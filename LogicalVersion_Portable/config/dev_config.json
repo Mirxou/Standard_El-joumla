@@ -1,0 +1,6 @@
+{
+  "debug": true,
+  "log_level": "DEBUG",
+  "auto_reload": true,
+  "test_data": true
+}

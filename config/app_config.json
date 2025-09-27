@@ -1,0 +1,29 @@
+{
+  "database": {
+    "path": "data/logical_release.db",
+    "backup_interval": 24,
+    "max_backups": 30
+  },
+  "ui": {
+    "language": "ar",
+    "theme": "light",
+    "rtl": true,
+    "font_family": "Segoe UI",
+    "font_size": 10
+  },
+  "security": {
+    "session_timeout": 480,
+    "password_min_length": 6,
+    "enable_audit_log": true
+  },
+  "reports": {
+    "default_format": "pdf",
+    "auto_save": true,
+    "save_path": "data/exports"
+  },
+  "pos": {
+    "auto_print": false,
+    "receipt_copies": 1,
+    "default_payment_method": "نقدي"
+  }
+}

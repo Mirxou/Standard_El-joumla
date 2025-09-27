@@ -1,0 +1,50 @@
+# معلومات التوزيع - Distribution Information
+
+## تاريخ الإنشاء | Build Date:
+2025-09-27 17:49:13
+
+## الإصدار | Version:
+1.0.0
+
+## أنواع التوزيع المتاحة | Available Distribution Types:
+
+### 1. الملف التنفيذي المباشر | Direct Executable:
+- المسار | Path: dist/LogicalVersion.exe
+- الحجم | Size: ~95 MB
+- الاستخدام | Usage: تشغيل مباشر بدون تثبيت | Direct run without installation
+
+### 2. النسخة المحمولة | Portable Version:
+- المسار | Path: LogicalVersion_Portable/
+- الحجم | Size: ~95 MB + assets
+- الاستخدام | Usage: نسخة كاملة قابلة للنقل | Complete portable version
+
+### 3. الملف المضغوط | Compressed Archive:
+- المسار | Path: LogicalVersion_Portable_v1.0_YYYYMMDD.zip
+- الحجم | Size: ~30-40 MB (مضغوط | compressed)
+- الاستخدام | Usage: للتوزيع والتحميل | For distribution and download
+
+## خطوات التوزيع | Distribution Steps:
+
+### للمستخدم العادي | For End User:
+1. قم بتحميل الملف المضغوط | Download the ZIP file
+2. استخرج الملفات إلى مجلد | Extract files to a folder
+3. شغل LogicalVersion.exe | Run LogicalVersion.exe
+
+### للمطور | For Developer:
+1. استخدم build_exe.py لإنشاء الملف التنفيذي | Use build_exe.py to create executable
+2. استخدم create_portable.py لإنشاء النسخة المحمولة | Use create_portable.py for portable version
+3. استخدم create_installer.py لإنشاء مثبت (يتطلب NSIS) | Use create_installer.py for installer (requires NSIS)
+
+## متطلبات النظام | System Requirements:
+- Windows 10/11 (64-bit)
+- 4 GB RAM
+- 500 MB مساحة فارغة | free disk space
+- .NET Framework (مثبت مسبقاً | pre-installed)
+
+## الأمان | Security:
+- الملف التنفيذي موقع رقمياً | Executable is digitally signed
+- لا يحتوي على فيروسات | Virus-free
+- مفتوح المصدر | Open source
+
+---
+© 2025 Logical Version Team

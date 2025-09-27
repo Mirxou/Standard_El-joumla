@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <!-- خلفية دائرية -->
+  <circle cx="128" cy="128" r="120" fill="#2E86AB" stroke="#A23B72" stroke-width="4"/>
+  
+  <!-- شعار التطبيق -->
+  <g transform="translate(128, 128)">
+    <!-- رمز المحاسبة -->
+    <rect x="-40" y="-50" width="80" height="60" rx="8" fill="#F18F01" opacity="0.9"/>
+    
+    <!-- خطوط البيانات -->
+    <line x1="-30" y1="-35" x2="30" y2="-35" stroke="white" stroke-width="3"/>
+    <line x1="-30" y1="-20" x2="20" y2="-20" stroke="white" stroke-width="2"/>
+    <line x1="-30" y1="-5" x2="25" y2="-5" stroke="white" stroke-width="2"/>
+    
+    <!-- رمز العملة -->
+    <circle cx="0" cy="25" r="25" fill="#C73E1D" opacity="0.8"/>
+    <text x="0" y="35" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="24" font-weight="bold">$</text>
+    
+    <!-- نقاط الزينة -->
+    <circle cx="-60" cy="-60" r="8" fill="#F18F01" opacity="0.6"/>
+    <circle cx="60" cy="-60" r="8" fill="#F18F01" opacity="0.6"/>
+    <circle cx="-60" cy="60" r="8" fill="#C73E1D" opacity="0.6"/>
+    <circle cx="60" cy="60" r="8" fill="#C73E1D" opacity="0.6"/>
+  </g>
+  
+  <!-- نص التطبيق -->
+  <text x="128" y="220" text-anchor="middle" fill="#2E86AB" font-family="Arial, sans-serif" font-size="18" font-weight="bold">Logical Version</text>
+</svg>
