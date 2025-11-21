@@ -24,3 +24,6 @@ requests>=2.32.0             # HTTP requests for health checks
 # Template & PDF
 jinja2>=3.1.0                # Template engine for printing
 weasyprint>=60.0             # HTML to PDF conversion (best Arabic support)
+
+# System Monitoring
+psutil>=5.9.0                # System and process monitoring

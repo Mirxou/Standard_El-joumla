@@ -1217,6 +1217,12 @@ class MainWindow(QMainWindow):
         search_action.triggered.connect(self.show_advanced_search_window)
         tools_menu.addAction(search_action)
         
+        # لوحة مراقبة الأداء
+        performance_action = QAction("📊 مراقبة الأداء", self)
+        performance_action.setToolTip("عرض لوحة مراقبة أداء التطبيق")
+        performance_action.triggered.connect(self.show_performance_dashboard)
+        tools_menu.addAction(performance_action)
+        
         tools_menu.addSeparator()
         
         # إضافة عنصر إدارة التشفير
@@ -2366,6 +2372,25 @@ class MainWindow(QMainWindow):
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في إعداد شريط الإجراءات: {str(e)}")
+    
+    def show_performance_dashboard(self):
+        """عرض لوحة مراقبة الأداء"""
+        try:
+            from ..performance_dashboard import show_performance_dashboard
+            
+            # محاولة الحصول على cache_manager إذا كان موجوداً
+            cache_manager = None
+            if hasattr(self, 'cache_service'):
+                cache_manager = self.cache_service
+            
+            show_performance_dashboard(self.db_manager, cache_manager, self)
+            
+            if self.logger:
+                self.logger.info("تم فتح لوحة مراقبة الأداء")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح لوحة الأداء: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح لوحة مراقبة الأداء:\n{str(e)}")
     
     def closeEvent(self, event):
         """حدث إغلاق النافذة"""
