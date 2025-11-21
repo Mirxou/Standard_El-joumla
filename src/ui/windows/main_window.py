@@ -1619,7 +1619,7 @@ class MainWindow(QMainWindow):
         try:
             from .cycle_count_window import CycleCountWindow
             if not hasattr(self, "_cycle_count_window") or self._cycle_count_window is None:
-                self._cycle_count_window = CycleCountWindow(parent=self)
+                self._cycle_count_window = CycleCountWindow(parent=self, service=self._get_cycle_count_service())
             self._cycle_count_window.show()
             self._cycle_count_window.raise_()
             self._cycle_count_window.activateWindow()

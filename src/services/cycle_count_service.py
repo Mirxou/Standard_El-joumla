@@ -216,6 +216,30 @@ class CycleCountService:
                 "variance_value": float(totals["variance_value"]) if totals and totals["variance_value"] is not None else 0.0,
             }
 
+    # Listings
+    def list_sessions(self, limit: int = 200) -> List[Dict[str, Any]]:
+        sql = (
+            """
+            SELECT s.id,
+                   s.plan_id,
+                   p.name AS plan_name,
+                   s.location_id,
+                   s.started_at,
+                   s.closed_at,
+                   s.status,
+                   s.accuracy,
+                   s.variance_qty,
+                   s.variance_value
+            FROM cycle_count_sessions s
+            LEFT JOIN cycle_count_plans p ON p.id = s.plan_id
+            ORDER BY s.id DESC
+            LIMIT ?
+            """
+        )
+        with self._conn() as cx:
+            rows = cx.execute(sql, (limit,)).fetchall()
+            return [dict(r) for r in rows]
+
 
 __all__ = [
     "CycleCountService",
