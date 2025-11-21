@@ -433,6 +433,44 @@ class DatabaseManager:
             )
         """)
 
+        # جدول ملاحظات الفواتير (Invoice Notes)
+        self.connection.execute("""
+            CREATE TABLE IF NOT EXISTS invoice_notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sale_id INTEGER NOT NULL,
+                note_text TEXT NOT NULL,
+                created_by INTEGER,
+                is_internal BOOLEAN DEFAULT 0, -- ملاحظة داخلية لا تظهر للعميل
+                is_pinned BOOLEAN DEFAULT 0,   -- ملاحظة مثبّتة بارزة
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (sale_id) REFERENCES sales(id),
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            )
+        """)
+
+        # جدول التذكيرات (Reminders) - تذكيرات الدفع والمتابعة
+        self.connection.execute("""
+            CREATE TABLE IF NOT EXISTS reminders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sale_id INTEGER,
+                customer_id INTEGER,
+                reminder_type TEXT NOT NULL CHECK (reminder_type IN ('payment', 'follow_up', 'custom')),
+                subject TEXT NOT NULL,
+                message TEXT,
+                due_at TIMESTAMP NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'cancelled')),
+                attempts INTEGER DEFAULT 0,
+                last_attempt_at TIMESTAMP,
+                recipient_email TEXT,
+                created_by INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (sale_id) REFERENCES sales(id),
+                FOREIGN KEY (customer_id) REFERENCES customers(id),
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            )
+        """)
+
         self.connection.commit()
     
     def _create_indexes(self):
@@ -462,6 +500,11 @@ class DatabaseManager:
             "CREATE INDEX IF NOT EXISTS idx_payment_schedules_entity ON payment_schedules(entity_id, entity_type)",
             "CREATE INDEX IF NOT EXISTS idx_payment_schedules_due_date ON payment_schedules(due_date)",
             "CREATE INDEX IF NOT EXISTS idx_payment_schedules_status ON payment_schedules(status)"
+            ,"CREATE INDEX IF NOT EXISTS idx_invoice_notes_sale ON invoice_notes(sale_id)"
+            ,"CREATE INDEX IF NOT EXISTS idx_invoice_notes_created_by ON invoice_notes(created_by)"
+            ,"CREATE INDEX IF NOT EXISTS idx_reminders_due_at ON reminders(due_at)"
+            ,"CREATE INDEX IF NOT EXISTS idx_reminders_status ON reminders(status)"
+            ,"CREATE INDEX IF NOT EXISTS idx_reminders_customer ON reminders(customer_id)"
         ]
         
         for index_sql in indexes:
