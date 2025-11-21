@@ -14,6 +14,7 @@ from typing import Optional
 
 from ...core.database_manager import DatabaseManager
 from ...services.dashboard_service import DashboardService
+from ...services.cycle_count_service import CycleCountService
 
 
 class DashboardWindow(QMainWindow):
@@ -21,6 +22,7 @@ class DashboardWindow(QMainWindow):
         super().__init__(parent)
         self.db = db_manager
         self.service = DashboardService(self.db)
+        self.cycle_service = CycleCountService(getattr(self.db, 'db_path', 'data/logical_release.db'))
         self.settings = QSettings("LogicalVersion", "Dashboard")
 
         self.setWindowTitle("📊 لوحة المعلومات الرئيسية")
@@ -118,6 +120,18 @@ class DashboardWindow(QMainWindow):
         self.kpi_grid = QGridLayout()
         root.addLayout(self.kpi_grid)
 
+        # Cycle Count KPIs (group)
+        self.cycle_group = QGroupBox("📦 ملخص الجرد الدوري")
+        self.cycle_layout = QHBoxLayout(self.cycle_group)
+        self.lbl_cc_open = QLabel("جلسات مفتوحة: 0"); self.lbl_cc_open.setStyleSheet("font-weight:bold;")
+        self.lbl_cc_closed = QLabel("مغلقة (7 أيام): 0")
+        self.lbl_cc_varq = QLabel("فرق كمية: 0.00")
+        self.lbl_cc_varv = QLabel("قيمة الفرق: 0.00 دج")
+        for w in (self.lbl_cc_open, self.lbl_cc_closed, self.lbl_cc_varq, self.lbl_cc_varv):
+            self.cycle_layout.addWidget(w)
+        self.cycle_layout.addStretch()
+        root.addWidget(self.cycle_group)
+
         # Charts Section
         charts_group = QGroupBox("📈 الرسوم البيانية")
         charts_layout = QGridLayout(charts_group)
@@ -211,6 +225,17 @@ class DashboardWindow(QMainWindow):
         self._render_distribution()
 
         self._update_widgets_visibility()
+
+        # Update Cycle Count KPIs
+        try:
+            cc = self.cycle_service.get_dashboard_summary()
+            self.lbl_cc_open.setText(f"جلسات مفتوحة: {int(cc.get('open_sessions', 0))}")
+            self.lbl_cc_closed.setText(f"مغلقة (7 أيام): {int(cc.get('recent_closed', 0))}")
+            self.lbl_cc_varq.setText(f"فرق كمية: {float(cc.get('variance_qty', 0.0)):.2f}")
+            self.lbl_cc_varv.setText(f"قيمة الفرق: {float(cc.get('variance_value', 0.0)):.2f} دج")
+        except Exception:
+            # Keep silent; dashboard should not break if cycle data missing
+            pass
 
     def _render_sales_chart(self, data):
         chart = QChart(); chart.setTitle("المبيعات اليومية")
