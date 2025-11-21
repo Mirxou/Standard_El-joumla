@@ -1,0 +1,31 @@
+[Arabic]
+العنوان: إصدار v5.1.0 — تحسينات تجربة المستخدم (UX)
+
+تم إصدار v5.1.0 ويتضمن:
+- تبويب الأداء مع مؤشرات حية وزر للوصول إلى لوحة الأداء الكاملة.
+- مؤشرات في شريط الحالة لحالة الثيم وعدد الإشعارات غير المقروءة.
+- مركز إشعارات موحّد مع زر “افحص الآن” ورابط لإعدادات الإشعارات.
+- إعداد فترة فحص الإشعارات (1–30 دقيقة) مع حفظها في QSettings.
+- تنظيف القوائم وإضافة اختصارات (Ctrl+Shift+P, Ctrl+Shift+N, Ctrl+T).
+
+التحقق:
+- اتبع خطوات `UX_SMOKE_TESTS.md`.
+
+الملاحظات:
+- راجع `RELEASE_v5.1.0_FINAL.md` و`CHANGELOG.md` للتفاصيل.
+
+[English]
+Subject: v5.1.0 Released — UX Polish
+
+v5.1.0 is out with:
+- Performance tab with live metrics and a button to open the full dashboard.
+- Status bar indicators for theme and unread notifications.
+- Unified Notification Center with “Check Now” and quick link to Notification Settings.
+- Configurable notifications interval (1–30 minutes) persisted via QSettings.
+- Menu cleanup and shortcuts (Ctrl+Shift+P, Ctrl+Shift+N, Ctrl+T).
+
+Verification:
+- Follow `UX_SMOKE_TESTS.md` steps.
+
+Notes:
+- See `RELEASE_v5.1.0_FINAL.md` and `CHANGELOG.md` for details.

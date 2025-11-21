@@ -97,6 +97,20 @@ except ImportError:
 
 app = FastAPI(title="Logical Version API", version="3.5.2")
 
+
+def create_app() -> FastAPI:
+    """Application factory for tests and embedding.
+
+    Returns the already-initialized FastAPI `app` instance and ensures
+    core services are initialized on first use.
+    """
+    # Ensure services are ready for tests that don't trigger startup event
+    try:
+        _ = get_services()
+    except Exception:
+        pass
+    return app
+
 # Register mobile API routes
 try:
     from .routes import mobile_router

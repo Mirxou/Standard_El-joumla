@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [5.1.0] - 2025-11-21 (UX Polish)
+
+### ✨ Enhancements
+- Performance tab in main window with live metrics and quick access to full Performance Dashboard.
+- Status bar indicators for current theme and unread notifications with last-check tooltip.
+- Unified Notifications Center with "Check Now" and quick link to notification settings.
+- Configurable notifications interval (1/2/5/10/15/30 minutes) persisted via QSettings.
+- Keyboard shortcut for Performance Dashboard (Ctrl+Shift+P) and menu cleanup/unification.
+- Optional Quick Action to launch Performance Dashboard from the toolbar (customizable).
+
+### 🧪 Tests & Docs
+- Added unit tests for theme persistence and notifications interval persistence (QSettings-based).
+- Updated UX smoke tests to cover performance tab, quick action enablement, and notifications flows.
+
+### 📄 Release Notes
+- See `RELEASE_v5.1.0_FINAL.md` for complete details, upgrade notes, and verification steps.
+
+---
+
 ## [3.5.2] - 2025-11-21 (Documentation & DevOps)
 
 ### 📚 API Documentation
