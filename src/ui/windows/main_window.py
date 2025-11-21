@@ -1237,6 +1237,11 @@ class MainWindow(QMainWindow):
         open_dashboard_action.triggered.connect(self.show_main_dashboard)
         dashboards_menu.addAction(open_dashboard_action)
 
+        cycle_count_summary_action = QAction("📦 ملخص الجرد الدوري", self)
+        cycle_count_summary_action.setToolTip("عرض ملخص سريع للجرد الدوري (جلسات وفروقات)")
+        cycle_count_summary_action.triggered.connect(self.show_cycle_count_summary)
+        dashboards_menu.addAction(cycle_count_summary_action)
+
         # قائمة عروض الأسعار والمرتجعات
         quotes_menu = menubar.addMenu("عروض ومرتجعات")
         
@@ -1316,6 +1321,11 @@ class MainWindow(QMainWindow):
         physical_count_action.triggered.connect(self.show_physical_counts_window)
         inventory_opt_menu.addAction(physical_count_action)
         
+        cycle_count_plans_action = QAction("🔁 الجرد الدوري (خطط)", self)
+        cycle_count_plans_action.setToolTip("إدارة خطط جلسات الجرد الدوري ومراجعة الجلسات")
+        cycle_count_plans_action.triggered.connect(self.show_cycle_count_window)
+        inventory_opt_menu.addAction(cycle_count_plans_action)
+
         adjustments_action = QAction("⚖️ تسويات المخزون", self)
         adjustments_action.setToolTip("إدارة تسويات المخزون")
         adjustments_action.triggered.connect(self.show_stock_adjustments_window)
@@ -1589,6 +1599,54 @@ class MainWindow(QMainWindow):
             if self.logger:
                 self.logger.error(f"خطأ في فتح نافذة الجرد الدوري: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة الجرد الدوري:\n{str(e)}")
+
+    def _get_cycle_count_service(self):
+        try:
+            if not hasattr(self, "_cycle_count_service") or self._cycle_count_service is None:
+                from ...services.cycle_count_service import CycleCountService
+                db_path = getattr(self.db_manager, 'db_path', None)
+                if not db_path:
+                    raise RuntimeError("لم يتم العثور على مسار قاعدة البيانات لإعداد خدمة الجرد الدوري")
+                self._cycle_count_service = CycleCountService(db_path=db_path)
+            return self._cycle_count_service
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في تهيئة خدمة الجرد الدوري: {str(e)}")
+            raise
+
+    def show_cycle_count_window(self):
+        """عرض نافذة إدارة خطط الجرد الدوري"""
+        try:
+            from .cycle_count_window import CycleCountWindow
+            if not hasattr(self, "_cycle_count_window") or self._cycle_count_window is None:
+                self._cycle_count_window = CycleCountWindow(parent=self)
+            self._cycle_count_window.show()
+            self._cycle_count_window.raise_()
+            self._cycle_count_window.activateWindow()
+            if self.logger:
+                self.logger.info("تم فتح نافذة خطط الجرد الدوري")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة خطط الجرد الدوري: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة خطط الجرد الدوري:\n{str(e)}")
+
+    def show_cycle_count_summary(self):
+        """عرض ملخص سريع للجرد الدوري في رسالة"""
+        try:
+            svc = self._get_cycle_count_service()
+            data = svc.get_dashboard_summary()
+            msg = (
+                "<h3>ملخص الجرد الدوري</h3>"
+                f"<p>جلسات مفتوحة: <b>{data.get('open_sessions', 0)}</b></p>"
+                f"<p>جلسات مغلقة (7 أيام): <b>{data.get('recent_closed', 0)}</b></p>"
+                f"<p>فرق الكمية الإجمالي: <b>{data.get('variance_qty', 0):,.2f}</b></p>"
+                f"<p>قيمة الفرق الإجمالية: <b>{data.get('variance_value', 0):,.2f} دج</b></p>"
+            )
+            QMessageBox.information(self, "ملخص الجرد الدوري", msg)
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في جلب ملخص الجرد الدوري: {str(e)}")
+            QMessageBox.warning(self, "خطأ", f"تعذر جلب الملخص: {str(e)}")
     
     def show_stock_adjustments_window(self):
         """عرض نافذة تسويات المخزون"""
