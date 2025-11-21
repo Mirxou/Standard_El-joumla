@@ -1,0 +1,22 @@
+# الإصدار المنطقي - Logical Version
+# Production Dependencies
+
+# Core Framework
+PySide6>=6.5.0
+
+# Security & Encryption
+argon2-cffi==23.1.0          # Argon2id password hashing
+pyotp==2.9.0                 # TOTP 2FA
+cryptography==43.0.1         # AES-256-GCM encryption
+
+# Data Validation
+pydantic>=2.0.0              # Schema validation (v2 for Python 3.13+)
+email-validator>=2.0.0       # Email validation
+
+# REST API
+fastapi>=0.110.0             # REST API layer
+uvicorn[standard]>=0.30.0    # ASGI server
+PyJWT>=2.10.0                # JWT token handling
+
+# HTTP Client
+requests>=2.32.0             # HTTP requests for health checks

@@ -1,0 +1,22 @@
+# متطلبات الاختبار
+# Testing Requirements
+
+# Playwright للاختبارات الآلية
+playwright==1.40.0
+pytest-playwright==0.4.3
+
+# pytest للاختبارات
+pytest>=7.0.0
+pytest-asyncio==0.21.1
+pytest-xdist==3.5.0
+pytest-html==4.1.1
+pytest-cov==4.1.0
+
+# FastAPI testing
+fastapi>=0.104.0
+httpx>=0.27.0
+
+# أدوات إضافية
+pytest-timeout==2.2.0
+pytest-mock==3.12.0
+allure-pytest==2.13.2
