@@ -48,6 +48,9 @@ class MainWindow(QMainWindow):
         self.setup_toolbar()
         self.setup_statusbar()
         
+        # إعداد اختصارات لوحة المفاتيح
+        self.setup_keyboard_shortcuts()
+        
         # تطبيق الإعدادات
         self.apply_settings()
         
@@ -1185,6 +1188,15 @@ class MainWindow(QMainWindow):
         # قائمة عرض
         view_menu = menubar.addMenu("عرض")
         
+        # اختيار السمة
+        theme_action = QAction("🎨 تغيير السمة", self)
+        theme_action.setToolTip("تبديل بين الوضع الفاتح والداكن")
+        theme_action.setShortcut("Ctrl+T")
+        theme_action.triggered.connect(self.show_theme_selector)
+        view_menu.addAction(theme_action)
+        
+        view_menu.addSeparator()
+        
         # قائمة أدوات
         tools_menu = menubar.addMenu("أدوات")
         
@@ -1386,6 +1398,14 @@ class MainWindow(QMainWindow):
         
         # قائمة مساعدة
         help_menu = menubar.addMenu("مساعدة")
+        
+        shortcuts_action = QAction("⌨️ اختصارات لوحة المفاتيح", self)
+        shortcuts_action.setShortcut("Ctrl+K")
+        shortcuts_action.setToolTip("عرض جميع اختصارات لوحة المفاتيح")
+        shortcuts_action.triggered.connect(self.show_shortcuts_help)
+        help_menu.addAction(shortcuts_action)
+        
+        help_menu.addSeparator()
         
         about_action = QAction("حول البرنامج", self)
         about_action.triggered.connect(self.show_about)
@@ -2266,6 +2286,47 @@ class MainWindow(QMainWindow):
             if self.logger:
                 self.logger.error(f"خطأ في فتح إدارة النظام: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح إدارة النظام: {str(e)}")
+    
+    def show_theme_selector(self):
+        """عرض نافذة اختيار السمة"""
+        try:
+            from ..dialogs.theme_selector_dialog import ThemeSelectorDialog
+            
+            dialog = ThemeSelectorDialog(self)
+            dialog.theme_changed.connect(self.on_theme_changed)
+            dialog.exec()
+            
+            if self.logger:
+                self.logger.info("تم فتح نافذة اختيار السمة")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة السمة: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة السمة: {str(e)}")
+    
+    def on_theme_changed(self, theme_name: str):
+        """معالج تغيير السمة"""
+        if self.logger:
+            self.logger.info(f"تم تغيير السمة إلى: {theme_name}")
+        
+        # إعادة تحميل جميع النوافذ المفتوحة إذا لزم الأمر
+        # (Qt يطبق الأنماط تلقائيًا على جميع النوافذ)
+    
+    def setup_keyboard_shortcuts(self):
+        """إعداد اختصارات لوحة المفاتيح"""
+        try:
+            from ..shortcuts_manager import setup_main_window_shortcuts
+            self.shortcuts_manager = setup_main_window_shortcuts(self)
+            
+            if self.logger:
+                self.logger.info("تم إعداد اختصارات لوحة المفاتيح")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في إعداد الاختصارات: {str(e)}")
+    
+    def show_shortcuts_help(self):
+        """عرض نافذة مساعدة الاختصارات"""
+        if hasattr(self, 'shortcuts_manager'):
+            self.shortcuts_manager.show_shortcuts_dialog()
     
     def closeEvent(self, event):
         """حدث إغلاق النافذة"""

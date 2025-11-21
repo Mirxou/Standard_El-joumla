@@ -272,6 +272,9 @@ class InventoryManagementApp(QApplication):
         # إعداد اتجاه النص
         self.setLayoutDirection(Qt.RightToLeft)
         
+        # تطبيق السمة المحفوظة
+        self.apply_saved_theme()
+        
         # إعداد المتغيرات
         self.logger = setup_logger(__name__)
         self.config_manager = ConfigManager()
@@ -299,6 +302,16 @@ class InventoryManagementApp(QApplication):
         
         # إعداد معالج الإغلاق
         self.aboutToQuit.connect(self.cleanup)
+    
+    def apply_saved_theme(self):
+        """تطبيق السمة المحفوظة"""
+        try:
+            from src.ui.theme_manager import get_theme_manager
+            theme_manager = get_theme_manager()
+            saved_theme = theme_manager.get_current_theme()
+            theme_manager.apply_theme(saved_theme)
+        except Exception as e:
+            print(f"تحذير: فشل تحميل السمة: {e}")
     
     def run(self):
         """تشغيل التطبيق"""
