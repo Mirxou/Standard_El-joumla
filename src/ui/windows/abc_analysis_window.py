@@ -1,4 +1,4 @@
-"""
+﻿"""
 ABC Analysis Window - نافذة تحليل ABC
 تحليل وتصنيف المنتجات حسب القيمة
 """
@@ -325,10 +325,10 @@ class ABCAnalysisWindow(QWidget):
         self.stats_labels['category_c_count'].setText(str(summary.get('category_c_count', 0)))
         
         total_value = summary.get('total_value', Decimal('0'))
-        self.stats_labels['category_a_value'].setText(f"{summary.get('category_a_value', 0):,.2f} ريال")
-        self.stats_labels['category_b_value'].setText(f"{summary.get('category_b_value', 0):,.2f} ريال")
-        self.stats_labels['category_c_value'].setText(f"{summary.get('category_c_value', 0):,.2f} ريال")
-        self.stats_labels['total_value'].setText(f"{total_value:,.2f} ريال")
+        self.stats_labels['category_a_value'].setText(f"{summary.get('category_a_value', 0):,.2f} دج")
+        self.stats_labels['category_b_value'].setText(f"{summary.get('category_b_value', 0):,.2f} دج")
+        self.stats_labels['category_c_value'].setText(f"{summary.get('category_c_value', 0):,.2f} دج")
+        self.stats_labels['total_value'].setText(f"{total_value:,.2f} دج")
     
     def populate_recommendations(self, results: List[ABCAnalysisResult]):
         """ملء جدول التوصيات"""

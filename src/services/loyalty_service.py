@@ -1,4 +1,4 @@
-"""
+﻿"""
 نظام نقاط الولاء والمكافآت
 Loyalty Points & Rewards System
 
@@ -45,10 +45,10 @@ class LoyaltySystem:
         LoyaltyTier("بلاتيني", 5000, ["خصم 20%", "شحن مجاني", "عروض حصرية", "أولوية الدعم"], 20.0)
     ]
     
-    # نقاط لكل ريال/دولار
+    # نقاط لكل دج/دولار
     POINTS_PER_CURRENCY = 1
     
-    # ريال لكل نقطة عند الاسترداد
+    # دج لكل نقطة عند الاسترداد
     REDEMPTION_RATE = 0.10
     
     def __init__(self, db_manager):

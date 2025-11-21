@@ -58,7 +58,7 @@ class Payment:
     
     # المبلغ والعملة
     amount: Decimal = Decimal('0.00')
-    currency: str = "SAR"
+    currency: str = "DZD"
     exchange_rate: Decimal = Decimal('1.00')
     amount_in_base_currency: Decimal = Decimal('0.00')
     
@@ -146,7 +146,7 @@ class AccountBalance:
     account_type: str
     account_name: str
     balance: Decimal = Decimal('0.00')
-    currency: str = "SAR"
+    currency: str = "DZD"
     last_transaction_date: Optional[date] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

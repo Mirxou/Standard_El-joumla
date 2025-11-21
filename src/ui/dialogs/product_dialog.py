@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 نافذة إضافة/تعديل المنتجات - Product Dialog
 واجهة شاملة لإدارة المنتجات مع دعم اللغة العربية
@@ -421,14 +421,14 @@ class ProductDialog(QDialog):
         self.cost_price_spin = QDoubleSpinBox()
         self.cost_price_spin.setRange(0, 999999.99)
         self.cost_price_spin.setDecimals(2)
-        self.cost_price_spin.setSuffix(" ريال")
+        self.cost_price_spin.setSuffix(" دج")
         pricing_layout.addRow("سعر التكلفة:", self.cost_price_spin)
         
         # سعر البيع
         self.selling_price_spin = QDoubleSpinBox()
         self.selling_price_spin.setRange(0.01, 999999.99)
         self.selling_price_spin.setDecimals(2)
-        self.selling_price_spin.setSuffix(" ريال")
+        self.selling_price_spin.setSuffix(" دج")
         pricing_layout.addRow("سعر البيع *:", self.selling_price_spin)
         
         # هامش الربح (للعرض فقط)

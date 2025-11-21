@@ -1,4 +1,4 @@
-"""
+﻿"""
 Payment Plan Dialog - نافذة إنشاء/تعديل خطة الدفع
 """
 
@@ -173,7 +173,7 @@ class PaymentPlanDialog(QDialog):
         self.total_amount_spin = QDoubleSpinBox()
         self.total_amount_spin.setMaximum(10000000)
         self.total_amount_spin.setDecimals(2)
-        self.total_amount_spin.setSuffix(" ريال")
+        self.total_amount_spin.setSuffix(" دج")
         self.total_amount_spin.valueChanged.connect(self.calculate_financed_amount)
         layout.addWidget(self.total_amount_spin, 0, 1)
         
@@ -182,13 +182,13 @@ class PaymentPlanDialog(QDialog):
         self.down_payment_spin = QDoubleSpinBox()
         self.down_payment_spin.setMaximum(10000000)
         self.down_payment_spin.setDecimals(2)
-        self.down_payment_spin.setSuffix(" ريال")
+        self.down_payment_spin.setSuffix(" دج")
         self.down_payment_spin.valueChanged.connect(self.calculate_financed_amount)
         layout.addWidget(self.down_payment_spin, 0, 3)
         
         # المبلغ المقسط
         layout.addWidget(QLabel("المبلغ المقسط:"), 1, 0)
-        self.financed_amount_label = QLabel("0.00 ريال")
+        self.financed_amount_label = QLabel("0.00 دج")
         self.financed_amount_label.setFont(QFont("Arial", 10, QFont.Bold))
         layout.addWidget(self.financed_amount_label, 1, 1)
         
@@ -232,7 +232,7 @@ class PaymentPlanDialog(QDialog):
         
         # مبلغ القسط
         layout.addWidget(QLabel("مبلغ القسط:"), 1, 0)
-        self.installment_amount_label = QLabel("0.00 ريال")
+        self.installment_amount_label = QLabel("0.00 دج")
         self.installment_amount_label.setFont(QFont("Arial", 10, QFont.Bold))
         layout.addWidget(self.installment_amount_label, 1, 1)
         
@@ -302,7 +302,7 @@ class PaymentPlanDialog(QDialog):
         down = self.down_payment_spin.value()
         financed = total - down
         
-        self.financed_amount_label.setText(f"{financed:,.2f} ريال")
+        self.financed_amount_label.setText(f"{financed:,.2f} دج")
         self.calculate_installment_amount()
         
     def calculate_installment_amount(self):
@@ -314,9 +314,9 @@ class PaymentPlanDialog(QDialog):
         
         if count > 0:
             installment = financed / count
-            self.installment_amount_label.setText(f"{installment:,.2f} ريال")
+            self.installment_amount_label.setText(f"{installment:,.2f} دج")
         else:
-            self.installment_amount_label.setText("0.00 ريال")
+            self.installment_amount_label.setText("0.00 دج")
             
     def on_late_fee_type_changed(self):
         """عند تغيير نوع الغرامة"""
@@ -326,7 +326,7 @@ class PaymentPlanDialog(QDialog):
         self.late_fee_value_spin.setEnabled(enabled)
         
         if fee_type == LateFeeType.FIXED.value:
-            self.late_fee_value_spin.setSuffix(" ريال")
+            self.late_fee_value_spin.setSuffix(" دج")
             self.late_fee_value_spin.setMaximum(100000)
         elif fee_type in [LateFeeType.PERCENTAGE.value, LateFeeType.COMPOUNDING.value]:
             self.late_fee_value_spin.setSuffix(" %")

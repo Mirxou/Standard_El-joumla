@@ -1,4 +1,4 @@
-"""
+﻿"""
 خدمة إدارة المدفوعات والذمم المدينة والدائنة
 """
 
@@ -45,7 +45,7 @@ class PaymentService:
                 status TEXT NOT NULL DEFAULT 'معلق',
                 
                 amount DECIMAL(15,2) NOT NULL DEFAULT 0.00,
-                currency TEXT NOT NULL DEFAULT 'SAR',
+                currency TEXT NOT NULL DEFAULT 'DZD',
                 exchange_rate DECIMAL(10,4) NOT NULL DEFAULT 1.0000,
                 amount_in_base_currency DECIMAL(15,2) NOT NULL DEFAULT 0.00,
                 

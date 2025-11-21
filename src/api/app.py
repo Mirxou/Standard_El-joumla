@@ -235,7 +235,7 @@ class PurchaseOrderCreate(BaseModel):
     supplier_name: Optional[str] = None
     supplier_contact: Optional[str] = None
     required_date: Optional[str] = None
-    currency: str = Field(default="SAR")
+    currency: str = Field(default="DZD")
     notes: Optional[str] = None
     items: List[PurchaseOrderItemCreate]
 
