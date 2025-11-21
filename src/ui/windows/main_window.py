@@ -1362,6 +1362,28 @@ class MainWindow(QMainWindow):
         open_accounting_action.triggered.connect(self.show_accounting_window)
         accounting_menu.addAction(open_accounting_action)
         
+        # قائمة الأمان والصلاحيات
+        security_menu = menubar.addMenu("🔒 الأمان")
+        
+        permissions_action = QAction("👥 إدارة الصلاحيات", self)
+        permissions_action.setToolTip("إدارة الأدوار والمستخدمين والصلاحيات")
+        permissions_action.triggered.connect(self.show_permissions_window)
+        security_menu.addAction(permissions_action)
+        
+        security_menu.addSeparator()
+        
+        audit_action = QAction("📋 سجل التدقيق", self)
+        audit_action.setToolTip("عرض سجل التدقيق والتتبع الكامل")
+        audit_action.triggered.connect(self.show_audit_viewer)
+        security_menu.addAction(audit_action)
+        
+        security_menu.addSeparator()
+        
+        system_mgmt_action = QAction("⚙️ إدارة النظام", self)
+        system_mgmt_action.setToolTip("النسخ الاحتياطي والأداء وصيانة النظام")
+        system_mgmt_action.triggered.connect(self.show_system_management)
+        security_menu.addAction(system_mgmt_action)
+        
         # قائمة مساعدة
         help_menu = menubar.addMenu("مساعدة")
         
@@ -2176,6 +2198,74 @@ class MainWindow(QMainWindow):
             if self.logger:
                 self.logger.error(f"خطأ في فتح نافذة البحث المتقدم: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة البحث المتقدم: {str(e)}")
+    
+    def show_permissions_window(self):
+        """عرض نافذة إدارة الصلاحيات"""
+        try:
+            from .permission_management_window import PermissionManagementWindow
+            
+            if not hasattr(self, "_permissions_window") or self._permissions_window is None:
+                self._permissions_window = PermissionManagementWindow(self.db_manager)
+            
+            self._permissions_window.show()
+            self._permissions_window.raise_()
+            self._permissions_window.activateWindow()
+            
+            if self.logger:
+                self.logger.info("تم فتح نافذة إدارة الصلاحيات")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة الصلاحيات: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة الصلاحيات: {str(e)}")
+    
+    def show_audit_viewer(self):
+        """عرض نافذة سجل التدقيق"""
+        try:
+            from .permission_management_window import PermissionManagementWindow
+            
+            if not hasattr(self, "_permissions_window") or self._permissions_window is None:
+                self._permissions_window = PermissionManagementWindow(self.db_manager)
+            
+            # فتح النافذة وتفعيل تبويب التدقيق
+            self._permissions_window.show()
+            self._permissions_window.tabs.setCurrentIndex(2)  # التدقيق هو التبويب الثالث
+            self._permissions_window.raise_()
+            self._permissions_window.activateWindow()
+            
+            if self.logger:
+                self.logger.info("تم فتح سجل التدقيق")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح سجل التدقيق: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح سجل التدقيق: {str(e)}")
+    
+    def show_system_management(self):
+        """عرض نافذة إدارة النظام"""
+        try:
+            from ..system_management_window import SystemManagementWindow
+            from ...services.backup_service import BackupService
+            from ...services.performance_service import PerformanceService
+            
+            if not hasattr(self, "_system_mgmt_window") or self._system_mgmt_window is None:
+                # Initialize services
+                backup_service = BackupService(self.db_manager)
+                performance_service = PerformanceService(self.db_manager)
+                
+                self._system_mgmt_window = SystemManagementWindow(
+                    parent=self,
+                    db_manager=self.db_manager,
+                    backup_service=backup_service,
+                    performance_service=performance_service
+                )
+            
+            self._system_mgmt_window.exec()  # Modal dialog
+            
+            if self.logger:
+                self.logger.info("تم فتح نافذة إدارة النظام")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح إدارة النظام: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح إدارة النظام: {str(e)}")
     
     def closeEvent(self, event):
         """حدث إغلاق النافذة"""
