@@ -184,11 +184,22 @@ class CustomerManager:
     def search_customers(self, search_term: str = "", active_only: bool = True) -> List[Customer]:
         """البحث في العملاء"""
         try:
-            query = """
+            # التحقق من الأعمدة المتاحة في جدول sales
+            cols_info = self.db_manager.fetch_all("PRAGMA table_info(sales)")
+            available_cols = {row[1] for row in cols_info} if cols_info else set()
+            
+            # بناء شروط الفلتر بناءً على الأعمدة المتاحة
+            total_purchases_filter = ""
+            purchases_count_filter = ""
+            if "status" in available_cols:
+                total_purchases_filter = "AND status != 'ملغية'"
+                purchases_count_filter = "AND status != 'ملغية'"
+            
+            query = f"""
             SELECT c.*,
                    (SELECT MAX(sale_date) FROM sales WHERE customer_id = c.id) as last_purchase_date,
-                   (SELECT SUM(total_amount) FROM sales WHERE customer_id = c.id AND status != 'ملغية') as total_purchases,
-                   (SELECT COUNT(*) FROM sales WHERE customer_id = c.id AND status != 'ملغية') as purchases_count
+                   (SELECT SUM(total_amount) FROM sales WHERE customer_id = c.id {total_purchases_filter}) as total_purchases,
+                   (SELECT COUNT(*) FROM sales WHERE customer_id = c.id {purchases_count_filter}) as purchases_count
             FROM customers c
             WHERE 1=1
             """

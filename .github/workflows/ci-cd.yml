@@ -1,0 +1,220 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ master, main, develop ]
+  pull_request:
+    branches: [ master, main ]
+  release:
+    types: [ published ]
+
+env:
+  PYTHON_VERSION: '3.13'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ==========================================
+  # Job 1: Code Quality & Testing
+  # ==========================================
+  test:
+    name: 🧪 Tests & Quality Checks
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-test.txt
+      
+      - name: 🔍 Lint with ruff
+        run: |
+          pip install ruff
+          ruff check . --output-format=github
+        continue-on-error: true
+      
+      - name: 🧪 Run tests with pytest
+        run: |
+          pytest test_ai_features.py test_comprehensive.py -v --tb=short
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+      
+      - name: 📊 Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results/
+          retention-days: 30
+  
+  # ==========================================
+  # Job 2: Security Scan
+  # ==========================================
+  security:
+    name: 🔒 Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: 🔐 Run Bandit security scan
+        run: |
+          pip install bandit
+          bandit -r src/ -f json -o bandit-report.json
+        continue-on-error: true
+      
+      - name: 📦 Check dependencies for vulnerabilities
+        run: |
+          pip install safety
+          safety check --json
+        continue-on-error: true
+      
+      - name: 📊 Upload security reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+          retention-days: 30
+  
+  # ==========================================
+  # Job 3: Build Docker Image
+  # ==========================================
+  build:
+    name: 🐳 Build Docker Image
+    runs-on: ubuntu-latest
+    needs: [test, security]
+    if: github.event_name != 'pull_request'
+    
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔐 Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: 📝 Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+      
+      - name: 🏗️ Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: 🐳 Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+  
+  # ==========================================
+  # Job 4: Deploy to Production
+  # ==========================================
+  deploy:
+    name: 🚀 Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.event_name == 'release'
+    environment:
+      name: production
+      url: https://your-domain.com
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🚀 Deploy to Cloud Run (GCP)
+        if: vars.DEPLOY_TARGET == 'gcp'
+        run: |
+          echo "Deploying to Google Cloud Run..."
+          # Add your GCP deployment commands here
+      
+      - name: 🚀 Deploy to Azure
+        if: vars.DEPLOY_TARGET == 'azure'
+        run: |
+          echo "Deploying to Azure Container Instances..."
+          # Add your Azure deployment commands here
+      
+      - name: 🚀 Deploy to AWS
+        if: vars.DEPLOY_TARGET == 'aws'
+        run: |
+          echo "Deploying to AWS ECS..."
+          # Add your AWS deployment commands here
+      
+      - name: 📢 Notify deployment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: context.payload.deployment.id,
+              state: 'success',
+              description: 'Deployment successful',
+              environment_url: 'https://your-domain.com'
+            })
+  
+  # ==========================================
+  # Job 5: Generate Release Notes
+  # ==========================================
+  release-notes:
+    name: 📝 Generate Release Notes
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: 📝 Generate changelog
+        uses: orhun/git-cliff-action@v3
+        with:
+          args: --latest
+        env:
+          OUTPUT: CHANGELOG-LATEST.md
+      
+      - name: 📤 Upload changelog
+        uses: actions/upload-artifact@v4
+        with:
+          name: changelog
+          path: CHANGELOG-LATEST.md

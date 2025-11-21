@@ -369,8 +369,7 @@ class LoginDialog(QDialog):
     
     def handle_forgot_password(self):
         """معالجة نسيان كلمة المرور"""
-        from .forgot_password_dialog import ForgotPasswordDialog
-        
+        # Use the ForgotPasswordDialog defined at the bottom of this file
         dialog = ForgotPasswordDialog(self.user_service, self)
         if dialog.exec() == QDialog.Accepted:
             self.show_info("تم إرسال كلمة المرور الجديدة. يرجى التحقق من الإدارة.")

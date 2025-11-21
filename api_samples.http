@@ -1,0 +1,336 @@
+### Logical Version API Samples (VS Code REST Client)
+
+@baseUrl = http://localhost:8000
+@username = admin
+@password = admin123
+@token = {{login.response.body.$.access_token}}
+
+### Health
+GET {{baseUrl}}/health
+
+### Login
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "{{username}}",
+  "password": "{{password}}"
+}
+
+### List Products
+GET {{baseUrl}}/products?page=1&page_size=10
+Authorization: Bearer {{token}}
+
+### Create Product (Admin)
+POST {{baseUrl}}/products
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Sample Product",
+  "unit": "قطعة",
+  "cost_price": 10,
+  "selling_price": 15,
+  "barcode": "PRD-SAMPLE-001"
+}
+
+### Create Variant (Admin)
+POST {{baseUrl}}/products/1/variants
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "sku": "SKU-001",
+  "attributes": {"size": "L"},
+  "selling_price": 16
+}
+
+### Add Tag (Admin)
+POST {{baseUrl}}/products/1/tags
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "tag": "summer"
+}
+
+### List Bundles
+GET {{baseUrl}}/bundles?page=1&page_size=10
+Authorization: Bearer {{token}}
+
+### Create Price Tier (Admin)
+POST {{baseUrl}}/prices
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "product_id": 1,
+  "price_type": "retail",
+  "min_qty": 5,
+  "price": 12.5
+}
+
+### ===================================
+### Sales & Customer Management (v1.3.0)
+### ===================================
+
+### Create Customer (Admin)
+POST {{baseUrl}}/customers
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "???? ????? ???????",
+  "phone": "0501234567",
+  "email": "alnour@example.com",
+  "address": "?????? - ?? ??????",
+  "credit_limit": 50000.00,
+  "is_active": true
+}
+
+### List Customers
+GET {{baseUrl}}/customers?page=1&page_size=50
+Authorization: Bearer {{token}}
+
+### Get Customer Detail
+GET {{baseUrl}}/customers/1
+Authorization: Bearer {{token}}
+
+### Create Sales Order (Admin/Cashier)
+POST {{baseUrl}}/sales/orders
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "customer_id": 1,
+  "items": [
+    {
+      "product_id": 1,
+      "variant_id": null,
+      "quantity": 10,
+      "unit_price": 150.00,
+      "discount": 10.0
+    }
+  ],
+  "notes": "??? ?? ?????? VIP",
+  "payment_method": "????"
+}
+
+### List Sales Orders
+GET {{baseUrl}}/sales/orders?page=1&page_size=50
+Authorization: Bearer {{token}}
+
+### Get Sales Order Detail
+GET {{baseUrl}}/sales/orders/1
+Authorization: Bearer {{token}}
+
+
+### ============= Inventory Management API (v1.4.0) =============
+
+### Transfer Stock
+POST {{baseUrl}}/inventory/transfer
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "product_id": 1,
+  "quantity": 50,
+  "from_location": "Main Warehouse",
+  "to_location": "Retail Store A",
+  "notes": "Weekly restock"
+}
+
+### Reserve Stock
+POST {{baseUrl}}/inventory/reserve
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "product_id": 1,
+  "quantity": 10,
+  "reference_id": 1234,
+  "reference_type": "order"
+}
+
+### Release Reserved Stock
+POST {{baseUrl}}/inventory/release/1?quantity=5&reference_id=1234
+Authorization: Bearer {{token}}
+
+### List Stock Movements
+GET {{baseUrl}}/inventory/movements?product_id=1&limit=50
+Authorization: Bearer {{token}}
+
+### List All Movements (no filter)
+GET {{baseUrl}}/inventory/movements?limit=100
+Authorization: Bearer {{token}}
+
+### ABC Analysis
+GET {{baseUrl}}/inventory/abc-analysis
+Authorization: Bearer {{token}}
+
+
+### ============= Vendor Management API (v1.5.0) =============
+
+### Create Vendor
+POST {{baseUrl}}/vendors
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "???? ????????? ????????",
+  "contact_person": "???? ????",
+  "phone": "+966501234567",
+  "email": "info@advanced-supplies.com",
+  "address": "?????? ??????? ??????? ????????",
+  "payment_terms": "??? 30 ???",
+  "credit_limit": 100000.0
+}
+
+### Get Vendor Details
+GET {{baseUrl}}/vendors/1
+Authorization: Bearer {{token}}
+
+### Search Vendors
+GET {{baseUrl}}/vendors?term=?????????
+Authorization: Bearer {{token}}
+
+### Create Vendor Evaluation
+POST {{baseUrl}}/vendors/1/evaluations
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "supplier_id": 1,
+  "evaluation_period_start": "2025-10-01",
+  "evaluation_period_end": "2025-11-01",
+  "quality_score": 4.5,
+  "delivery_score": 4.8,
+  "pricing_score": 4.2,
+  "communication_score": 4.6,
+  "reliability_score": 4.7,
+  "total_orders": 10,
+  "completed_orders": 10,
+  "on_time_deliveries": 9,
+  "late_deliveries": 1,
+  "rejected_shipments": 0,
+  "total_value": 500000.0,
+  "notes": "???? ????? ???? ????? ??????",
+  "recommendations": "???? ?????? ??? ???????",
+  "is_approved": true,
+  "is_preferred": true
+}
+
+### Get Vendor Latest Evaluation
+GET {{baseUrl}}/vendors/1/evaluation
+Authorization: Bearer {{token}}
+
+### Get Vendor Score/Grade
+GET {{baseUrl}}/vendors/1/score
+Authorization: Bearer {{token}}
+
+### Get Vendor Performance Metrics
+GET {{baseUrl}}/vendors/1/performance
+Authorization: Bearer {{token}}
+
+
+### ============= Reports & Analytics API (v1.6.0) =============
+
+### Generate Sales Summary Report (Last 30 Days)
+POST {{baseUrl}}/reports/sales-summary?format=json
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "start_date": "2025-10-20",
+  "end_date": "2025-11-19"
+}
+
+### Generate Sales Summary Report (With Filters)
+POST {{baseUrl}}/reports/sales-summary?format=json
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "start_date": "2025-11-01",
+  "end_date": "2025-11-19",
+  "customer_id": 1,
+  "min_amount": 100.0
+}
+
+### Export Sales Report to Excel
+POST {{baseUrl}}/reports/sales-summary?format=xlsx
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "start_date": "2025-11-01",
+  "end_date": "2025-11-19"
+}
+
+### Generate Inventory Status Report
+POST {{baseUrl}}/reports/inventory-status?format=json
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{}
+
+### Generate Inventory Report by Category
+POST {{baseUrl}}/reports/inventory-status?format=json
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "category_id": 1
+}
+
+### Generate Financial Summary Report (Last Quarter)
+POST {{baseUrl}}/reports/financial-summary?format=json
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "start_date": "2025-08-01",
+  "end_date": "2025-11-19"
+}
+
+### Export Financial Report to PDF
+POST {{baseUrl}}/reports/financial-summary?format=pdf
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "start_date": "2025-11-01",
+  "end_date": "2025-11-19"
+}
+
+### Generate Payment Summary Report
+POST {{baseUrl}}/reports/payment-summary?format=json
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "start_date": "2025-11-01",
+  "end_date": "2025-11-19",
+  "payment_method": "cash"
+}
+
+### Generate Cash Flow Report
+POST {{baseUrl}}/reports/cash-flow?format=json
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "start_date": "2025-10-01",
+  "end_date": "2025-11-19"
+}
+
+### Export Cash Flow to CSV
+POST {{baseUrl}}/reports/cash-flow?format=csv
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "start_date": "2025-11-01",
+  "end_date": "2025-11-19"
+}

@@ -10,7 +10,8 @@ from PySide6.QtWidgets import (
     QTabWidget, QMenuBar, QStatusBar, QToolBar,
     QLabel, QPushButton, QMessageBox, QSplashScreen, QDialog,
     QLineEdit, QComboBox, QTableWidget, QTableWidgetItem,
-    QHeaderView, QAbstractItemView, QGroupBox, QFrame
+    QHeaderView, QAbstractItemView, QGroupBox, QFrame,
+    QFileDialog
 )
 from PySide6.QtCore import Qt, QTimer, QThread, Signal
 from PySide6.QtGui import QAction, QIcon, QPixmap, QFont, QColor
@@ -23,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.models.customer import CustomerManager
 from src.models.supplier import SupplierManager
+from src.core.caching_service import AdvancedCachingService
 
 class MainWindow(QMainWindow):
     """النافذة الرئيسية للتطبيق"""
@@ -51,33 +53,144 @@ class MainWindow(QMainWindow):
         
         if self.logger:
             self.logger.info("تم إنشاء النافذة الرئيسية")
+
+    class BackupWorker(QThread):
+        finished = Signal(bool, str)
+
+        def __init__(self, db_manager, mode: str, logger=None, backup_file: Optional[str] = None, metadata: Optional[dict] = None):
+            super().__init__()
+            self.db_manager = db_manager
+            self.mode = mode  # 'backup' or 'restore'
+            self.logger = logger
+            self.backup_file = backup_file
+            self.metadata = metadata or {}
+
+        def run(self):
+            try:
+                if self.mode == 'backup':
+                    path = None
+                    if hasattr(self.db_manager, 'backup_database_encrypted'):
+                        path = self.db_manager.backup_database_encrypted(metadata=self.metadata)
+                        ok = bool(path)
+                        self.finished.emit(ok, str(path) if path else "")
+                    else:
+                        ok = self.db_manager.backup_database()
+                        self.finished.emit(ok, "")
+                elif self.mode == 'restore':
+                    ok = False
+                    if hasattr(self.db_manager, 'restore_database_encrypted') and self.backup_file:
+                        ok = self.db_manager.restore_database_encrypted(self.backup_file)
+                    self.finished.emit(ok, "")
+                else:
+                    self.finished.emit(False, "وضع غير معروف")
+            except Exception as e:
+                if self.logger:
+                    self.logger.error(f"خطأ في مهمة النسخ الاحتياطي/الاستعادة: {str(e)}")
+                self.finished.emit(False, str(e))
     
     def init_services(self):
         """تهيئة الخدمات المطلوبة"""
         try:
             if self.db_manager:
-                # تهيئة خدمة المخزون
-                from src.services.inventory_service import InventoryService
-                self.inventory_service = InventoryService(self.db_manager, self.logger)
-                
-                # تهيئة خدمة المبيعات
-                from src.services.sales_service import SalesService
-                self.sales_service = SalesService(self.db_manager, self.logger)
-                
-                # تهيئة خدمة التقارير
-                from src.services.reports_service import ReportsService
-                self.reports_service = ReportsService(self.db_manager)
-                
-                # تهيئة خدمة المدفوعات
-                from src.services.payment_service import PaymentService
-                self.payment_service = PaymentService(self.db_manager)
+                # حاول تهيئة النسخ المحسنة أولاً ثم الرجوع إلى النسخ القديمة إذا لم تتوفر
+                try:
+                    from src.services.inventory_service_enhanced import InventoryService as EnhancedInventoryService
+                    from src.services.product_service_enhanced import ProductService as EnhancedProductService
 
-                # تهيئة مديري العملاء والموردين
-                self.customer_manager = CustomerManager(self.db_manager, self.logger)
-                self.supplier_manager = SupplierManager(self.db_manager, self.logger)
-                
+                    self.inventory_service = EnhancedInventoryService(self.db_manager, self.logger)
+                    # ProductService يحتوي على واجهات البحث والإحصاء
+                    self.product_service = EnhancedProductService(self.db_manager, self.logger)
+
+                    # توفير واجهة متوافقة مع الكود الحالي
+                    # بعض أجزاء الواجهة تتوقع وجود product_manager و generate_inventory_report
+                    self.inventory_service.product_manager = self.product_service
+                    # ربط اسم الدالة المتوقع generate_inventory_report
+                    if not hasattr(self.inventory_service, 'generate_inventory_report') and hasattr(self.inventory_service, 'get_inventory_report'):
+                        self.inventory_service.generate_inventory_report = self.inventory_service.get_inventory_report
+
+                except Exception:
+                    # استرجاع الإصدارات التقليدية إن لم تتوفر النسخ المحسّنة
+                    try:
+                        from src.services.inventory_service import InventoryService
+                        from src.services.product_service import ProductService
+                        self.inventory_service = InventoryService(self.db_manager, self.logger)
+                        self.product_service = ProductService(self.db_manager, self.logger)
+                        self.inventory_service.product_manager = getattr(self.product_service, 'product_manager', None) or self.product_service
+                    except Exception as e:
+                        if self.logger:
+                            self.logger.warning(f"تعذر تهيئة خدمة المخزون: {e}")
+                        self.inventory_service = None
+
+                # تهيئة خدمة المبيعات (محسنة أو قديمة)
+                try:
+                    from src.services.sales_service_enhanced import SalesService as EnhancedSalesService
+                    self.sales_service = EnhancedSalesService(self.db_manager, self.logger, inventory_service=getattr(self, 'inventory_service', None), product_service=getattr(self, 'product_service', None))
+                except Exception:
+                    try:
+                        from src.services.sales_service import SalesService
+                        self.sales_service = SalesService(self.db_manager, self.logger)
+                    except Exception as e:
+                        if self.logger:
+                            self.logger.warning(f"تعذر تهيئة خدمة المبيعات: {e}")
+                        self.sales_service = None
+
+                # تهيئة خدمة التقارير
+                try:
+                    from src.services.reports_service_enhanced import ReportsService as EnhancedReportsService
+                    self.reports_service = EnhancedReportsService(self.db_manager, self.logger)
+                except Exception:
+                    try:
+                        from src.services.reports_service import ReportsService
+                        self.reports_service = ReportsService(self.db_manager)
+                    except Exception as e:
+                        if self.logger:
+                            self.logger.warning(f"تعذر تهيئة خدمة التقارير: {e}")
+                        self.reports_service = None
+
+                # تهيئة خدمة المدفوعات / الفواتير
+                try:
+                    from src.services.billing_service import BillingService
+                    self.payment_service = BillingService(self.db_manager, self.logger)
+                except Exception:
+                    try:
+                        from src.services.payment_service import PaymentService
+                        self.payment_service = PaymentService(self.db_manager)
+                    except Exception as e:
+                        if self.logger:
+                            self.logger.warning(f"تعذر تهيئة خدمة المدفوعات: {e}")
+                        self.payment_service = None
+
+                # تهيئة مديري العملاء والموردين من النماذج
+                try:
+                    self.customer_manager = CustomerManager(self.db_manager, self.logger)
+                except Exception:
+                    self.customer_manager = None
+                try:
+                    self.supplier_manager = SupplierManager(self.db_manager, self.logger)
+                except Exception:
+                    self.supplier_manager = None
+
                 if self.logger:
-                    self.logger.info("تم تهيئة جميع الخدمات في النافذة الرئيسية")
+                    self.logger.info("تم تهيئة الخدمات (محسنة/تقليدية) في النافذة الرئيسية")
+
+                # تهيئة خدمة التخزين المؤقت من الإعدادات
+                try:
+                    cache_enabled = True
+                    default_ttl = 60
+                    disk_cache = False
+                    disk_path = str(Path(self.db_manager.db_path).parent / "cache") if hasattr(self.db_manager, 'db_path') else "data/cache"
+                    if self.config_manager and hasattr(self.config_manager, 'get'):
+                        cache_enabled = bool(self.config_manager.get('cache.enabled', True))
+                        default_ttl = int(self.config_manager.get('cache.default_ttl', 60))
+                        disk_cache = bool(self.config_manager.get('cache.disk_cache', False))
+                        disk_path = self.config_manager.get('cache.disk_path', disk_path)
+                    self.cache = AdvancedCachingService(default_ttl=default_ttl, enable_disk_cache=disk_cache, disk_cache_path=disk_path) if cache_enabled else None
+                    if self.logger:
+                        self.logger.info(f"خدمة التخزين المؤقت: {'مفعلة' if self.cache else 'معطلة'} (TTL={default_ttl}s, Disk={disk_cache})")
+                except Exception as e:
+                    self.cache = None
+                    if self.logger:
+                        self.logger.warning(f"تعذر تهيئة خدمة التخزين المؤقت: {e}")
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في تهيئة الخدمات: {str(e)}")
@@ -339,9 +452,15 @@ class MainWindow(QMainWindow):
             self.inventory_category_combo.addItem("جميع الفئات", None)
             
             if getattr(self, "inventory_service", None):
-                categories = self.inventory_service.category_manager.get_all_categories(active_only=True)
-                for category in categories:
-                    self.inventory_category_combo.addItem(category.name, category.id)
+                try:
+                    # محاولة استخدام category_manager إذا كان موجوداً
+                    categories = self.inventory_service.category_manager.get_all_categories()
+                    for category in categories:
+                        if getattr(category, 'is_active', True):
+                            self.inventory_category_combo.addItem(category.name, category.id)
+                except (AttributeError, TypeError):
+                    # إذا فشل، حاول طلب الفئات مباشرة من قاعدة البيانات
+                    pass
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في تحميل مرشحات الفئات: {str(e)}")
@@ -366,11 +485,32 @@ class MainWindow(QMainWindow):
             if category_id is None:
                 category_id = None
             
-            products = self.inventory_service.product_manager.search_products(
-                search_term=search_term,
-                category_id=category_id,
-                active_only=True
-            )
+            # Cache مفتاح لنتائج البحث
+            cache_key = None
+            if getattr(self, 'cache', None):
+                cache_key = f"ui:inventory:search:{search_term}|{category_id}"
+                products = self.cache.get(cache_key)
+            else:
+                products = None
+
+            if products is None:
+                # محاولة استخدام product_manager أو ProductService حسب ما هو متاح
+                try:
+                    products = self.inventory_service.product_manager.search_products(
+                        search_term=search_term,
+                        category_id=category_id
+                    )
+                except AttributeError:
+                    # إذا لم يكن product_manager موجوداً، استخدم ProductService
+                    from src.services.product_service_enhanced import ProductService
+                    ps = ProductService(self.db_manager, self.logger)
+                    products = ps.search_products(
+                        search_term=search_term,
+                        category_id=category_id,
+                        active_only=True
+                    )
+                if getattr(self, 'cache', None) and cache_key:
+                    self.cache.set(cache_key, products, ttl=30)
             
             self.inventory_table.setRowCount(len(products))
             
@@ -416,8 +556,18 @@ class MainWindow(QMainWindow):
                 
                 self.inventory_table.setRowHeight(row_index, 40)
             
-            # تحديث الملخص
-            report = self.inventory_service.generate_inventory_report()
+            # تحديث الملخص مع التخزين المؤقت
+            report_filters = {"search": search_term or "", "category_id": category_id}
+            if getattr(self, 'cache', None):
+                cached_report = self.cache.get_cached_report("inventory_summary", report_filters)
+            else:
+                cached_report = None
+            if cached_report is not None:
+                report = cached_report
+            else:
+                report = self.inventory_service.generate_inventory_report()
+                if getattr(self, 'cache', None):
+                    self.cache.cache_report("inventory_summary", report_filters, report, ttl=60)
             self.update_inventory_summary(report)
         
         except Exception as e:
@@ -474,7 +624,17 @@ class MainWindow(QMainWindow):
         
         try:
             search_term = self.contacts_search_input.text().strip() if hasattr(self, "contacts_search_input") else ""
-            customers = self.customer_manager.search_customers(search_term=search_term, active_only=True)
+            # Cache نتائج العملاء
+            cache_key = None
+            if getattr(self, 'cache', None):
+                cache_key = f"ui:customers:search:{search_term}"
+                customers = self.cache.get(cache_key)
+            else:
+                customers = None
+            if customers is None:
+                customers = self.customer_manager.search_customers(search_term=search_term, active_only=True)
+                if getattr(self, 'cache', None) and cache_key:
+                    self.cache.set(cache_key, customers, ttl=45)
             
             self.customers_table.setRowCount(len(customers))
             for row_index, customer in enumerate(customers):
@@ -497,6 +657,28 @@ class MainWindow(QMainWindow):
                     else:
                         item.setTextAlignment(Qt.AlignVCenter | Qt.AlignRight)
                     self.customers_table.setItem(row_index, col_index, item)
+                
+                # إضافة أزرار الإجراءات
+                actions_widget = QWidget()
+                actions_layout = QHBoxLayout(actions_widget)
+                actions_layout.setContentsMargins(4, 0, 4, 0)
+                actions_layout.setSpacing(4)
+                
+                edit_btn = QPushButton("تعديل")
+                edit_btn.setMaximumWidth(60)
+                edit_btn.setMinimumHeight(28)
+                edit_btn.clicked.connect(lambda checked, cid=customer.id: self.edit_customer(cid))
+                actions_layout.addWidget(edit_btn)
+                
+                delete_btn = QPushButton("حذف")
+                delete_btn.setMaximumWidth(50)
+                delete_btn.setMinimumHeight(28)
+                delete_btn.setStyleSheet("background-color: #e74c3c; color: white;")
+                delete_btn.clicked.connect(lambda checked, cid=customer.id: self.delete_customer(cid))
+                actions_layout.addWidget(delete_btn)
+                
+                actions_layout.addStretch()
+                self.customers_table.setCellWidget(row_index, 9, actions_widget)
                 
                 self.customers_table.setRowHeight(row_index, 36)
             
@@ -537,7 +719,17 @@ class MainWindow(QMainWindow):
         
         try:
             search_term = self.contacts_search_input.text().strip() if hasattr(self, "contacts_search_input") else ""
-            suppliers = self.supplier_manager.search_suppliers(search_term=search_term, active_only=True)
+            # Cache نتائج الموردين
+            cache_key = None
+            if getattr(self, 'cache', None):
+                cache_key = f"ui:suppliers:search:{search_term}"
+                suppliers = self.cache.get(cache_key)
+            else:
+                suppliers = None
+            if suppliers is None:
+                suppliers = self.supplier_manager.search_suppliers(search_term=search_term, active_only=True)
+                if getattr(self, 'cache', None) and cache_key:
+                    self.cache.set(cache_key, suppliers, ttl=45)
             
             self.suppliers_table.setRowCount(len(suppliers))
             for row_index, supplier in enumerate(suppliers):
@@ -560,6 +752,28 @@ class MainWindow(QMainWindow):
                     else:
                         item.setTextAlignment(Qt.AlignVCenter | Qt.AlignRight)
                     self.suppliers_table.setItem(row_index, col_index, item)
+                
+                # إضافة أزرار الإجراءات
+                actions_widget = QWidget()
+                actions_layout = QHBoxLayout(actions_widget)
+                actions_layout.setContentsMargins(4, 0, 4, 0)
+                actions_layout.setSpacing(4)
+                
+                edit_btn = QPushButton("تعديل")
+                edit_btn.setMaximumWidth(60)
+                edit_btn.setMinimumHeight(28)
+                edit_btn.clicked.connect(lambda checked, sid=supplier.id: self.edit_supplier(sid))
+                actions_layout.addWidget(edit_btn)
+                
+                delete_btn = QPushButton("حذف")
+                delete_btn.setMaximumWidth(50)
+                delete_btn.setMinimumHeight(28)
+                delete_btn.setStyleSheet("background-color: #e74c3c; color: white;")
+                delete_btn.clicked.connect(lambda checked, sid=supplier.id: self.delete_supplier(sid))
+                actions_layout.addWidget(delete_btn)
+                
+                actions_layout.addStretch()
+                self.suppliers_table.setCellWidget(row_index, 9, actions_widget)
                 
                 self.suppliers_table.setRowHeight(row_index, 36)
             
@@ -590,17 +804,101 @@ class MainWindow(QMainWindow):
     
     # ===== عمليات إدارة العملاء والموردين =====
     def add_customer(self):
-        """إضافة عميل جديد - سيتم تطوير نافذة متقدمة لاحقاً"""
-        QMessageBox.information(self, "إضافة عميل", "سيتم إضافة واجهة متقدمة لإدارة العملاء في الإصدار القادم.")
+        """إضافة عميل جديد"""
+        try:
+            from src.ui.dialogs.customer_form_dialog import CustomerFormDialog
+            dialog = CustomerFormDialog(self.db_manager, logger=self.logger, parent=self)
+            if dialog.exec():
+                self.refresh_contacts_data()
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة إضافة عميل: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة إضافة عميل:\n{str(e)}")
     
     def add_supplier(self):
         """إضافة مورد جديد"""
-        QMessageBox.information(self, "إضافة مورد", "سيتم إضافة واجهة متقدمة لإدارة الموردين في الإصدار القادم.")
+        try:
+            from src.ui.dialogs.supplier_form_dialog import SupplierFormDialog
+            dialog = SupplierFormDialog(self.db_manager, logger=self.logger, parent=self)
+            if dialog.exec():
+                self.refresh_contacts_data()
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة إضافة مورد: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة إضافة مورد:\n{str(e)}")
+    
+    def edit_customer(self, customer_id):
+        """تعديل عميل"""
+        try:
+            from src.ui.dialogs.customer_form_dialog import CustomerFormDialog
+            dialog = CustomerFormDialog(self.db_manager, customer_id=customer_id, logger=self.logger, parent=self)
+            if dialog.exec():
+                self.refresh_contacts_data()
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة تعديل عميل: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة تعديل عميل:\n{str(e)}")
+    
+    def delete_customer(self, customer_id):
+        """حذف عميل"""
+        reply = QMessageBox.question(
+            self,
+            "تأكيد الحذف",
+            "هل تريد حذف هذا العميل؟",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                self.db_manager.execute_query("DELETE FROM customers WHERE id = ?", (customer_id,))
+                self.refresh_contacts_data()
+                QMessageBox.information(self, "نجاح", "تم حذف العميل بنجاح")
+            except Exception as e:
+                if self.logger:
+                    self.logger.error(f"خطأ في حذف العميل: {str(e)}")
+                QMessageBox.critical(self, "خطأ", f"فشل في حذف العميل: {str(e)}")
+    
+    def edit_supplier(self, supplier_id):
+        """تعديل مورد"""
+        try:
+            from src.ui.dialogs.supplier_form_dialog import SupplierFormDialog
+            dialog = SupplierFormDialog(self.db_manager, supplier_id=supplier_id, logger=self.logger, parent=self)
+            if dialog.exec():
+                self.refresh_contacts_data()
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة تعديل مورد: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة تعديل مورد:\n{str(e)}")
+    
+    def delete_supplier(self, supplier_id):
+        """حذف مورد"""
+        reply = QMessageBox.question(
+            self,
+            "تأكيد الحذف",
+            "هل تريد حذف هذا المورد؟",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                self.db_manager.execute_query("DELETE FROM suppliers WHERE id = ?", (supplier_id,))
+                self.refresh_contacts_data()
+                QMessageBox.information(self, "نجاح", "تم حذف المورد بنجاح")
+            except Exception as e:
+                if self.logger:
+                    self.logger.error(f"خطأ في حذف المورد: {str(e)}")
+                QMessageBox.critical(self, "خطأ", f"فشل في حذف المورد: {str(e)}")
     
     def contacts_report(self):
         """عرض تقارير العملاء والموردين"""
-        self.refresh_contacts_data()
-        QMessageBox.information(self, "تقارير العملاء والموردين", "تم تحديث جداول العملاء والموردين. سيتم إضافة تقارير تفصيلية قريباً.")
+        try:
+            from src.ui.dialogs.contacts_report_dialog import ContactsReportDialog
+            dialog = ContactsReportDialog(self.db_manager, logger=self.logger, parent=self)
+            dialog.exec()
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة التقارير: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة التقارير:\n{str(e)}")
     
     def refresh_data(self):
         """تحديث البيانات في الواجهة"""
@@ -763,11 +1061,11 @@ class MainWindow(QMainWindow):
         customers_layout.addWidget(customers_summary_group)
         
         self.customers_table = QTableWidget()
-        self.customers_table.setColumnCount(9)
+        self.customers_table.setColumnCount(10)
         self.customers_table.setHorizontalHeaderLabels([
             "المعرف", "الاسم", "الهاتف", "البريد الإلكتروني",
             "المدينة", "الرصيد الحالي", "الحد الائتماني",
-            "آخر شراء", "عدد الفواتير"
+            "آخر شراء", "عدد الفواتير", "الإجراءات"
         ])
         self.customers_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.customers_table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -793,11 +1091,11 @@ class MainWindow(QMainWindow):
         suppliers_layout.addWidget(suppliers_summary_group)
         
         self.suppliers_table = QTableWidget()
-        self.suppliers_table.setColumnCount(9)
+        self.suppliers_table.setColumnCount(10)
         self.suppliers_table.setHorizontalHeaderLabels([
             "المعرف", "الاسم", "مسؤول الاتصال", "الهاتف",
             "المدينة", "الرصيد الحالي", "الحد الائتماني",
-            "آخر شراء", "عدد فواتير الشراء"
+            "آخر شراء", "عدد فواتير الشراء", "الإجراءات"
         ])
         self.suppliers_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.suppliers_table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -866,6 +1164,16 @@ class MainWindow(QMainWindow):
         backup_action = QAction("نسخة احتياطية", self)
         backup_action.triggered.connect(self.backup_database)
         file_menu.addAction(backup_action)
+
+        backup_enc_action = QAction("نسخة احتياطية مشفرة…", self)
+        backup_enc_action.setToolTip("إنشاء نسخة احتياطية مشفرة (AES-256-GCM)")
+        backup_enc_action.triggered.connect(self.backup_database_encrypted_action)
+        file_menu.addAction(backup_enc_action)
+
+        restore_enc_action = QAction("استعادة نسخة مشفرة…", self)
+        restore_enc_action.setToolTip("استعادة قاعدة البيانات من نسخة احتياطية مشفرة")
+        restore_enc_action.triggered.connect(self.restore_database_encrypted_action)
+        file_menu.addAction(restore_enc_action)
         
         file_menu.addSeparator()
         
@@ -879,6 +1187,15 @@ class MainWindow(QMainWindow):
         
         # قائمة أدوات
         tools_menu = menubar.addMenu("أدوات")
+        
+        # إضافة عنصر البحث المتقدم
+        search_action = QAction("🔍 البحث المتقدم", self)
+        search_action.setShortcut("Ctrl+F")
+        search_action.setToolTip("البحث المتقدم في جميع بيانات النظام")
+        search_action.triggered.connect(self.show_advanced_search_window)
+        tools_menu.addAction(search_action)
+        
+        tools_menu.addSeparator()
         
         # إضافة عنصر إدارة التشفير
         encryption_action = QAction("🔒 إدارة التشفير", self)
@@ -913,6 +1230,127 @@ class MainWindow(QMainWindow):
         payment_reports_action = QAction("📈 تقارير المدفوعات", self)
         payment_reports_action.triggered.connect(self.show_payment_reports)
         payments_menu.addAction(payment_reports_action)
+
+        # قائمة لوحات المعلومات العامة
+        dashboards_menu = menubar.addMenu("لوحات المعلومات")
+        open_dashboard_action = QAction("📊 لوحة المعلومات الرئيسية", self)
+        open_dashboard_action.triggered.connect(self.show_main_dashboard)
+        dashboards_menu.addAction(open_dashboard_action)
+
+        # قائمة عروض الأسعار والمرتجعات
+        quotes_menu = menubar.addMenu("عروض ومرتجعات")
+        
+        quotes_action = QAction("💼 عروض الأسعار", self)
+        quotes_action.triggered.connect(self.show_quotes_window)
+        quotes_menu.addAction(quotes_action)
+        
+        returns_action = QAction("↩️ المرتجعات", self)
+        returns_action.triggered.connect(self.show_returns_window)
+        quotes_menu.addAction(returns_action)
+
+        # قائمة أوامر الشراء
+        po_menu = menubar.addMenu("أوامر الشراء")
+        
+        po_action = QAction("📋 إدارة أوامر الشراء", self)
+        po_action.triggered.connect(self.show_purchase_orders_window)
+        po_menu.addAction(po_action)
+        
+        po_menu.addSeparator()
+        
+        receiving_action = QAction("📦 استلام الشحنات", self)
+        receiving_action.triggered.connect(self.show_receiving_notes_window)
+        po_menu.addAction(receiving_action)
+        
+        supplier_eval_action = QAction("⭐ تقييم الموردين", self)
+        supplier_eval_action.triggered.connect(self.show_supplier_evaluations_window)
+        po_menu.addAction(supplier_eval_action)
+
+        # قائمة خطط الدفع والتقسيط
+        payment_plans_menu = menubar.addMenu("خطط الدفع")
+        
+        payment_plans_action = QAction("💳 إدارة خطط الدفع", self)
+        payment_plans_action.triggered.connect(self.show_payment_plans_window)
+        payment_plans_menu.addAction(payment_plans_action)
+        
+        payment_plans_menu.addSeparator()
+        
+        upcoming_payments_action = QAction("📅 الأقساط القادمة", self)
+        upcoming_payments_action.triggered.connect(self.show_upcoming_payments)
+        payment_plans_menu.addAction(upcoming_payments_action)
+        
+        overdue_payments_action = QAction("⚠️ الأقساط المتأخرة", self)
+        overdue_payments_action.triggered.connect(self.show_overdue_payments)
+        payment_plans_menu.addAction(overdue_payments_action)
+
+        # قائمة تحسين المخزون
+        inventory_opt_menu = menubar.addMenu("تحسين المخزون")
+        
+        abc_analysis_action = QAction("📊 تحليل ABC", self)
+        abc_analysis_action.setToolTip("تحليل ABC للمنتجات حسب القيمة")
+        abc_analysis_action.triggered.connect(self.show_abc_analysis_window)
+        inventory_opt_menu.addAction(abc_analysis_action)
+        
+        inventory_opt_menu.addSeparator()
+        
+        safety_stock_action = QAction("🛡️ الأرصدة الآمنة", self)
+        safety_stock_action.setToolTip("إدارة الأرصدة الآمنة ونقاط إعادة الطلب")
+        safety_stock_action.triggered.connect(self.show_safety_stock_window)
+        inventory_opt_menu.addAction(safety_stock_action)
+        
+        batch_tracking_action = QAction("📦 تتبع الدفعات", self)
+        batch_tracking_action.setToolTip("تتبع دفعات المنتجات وتواريخ الانتهاء")
+        batch_tracking_action.triggered.connect(self.show_batch_tracking_window)
+        inventory_opt_menu.addAction(batch_tracking_action)
+        
+        inventory_opt_menu.addSeparator()
+        
+        reorder_action = QAction("🔔 توصيات إعادة الطلب", self)
+        reorder_action.setToolTip("توصيات ذكية لإعادة طلب المنتجات")
+        reorder_action.triggered.connect(self.show_reorder_recommendations_window)
+        inventory_opt_menu.addAction(reorder_action)
+        
+        inventory_opt_menu.addSeparator()
+        
+        physical_count_action = QAction("📋 الجرد الدوري", self)
+        physical_count_action.setToolTip("إدارة الجرد الدوري للمخزون")
+        physical_count_action.triggered.connect(self.show_physical_counts_window)
+        inventory_opt_menu.addAction(physical_count_action)
+        
+        adjustments_action = QAction("⚖️ تسويات المخزون", self)
+        adjustments_action.setToolTip("إدارة تسويات المخزون")
+        adjustments_action.triggered.connect(self.show_stock_adjustments_window)
+        inventory_opt_menu.addAction(adjustments_action)
+
+        # قائمة التقارير
+        reports_menu = menubar.addMenu("📊 التقارير")
+        
+        advanced_reports_action = QAction("📊 التقارير المتقدمة", self)
+        advanced_reports_action.setToolTip("نظام التقارير المتقدمة الشامل")
+        advanced_reports_action.triggered.connect(self.show_advanced_reports_window)
+        reports_menu.addAction(advanced_reports_action)
+        
+        reports_menu.addSeparator()
+        
+        sales_reports_action = QAction("📈 تقارير المبيعات", self)
+        sales_reports_action.setToolTip("تقارير المبيعات التفصيلية")
+        sales_reports_action.triggered.connect(lambda: self.show_advanced_reports_window("sales"))
+        reports_menu.addAction(sales_reports_action)
+        
+        inventory_reports_action = QAction("📦 تقارير المخزون", self)
+        inventory_reports_action.setToolTip("تقارير المخزون والحركة")
+        inventory_reports_action.triggered.connect(lambda: self.show_advanced_reports_window("inventory"))
+        reports_menu.addAction(inventory_reports_action)
+        
+        financial_reports_action = QAction("💰 التقارير المالية", self)
+        financial_reports_action.setToolTip("التقارير المحاسبية والمالية")
+        financial_reports_action.triggered.connect(lambda: self.show_advanced_reports_window("financial"))
+        reports_menu.addAction(financial_reports_action)
+
+        # قائمة المحاسبة
+        accounting_menu = menubar.addMenu("المحاسبة")
+        open_accounting_action = QAction("📚 إدارة المحاسبة", self)
+        open_accounting_action.triggered.connect(self.show_accounting_window)
+        accounting_menu.addAction(open_accounting_action)
         
         # قائمة مساعدة
         help_menu = menubar.addMenu("مساعدة")
@@ -920,6 +1358,279 @@ class MainWindow(QMainWindow):
         about_action = QAction("حول البرنامج", self)
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
+
+    def show_accounting_window(self):
+        """عرض نافذة إدارة المحاسبة"""
+        try:
+            from .accounting_window import AccountingWindow
+            # احتفظ بالمرجع حتى لا تُجمّع
+            if not hasattr(self, "_accounting_window") or self._accounting_window is None:
+                self._accounting_window = AccountingWindow(self.db_manager, parent=self)
+            self._accounting_window.show()
+            self._accounting_window.raise_()
+            self._accounting_window.activateWindow()
+            if self.logger:
+                self.logger.info("تم فتح نافذة إدارة المحاسبة")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة إدارة المحاسبة: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة إدارة المحاسبة:\n{str(e)}")
+    
+    def show_quotes_window(self):
+        """عرض نافذة إدارة عروض الأسعار"""
+        try:
+            from .quotes_window import QuotesWindow
+            if not hasattr(self, "_quotes_window") or self._quotes_window is None:
+                self._quotes_window = QuotesWindow(self.db_manager, parent=self)
+            self._quotes_window.show()
+            self._quotes_window.raise_()
+            self._quotes_window.activateWindow()
+            if self.logger:
+                self.logger.info("تم فتح نافذة إدارة عروض الأسعار")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة عروض الأسعار: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة عروض الأسعار:\n{str(e)}")
+    
+    def show_returns_window(self):
+        """عرض نافذة إدارة المرتجعات"""
+        try:
+            from .returns_window import ReturnsWindow
+            if not hasattr(self, "_returns_window") or self._returns_window is None:
+                self._returns_window = ReturnsWindow(self.db_manager, parent=self)
+            self._returns_window.show()
+            self._returns_window.raise_()
+            self._returns_window.activateWindow()
+            if self.logger:
+                self.logger.info("تم فتح نافذة إدارة المرتجعات")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة المرتجعات: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة المرتجعات:\n{str(e)}")
+    
+    def show_purchase_orders_window(self):
+        """عرض نافذة أوامر الشراء"""
+        try:
+            from .purchase_orders_window import PurchaseOrdersWindow
+            if not hasattr(self, "_purchase_orders_window") or self._purchase_orders_window is None:
+                self._purchase_orders_window = PurchaseOrdersWindow(self.db_manager, parent=self)
+            self._purchase_orders_window.show()
+            self._purchase_orders_window.raise_()
+            self._purchase_orders_window.activateWindow()
+            if self.logger:
+                self.logger.info("تم فتح نافذة أوامر الشراء")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة أوامر الشراء: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة أوامر الشراء:\n{str(e)}")
+    
+    def show_receiving_notes_window(self):
+        """عرض نافذة استلام الشحنات"""
+        try:
+            # يمكن إضافة نافذة منفصلة للاستلام أو استخدام نفس نافذة أوامر الشراء
+            self.show_purchase_orders_window()
+            if self.logger:
+                self.logger.info("تم فتح نافذة استلام الشحنات")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة استلام الشحنات: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة استلام الشحنات:\n{str(e)}")
+    
+    def show_supplier_evaluations_window(self):
+        """عرض نافذة تقييم الموردين"""
+        try:
+            # يمكن إضافة نافذة منفصلة للتقييم
+            QMessageBox.information(self, "قريباً", "سيتم إضافة نافذة تقييم الموردين قريباً")
+            if self.logger:
+                self.logger.info("طلب فتح نافذة تقييم الموردين")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة تقييم الموردين: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة تقييم الموردين:\n{str(e)}")
+    
+    def show_payment_plans_window(self):
+        """عرض نافذة إدارة خطط الدفع"""
+        try:
+            from .payment_plans_window import PaymentPlansWindow
+            
+            window = PaymentPlansWindow(self.db_manager, parent=self)
+            window.show()
+            
+            if self.logger:
+                self.logger.info("فتح نافذة إدارة خطط الدفع")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة خطط الدفع: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة خطط الدفع:\n{str(e)}")
+    
+    def show_upcoming_payments(self):
+        """عرض الأقساط القادمة"""
+        try:
+            from .payment_plans_window import PaymentPlansWindow
+            
+            window = PaymentPlansWindow(self.db_manager, parent=self)
+            window.tabs.setCurrentIndex(1)  # تبويب الأقساط القادمة
+            window.show()
+            
+            if self.logger:
+                self.logger.info("عرض الأقساط القادمة")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في عرض الأقساط القادمة: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في عرض الأقساط القادمة:\n{str(e)}")
+    
+    def show_overdue_payments(self):
+        """عرض الأقساط المتأخرة"""
+        try:
+            from .payment_plans_window import PaymentPlansWindow
+            
+            window = PaymentPlansWindow(self.db_manager, parent=self)
+            window.tabs.setCurrentIndex(2)  # تبويب الأقساط المتأخرة
+            window.show()
+            
+            if self.logger:
+                self.logger.info("عرض الأقساط المتأخرة")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في عرض الأقساط المتأخرة: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في عرض الأقساط المتأخرة:\n{str(e)}")
+    
+    def show_abc_analysis_window(self):
+        """عرض نافذة تحليل ABC"""
+        try:
+            from .abc_analysis_window import ABCAnalysisWindow
+        
+            if not hasattr(self, "_abc_analysis_window") or self._abc_analysis_window is None:
+                self._abc_analysis_window = ABCAnalysisWindow(self.db_manager, parent=self)
+        
+            self._abc_analysis_window.show()
+            self._abc_analysis_window.raise_()
+            self._abc_analysis_window.activateWindow()
+        
+            if self.logger:
+                self.logger.info("تم فتح نافذة تحليل ABC")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة تحليل ABC: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة تحليل ABC:\n{str(e)}")
+    
+    def show_safety_stock_window(self):
+        """عرض نافذة إدارة الأرصدة الآمنة"""
+        try:
+            from .safety_stock_window import SafetyStockWindow
+        
+            if not hasattr(self, "_safety_stock_window") or self._safety_stock_window is None:
+                self._safety_stock_window = SafetyStockWindow(self.db_manager, parent=self)
+        
+            self._safety_stock_window.show()
+            self._safety_stock_window.raise_()
+            self._safety_stock_window.activateWindow()
+        
+            if self.logger:
+                self.logger.info("تم فتح نافذة الأرصدة الآمنة")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة الأرصدة الآمنة: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة الأرصدة الآمنة:\n{str(e)}")
+    
+    def show_batch_tracking_window(self):
+        """عرض نافذة تتبع الدفعات"""
+        try:
+            from .batch_tracking_window import BatchTrackingWindow
+        
+            if not hasattr(self, "_batch_tracking_window") or self._batch_tracking_window is None:
+                self._batch_tracking_window = BatchTrackingWindow(self.db_manager, parent=self)
+        
+            self._batch_tracking_window.show()
+            self._batch_tracking_window.raise_()
+            self._batch_tracking_window.activateWindow()
+        
+            if self.logger:
+                self.logger.info("تم فتح نافذة تتبع الدفعات")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة تتبع الدفعات: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة تتبع الدفعات:\n{str(e)}")
+    
+    def show_reorder_recommendations_window(self):
+        """عرض نافذة توصيات إعادة الطلب"""
+        try:
+            from .reorder_recommendations_window import ReorderRecommendationsWindow
+        
+            if not hasattr(self, "_reorder_window") or self._reorder_window is None:
+                self._reorder_window = ReorderRecommendationsWindow(self.db_manager, parent=self)
+        
+            self._reorder_window.show()
+            self._reorder_window.raise_()
+            self._reorder_window.activateWindow()
+        
+            if self.logger:
+                self.logger.info("تم فتح نافذة توصيات إعادة الطلب")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة توصيات إعادة الطلب: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة توصيات إعادة الطلب:\n{str(e)}")
+    
+    def show_physical_counts_window(self):
+        """عرض نافذة الجرد الدوري"""
+        try:
+            from .physical_counts_window import PhysicalCountsWindow
+            
+            if not hasattr(self, "_physical_counts_window") or self._physical_counts_window is None:
+                self._physical_counts_window = PhysicalCountsWindow(self.db_manager, parent=self)
+            
+            self._physical_counts_window.show()
+            self._physical_counts_window.raise_()
+            self._physical_counts_window.activateWindow()
+            
+            if self.logger:
+                self.logger.info("تم فتح نافذة الجرد الدوري")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة الجرد الدوري: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة الجرد الدوري:\n{str(e)}")
+    
+    def show_stock_adjustments_window(self):
+        """عرض نافذة تسويات المخزون"""
+        try:
+            from .stock_adjustments_window import StockAdjustmentsWindow
+            
+            if not hasattr(self, "_adjustments_window") or self._adjustments_window is None:
+                self._adjustments_window = StockAdjustmentsWindow(self.db_manager, parent=self)
+            
+            self._adjustments_window.show()
+            self._adjustments_window.raise_()
+            self._adjustments_window.activateWindow()
+            
+            if self.logger:
+                self.logger.info("تم فتح نافذة تسويات المخزون")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة تسويات المخزون: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة تسويات المخزون:\n{str(e)}")
+    
+    def show_advanced_reports_window(self, report_category=None):
+        """عرض نافذة التقارير المتقدمة"""
+        try:
+            from .advanced_reports_window import AdvancedReportsWindow
+            
+            if not hasattr(self, "_advanced_reports_window") or self._advanced_reports_window is None:
+                self._advanced_reports_window = AdvancedReportsWindow(self.db_manager, parent=self)
+            
+            # إذا تم تحديد فئة، قم بتحديدها في النافذة
+            if report_category and hasattr(self._advanced_reports_window, 'set_report_category'):
+                self._advanced_reports_window.set_report_category(report_category)
+            
+            self._advanced_reports_window.show()
+            self._advanced_reports_window.raise_()
+            self._advanced_reports_window.activateWindow()
+            
+            if self.logger:
+                self.logger.info(f"تم فتح نافذة التقارير المتقدمة - الفئة: {report_category or 'الكل'}")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة التقارير المتقدمة: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة التقارير المتقدمة:\n{str(e)}")
     
     def setup_toolbar(self):
         """إعداد شريط الأدوات"""
@@ -936,6 +1647,10 @@ class MainWindow(QMainWindow):
         backup_action = QAction("نسخة احتياطية", self)
         backup_action.triggered.connect(self.backup_database)
         toolbar.addAction(backup_action)
+
+        backup_enc_action = QAction("نسخة احتياطية مشفرة", self)
+        backup_enc_action.triggered.connect(self.backup_database_encrypted_action)
+        toolbar.addAction(backup_enc_action)
     
     def setup_statusbar(self):
         """إعداد شريط الحالة"""
@@ -989,6 +1704,9 @@ class MainWindow(QMainWindow):
             # تحديث المخزون
             if hasattr(self, 'inventory_service') and hasattr(self.inventory_service, "refresh_cache"):
                 self.inventory_service.refresh_cache()
+            # إبطال cache لتغييرات البيانات
+            if getattr(self, 'cache', None):
+                self.cache.clear()
             self.refresh_inventory_data()
         except Exception as e:
             self.logger.error(f"خطأ في معالجة حفظ المنتج: {str(e)}")
@@ -999,7 +1717,16 @@ class MainWindow(QMainWindow):
     
     def manage_categories(self):
         """إدارة الفئات"""
-        QMessageBox.information(self, "إدارة الفئات", "سيتم فتح نافذة إدارة الفئات")
+        try:
+            from src.ui.dialogs.category_dialog import CategoryDialog
+            dialog = CategoryDialog(self.db_manager, logger=self.logger, parent=self)
+            dialog.exec()
+            # تحديث قائمة الفئات بعد الإغلاق
+            self.load_inventory_filters()
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة إدارة الفئات: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة إدارة الفئات:\n{str(e)}")
     
     def inventory_report(self):
         """تقرير المخزون"""
@@ -1051,6 +1778,8 @@ class MainWindow(QMainWindow):
                 self.inventory_service.refresh_cache()
             if hasattr(self, 'sales_service') and hasattr(self.sales_service, "refresh_cache"):
                 self.sales_service.refresh_cache()
+            if getattr(self, 'cache', None):
+                self.cache.clear()
             self.refresh_inventory_data()
         except Exception as e:
             if self.logger:
@@ -1070,7 +1799,14 @@ class MainWindow(QMainWindow):
     
     def manage_suppliers(self):
         """إدارة الموردين"""
-        QMessageBox.information(self, "إدارة الموردين", "سيتم فتح نافذة إدارة الموردين")
+        try:
+            from src.ui.dialogs.supplier_management_dialog import SupplierManagementDialog
+            dialog = SupplierManagementDialog(self.db_manager, logger=self.logger, parent=self)
+            dialog.exec()
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة إدارة الموردين: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة إدارة الموردين:\n{str(e)}")
     
     def purchases_report(self):
         """تقرير المشتريات"""
@@ -1087,6 +1823,63 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "خطأ", "فشل في إنشاء النسخة الاحتياطية")
         else:
             QMessageBox.warning(self, "خطأ", "قاعدة البيانات غير متصلة")
+
+    def backup_database_encrypted_action(self):
+        """إنشاء نسخة احتياطية مشفرة بدون حظر الواجهة"""
+        if not self.db_manager:
+            QMessageBox.warning(self, "خطأ", "قاعدة البيانات غير متصلة")
+            return
+        self.statusBar().showMessage("جاري إنشاء النسخة الاحتياطية المشفرة…")
+        if self.logger:
+            self.logger.info("بدء إنشاء نسخة احتياطية مشفرة")
+        # تمرير بعض البيانات الوصفية البسيطة
+        metadata = {"initiated_by": "ui", "context": "manual"}
+        self._backup_thread = self.BackupWorker(self.db_manager, mode='backup', logger=self.logger, metadata=metadata)
+        self._backup_thread.finished.connect(self._on_encrypted_backup_finished)
+        self._backup_thread.start()
+
+    def _on_encrypted_backup_finished(self, success: bool, path: str):
+        self.statusBar().clearMessage()
+        if success:
+            msg = "تم إنشاء النسخة الاحتياطية المشفرة بنجاح"
+            if path:
+                msg += f"\nالمسار: {path}"
+            QMessageBox.information(self, "نسخة احتياطية مشفرة", msg)
+            if self.logger:
+                self.logger.info(f"تم إنشاء نسخة احتياطية مشفرة: {path}")
+        else:
+            QMessageBox.warning(self, "خطأ", "فشل في إنشاء النسخة الاحتياطية المشفرة")
+            if self.logger:
+                self.logger.warning("فشل إنشاء النسخة الاحتياطية المشفرة")
+
+    def restore_database_encrypted_action(self):
+        """استعادة نسخة احتياطية مشفرة بدون حظر الواجهة"""
+        if not self.db_manager:
+            QMessageBox.warning(self, "خطأ", "قاعدة البيانات غير متصلة")
+            return
+        file_path, _ = QFileDialog.getOpenFileName(self, "اختر ملف النسخة المشفرة", str(Path.home()), "Encrypted Backups (*.encrypted);;All Files (*)")
+        if not file_path:
+            return
+        self.statusBar().showMessage("جاري استعادة النسخة الاحتياطية المشفرة…")
+        if self.logger:
+            self.logger.info(f"بدء استعادة نسخة احتياطية مشفرة من: {file_path}")
+        self._restore_thread = self.BackupWorker(self.db_manager, mode='restore', logger=self.logger, backup_file=file_path)
+        self._restore_thread.finished.connect(self._on_encrypted_restore_finished)
+        self._restore_thread.start()
+
+    def _on_encrypted_restore_finished(self, success: bool, _msg: str):
+        self.statusBar().clearMessage()
+        if success:
+            QMessageBox.information(self, "استعادة نسخة مشفرة", "تمت استعادة قاعدة البيانات بنجاح. سيتم تحديث البيانات.")
+            if self.logger:
+                self.logger.info("تمت استعادة قاعدة البيانات من نسخة مشفرة")
+            # تحديث حالة شريط الحالة والبيانات بعد إعادة تهيئة الاتصال
+            self.setup_statusbar()
+            self.refresh_data()
+        else:
+            QMessageBox.warning(self, "خطأ", "فشل في استعادة النسخة الاحتياطية المشفرة")
+            if self.logger:
+                self.logger.warning("فشل استعادة النسخة الاحتياطية المشفرة")
     
     def daily_report(self):
         """عرض التقرير اليومي"""
@@ -1287,6 +2080,44 @@ class MainWindow(QMainWindow):
             if self.logger:
                 self.logger.error(f"خطأ في فتح لوحة تحكم المدفوعات: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح لوحة تحكم المدفوعات: {str(e)}")
+
+    def show_main_dashboard(self):
+        """عرض لوحة المعلومات الرئيسية"""
+        try:
+            from .dashboard_window import DashboardWindow
+            
+            if not hasattr(self, "_dashboard_window") or self._dashboard_window is None:
+                self._dashboard_window = DashboardWindow(self.db_manager, self)
+            
+            self._dashboard_window.show()
+            self._dashboard_window.raise_()
+            self._dashboard_window.activateWindow()
+            
+            if self.logger:
+                self.logger.info("تم فتح لوحة المعلومات الرئيسية")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح لوحة المعلومات: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح لوحة المعلومات: {str(e)}")
+    
+    def show_advanced_search_window(self):
+        """عرض نافذة البحث المتقدم"""
+        try:
+            from .advanced_search_window import AdvancedSearchWindow
+            
+            if not hasattr(self, "_search_window") or self._search_window is None:
+                self._search_window = AdvancedSearchWindow(self.db_manager, self)
+            
+            self._search_window.show()
+            self._search_window.raise_()
+            self._search_window.activateWindow()
+            
+            if self.logger:
+                self.logger.info("تم فتح نافذة البحث المتقدم")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة البحث المتقدم: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة البحث المتقدم: {str(e)}")
     
     def closeEvent(self, event):
         """حدث إغلاق النافذة"""

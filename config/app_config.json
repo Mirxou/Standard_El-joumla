@@ -2,7 +2,19 @@
   "database": {
     "path": "data/logical_release.db",
     "backup_interval": 24,
-    "max_backups": 30
+    "max_backups": 30,
+    "pool": {
+      "enabled": true,
+      "pool_size": 10,
+      "max_overflow": 20,
+      "timeout": 30
+    },
+    "backups": {
+      "encrypted": true,
+      "backup_dir": "data/backups",
+      "max_backups": 30,
+      "encryption_key_path": null
+    }
   },
   "ui": {
     "language": "ar",
@@ -20,6 +32,12 @@
     "default_format": "pdf",
     "auto_save": true,
     "save_path": "data/exports"
+  },
+  "cache": {
+    "enabled": true,
+    "default_ttl": 600,
+    "disk_cache": false,
+    "disk_path": "data/cache"
   },
   "pos": {
     "auto_print": false,

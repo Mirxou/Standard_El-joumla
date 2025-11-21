@@ -7,6 +7,8 @@
 
 import logging
 import sys
+import os
+import io
 from pathlib import Path
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
@@ -59,8 +61,21 @@ def setup_logger(
     
     # إعداد السجل في وحدة التحكم
     if log_to_console:
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setLevel(logging.INFO)
+        stream = sys.stdout
+        try:
+            # على Windows: إجبار الترميز إلى UTF-8 لتجنب UnicodeEncodeError
+            if os.name == "nt" and hasattr(stream, "reconfigure"):
+                stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            try:
+                # كحل احتياطي: لفّ التدفق بمغلّف UTF-8
+                stream = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+            except Exception:
+                # كحل نهائي: تجاهل الإخراج إلى وحدة التحكم إذا تعذّر الترميز
+                stream = io.StringIO()
+
+        console_handler = logging.StreamHandler(stream)
+        console_handler.setLevel(getattr(logging, log_level.upper()))
         console_handler.setFormatter(formatter)
         logger.addHandler(console_handler)
     

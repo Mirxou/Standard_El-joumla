@@ -1,0 +1,1432 @@
+{
+  "info": {
+    "name": "Logical Version ERP API",
+    "description": "\n        # 🚀 Logical Version ERP - نظام تخطيط موارد المؤسسات\n        \n        نظام ERP شامل مع دعم كامل للغة العربية\n        \n        ## المميزات الرئيسية:\n        - 🛒 إدارة المبيعات والمشتريات\n        - 📦 إدارة المخزون\n        - 👥 إدارة العملاء والموردين\n        - 💰 المحاسبة المالية\n        - 📊 التقارير والتحليلات\n        - 🤖 الذكاء الاصطناعي\n        - 🎁 برنامج الولاء\n        - 📄 الفواتير الإلكترونية\n        - 🛡️ المصادقة متعددة العوامل\n        \n        ## المصادقة:\n        يتطلب النظام JWT token للوصول إلى معظم endpoints\n        \n        1. أولاً، سجل الدخول عبر `/auth/login`\n        2. استخدم الـ token المُرجع في header: `Authorization: Bearer {token}`\n        ",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Other",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Customers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/customers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/customers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/products",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "products"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Product",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/products",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "products"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Product Detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/products/{product_id}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "products",
+                "{product_id}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Product Variant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/products/{product_id}/variants",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "products",
+                "{product_id}",
+                "variants"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Bundle",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/products/{product_id}/bundles",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "products",
+                "{product_id}",
+                "bundles"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Add Bundle Item",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/bundles/{bundle_id}/items",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "bundles",
+                "{bundle_id}",
+                "items"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Bundles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/bundles",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "bundles"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Bundle Detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/bundles/{bundle_id}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "bundles",
+                "{bundle_id}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Bundle Item",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/bundles/{bundle_id}/items/{item_id}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "bundles",
+                "{bundle_id}",
+                "items",
+                "{item_id}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Price",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/prices",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "prices"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Product Prices",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/products/{product_id}/prices",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "products",
+                "{product_id}",
+                "prices"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Variant Prices",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/variants/{variant_id}/prices",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "variants",
+                "{variant_id}",
+                "prices"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Price",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/prices/{price_id}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "prices",
+                "{price_id}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Add Product Tag",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/products/{product_id}/tags",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "products",
+                "{product_id}",
+                "tags"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Product Tags",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/products/{product_id}/tags",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "products",
+                "{product_id}",
+                "tags"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Product Tag",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/products/{product_id}/tags/{tag}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "products",
+                "{product_id}",
+                "tags",
+                "{tag}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Invoices",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/invoices",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "invoices"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Supplier Rating",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/suppliers/{supplier_id}/rating",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "suppliers",
+                "{supplier_id}",
+                "rating"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Supplier Evaluation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/suppliers/{supplier_id}/evaluations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "suppliers",
+                "{supplier_id}",
+                "evaluations"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Customer Detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/customers/{customer_id}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers",
+                "{customer_id}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Sales Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/sales/orders",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "sales",
+                "orders"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Sales Orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/sales/orders",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "sales",
+                "orders"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Sales Order Detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/sales/orders/{order_id}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "sales",
+                "orders",
+                "{order_id}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Order Status",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/sales/orders/update-status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "sales",
+                "orders",
+                "update-status"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Order Refund",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/sales/orders/create-refund",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "sales",
+                "orders",
+                "create-refund"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Order Return",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/sales/orders/create-return",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "sales",
+                "orders",
+                "create-return"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Track Order Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/sales/orders/track-payment",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "sales",
+                "orders",
+                "track-payment"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Purchase Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/purchase/orders",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "purchase",
+                "orders"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Purchase Orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/purchase/orders",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "purchase",
+                "orders"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Purchase Order Detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/purchase/orders/{po_id}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "purchase",
+                "orders",
+                "{po_id}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Purchase Order Status",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/purchase/orders/update-status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "purchase",
+                "orders",
+                "update-status"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Receive Purchase Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/purchase/orders/receive",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "purchase",
+                "orders",
+                "receive"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Quote",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/sales/quotes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "sales",
+                "quotes"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Quotes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/sales/quotes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "sales",
+                "quotes"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Transfer Stock",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/inventory/transfer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "inventory",
+                "transfer"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Reserve Stock",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/inventory/reserve",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "inventory",
+                "reserve"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Release Stock",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/inventory/release/{product_id}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "inventory",
+                "release",
+                "{product_id}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Stock Movements",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/inventory/movements",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "inventory",
+                "movements"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Abc Analysis",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/inventory/abc-analysis",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "inventory",
+                "abc-analysis"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Vendor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/vendors",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "vendors"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Search Vendors",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/vendors",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "vendors"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Vendor",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/vendors/{vendor_id}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "vendors",
+                "{vendor_id}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Vendor Evaluation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/vendors/{vendor_id}/evaluations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "vendors",
+                "{vendor_id}",
+                "evaluations"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Vendor Evaluation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/vendors/{vendor_id}/evaluation",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "vendors",
+                "{vendor_id}",
+                "evaluation"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Vendor Score",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/vendors/{vendor_id}/score",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "vendors",
+                "{vendor_id}",
+                "score"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Vendor Performance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/vendors/{vendor_id}/performance",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "vendors",
+                "{vendor_id}",
+                "performance"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Generate Sales Report",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/reports/sales-summary",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "sales-summary"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Generate Inventory Report",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/reports/inventory-status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "inventory-status"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Generate Financial Report",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/reports/financial-summary",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "financial-summary"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Generate Payment Report",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/reports/payment-summary",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "payment-summary"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Generate Cashflow Report",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/reports/cash-flow",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "cash-flow"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Chat With Bot",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/ai/chat",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ai",
+                "chat"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Chat History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/ai/chat/history",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ai",
+                "chat",
+                "history"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Clear Chat History",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/ai/chat/history",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ai",
+                "chat",
+                "history"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Forecast Sales",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/ai/forecast/sales",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ai",
+                "forecast",
+                "sales"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Customer Insights",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/ai/customer-insights",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ai",
+                "customer-insights"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Recommendations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/ai/recommendations/{customer_id}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ai",
+                "recommendations",
+                "{customer_id}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Detect Anomalies",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/ai/anomalies",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ai",
+                "anomalies"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Customer Segment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/marketing/segments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "marketing",
+                "segments"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Marketing Campaign",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/marketing/campaigns",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "marketing",
+                "campaigns"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Send Marketing Campaign",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/marketing/campaigns/{campaign_id}/send",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "marketing",
+                "campaigns",
+                "{campaign_id}",
+                "send"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Campaign Analytics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/marketing/campaigns/{campaign_id}/analytics",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "marketing",
+                "campaigns",
+                "{campaign_id}",
+                "analytics"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Hot Leads",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/marketing/leads/hot",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "marketing",
+                "leads",
+                "hot"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Enable Mfa",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/mfa/enable",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "mfa",
+                "enable"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Disable Mfa",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/mfa/disable",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "mfa",
+                "disable"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Send Mfa Otp",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/mfa/send-otp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "mfa",
+                "send-otp"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Verify Mfa",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/mfa/verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "mfa",
+                "verify"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

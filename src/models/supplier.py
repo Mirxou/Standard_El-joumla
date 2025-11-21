@@ -205,11 +205,22 @@ class SupplierManager:
     def search_suppliers(self, search_term: str = "", active_only: bool = True) -> List[Supplier]:
         """البحث في الموردين"""
         try:
-            query = """
+            # التحقق من الأعمدة المتاحة في جدول purchases
+            cols_info = self.db_manager.fetch_all("PRAGMA table_info(purchases)")
+            available_cols = {row[1] for row in cols_info} if cols_info else set()
+            
+            # بناء شروط الفلتر بناءً على الأعمدة المتاحة
+            total_purchases_filter = ""
+            purchases_count_filter = ""
+            if "status" in available_cols:
+                total_purchases_filter = "AND status != 'ملغية'"
+                purchases_count_filter = "AND status != 'ملغية'"
+            
+            query = f"""
             SELECT s.*,
                    (SELECT MAX(purchase_date) FROM purchases WHERE supplier_id = s.id) as last_purchase_date,
-                   (SELECT SUM(total_amount) FROM purchases WHERE supplier_id = s.id AND status != 'ملغية') as total_purchases,
-                   (SELECT COUNT(*) FROM purchases WHERE supplier_id = s.id AND status != 'ملغية') as purchases_count
+                   (SELECT SUM(total_amount) FROM purchases WHERE supplier_id = s.id {total_purchases_filter}) as total_purchases,
+                   (SELECT COUNT(*) FROM purchases WHERE supplier_id = s.id {purchases_count_filter}) as purchases_count
             FROM suppliers s
             WHERE 1=1
             """

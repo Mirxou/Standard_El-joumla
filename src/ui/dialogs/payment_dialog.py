@@ -26,6 +26,7 @@ from ...models.payment import Payment, PaymentManager, PaymentType, PaymentMetho
 from ...models.customer import CustomerManager
 from ...models.supplier import SupplierManager
 from ...services.payment_service import PaymentService
+from ...services.billing_service import BillingService
 from ...utils.logger import setup_logger
 
 
@@ -79,6 +80,7 @@ class PaymentDialog(QDialog):
         # إعداد قاعدة البيانات والخدمات
         self.db_manager = DatabaseManager()
         self.payment_service = PaymentService(self.db_manager)
+        self.billing_service = BillingService(self.db_manager)
         self.customer_manager = CustomerManager(self.db_manager)
         self.supplier_manager = SupplierManager(self.db_manager)
         

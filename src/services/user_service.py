@@ -608,10 +608,12 @@ class UserService:
     def generate_jwt_token(self, user: User) -> str:
         """إنشاء JWT token للمستخدم"""
         try:
+            # Handle both User object and dict, role may already be a string
+            role_val = user.role.value if hasattr(user.role, 'value') else user.role
             payload = {
                 'user_id': user.id,
                 'username': user.username,
-                'role': user.role.value,
+                'role': role_val,
                 'exp': datetime.utcnow() + timedelta(hours=self.security_settings.jwt_expiry_hours),
                 'iat': datetime.utcnow()
             }

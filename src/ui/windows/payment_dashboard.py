@@ -117,39 +117,56 @@ class DataUpdateWorker(QThread):
     def run(self):
         """تشغيل عملية تحديث البيانات"""
         try:
+            from datetime import date
+            
             # جمع جميع البيانات المطلوبة
             data = {}
             
-            # مؤشرات الأداء الرئيسية
-            data['kpis'] = self.payment_service.get_payment_performance_kpis()
+            # تحديد الفترات الزمنية
+            end_date = date.today()
+            start_date = date(end_date.year, end_date.month, 1)  # أول الشهر
             
-            # تحليل الاتجاهات
-            data['trends'] = self.payment_service.get_payment_trends_analysis('monthly')
+            # فترة المقارنة
+            prev_end = start_date - timedelta(days=1)
+            prev_start = date(prev_end.year, prev_end.month, 1)
             
-            # التوقعات
-            data['forecast'] = self.payment_service.get_payment_forecast(3)
+            # مؤشرات الأداء الرئيسية (مع معالجة الأخطاء)
+            try:
+                data['kpis'] = self.payment_service.get_payment_performance_kpis(start_date, end_date)
+            except Exception as e:
+                data['kpis'] = {}
             
-            # مقارنة الفترات
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=30)
-            prev_end = start_date
-            prev_start = prev_end - timedelta(days=30)
+            # تحليل الاتجاهات (مع معالجة الأخطاء)
+            try:
+                data['trends'] = self.payment_service.get_payment_trends_analysis(start_date, end_date, 'monthly')
+            except Exception as e:
+                data['trends'] = {}
             
-            data['comparison'] = self.payment_service.get_period_comparison_analysis(
-                prev_start.strftime('%Y-%m-%d'),
-                prev_end.strftime('%Y-%m-%d'),
-                start_date.strftime('%Y-%m-%d'),
-                end_date.strftime('%Y-%m-%d')
-            )
+            # التوقعات (مع معالجة الأخطاء)
+            try:
+                data['forecast'] = self.payment_service.get_payment_forecast(12, 3)
+            except Exception as e:
+                data['forecast'] = {}
             
-            # تقرير الأعمار
-            data['aging'] = self.payment_service.get_aging_report('receivables')
+            # مقارنة الفترات (مع معالجة الأخطاء)
+            try:
+                data['comparison'] = self.payment_service.get_period_comparison_analysis(
+                    prev_start, prev_end, start_date, end_date
+                )
+            except Exception as e:
+                data['comparison'] = {}
             
-            # تدفق نقدي
-            data['cash_flow'] = self.payment_service.get_cash_flow_report(
-                start_date.strftime('%Y-%m-%d'),
-                end_date.strftime('%Y-%m-%d')
-            )
+            # تقرير الأعمار (مع معالجة الأخطاء)
+            try:
+                data['aging'] = self.payment_service.get_aging_report('receivables')
+            except Exception as e:
+                data['aging'] = {}
+            
+            # تدفق نقدي (مع معالجة الأخطاء)
+            try:
+                data['cash_flow'] = self.payment_service.get_cash_flow_report(start_date, end_date)
+            except Exception as e:
+                data['cash_flow'] = {}
             
             self.data_updated.emit(data)
             

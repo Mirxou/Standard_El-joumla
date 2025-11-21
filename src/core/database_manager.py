@@ -14,11 +14,19 @@ from typing import Optional, List, Dict, Any, Tuple
 from contextlib import contextmanager
 from .encryption_manager import EncryptionManager
 from .exceptions import DatabaseException
+from src.database.connection_pool import ConnectionPool, PoolConfig
+from src.core.encrypted_backup_service import EncryptedBackupService
 
 class DatabaseManager:
     """مدير قاعدة البيانات"""
     
-    def __init__(self, db_path: Optional[str] = None, encryption_password: Optional[str] = None):
+    def __init__(
+        self,
+        db_path: Optional[str] = None,
+        encryption_password: Optional[str] = None,
+        pool_options: Optional[Dict[str, Any]] = None,
+        backup_options: Optional[Dict[str, Any]] = None
+    ):
         if db_path is None:
             project_root = Path(__file__).parent.parent.parent
             self.db_path = str(project_root / "data" / "logical_release.db")
@@ -26,9 +34,13 @@ class DatabaseManager:
             self.db_path = db_path
         
         self.connection = None
+        self.pool: Optional[ConnectionPool] = None
         self.encryption_manager = None
         self.encryption_password = encryption_password
         self.is_encrypted = False
+        self.encrypted_backup_service: Optional[EncryptedBackupService] = None
+        self._pool_options = pool_options or {}
+        self._backup_options = backup_options or {}
         
         self._ensure_data_directory()
         
@@ -84,6 +96,44 @@ class DatabaseManager:
             
             # إنشاء الفهارس
             self._create_indexes()
+            
+            # تشغيل الهجرات
+            self._run_migrations()
+
+            # تهيئة Connection Pool للاستخدام العام (تخطي الذاكرة)
+            if self.pool is None:
+                if self.db_path == ':memory:' or str(self.db_path).startswith('file::memory:'):
+                    self.pool = None
+                else:
+                    enabled = self._pool_options.get('enabled', True)
+                    if enabled:
+                        cfg = PoolConfig(
+                            pool_size=int(self._pool_options.get('pool_size', 10)),
+                            max_overflow=int(self._pool_options.get('max_overflow', 20)),
+                            timeout=float(self._pool_options.get('timeout', 30.0))
+                        )
+                        self.pool = ConnectionPool(self.db_path, cfg)
+
+            # تهيئة خدمة النسخ الاحتياطي (مشفر عند التمكين)
+            if self.encrypted_backup_service is None:
+                backups_dir = str(self._backup_options.get('backup_dir', Path(self.db_path).parent / "backups"))
+                max_b = int(self._backup_options.get('max_backups', 30))
+                enc_enabled = bool(self._backup_options.get('encrypted', True))
+                key_path = self._backup_options.get('encryption_key_path')
+                key_bytes = None
+                if key_path:
+                    try:
+                        key_bytes = Path(key_path).read_bytes()
+                    except Exception:
+                        key_bytes = None
+                # If encryption not enabled we still construct service; it gracefully falls back
+                self.encrypted_backup_service = EncryptedBackupService(
+                    database_path=self.db_path,
+                    backup_dir=backups_dir,
+                    encryption_key=key_bytes,
+                    max_backups=max_b,
+                    compress=True
+                )
             
             return True
             
@@ -421,18 +471,26 @@ class DatabaseManager:
     
     @contextmanager
     def get_cursor(self):
-        """الحصول على cursor مع إدارة تلقائية للموارد"""
-        cursor = self.connection.cursor()
-        try:
-            yield cursor
-        finally:
-            cursor.close()
+        """الحصول على cursor مع إدارة تلقائية للموارد (يدعم الـ Pool)."""
+        # استخدام Pool إن توفر
+        if self.pool is not None:
+            with self.pool.get_connection() as conn:
+                cursor = conn.cursor()
+                try:
+                    yield cursor
+                finally:
+                    cursor.close()
+        else:
+            cursor = self.connection.cursor()
+            try:
+                yield cursor
+            finally:
+                cursor.close()
     
     def execute_query(self, query: str, params: Tuple = ()) -> Any:
         """تنفيذ استعلام وإرجاع النتائج أو cursor للعمليات الأخرى"""
         with self.get_cursor() as cursor:
             cursor.execute(query, params)
-            
             # إذا كان الاستعلام يحتوي على نتائج (SELECT)
             if cursor.description:
                 columns = [description[0] for description in cursor.description]
@@ -440,7 +498,11 @@ class DatabaseManager:
                 return [dict(zip(columns, row)) for row in rows]
             else:
                 # للعمليات الأخرى مثل CREATE, INSERT, UPDATE, DELETE
-                self.connection.commit()
+                if self.pool is None:
+                    self.connection.commit()
+                else:
+                    # مع Pool، يتم الالتزام عبر الاتصال داخل السياق
+                    cursor.connection.commit()
                 return cursor
     
     def fetch_one(self, query: str, params: Tuple = ()) -> Optional[Any]:
@@ -459,7 +521,10 @@ class DatabaseManager:
         """تنفيذ استعلام INSERT/UPDATE/DELETE وإرجاع عدد الصفوف المتأثرة"""
         with self.get_cursor() as cursor:
             cursor.execute(query, params)
-            self.connection.commit()
+            if self.pool is None:
+                self.connection.commit()
+            else:
+                cursor.connection.commit()
             return cursor.rowcount
     
     def execute_scalar(self, query: str, params: Tuple = ()) -> Any:
@@ -471,9 +536,9 @@ class DatabaseManager:
     
     def get_last_insert_id(self) -> int:
         """الحصول على آخر ID تم إدراجه"""
-        cursor = self.connection.cursor()
-        cursor.execute("SELECT last_insert_rowid()")
-        return cursor.fetchone()[0]
+        with self.get_cursor() as cursor:
+            cursor.execute("SELECT last_insert_rowid()")
+            return cursor.fetchone()[0]
     
     def backup_database(self, backup_path: Optional[str] = None) -> bool:
         """إنشاء نسخة احتياطية من قاعدة البيانات"""
@@ -490,6 +555,18 @@ class DatabaseManager:
         except Exception as e:
             print(f"خطأ في إنشاء النسخة الاحتياطية: {e}")
             return False
+
+    def backup_database_encrypted(self, metadata: Optional[Dict[str, Any]] = None) -> Optional[str]:
+        """إنشاء نسخة احتياطية مشفرة باستخدام EncryptedBackupService"""
+        try:
+            if self.encrypted_backup_service is None:
+                backups_dir = str(Path(self.db_path).parent / "backups")
+                self.encrypted_backup_service = EncryptedBackupService(self.db_path, backups_dir)
+            backup_file = self.encrypted_backup_service.create_backup(metadata=metadata)
+            return str(backup_file) if backup_file else None
+        except Exception as e:
+            print(f"خطأ في النسخ الاحتياطي المشفر: {e}")
+            return None
     
     def restore_database(self, backup_path: str) -> bool:
         """استعادة قاعدة البيانات من نسخة احتياطية"""
@@ -509,6 +586,24 @@ class DatabaseManager:
             
         except Exception as e:
             print(f"خطأ في استعادة النسخة الاحتياطية: {e}")
+            return False
+
+    def restore_database_encrypted(self, backup_file: str) -> bool:
+        """استعادة قاعدة البيانات من نسخة احتياطية مشفرة"""
+        try:
+            if self.encrypted_backup_service is None:
+                backups_dir = str(Path(self.db_path).parent / "backups")
+                self.encrypted_backup_service = EncryptedBackupService(self.db_path, backups_dir)
+            # إغلاق الاتصال الحالي
+            if self.connection:
+                self.connection.close()
+            success = self.encrypted_backup_service.restore_backup(backup_file, restore_path=self.db_path)
+            if not success:
+                return False
+            # إعادة التهيئة بعد الاستعادة
+            return self.initialize()
+        except Exception as e:
+            print(f"خطأ في استعادة النسخة الاحتياطية المشفرة: {e}")
             return False
     
     def cleanup_old_backups(self, max_backups: int = 30):
@@ -683,9 +778,38 @@ class DatabaseManager:
         except Exception as e:
             print(f"خطأ في التحقق من وجود الجدول {table_name}: {e}")
             return False
+    
+    def _run_migrations(self) -> None:
+        """تشغيل ملفات الهجرات من مجلد migrations"""
+        try:
+            migrations_dir = Path(__file__).parent.parent.parent / "migrations"
+            if not migrations_dir.exists():
+                return
+            migration_files = sorted(migrations_dir.glob("*.sql"))
+            for migration_file in migration_files:
+                try:
+                    with open(migration_file, 'r', encoding='utf-8') as f:
+                        sql_content = f.read()
+                    queries = [q.strip() for q in sql_content.split(';') if q.strip()]
+                    for query in queries:
+                        self.connection.execute(query)
+                    self.connection.commit()
+                except Exception as e:
+                    self.connection.rollback()
+        except Exception as e:
+            pass
+    def execute(self, query: str, params: Tuple = ()) -> Any:
+        """تنفيذ استعلام وإرجاع cursor"""
+        cursor = self.connection.cursor()
+        cursor.execute(query, params)
+        self.connection.commit()
+        return cursor
 
     def close(self):
         """إغلاق الاتصال بقاعدة البيانات"""
         if self.connection:
             self.connection.close()
             self.connection = None
+        if self.pool is not None:
+            self.pool.close()
+            self.pool = None

@@ -25,6 +25,10 @@ from ...models.sale import Sale, SaleItem, SaleManager, SaleStatus, PaymentMetho
 from ...models.product import ProductManager
 from ...models.customer import CustomerManager
 from ...services.sales_service import SalesService
+try:
+    from ...services.sales_service_enhanced import SalesService as EnhancedSalesService
+except Exception:
+    EnhancedSalesService = None
 from ...utils.logger import setup_logger
 
 
@@ -71,7 +75,15 @@ class SalesDialog(QDialog):
         self.sale_manager = SaleManager(db_manager)
         self.product_manager = ProductManager(db_manager)
         self.customer_manager = CustomerManager(db_manager)
-        self.sales_service = SalesService(db_manager)
+        # prefer enhanced sales service if available
+        self.legacy_sales_service = SalesService(db_manager)
+        if EnhancedSalesService:
+            try:
+                self.sales_service = EnhancedSalesService(db_manager)
+            except Exception:
+                self.sales_service = self.legacy_sales_service
+        else:
+            self.sales_service = self.legacy_sales_service
         self.logger = setup_logger(__name__)
         
         self.sale = sale  # الفاتورة للتعديل (None للإنشاء الجديد)
@@ -623,7 +635,18 @@ class SalesDialog(QDialog):
             )
             
             # إنشاء الفاتورة في قاعدة البيانات
-            sale_id = self.sales_service.create_sale(new_sale)
+            sale_id = None
+            # try enhanced API names first
+            if hasattr(self.sales_service, 'create_order'):
+                try:
+                    sale_id = self.sales_service.create_order(new_sale)
+                except Exception:
+                    sale_id = None
+            if not sale_id and hasattr(self.sales_service, 'create_sale'):
+                try:
+                    sale_id = self.sales_service.create_sale(new_sale)
+                except Exception:
+                    sale_id = None
             if sale_id:
                 new_sale.id = sale_id
                 self.sale = new_sale
@@ -1111,24 +1134,60 @@ class SalesDialog(QDialog):
             
             # إضافة العناصر إلى الفاتورة
             for item in self.sale_items:
-                success = self.sales_service.add_item_to_sale(
-                    self.sale.id,
-                    item.product_id,
-                    item.quantity,
-                    item.unit_price,
-                    item.discount_amount
-                )
+                success = False
+                # try enhanced method names
+                if hasattr(self.sales_service, 'add_item_to_order'):
+                    try:
+                        success = self.sales_service.add_item_to_order(
+                            self.sale.id,
+                            item.product_id,
+                            item.quantity,
+                            item.unit_price,
+                            item.discount_amount
+                        )
+                    except Exception:
+                        success = False
+                # fallback to legacy
+                if not success and hasattr(self.sales_service, 'add_item_to_sale'):
+                    try:
+                        success = self.sales_service.add_item_to_sale(
+                            self.sale.id,
+                            item.product_id,
+                            item.quantity,
+                            item.unit_price,
+                            item.discount_amount
+                        )
+                    except Exception:
+                        success = False
                 if not success:
                     raise Exception(f"فشل في إضافة المنتج: {item.product_name}")
             
             # إكمال الفاتورة
-            completed_sale = self.sales_service.complete_sale(
-                self.sale.id,
-                payment_method=payment_method,
-                customer_id=customer_id,
-                discount_amount=self.discount_amount,
-                notes=notes
-            )
+            completed_sale = None
+            # try enhanced confirm API
+            if hasattr(self.sales_service, 'confirm_order'):
+                try:
+                    completed_sale = self.sales_service.confirm_order(
+                        self.sale.id,
+                        payment_method=payment_method,
+                        customer_id=customer_id,
+                        discount_amount=self.discount_amount,
+                        notes=notes
+                    )
+                except Exception:
+                    completed_sale = None
+            # fallback to legacy
+            if not completed_sale and hasattr(self.sales_service, 'complete_sale'):
+                try:
+                    completed_sale = self.sales_service.complete_sale(
+                        self.sale.id,
+                        payment_method=payment_method,
+                        customer_id=customer_id,
+                        discount_amount=self.discount_amount,
+                        notes=notes
+                    )
+                except Exception:
+                    completed_sale = None
             
             if completed_sale:
                 self.sale = completed_sale

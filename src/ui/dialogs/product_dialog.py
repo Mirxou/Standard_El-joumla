@@ -27,6 +27,14 @@ from ...models.category import CategoryManager
 from ...models.supplier import SupplierManager
 from ...utils.logger import setup_logger
 
+# Try to use enhanced product service/model if available
+try:
+    from ...services.product_service_enhanced import ProductService as EnhancedProductService
+    from ...models.product_enhanced import Product as EnhancedProduct
+except Exception:
+    EnhancedProductService = None
+    EnhancedProduct = None
+
 
 class ProductValidationWorker(QThread):
     """عامل التحقق من صحة بيانات المنتج"""
@@ -111,6 +119,14 @@ class ProductDialog(QDialog):
         
         # إعداد المدراء
         self.product_manager = ProductManager(db_manager)
+        # if enhanced product service available, prefer it
+        if EnhancedProductService:
+            try:
+                self.product_service = EnhancedProductService(db_manager, logger=setup_logger('product_service'))
+            except Exception:
+                self.product_service = None
+        else:
+            self.product_service = None
         self.category_manager = CategoryManager(db_manager)
         self.supplier_manager = SupplierManager(db_manager)
         
@@ -970,56 +986,126 @@ class ProductDialog(QDialog):
         
         try:
             if self.is_edit_mode:
-                # تحديث المنتج
-                success = self.product_manager.update_product(self.product.id, data)
-                if success:
-                    # إعادة تحميل المنتج
-                    updated_product = self.product_manager.get_product_by_id(self.product.id)
-                    if updated_product:
-                        self.product = updated_product
-                        self.product_saved.emit(updated_product)
-                        QMessageBox.information(self, "نجح", "تم تحديث المنتج بنجاح")
-                        if close_after_save:
-                            self.accept()
-                    else:
-                        QMessageBox.critical(self, "خطأ", "فشل في إعادة تحميل المنتج")
-                else:
-                    QMessageBox.critical(self, "خطأ", "فشل في تحديث المنتج")
-            else:
-                # إضافة منتج جديد
-                # تحويل البيانات إلى كائن Product
-                product = Product(
-                    name=data['name'],
-                    name_en=data.get('name_en'),
-                    barcode=data.get('barcode'),
-                    category_id=data.get('category_id'),
-                    unit=data.get('unit', 'قطعة'),
-                    cost_price=data['cost_price'],
-                    selling_price=data['selling_price'],
-                    min_stock=data.get('min_stock_level', 0),
-                    current_stock=data.get('stock_quantity', 0),
-                    description=data.get('description'),
-                    image_path=data.get('image_path'),
-                    is_active=data.get('is_active', True)
-                )
-                
-                product_id = self.product_manager.create_product(product)
-                if product_id:
-                    # إعادة تحميل المنتج من قاعدة البيانات
-                    created_product = self.product_manager.get_product_by_id(product_id)
-                    if created_product:
-                        self.product_saved.emit(created_product)
-                        QMessageBox.information(self, "نجح", f"تم إضافة المنتج بنجاح\nرقم المنتج: {product_id}")
-                        
-                        if close_after_save:
-                            self.accept()
+                if self.product_service:
+                    # build enhanced Product instance
+                    try:
+                        enhanced_product = EnhancedProduct(
+                            id=self.product.id,
+                            name=data['name'],
+                            name_en=data.get('name_en'),
+                            barcode=data.get('barcode'),
+                            category_id=data.get('category_id'),
+                            unit=data.get('unit', 'قطعة'),
+                            cost_price=data.get('cost_price', 0),
+                            base_price=data.get('selling_price', 0),
+                            current_stock=data.get('stock_quantity', 0),
+                            min_stock=data.get('min_stock_level', 0),
+                            max_stock=data.get('max_stock_level', 0),
+                            description=data.get('description'),
+                            image_path=data.get('image_path'),
+                            is_active=data.get('is_active', True)
+                        )
+                        success = self.product_service.update_product(enhanced_product)
+                    except Exception as e:
+                        self.logger.error(f"خطأ في تحضير المنتج المحسّن للتحديث: {str(e)}")
+                        success = False
+
+                    if success:
+                        updated_product = self.product_service.get_product_by_id(self.product.id)
+                        if updated_product:
+                            self.product = updated_product
+                            self.product_saved.emit(updated_product)
+                            QMessageBox.information(self, "نجح", "تم تحديث المنتج بنجاح")
+                            if close_after_save:
+                                self.accept()
                         else:
-                            # مسح النموذج للإضافة الجديدة
-                            self.clear_form()
+                            QMessageBox.critical(self, "خطأ", "فشل في إعادة تحميل المنتج")
                     else:
-                        QMessageBox.critical(self, "خطأ", "فشل في إعادة تحميل المنتج المُنشأ")
+                        QMessageBox.critical(self, "خطأ", "فشل في تحديث المنتج")
                 else:
-                    QMessageBox.critical(self, "خطأ", "فشل في إضافة المنتج")
+                    # legacy update
+                    success = self.product_manager.update_product(self.product.id, data)
+                    if success:
+                        updated_product = self.product_manager.get_product_by_id(self.product.id)
+                        if updated_product:
+                            self.product = updated_product
+                            self.product_saved.emit(updated_product)
+                            QMessageBox.information(self, "نجح", "تم تحديث المنتج بنجاح")
+                            if close_after_save:
+                                self.accept()
+                        else:
+                            QMessageBox.critical(self, "خطأ", "فشل في إعادة تحميل المنتج")
+                    else:
+                        QMessageBox.critical(self, "خطأ", "فشل في تحديث المنتج")
+            else:
+                # إنشاء منتج جديد (افضلية للخدمة المحسنة)
+                if self.product_service:
+                    try:
+                        enhanced_product = EnhancedProduct(
+                            name=data['name'],
+                            name_en=data.get('name_en'),
+                            barcode=data.get('barcode'),
+                            category_id=data.get('category_id'),
+                            unit=data.get('unit', 'قطعة'),
+                            cost_price=data.get('cost_price', 0),
+                            base_price=data.get('selling_price', 0),
+                            current_stock=data.get('stock_quantity', 0),
+                            min_stock=data.get('min_stock_level', 0),
+                            max_stock=data.get('max_stock_level', 0),
+                            description=data.get('description'),
+                            image_path=data.get('image_path'),
+                            is_active=data.get('is_active', True)
+                        )
+                        product_id = self.product_service.create_product(enhanced_product)
+                    except Exception as e:
+                        self.logger.error(f"خطأ في إنشاء المنتج المحسّن: {str(e)}")
+                        product_id = None
+
+                    if product_id:
+                        created_product = self.product_service.get_product_by_id(product_id)
+                        if created_product:
+                            self.product_saved.emit(created_product)
+                            QMessageBox.information(self, "نجح", f"تم إضافة المنتج بنجاح\nرقم المنتج: {product_id}")
+                            if close_after_save:
+                                self.accept()
+                            else:
+                                self.clear_form()
+                        else:
+                            QMessageBox.critical(self, "خطأ", "فشل في إعادة تحميل المنتج المُنشأ")
+                    else:
+                        QMessageBox.critical(self, "خطأ", "فشل في إضافة المنتج")
+                else:
+                    # تحويل البيانات إلى كائن Product (legacy)
+                    product = Product(
+                        name=data['name'],
+                        name_en=data.get('name_en'),
+                        barcode=data.get('barcode'),
+                        category_id=data.get('category_id'),
+                        unit=data.get('unit', 'قطعة'),
+                        cost_price=data['cost_price'],
+                        selling_price=data['selling_price'],
+                        min_stock=data.get('min_stock_level', 0),
+                        current_stock=data.get('stock_quantity', 0),
+                        description=data.get('description'),
+                        image_path=data.get('image_path'),
+                        is_active=data.get('is_active', True)
+                    )
+                    product_id = self.product_manager.create_product(product)
+                    if product_id:
+                        # إعادة تحميل المنتج من قاعدة البيانات
+                        created_product = self.product_manager.get_product_by_id(product_id)
+                        if created_product:
+                            self.product_saved.emit(created_product)
+                            QMessageBox.information(self, "نجح", f"تم إضافة المنتج بنجاح\nرقم المنتج: {product_id}")
+                            if close_after_save:
+                                self.accept()
+                            else:
+                                # مسح النموذج للإضافة الجديدة
+                                self.clear_form()
+                        else:
+                            QMessageBox.critical(self, "خطأ", "فشل في إعادة تحميل المنتج المُنشأ")
+                    else:
+                        QMessageBox.critical(self, "خطأ", "فشل في إضافة المنتج")
                     
         except Exception as e:
             self.logger.error(f"خطأ في حفظ المنتج: {str(e)}")

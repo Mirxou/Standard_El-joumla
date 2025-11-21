@@ -22,6 +22,14 @@ from core.config_manager import ConfigManager
 from core.database_manager import DatabaseManager
 from core.exceptions import DatabaseException, ConfigurationException
 from utils.logger import setup_logger
+try:
+    from core.logging_service import AdvancedLoggingService
+except Exception:
+    AdvancedLoggingService = None
+try:
+    from core.exception_handler import GlobalExceptionHandler
+except Exception:
+    GlobalExceptionHandler = None
 
 class LogicalReleaseApp:
     """الفئة الرئيسية للتطبيق"""
@@ -48,6 +56,14 @@ class LogicalReleaseApp:
         # إعداد اتجاه النص من اليمين لليسار
         self.app.setLayoutDirection(Qt.RightToLeft)
         
+        # تثبيت معالج الاستثناءات العالمي (إن توفر)
+        try:
+            if GlobalExceptionHandler is not None:
+                handler = GlobalExceptionHandler()
+                handler.install()
+        except Exception:
+            pass
+
         return True
     
     def load_configuration(self):
@@ -65,7 +81,37 @@ class LogicalReleaseApp:
     def setup_database(self):
         """إعداد قاعدة البيانات"""
         try:
-            self.db_manager = DatabaseManager()
+            # استخدام مسار قاعدة البيانات من الإعدادات إذا توفر
+            db_rel = None
+            try:
+                db_rel = self.config_manager.get('database.path', 'data/logical_release.db')
+            except Exception:
+                db_rel = 'data/logical_release.db'
+
+            project_root = Path(__file__).resolve().parent.parent
+            db_path = str((project_root / db_rel).resolve())
+            # إعدادات Pool من الإعدادات
+            pool_opts = self.config_manager.get('database.pool', {
+                'enabled': True,
+                'pool_size': 10,
+                'max_overflow': 20,
+                'timeout': 30
+            }) or {}
+            # إعدادات النسخ الاحتياطي
+            backup_opts = self.config_manager.get('database.backups', {
+                'encrypted': True,
+                'backup_dir': str(project_root / 'data' / 'backups'),
+                'max_backups': 30,
+                'encryption_key_path': None
+            }) or {}
+
+            # تحويل المسارات إلى مطلقة عند الحاجة
+            if backup_opts.get('backup_dir') and not Path(str(backup_opts['backup_dir'])).is_absolute():
+                backup_opts['backup_dir'] = str((project_root / str(backup_opts['backup_dir'])).resolve())
+            if backup_opts.get('encryption_key_path') and not Path(str(backup_opts['encryption_key_path'])).is_absolute():
+                backup_opts['encryption_key_path'] = str((project_root / str(backup_opts['encryption_key_path'])).resolve())
+
+            self.db_manager = DatabaseManager(db_path, pool_options=pool_opts, backup_options=backup_opts)
             return self.db_manager.initialize()
         except DatabaseException as e:
             QMessageBox.critical(None, "خطأ في قاعدة البيانات", f"فشل في إعداد قاعدة البيانات:\n{str(e)}")
@@ -77,7 +123,12 @@ class LogicalReleaseApp:
     def setup_logging(self):
         """إعداد نظام السجلات"""
         try:
-            self.logger = setup_logger()
+            # تفضيل نظام السجلات المتقدم إذا توفر
+            if AdvancedLoggingService is not None:
+                adv = AdvancedLoggingService(app_name="الإصدار المنطقي")
+                self.logger = adv.get_logger()
+            else:
+                self.logger = setup_logger()
             self.logger.info("تم بدء تشغيل التطبيق")
             return True
         except Exception as e:

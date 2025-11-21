@@ -259,8 +259,12 @@ class SaleManager:
             )
             
             result = self.db_manager.execute_query(query, params)
-            if result and hasattr(result, 'lastrowid'):
-                sale_id = result.lastrowid
+            if result:
+                try:
+                    sale_id = self.db_manager.get_last_insert_id()
+                except Exception:
+                    # fallback to cursor.lastrowid if available
+                    sale_id = getattr(result, 'lastrowid', None)
                 
                 # إضافة عناصر الفاتورة
                 for item in sale.items:
@@ -282,31 +286,55 @@ class SaleManager:
     def _create_sale_item(self, item: SaleItem) -> Optional[int]:
         """إنشاء عنصر فاتورة"""
         try:
+            # Try to adapt to current sale_items schema (may include batch_id, total_price, cost_price, profit)
+            # Fetch product cost_price
+            prod = self.db_manager.fetch_one('SELECT cost_price FROM products WHERE id = ?', (item.product_id,))
+            cost_price = float(prod[0]) if prod and prod[0] is not None else 0.0
+
+            # Find or create a batch for this product
+            batch = self.db_manager.fetch_one('SELECT id FROM batches WHERE product_id = ? LIMIT 1', (item.product_id,))
+            if batch and batch[0]:
+                batch_id = batch[0]
+            else:
+                # create placeholder batch
+                batch_number = f'auto-{item.product_id}-{int(datetime.now().timestamp())}'
+                bq = """
+                INSERT INTO batches (product_id, batch_number, quantity, cost_price, selling_price, purchase_date)
+                VALUES (?, ?, ?, ?, ?, DATE('now'))
+                """
+                bparams = (item.product_id, batch_number, 0, cost_price, float(item.unit_price))
+                self.db_manager.execute_query(bq, bparams)
+                try:
+                    batch_id = self.db_manager.get_last_insert_id()
+                except Exception:
+                    batch_id = None
+
+            total_price = float(item.unit_price) * int(item.quantity)
+            profit = total_price - (cost_price * int(item.quantity))
+
             query = """
             INSERT INTO sale_items (
-                sale_id, product_id, product_name, product_barcode,
-                quantity, unit_price, discount_amount, discount_percentage,
-                tax_amount, tax_percentage, total_amount
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                sale_id, product_id, batch_id, quantity, unit_price, total_price, cost_price, profit
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """
-            
+
             params = (
                 item.sale_id,
                 item.product_id,
-                item.product_name,
-                item.product_barcode,
+                batch_id,
                 item.quantity,
                 float(item.unit_price),
-                float(item.discount_amount),
-                float(item.discount_percentage),
-                float(item.tax_amount),
-                float(item.tax_percentage),
-                float(item.total_amount)
+                total_price,
+                cost_price,
+                profit
             )
-            
+
             result = self.db_manager.execute_query(query, params)
-            if result and hasattr(result, 'lastrowid'):
-                return result.lastrowid
+            if result:
+                try:
+                    return self.db_manager.get_last_insert_id()
+                except Exception:
+                    return getattr(result, 'lastrowid', None)
             
         except Exception as e:
             if self.logger:
