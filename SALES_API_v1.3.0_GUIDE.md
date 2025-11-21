@@ -140,7 +140,7 @@
   "name": "شركة النور للتجارة",
   "phone": "0501234567",
   "email": "alnour@example.com",
-  "address": "الرياض - حي النخيل",
+  "address": "الجزائر العاصمة - حي السلام",
   "credit_limit": 50000.00,
   "is_active": true
 }
@@ -167,7 +167,7 @@
   "name": "شركة النور للتجارة",
   "phone": "0501234567",
   "email": "alnour@example.com",
-  "address": "الرياض - حي النخيل",
+  "address": "الجزائر العاصمة - حي السلام",
   "credit_limit": 50000.00,
   "current_balance": 0.00,
   "is_active": 1

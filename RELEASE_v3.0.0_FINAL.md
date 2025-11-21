@@ -205,7 +205,7 @@ from src.services.einvoice_service import EInvoiceGenerator, EInvoiceConfig
 config = EInvoiceConfig(
     company_vat_number="300012345600003",
     company_name="شركة الإصدار المنطقي",
-    company_address="الرياض"
+    company_address="الجزائر العاصمة"
 )
 
 generator = EInvoiceGenerator(config)

@@ -213,7 +213,7 @@ class TestEInvoicing:
         config = EInvoiceConfig(
             company_vat_number="300012345600003",
             company_name="شركة اختبار",
-            company_address="الرياض"
+            company_address="الجزائر العاصمة"
         )
         
         assert config.company_vat_number == "300012345600003"
@@ -224,7 +224,7 @@ class TestEInvoicing:
         config = EInvoiceConfig(
             company_vat_number="300012345600003",
             company_name="شركة اختبار",
-            company_address="الرياض"
+            company_address="الجزائر العاصمة"
         )
         
         generator = EInvoiceGenerator(config)
@@ -249,7 +249,7 @@ class TestEInvoicing:
         config = EInvoiceConfig(
             company_vat_number="300012345600003",
             company_name="شركة اختبار",
-            company_address="الرياض"
+            company_address="الجزائر العاصمة"
         )
         
         generator = EInvoiceGenerator(config)

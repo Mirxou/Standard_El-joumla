@@ -28,7 +28,7 @@ class Supplier:
     website: Optional[str] = None
     address: Optional[str] = None
     city: Optional[str] = None
-    country: str = "السعودية"
+    country: str = "الجزائر"
     tax_number: Optional[str] = None
     commercial_register: Optional[str] = None
     payment_terms: str = "نقدي"  # نقدي، آجل 30 يوم، آجل 60 يوم

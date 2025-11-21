@@ -67,7 +67,7 @@ def example_create_sales_entry():
     db.initialize()
     accounting = AccountingService(db)
     
-    # إنشاء قيد لعملية بيع بمبلغ 10,000 ريال
+    # إنشاء قيد لعملية بيع بمبلغ 10,000 دج
     # مدين: حسابات العملاء (1010)
     # دائن: إيرادات المبيعات (4001)
     
@@ -126,7 +126,7 @@ def example_create_purchase_entry():
     db.initialize()
     accounting = AccountingService(db)
     
-    # إنشاء قيد لعملية شراء بمبلغ 5,000 ريال
+    # إنشاء قيد لعملية شراء بمبلغ 5,000 دج
     # مدين: المخزون (1020)
     # دائن: حسابات الموردين (2001)
     

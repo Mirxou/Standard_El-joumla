@@ -38,7 +38,7 @@ def ensure_entities(db: DatabaseManager):
             )
 
     # Customers
-    customers = ["شركة الأفق", "مؤسسة النجاح", "الحدود للتجارة", "الرياض الحديثة", "نور المتحدة"]
+    customers = ["شركة الأفق", "مؤسسة النجاح", "الحدود للتجارة", "الجزائر الحديثة", "نور المتحدة"]
     for c in customers:
         row = db.fetch_one("SELECT id FROM customers WHERE name = ?", (c,))
         if not row:

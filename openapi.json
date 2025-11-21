@@ -3947,7 +3947,7 @@
           "currency": {
             "type": "string",
             "title": "Currency",
-            "default": "SAR"
+            "default": "DZD"
           },
           "notes": {
             "anyOf": [

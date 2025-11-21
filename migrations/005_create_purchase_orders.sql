@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
     -- شروط التسليم والدفع
     delivery_terms TEXT,  -- EXW, FOB, CIF, DAP, DDP
     payment_terms TEXT,   -- CASH, NET_7, NET_30, etc.
-    currency TEXT DEFAULT 'SAR',
+    currency TEXT DEFAULT 'DZD',
     
     -- المبالغ المالية
     subtotal DECIMAL(15, 2) DEFAULT 0.00,

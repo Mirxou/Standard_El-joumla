@@ -52,7 +52,7 @@ def test_01_create_vendor():
         "contact_person": "أحمد محمد",
         "phone": "+966501234567",
         "email": "info@advanced-supplies.com",
-        "address": "الرياض، المملكة العربية السعودية",
+        "address": "الجزائر العاصمة، الجزائر",
         "payment_terms": "آجل 30 يوم",
         "credit_limit": 100000.0
     }

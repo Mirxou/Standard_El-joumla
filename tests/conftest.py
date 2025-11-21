@@ -67,7 +67,7 @@ def sample_customer(db_manager):
     cursor.execute("""
         INSERT INTO customers (name, phone, email, city, credit_limit)
         VALUES (?, ?, ?, ?, ?)
-    """, ("عميل اختبار", "0500000000", "test@test.com", "الرياض", 10000.0))
+    """, ("عميل اختبار", "0500000000", "test@test.com", "الجزائر العاصمة", 10000.0))
     db_manager.connection.commit()
     customer_id = cursor.lastrowid
     

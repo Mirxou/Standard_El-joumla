@@ -26,7 +26,7 @@ class Customer:
     email: Optional[str] = None
     address: Optional[str] = None
     city: Optional[str] = None
-    country: str = "السعودية"
+    country: str = "الجزائر"
     tax_number: Optional[str] = None
     credit_limit: Decimal = Decimal('0.00')
     current_balance: Decimal = Decimal('0.00')

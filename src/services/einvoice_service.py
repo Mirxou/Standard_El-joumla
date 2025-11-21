@@ -126,7 +126,7 @@ class EInvoiceGenerator:
         Returns:
             نص QR Code
         """
-        # تنسيق بيانات QR حسب المعايير السعودية/الخليجية
+        # تنسيق بيانات QR حسب المعايير الجزائرية
         qr_fields = [
             ("1", self.config.company_name),
             ("2", self.config.company_vat_number),
@@ -340,7 +340,7 @@ if __name__ == "__main__":
     config = EInvoiceConfig(
         company_vat_number="300012345600003",
         company_name="شركة الإصدار المنطقي",
-        company_address="الرياض، المملكة العربية السعودية"
+        company_address="الجزائر العاصمة، الجزائر"
     )
     
     generator = EInvoiceGenerator(config)

@@ -77,7 +77,7 @@ def test_create_customer(token):
         "name": "شركة النور للتجارة",
         "phone": "0501234567",
         "email": "alnour@example.com",
-        "address": "الرياض - حي النخيل",
+        "address": "الجزائر العاصمة - حي السلام",
         "credit_limit": 50000.0,
         "is_active": True
     }
