@@ -59,6 +59,14 @@ class MainWindow(QMainWindow):
         
         if self.logger:
             self.logger.info("تم إنشاء النافذة الرئيسية")
+        
+        # بدء نظام الإشعارات الذكية إن توفرت قاعدة البيانات
+        try:
+            if self.db_manager is not None:
+                self.notifications_manager = get_notifications_manager(self.db_manager, self)
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"فشل تهيئة نظام الإشعارات: {str(e)}")
 
     class BackupWorker(QThread):
         finished = Signal(bool, str)
@@ -1191,6 +1199,41 @@ class MainWindow(QMainWindow):
         # قائمة عرض
         view_menu = menubar.addMenu("عرض")
         
+        menubar = self.menuBar()
+        
+        # قائمة عرض
+        view_menu = menubar.addMenu("عرض")
+        
+        # اختيار السمة
+        theme_action = QAction("🎨 تغيير السمة", self)
+        theme_action.setToolTip("تبديل بين الوضع الفاتح والداكن")
+        theme_action.setShortcut("Ctrl+T")
+        theme_action.triggered.connect(self.show_theme_selector)
+        view_menu.addAction(theme_action)
+        
+        # مركز الإشعارات
+        notifications_action = QAction("🔔 مركز الإشعارات", self)
+        notifications_action.setToolTip("عرض جميع الإشعارات")
+        notifications_action.triggered.connect(self.show_notification_center)
+        view_menu.addAction(notifications_action)
+        
+        view_menu.addSeparator()
+        
+        # قائمة أدوات
+        tools_menu = menubar.addMenu("أدوات")
+        
+        # قائمة مساعدة
+        help_menu = menubar.addMenu("مساعدة")
+        shortcuts_action = QAction("⌨️ اختصارات لوحة المفاتيح", self)
+        shortcuts_action.setShortcut("Ctrl+K")
+        shortcuts_action.setToolTip("عرض جميع اختصارات لوحة المفاتيح")
+        shortcuts_action.triggered.connect(self.show_shortcuts_help)
+        help_menu.addAction(shortcuts_action)
+        help_menu.addSeparator()
+        about_action = QAction("حول البرنامج", self)
+        about_action.triggered.connect(self.show_about)
+        help_menu.addAction(about_action)
+
         # اختيار السمة
         theme_action = QAction("🎨 تغيير السمة", self)
         theme_action.setToolTip("تبديل بين الوضع الفاتح والداكن")
@@ -2343,6 +2386,18 @@ class MainWindow(QMainWindow):
         """عرض نافذة مساعدة الاختصارات"""
         if hasattr(self, 'shortcuts_manager'):
             self.shortcuts_manager.show_shortcuts_dialog()
+
+    def show_notification_center(self):
+        """عرض مركز الإشعارات"""
+        try:
+            if hasattr(self, 'notifications_manager') and self.notifications_manager:
+                self.notifications_manager.show_notification_center()
+            else:
+                QMessageBox.information(self, "الإشعارات", "نظام الإشعارات غير مُفعّل.")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في عرض مركز الإشعارات: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في عرض مركز الإشعارات: {str(e)}")
     
     def show_notifications_center(self):
         """عرض مركز الإشعارات"""
