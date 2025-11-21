@@ -74,6 +74,7 @@ class NotificationChecker(QThread):
     """فاحص الإشعارات الدوري"""
     
     notifications_found = Signal(list)  # قائمة الإشعارات الجديدة
+    check_performed = Signal()          # إشارة عند اكتمال كل فحص
     
     def __init__(self, db_manager, interval_seconds: int = 300):
         super().__init__()
@@ -88,6 +89,8 @@ class NotificationChecker(QThread):
                 notifications = self.check_for_notifications()
                 if notifications:
                     self.notifications_found.emit(notifications)
+                # دائماً أعلن عن اكتمال الفحص حتى لو لم توجد إشعارات جديدة
+                self.check_performed.emit()
             except Exception as e:
                 print(f"خطأ في فحص الإشعارات: {e}")
             
@@ -373,11 +376,22 @@ class NotificationCenterDialog(QDialog):
         clear_all_btn.clicked.connect(self.clear_all)
         top_buttons.addWidget(clear_all_btn)
         
+        settings_btn = QPushButton("⚙️ إعدادات الإشعارات")
+        settings_btn.setToolTip("فتح إعدادات الإشعارات لتغيير فترة الفحص")
+        settings_btn.clicked.connect(self.open_notifications_settings)
+        top_buttons.addWidget(settings_btn)
+
         top_buttons.addStretch()
         
         refresh_btn = QPushButton("🔄 تحديث")
         refresh_btn.clicked.connect(self.load_notifications)
         top_buttons.addWidget(refresh_btn)
+
+        # فحص فوري
+        check_now_btn = QPushButton("⟳ افحص الآن")
+        check_now_btn.setToolTip("تنفيذ فحص الإشعارات فوراً")
+        check_now_btn.clicked.connect(self.run_check_now)
+        top_buttons.addWidget(check_now_btn)
         
         layout.addLayout(top_buttons)
         
@@ -444,6 +458,27 @@ class NotificationCenterDialog(QDialog):
             self.notifications_manager.clear_all()
             self.load_notifications()
 
+    def run_check_now(self):
+        """تنفيذ فحص إشعارات فوري"""
+        try:
+            self.notifications_manager.force_check()
+            self.load_notifications()
+        except Exception as e:
+            QMessageBox.warning(self, "خطأ", f"تعذر تنفيذ الفحص الآن: {e}")
+
+    def open_notifications_settings(self):
+        """فتح تبويب الإعدادات والتركيز على إعدادات الإشعارات"""
+        try:
+            mw = getattr(self.notifications_manager, 'main_window', None)
+            if mw and hasattr(mw, 'tab_widget') and hasattr(mw, 'settings_tab'):
+                mw.tab_widget.setCurrentWidget(mw.settings_tab)
+                # إذا كانت هناك قائمة منسدلة لفترة الإشعارات، يمكن لفت الانتباه إليها بتغيير التركيز
+                if hasattr(mw, 'notifications_interval_combo'):
+                    mw.notifications_interval_combo.setFocus()
+                self.accept()
+        except Exception as e:
+            print(f"خطأ في فتح إعدادات الإشعارات: {e}")
+
 
 class SmartNotificationsManager:
     """
@@ -463,15 +498,38 @@ class SmartNotificationsManager:
         self.notifications: List[Notification] = []
         self.checker: Optional[NotificationChecker] = None
         self.system_tray: Optional[QSystemTrayIcon] = None
+        self.last_check_time: Optional[datetime] = None
         
         # تحميل الإشعارات المحفوظة
         self.load_notifications()
     
     def start(self):
         """بدء نظام الإشعارات"""
+        # تحديد فترة الفحص من الإعدادات أو التهيئة (افتراضي 300 ثانية)
+        interval_seconds = 300
+        try:
+            # تفضيل QSettings إن وُجد
+            from PySide6.QtCore import QSettings
+            s = QSettings('LogicalVersion', 'ERP')
+            val = s.value('notifications/interval_seconds', None)
+            if val is not None:
+                interval_seconds = int(val)
+        except Exception:
+            pass
+
+        # محاولة القراءة من config_manager للنافذة الرئيسية إن توفر
+        try:
+            if self.main_window and hasattr(self.main_window, 'config_manager') and self.main_window.config_manager:
+                cfg_val = self.main_window.config_manager.get('notifications.interval_seconds', None)
+                if cfg_val is not None:
+                    interval_seconds = int(cfg_val)
+        except Exception:
+            pass
+
         # بدء الفحص الدوري
-        self.checker = NotificationChecker(self.db_manager, interval_seconds=300)  # كل 5 دقائق
+        self.checker = NotificationChecker(self.db_manager, interval_seconds=interval_seconds)
         self.checker.notifications_found.connect(self.on_notifications_found)
+        self.checker.check_performed.connect(self._on_check_performed)
         self.checker.start()
         
         # إعداد System Tray
@@ -518,6 +576,13 @@ class SmartNotificationsManager:
             # تجنب الازدواجية
             if not any(n.id == notification.id for n in self.notifications):
                 self.add_notification(notification)
+
+    def _on_check_performed(self):
+        """تحديث وقت آخر فحص"""
+        try:
+            self.last_check_time = datetime.now()
+        except Exception:
+            pass
     
     def add_notification(self, notification: Notification):
         """إضافة إشعار"""
@@ -603,6 +668,28 @@ class SmartNotificationsManager:
         """عرض مركز الإشعارات"""
         dialog = NotificationCenterDialog(self, self.main_window)
         dialog.show()
+
+    def get_last_check_time_str(self) -> str:
+        """إرجاع آخر وقت فحص كسلسلة قابلة للعرض"""
+        try:
+            if not self.last_check_time:
+                return "—"
+            return self.last_check_time.strftime('%Y-%m-%d %H:%M:%S')
+        except Exception:
+            return "—"
+
+    def force_check(self):
+        """تنفيذ فحص فوري للإشعارات وتحديث الحالة"""
+        try:
+            # استخدام نفس منطق الفاحص بدون تشغيل خيط منفصل
+            temp_checker = NotificationChecker(self.db_manager, interval_seconds=0)
+            new_list = temp_checker.check_for_notifications()
+            if new_list:
+                self.on_notifications_found(new_list)
+            # تحديث وقت آخر فحص
+            self._on_check_performed()
+        except Exception as e:
+            print(f"خطأ في الفحص الفوري للإشعارات: {e}")
 
 
 # Global instance

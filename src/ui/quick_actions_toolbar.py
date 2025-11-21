@@ -307,6 +307,17 @@ class QuickActionsToolbar(QToolBar):
             'تقارير',
             True
         )
+
+        # فئة: أدوات
+        self.available_actions['performance'] = QuickAction(
+            'performance',
+            'مراقبة الأداء',
+            '📊',
+            'فتح لوحة مراقبة الأداء (Ctrl+Shift+P)',
+            lambda: self.main_window.show_performance_dashboard() if hasattr(self.main_window, 'show_performance_dashboard') else None,
+            'أدوات',
+            False
+        )
         
         # فئة: إعدادات
         self.available_actions['notifications'] = QuickAction(

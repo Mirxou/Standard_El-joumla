@@ -18,6 +18,7 @@ from PySide6.QtGui import QAction, QIcon, QPixmap, QFont, QColor
 from typing import Optional
 import sys
 from pathlib import Path
+from datetime import datetime
 
 # إضافة مسار src
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -25,6 +26,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.models.customer import CustomerManager
 from src.models.supplier import SupplierManager
 from src.core.caching_service import AdvancedCachingService
+from src.ui.theme_manager import get_theme_manager
+from src.ui.notifications_manager import get_notifications_manager
 
 class MainWindow(QMainWindow):
     """النافذة الرئيسية للتطبيق"""
@@ -35,6 +38,7 @@ class MainWindow(QMainWindow):
         self.config_manager = config_manager
         self.db_manager = db_manager
         self.logger = logger
+        self.app_start_time = datetime.now()
         
         # تهيئة الخدمات
         self.init_services()
@@ -56,6 +60,15 @@ class MainWindow(QMainWindow):
         
         # تطبيق الإعدادات
         self.apply_settings()
+
+        # مؤقت لتحديث مؤشرات الحالة
+        try:
+            self._status_timer = QTimer(self)
+            self._status_timer.setInterval(3000)
+            self._status_timer.timeout.connect(self.update_statusbar_metrics)
+            self._status_timer.start()
+        except Exception:
+            pass
         
         if self.logger:
             self.logger.info("تم إنشاء النافذة الرئيسية")
@@ -271,8 +284,112 @@ class MainWindow(QMainWindow):
         # تبويب الإعدادات
         self.settings_tab = self.create_settings_tab()
         self.tab_widget.addTab(self.settings_tab, "⚙️ الإعدادات")
+
+        # تبويب الأداء البسيط
+        self.performance_tab = self.create_performance_tab()
+        self.tab_widget.addTab(self.performance_tab, "⚡ الأداء")
         
         main_layout.addWidget(self.tab_widget)
+
+    def create_performance_tab(self) -> QWidget:
+        """إنشاء تبويب أداء خفيف الوزن مع مؤشرات بسيطة"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setSpacing(12)
+        layout.setContentsMargins(12, 12, 12, 12)
+
+        title = QLabel("مؤشرات الأداء الأساسية")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #2980b9; margin-bottom: 4px;")
+        layout.addWidget(title)
+
+        grid = QHBoxLayout()
+
+        # بطاقة: السمة الحالية
+        theme_box = QGroupBox("السمة الحالية")
+        theme_layout = QVBoxLayout(theme_box)
+        self.perf_theme_label = QLabel("-")
+        self.perf_theme_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #2c3e50;")
+        theme_layout.addWidget(self.perf_theme_label)
+        grid.addWidget(theme_box)
+
+        # بطاقة: إشعارات غير مقروءة
+        notif_box = QGroupBox("الإشعارات غير المقروءة")
+        notif_layout = QVBoxLayout(notif_box)
+        self.perf_unread_label = QLabel("0")
+        self.perf_unread_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #2c3e50;")
+        notif_layout.addWidget(self.perf_unread_label)
+        grid.addWidget(notif_box)
+
+        # بطاقة: حالة قاعدة البيانات
+        db_box = QGroupBox("حالة قاعدة البيانات")
+        db_layout = QVBoxLayout(db_box)
+        self.perf_db_label = QLabel("-")
+        self.perf_db_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #2c3e50;")
+        db_layout.addWidget(self.perf_db_label)
+        grid.addWidget(db_box)
+
+        # بطاقة: وقت التشغيل
+        uptime_box = QGroupBox("وقت التشغيل")
+        uptime_layout = QVBoxLayout(uptime_box)
+        self.perf_uptime_label = QLabel("00:00:00")
+        self.perf_uptime_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #2c3e50;")
+        uptime_layout.addWidget(self.perf_uptime_label)
+        grid.addWidget(uptime_box)
+
+        layout.addLayout(grid)
+
+        # ملاحظات
+        hint = QLabel("للحصول على لوحة تفصيلية، استخدم القائمة: أدوات → مراقبة الأداء")
+        hint.setStyleSheet("color: #7f8c8d;")
+        layout.addWidget(hint)
+
+        # زر فتح اللوحة التفصيلية
+        open_perf_btn = QPushButton("📊 افتح لوحة مراقبة الأداء التفصيلية")
+        open_perf_btn.setMinimumHeight(36)
+        open_perf_btn.clicked.connect(self.show_performance_dashboard)
+        layout.addWidget(open_perf_btn)
+
+        # مؤقت التحديث
+        self.perf_timer = QTimer(self)
+        self.perf_timer.setInterval(2000)
+        self.perf_timer.timeout.connect(self.update_performance_tab)
+        self.perf_timer.start()
+
+        # تحديث أولي
+        self.update_performance_tab()
+
+        return tab
+
+    def update_performance_tab(self):
+        """تحديث قيم تبويب الأداء"""
+        try:
+            # السمة
+            theme = get_theme_manager().get_current_theme()
+            self.perf_theme_label.setText("داكن" if theme == 'dark' else "فاتح")
+
+            # الإشعارات
+            unread = 0
+            if hasattr(self, 'notifications_manager') and self.notifications_manager:
+                try:
+                    unread = int(self.notifications_manager.get_unread_count())
+                except Exception:
+                    unread = 0
+            self.perf_unread_label.setText(str(unread))
+
+            # قاعدة البيانات
+            db_connected = bool(self.db_manager)
+            self.perf_db_label.setText("متصلة" if db_connected else "غير متصلة")
+
+            # وقت التشغيل
+            if hasattr(self, 'app_start_time') and isinstance(self.app_start_time, datetime):
+                delta = datetime.now() - self.app_start_time
+                total_seconds = int(delta.total_seconds())
+                hours = total_seconds // 3600
+                minutes = (total_seconds % 3600) // 60
+                seconds = total_seconds % 60
+                self.perf_uptime_label.setText(f"{hours:02d}:{minutes:02d}:{seconds:02d}")
+        except Exception:
+            pass
     
     def create_inventory_tab(self) -> QWidget:
         """إنشاء تبويب المخزون"""
@@ -1153,6 +1270,43 @@ class MainWindow(QMainWindow):
         
         buttons_layout.addStretch()
         layout.addLayout(buttons_layout)
+
+        # مجموعة إعدادات الإشعارات
+        notifications_group = QGroupBox("إعدادات الإشعارات")
+        notif_layout = QHBoxLayout(notifications_group)
+        notif_layout.setContentsMargins(12, 12, 12, 12)
+        notif_layout.setSpacing(12)
+
+        notif_label = QLabel("فترة الفحص:")
+        notif_layout.addWidget(notif_label)
+
+        from PySide6.QtWidgets import QComboBox
+        self.notifications_interval_combo = QComboBox()
+        self.notifications_interval_combo.setMinimumWidth(200)
+        # دقائق شائعة
+        minutes_options = [1, 2, 5, 10, 15, 30]
+        for m in minutes_options:
+            self.notifications_interval_combo.addItem(f"كل {m} دقيقة", m)
+        notif_layout.addWidget(self.notifications_interval_combo)
+
+        # تحميل القيمة الحالية من QSettings
+        try:
+            from PySide6.QtCore import QSettings
+            s = QSettings('LogicalVersion', 'ERP')
+            val = s.value('notifications/interval_seconds', None)
+            current_m = 5  # افتراضي 5 دقائق للواجهة
+            if val is not None:
+                current_m = max(1, int(int(val) / 60))
+            # اختيار العنصر المناسب
+            idx = self.notifications_interval_combo.findData(current_m)
+            if idx >= 0:
+                self.notifications_interval_combo.setCurrentIndex(idx)
+        except Exception:
+            pass
+
+        # حدث التغيير
+        self.notifications_interval_combo.currentIndexChanged.connect(self.on_notifications_interval_changed)
+        layout.addWidget(notifications_group)
         
         content_label = QLabel("سيتم إضافة لوحة الإعدادات هنا")
         content_label.setAlignment(Qt.AlignCenter)
@@ -1161,6 +1315,30 @@ class MainWindow(QMainWindow):
         
         layout.addStretch()
         return tab
+
+    def on_notifications_interval_changed(self):
+        """تغيير فترة فحص الإشعارات وتطبيقها فوراً"""
+        try:
+            m = self.notifications_interval_combo.currentData()
+            seconds = int(m) * 60
+            from PySide6.QtCore import QSettings
+            s = QSettings('LogicalVersion', 'ERP')
+            s.setValue('notifications/interval_seconds', seconds)
+            # إعادة تشغيل الفاحص إذا كان مفعلاً
+            if hasattr(self, 'notifications_manager') and self.notifications_manager:
+                try:
+                    self.notifications_manager.stop()
+                except Exception:
+                    pass
+                try:
+                    self.notifications_manager.start()
+                except Exception:
+                    pass
+            if self.logger:
+                self.logger.info(f"تم تحديث فترة فحص الإشعارات إلى {m} دقيقة")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في تحديث فترة الإشعارات: {str(e)}")
     
     def setup_menus(self):
         """إعداد القوائم"""
@@ -1198,41 +1376,6 @@ class MainWindow(QMainWindow):
         
         # قائمة عرض
         view_menu = menubar.addMenu("عرض")
-        
-        menubar = self.menuBar()
-        
-        # قائمة عرض
-        view_menu = menubar.addMenu("عرض")
-        
-        # اختيار السمة
-        theme_action = QAction("🎨 تغيير السمة", self)
-        theme_action.setToolTip("تبديل بين الوضع الفاتح والداكن")
-        theme_action.setShortcut("Ctrl+T")
-        theme_action.triggered.connect(self.show_theme_selector)
-        view_menu.addAction(theme_action)
-        
-        # مركز الإشعارات
-        notifications_action = QAction("🔔 مركز الإشعارات", self)
-        notifications_action.setToolTip("عرض جميع الإشعارات")
-        notifications_action.triggered.connect(self.show_notification_center)
-        view_menu.addAction(notifications_action)
-        
-        view_menu.addSeparator()
-        
-        # قائمة أدوات
-        tools_menu = menubar.addMenu("أدوات")
-        
-        # قائمة مساعدة
-        help_menu = menubar.addMenu("مساعدة")
-        shortcuts_action = QAction("⌨️ اختصارات لوحة المفاتيح", self)
-        shortcuts_action.setShortcut("Ctrl+K")
-        shortcuts_action.setToolTip("عرض جميع اختصارات لوحة المفاتيح")
-        shortcuts_action.triggered.connect(self.show_shortcuts_help)
-        help_menu.addAction(shortcuts_action)
-        help_menu.addSeparator()
-        about_action = QAction("حول البرنامج", self)
-        about_action.triggered.connect(self.show_about)
-        help_menu.addAction(about_action)
 
         # اختيار السمة
         theme_action = QAction("🎨 تغيير السمة", self)
@@ -1245,7 +1388,7 @@ class MainWindow(QMainWindow):
         notifications_action = QAction("🔔 مركز الإشعارات", self)
         notifications_action.setToolTip("عرض جميع الإشعارات والتنبيهات")
         notifications_action.setShortcut("Ctrl+Shift+N")
-        notifications_action.triggered.connect(self.show_notifications_center)
+        notifications_action.triggered.connect(self.show_notification_center)
         view_menu.addAction(notifications_action)
         
         view_menu.addSeparator()
@@ -1263,6 +1406,7 @@ class MainWindow(QMainWindow):
         # لوحة مراقبة الأداء
         performance_action = QAction("📊 مراقبة الأداء", self)
         performance_action.setToolTip("عرض لوحة مراقبة أداء التطبيق")
+        performance_action.setShortcut("Ctrl+Shift+P")
         performance_action.triggered.connect(self.show_performance_dashboard)
         tools_menu.addAction(performance_action)
         
@@ -1814,14 +1958,52 @@ class MainWindow(QMainWindow):
     def setup_statusbar(self):
         """إعداد شريط الحالة"""
         statusbar = self.statusBar()
-        
-        # معلومات قاعدة البيانات
+
+        # عناصر مخصصة: السمة + الإشعارات
+        from PySide6.QtWidgets import QLabel
+        self._status_theme = QLabel("")
+        self._status_theme.setStyleSheet("color:#555; padding:0 8px;")
+        statusbar.addPermanentWidget(self._status_theme)
+
+        self._status_unread = QLabel("")
+        self._status_unread.setStyleSheet("color:#555; padding:0 8px;")
+        statusbar.addPermanentWidget(self._status_unread)
+
+        # رسالة قاعدة البيانات الأولى
         if self.db_manager:
-            db_info = self.db_manager.get_database_info()
-            db_status = f"قاعدة البيانات: متصلة | الحجم: {db_info.get('size_mb', 0)} MB"
+            try:
+                db_info = self.db_manager.get_database_info()
+                db_status = f"قاعدة البيانات: متصلة | الحجم: {db_info.get('size_mb', 0)} MB"
+            except Exception:
+                db_status = "قاعدة البيانات: متصلة"
             statusbar.showMessage(db_status)
         else:
             statusbar.showMessage("جاهز")
+
+        # تحديث أولي للمؤشرات
+        self.update_statusbar_metrics()
+
+    def update_statusbar_metrics(self):
+        """تحديث مؤشرات شريط الحالة (السمة/الإشعارات)"""
+        try:
+            theme = get_theme_manager().get_current_theme()
+            self._status_theme.setText(f"السمة: {'داكن' if theme=='dark' else 'فاتح'}")
+        except Exception:
+            pass
+
+        try:
+            unread = 0
+            if hasattr(self, 'notifications_manager') and self.notifications_manager:
+                unread = int(self.notifications_manager.get_unread_count())
+                # تحديث تلميح آخر وقت فحص
+                try:
+                    last_check = getattr(self.notifications_manager, 'get_last_check_time_str', lambda: "—")()
+                    self._status_unread.setToolTip(f"آخر فحص: {last_check}")
+                except Exception:
+                    pass
+            self._status_unread.setText(f"إشعارات غير مقروءة: {unread}")
+        except Exception:
+            pass
     
     def apply_settings(self):
         """تطبيق الإعدادات"""
@@ -2400,21 +2582,9 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "خطأ", f"فشل في عرض مركز الإشعارات: {str(e)}")
     
     def show_notifications_center(self):
-        """عرض مركز الإشعارات"""
-        try:
-            from ..notifications_manager import get_notifications_manager
-            notifications_manager = get_notifications_manager(self.db_manager, self)
-            
-            if notifications_manager:
-                notifications_manager.show_notification_center()
-                if self.logger:
-                    self.logger.info("تم فتح مركز الإشعارات")
-            else:
-                QMessageBox.information(self, "معلومات", "نظام الإشعارات غير متاح حالياً")
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح مركز الإشعارات: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في فتح مركز الإشعارات:\n{str(e)}")
+        """عرض مركز الإشعارات (اسم بديل للتوافق)"""
+        # إعادة استخدام الطريقة الأساسية لضمان سلوك موحد
+        self.show_notification_center()
     
     def setup_quick_actions(self):
         """إعداد شريط الإجراءات السريعة"""
