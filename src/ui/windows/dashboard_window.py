@@ -116,7 +116,7 @@ class DashboardWindow(QMainWindow):
 
         root.addLayout(filters)
 
-        # KPI Cards
+        # KPI Cards (Enhanced Grid - 3x4 to accommodate 12 KPIs)
         self.kpi_grid = QGridLayout()
         root.addLayout(self.kpi_grid)
 
@@ -182,18 +182,58 @@ class DashboardWindow(QMainWindow):
         self.settings.setValue("show_top", self.toggle_top.isChecked())
         self.settings.setValue("show_pie", self.toggle_pie.isChecked())
 
-    def _add_kpi_card(self, row: int, col: int, title: str, value: str, color: str, change: float|None=None):
+    def _add_kpi_card(self, row: int, col: int, title: str, value: str, color: str, change: float|None=None, icon: str = "📊"):
+        """إنشاء بطاقة KPI محسّنة مع أيقونة وتدرج لوني"""
         card = QGroupBox()
-        card.setStyleSheet(f"QGroupBox {{ background-color: {color}; border-radius: 10px;}}")
+        # Gradient background effect
+        card.setStyleSheet(f"""
+            QGroupBox {{ 
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 {color}, stop:1 {self._darken_color(color)});
+                border-radius: 12px;
+                padding: 10px;
+                min-height: 100px;
+            }}
+        """)
         lay = QVBoxLayout(card)
-        t = QLabel(title); t.setStyleSheet("color:white; font-weight:bold;")
-        v = QLabel(value); v.setStyleSheet("color:white; font-size:24px; font-weight:bold;")
-        lay.addWidget(t); lay.addWidget(v)
+        
+        # Icon + Title row
+        header = QHBoxLayout()
+        icon_lbl = QLabel(icon)
+        icon_lbl.setStyleSheet("color:white; font-size:24px;")
+        header.addWidget(icon_lbl)
+        
+        t = QLabel(title)
+        t.setStyleSheet("color:white; font-weight:bold; font-size:11px;")
+        t.setWordWrap(True)
+        header.addWidget(t, 1)
+        lay.addLayout(header)
+        
+        # Value
+        v = QLabel(value)
+        v.setStyleSheet("color:white; font-size:22px; font-weight:bold;")
+        v.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lay.addWidget(v)
+        
+        # Change indicator
         if change is not None:
-            ch = QLabel(f"التغير: {change:.1f}%")
-            ch.setStyleSheet("color:white; font-size:12px;")
+            arrow = "↑" if change >= 0 else "↓"
+            ch_color = "#C8E6C9" if change >= 0 else "#FFCDD2"
+            ch = QLabel(f"{arrow} {abs(change):.1f}%")
+            ch.setStyleSheet(f"color:{ch_color}; font-size:12px; font-weight:bold;")
+            ch.setAlignment(Qt.AlignmentFlag.AlignCenter)
             lay.addWidget(ch)
+        
         self.kpi_grid.addWidget(card, row, col)
+    
+    def _darken_color(self, hex_color: str) -> str:
+        """تعتيم اللون للتدرج"""
+        hex_color = hex_color.lstrip('#')
+        r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+        r = max(0, r - 30)
+        g = max(0, g - 30)
+        b = max(0, b - 30)
+        return f"#{r:02x}{g:02x}{b:02x}"
 
     def _load(self):
         days = self.period_combo.currentData()
@@ -203,17 +243,35 @@ class DashboardWindow(QMainWindow):
 
         data = self.service.load_dashboard(start, end)
 
-        # KPIs grid (2x4)
+        # KPIs grid (3x4 for 12 KPIs)
         # clear previous
         for i in reversed(range(self.kpi_grid.count())):
             item = self.kpi_grid.itemAt(i)
             if item and item.widget():
                 item.widget().deleteLater()
-        # add
-        for i, k in enumerate(data.kpis[:8]):
+        
+        # Icon mapping for KPIs
+        kpi_icons = {
+            "total_sales": "💰",
+            "today_sales": "📅",
+            "month_sales": "📆",
+            "gross_profit": "💵",
+            "profit_margin": "📈",
+            "aov": "🛒",
+            "inventory_value": "📦",
+            "inventory_turnover": "🔄",
+            "low_stock": "⚠️",
+            "receivables": "💳",
+            "payables": "💸",
+            "cash_flow": "💹"
+        }
+        
+        # Display KPIs in 3x4 grid
+        for i, k in enumerate(data.kpis[:12]):
             r, c = divmod(i, 4)
-            value = f"{k.value:,.2f}{(' ' + k.unit) if k.unit else ''}"
-            self._add_kpi_card(r, c, k.title, value, k.color, k.change)
+            value_str = f"{k.value:,.2f}{(' ' + k.unit) if k.unit else ''}"
+            icon = kpi_icons.get(k.key, "📊")
+            self._add_kpi_card(r, c, k.title, value_str, k.color, k.change, icon)
 
         # Sales series -> line chart
         self._render_sales_chart(data)

@@ -19,16 +19,20 @@ class DashboardService:
     def load_dashboard(self, start: date, end: date) -> DashboardData:
         data = DashboardData(period_start=start, period_end=end)
 
-        # KPIs
+        # KPIs - Enhanced with new metrics
         data.kpis = [
             self._kpi_total_sales(start, end),
             self._kpi_today_sales(end),
             self._kpi_month_sales(end),
             self._kpi_gross_profit(start, end),
+            self._kpi_profit_margin(start, end),            # NEW
+            self._kpi_avg_order_value(start, end),          # NEW
             self._kpi_inventory_value(),
+            self._kpi_inventory_turnover(start, end),       # NEW
             self._kpi_low_stock_count(),
             self._kpi_receivables(),
             self._kpi_payables(),
+            self._kpi_cash_flow(start, end),                # NEW
         ]
 
         # Time series: sales per day
@@ -130,6 +134,140 @@ class DashboardService:
         v = self._scalar(q1)
         return KPI(key="payables", title="الذمم الدائنة", value=v, unit="ر.س", color="#00ACC1")
 
+    def _kpi_profit_margin(self, start: date, end: date) -> KPI:
+        """هامش الربح (Profit Margin %) = (الربح / المبيعات) × 100"""
+        q_sales = """
+            SELECT COALESCE(SUM(final_amount), 0) FROM sales WHERE DATE(sale_date) BETWEEN ? AND ?
+        """
+        q_profit = """
+            SELECT COALESCE(SUM(si.profit), 0)
+            FROM sale_items si
+            JOIN sales s ON si.sale_id = s.id
+            WHERE DATE(s.sale_date) BETWEEN ? AND ?
+        """
+        sales = self._scalar(q_sales, [start, end])
+        profit = self._scalar(q_profit, [start, end])
+        
+        margin = 0.0 if sales == 0 else (profit / sales * 100)
+        
+        # Previous period margin
+        period_len = (end - start).days
+        prev_end = start - timedelta(days=1)
+        prev_start = prev_end - timedelta(days=period_len)
+        prev_sales = self._scalar(q_sales, [prev_start, prev_end])
+        prev_profit = self._scalar(q_profit, [prev_start, prev_end])
+        prev_margin = 0.0 if prev_sales == 0 else (prev_profit / prev_sales * 100)
+        
+        change = margin - prev_margin
+        
+        return KPI(
+            key="profit_margin",
+            title="هامش الربح",
+            value=margin,
+            change=change,
+            unit="%",
+            color="#673AB7"
+        )
+
+    def _kpi_avg_order_value(self, start: date, end: date) -> KPI:
+        """متوسط قيمة الطلب (AOV - Average Order Value)"""
+        q = """
+            SELECT 
+                COALESCE(SUM(final_amount), 0) as total_sales,
+                COUNT(*) as order_count
+            FROM sales
+            WHERE DATE(sale_date) BETWEEN ? AND ?
+        """
+        rows = self.db.execute_query(q, [start, end])
+        if not rows or rows[0]["order_count"] == 0:
+            return KPI(key="aov", title="متوسط قيمة الطلب", value=0, unit="ر.س", color="#3F51B5")
+        
+        total = float(rows[0]["total_sales"])
+        count = int(rows[0]["order_count"])
+        aov = total / count
+        
+        # Previous period AOV
+        period_len = (end - start).days
+        prev_end = start - timedelta(days=1)
+        prev_start = prev_end - timedelta(days=period_len)
+        prev_rows = self.db.execute_query(q, [prev_start, prev_end])
+        prev_aov = 0.0
+        if prev_rows and prev_rows[0]["order_count"] > 0:
+            prev_aov = float(prev_rows[0]["total_sales"]) / int(prev_rows[0]["order_count"])
+        
+        change = self._change_pct(prev_aov, aov)
+        
+        return KPI(
+            key="aov",
+            title="متوسط قيمة الطلب",
+            value=aov,
+            change=change,
+            unit="ر.س",
+            color="#3F51B5"
+        )
+
+    def _kpi_inventory_turnover(self, start: date, end: date) -> KPI:
+        """معدل دوران المخزون (Inventory Turnover) = تكلفة البضاعة المباعة / متوسط المخزون"""
+        # Cost of Goods Sold (COGS) during period
+        q_cogs = """
+            SELECT COALESCE(SUM(si.quantity * si.unit_price - si.profit), 0) as cogs
+            FROM sale_items si
+            JOIN sales s ON si.sale_id = s.id
+            WHERE DATE(s.sale_date) BETWEEN ? AND ?
+        """
+        cogs = self._scalar(q_cogs, [start, end])
+        
+        # Average inventory value
+        q_inv = """
+            SELECT COALESCE(SUM(current_stock * cost_price), 0) as value FROM products
+        """
+        avg_inventory = self._scalar(q_inv)
+        
+        turnover = 0.0 if avg_inventory == 0 else (cogs / avg_inventory)
+        
+        return KPI(
+            key="inventory_turnover",
+            title="معدل دوران المخزون",
+            value=turnover,
+            unit="مرة",
+            color="#8E24AA"
+        )
+
+    def _kpi_cash_flow(self, start: date, end: date) -> KPI:
+        """التدفق النقدي = (المقبوضات - المدفوعات)"""
+        q_in = """
+            SELECT COALESCE(SUM(amount), 0) FROM payments 
+            WHERE DATE(payment_date) BETWEEN ? AND ? AND payment_type = 'received'
+        """
+        q_out = """
+            SELECT COALESCE(SUM(amount), 0) FROM payments 
+            WHERE DATE(payment_date) BETWEEN ? AND ? AND payment_type = 'paid'
+        """
+        cash_in = self._scalar(q_in, [start, end])
+        cash_out = self._scalar(q_out, [start, end])
+        net_flow = cash_in - cash_out
+        
+        # Previous period
+        period_len = (end - start).days
+        prev_end = start - timedelta(days=1)
+        prev_start = prev_end - timedelta(days=period_len)
+        prev_in = self._scalar(q_in, [prev_start, prev_end])
+        prev_out = self._scalar(q_out, [prev_start, prev_end])
+        prev_flow = prev_in - prev_out
+        
+        change = self._change_pct(prev_flow, net_flow)
+        
+        color = "#4CAF50" if net_flow >= 0 else "#F44336"
+        
+        return KPI(
+            key="cash_flow",
+            title="التدفق النقدي الصافي",
+            value=net_flow,
+            change=change,
+            unit="ر.س",
+            color=color
+        )
+
     # ============================ Series & Lists ============================
     def _series_sales_per_day(self, start: date, end: date) -> ChartSeries:
         q = """
@@ -166,16 +304,37 @@ class DashboardService:
 
     # ============================ Helpers ============================
     def _scalar(self, query: str, params: List[Any] | None = None) -> float:
-        rows = self.db.execute_query(query, params or [])
-        if not rows:
+        """تنفيذ استعلام وإرجاع قيمة واحدة كـ float"""
+        try:
+            rows = self.db.execute_query(query, params or [])
+            if not rows:
+                return 0.0
+            value = list(rows[0].values())[0]
+            if value is None:
+                return 0.0
+            return float(value)
+        except (ValueError, TypeError):
             return 0.0
-        value = list(rows[0].values())[0]
-        return float(value or 0)
 
     def _change_pct(self, prev: float, curr: float) -> float:
+        """حساب نسبة التغيير بين قيمتين"""
+        # Handle None values
+        if prev is None:
+            prev = 0.0
+        if curr is None:
+            curr = 0.0
+        
+        # Convert to float if needed
+        prev = float(prev) if not isinstance(prev, float) else prev
+        curr = float(curr) if not isinstance(curr, float) else curr
+        
         if prev == 0:
             return 0.0 if curr == 0 else 100.0
-        return float((Decimal(str(curr)) - Decimal(str(prev))) * 100 / Decimal(str(prev)))
+        
+        try:
+            return ((curr - prev) * 100 / prev)
+        except (ValueError, ZeroDivisionError, TypeError):
+            return 0.0
 
     # ============================ Additional Metrics ============================
     def _active_customers(self, start: date, end: date) -> int:
@@ -219,3 +378,108 @@ class DashboardService:
             ORDER BY value DESC
         """
         return self.db.execute_query(q, [start, end])
+
+    # ============================ New Advanced Analytics ============================
+    def get_revenue_vs_expenses(self, start: date, end: date) -> Dict[str, List[Dict[str, Any]]]:
+        """مقارنة الإيرادات والمصروفات يومياً"""
+        q_revenue = """
+            SELECT DATE(sale_date) as day, COALESCE(SUM(final_amount), 0) as amount
+            FROM sales
+            WHERE DATE(sale_date) BETWEEN ? AND ?
+            GROUP BY DATE(sale_date)
+            ORDER BY DATE(sale_date)
+        """
+        q_expenses = """
+            SELECT DATE(purchase_date) as day, COALESCE(SUM(total_amount), 0) as amount
+            FROM purchases
+            WHERE DATE(purchase_date) BETWEEN ? AND ?
+            GROUP BY DATE(purchase_date)
+            ORDER BY DATE(purchase_date)
+        """
+        return {
+            "revenue": self.db.execute_query(q_revenue, [start, end]),
+            "expenses": self.db.execute_query(q_expenses, [start, end])
+        }
+
+    def get_inventory_status_distribution(self) -> List[Dict[str, Any]]:
+        """توزيع حالة المخزون: منخفض / عادي / عالي"""
+        q = """
+            SELECT 
+                CASE 
+                    WHEN current_stock = 0 THEN 'نفذ من المخزون'
+                    WHEN current_stock <= COALESCE(min_stock, 0) THEN 'منخفض'
+                    WHEN current_stock >= COALESCE(max_stock, current_stock * 2) THEN 'مرتفع'
+                    ELSE 'عادي'
+                END as status,
+                COUNT(*) as count,
+                SUM(current_stock * cost_price) as value
+            FROM products
+            GROUP BY status
+        """
+        return self.db.execute_query(q)
+
+    def get_profit_trend(self, start: date, end: date) -> List[Dict[str, Any]]:
+        """اتجاه الربحية اليومي"""
+        q = """
+            SELECT 
+                DATE(s.sale_date) as day,
+                COALESCE(SUM(si.profit), 0) as profit,
+                COALESCE(SUM(si.total_price), 0) as sales,
+                CASE 
+                    WHEN SUM(si.total_price) > 0 
+                    THEN (SUM(si.profit) * 100.0 / SUM(si.total_price))
+                    ELSE 0
+                END as margin
+            FROM sale_items si
+            JOIN sales s ON si.sale_id = s.id
+            WHERE DATE(s.sale_date) BETWEEN ? AND ?
+            GROUP BY DATE(s.sale_date)
+            ORDER BY DATE(s.sale_date)
+        """
+        return self.db.execute_query(q, [start, end])
+
+    def get_customer_insights(self, start: date, end: date) -> Dict[str, Any]:
+        """رؤى العملاء: جديد vs متكرر، متوسط القيمة"""
+        q_total = """
+            SELECT COUNT(DISTINCT customer_id) as total_customers
+            FROM sales
+            WHERE DATE(sale_date) BETWEEN ? AND ?
+        """
+        q_repeat = """
+            SELECT COUNT(*) as repeat_customers
+            FROM (
+                SELECT customer_id
+                FROM sales
+                WHERE DATE(sale_date) BETWEEN ? AND ?
+                GROUP BY customer_id
+                HAVING COUNT(*) > 1
+            )
+        """
+        q_avg_value = """
+            SELECT 
+                AVG(customer_total) as avg_customer_value
+            FROM (
+                SELECT customer_id, SUM(final_amount) as customer_total
+                FROM sales
+                WHERE DATE(sale_date) BETWEEN ? AND ?
+                GROUP BY customer_id
+            )
+        """
+        
+        total_rows = self.db.execute_query(q_total, [start, end])
+        repeat_rows = self.db.execute_query(q_repeat, [start, end])
+        avg_rows = self.db.execute_query(q_avg_value, [start, end])
+        
+        total = int(total_rows[0]["total_customers"]) if total_rows else 0
+        repeat = int(repeat_rows[0]["repeat_customers"]) if repeat_rows else 0
+        new = total - repeat
+        avg_val = float(avg_rows[0]["avg_customer_value"] or 0) if avg_rows else 0.0
+        
+        return {
+            "total_customers": total,
+            "new_customers": new,
+            "repeat_customers": repeat,
+            "repeat_rate": (repeat / total * 100) if total > 0 else 0.0,
+            "avg_customer_value": avg_val
+        }
+
