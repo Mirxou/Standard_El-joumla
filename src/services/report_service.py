@@ -659,3 +659,240 @@ class ReportService:
         # سيتم التنفيذ لاحقاً
         # يحتاج مكتبة openpyxl أو مشابهة
         return True
+    
+    # ==================== تقارير مالية متقدمة ====================
+    
+    def generate_financial_ratios_report(self, filters: ReportFilter) -> Dict[str, Any]:
+        """
+        توليد تقرير النسب المالية
+        
+        Returns:
+            Dict with financial ratios:
+            - liquidity_ratios: نسب السيولة
+            - profitability_ratios: نسب الربحية  
+            - efficiency_ratios: نسب الكفاءة
+        """
+        start = filters.start_date or (date.today() - timedelta(days=30))
+        end = filters.end_date or date.today()
+        
+        # Current Assets & Liabilities
+        q_assets = """
+            SELECT COALESCE(SUM(current_stock * cost_price), 0) as inventory_value,
+                   COALESCE((SELECT SUM(current_balance) FROM customers WHERE current_balance > 0), 0) as receivables
+            FROM products
+        """
+        assets_row = self.db.execute_query(q_assets)[0]
+        current_assets = float(assets_row['inventory_value']) + float(assets_row['receivables'])
+        
+        q_liabilities = """
+            SELECT COALESCE(SUM(balance), 0) as payables FROM account_balances WHERE account_type = 'payable'
+        """
+        liabilities_row = self.db.execute_query(q_liabilities)
+        current_liabilities = float(liabilities_row[0]['payables']) if liabilities_row else 0.0
+        
+        # Sales & Profit
+        q_sales = """
+            SELECT COALESCE(SUM(final_amount), 0) as sales,
+                   COALESCE(SUM(si.profit), 0) as profit
+            FROM sales s
+            LEFT JOIN sale_items si ON si.sale_id = s.id
+            WHERE DATE(s.sale_date) BETWEEN ? AND ?
+        """
+        sales_row = self.db.execute_query(q_sales, [start, end])[0]
+        sales = float(sales_row['sales'])
+        profit = float(sales_row['profit'])
+        
+        # Calculate Ratios
+        ratios = {
+            "liquidity_ratios": {
+                "current_ratio": current_assets / current_liabilities if current_liabilities > 0 else 0.0,
+                "quick_ratio": (current_assets - float(assets_row['inventory_value'])) / current_liabilities if current_liabilities > 0 else 0.0,
+            },
+            "profitability_ratios": {
+                "gross_profit_margin": (profit / sales * 100) if sales > 0 else 0.0,
+                "net_profit_margin": (profit / sales * 100) if sales > 0 else 0.0,  # Simplified
+                "roa": (profit / current_assets * 100) if current_assets > 0 else 0.0,
+            },
+            "efficiency_ratios": {
+                "inventory_turnover": sales / float(assets_row['inventory_value']) if float(assets_row['inventory_value']) > 0 else 0.0,
+                "receivables_turnover": sales / float(assets_row['receivables']) if float(assets_row['receivables']) > 0 else 0.0,
+            }
+        }
+        
+        return ratios
+    
+    def generate_profitability_analysis_report(self, filters: ReportFilter) -> Dict[str, Any]:
+        """
+        تقرير تحليل الربحية حسب المنتج/الفئة/العميل
+        
+        Returns:
+            Dict with profitability breakdowns
+        """
+        start = filters.start_date or (date.today() - timedelta(days=30))
+        end = filters.end_date or date.today()
+        
+        # By Product
+        q_product = """
+            SELECT p.name,
+                   SUM(si.quantity) as qty,
+                   SUM(si.total_price) as sales,
+                   SUM(si.profit) as profit,
+                   (SUM(si.profit) * 100.0 / SUM(si.total_price)) as margin
+            FROM sale_items si
+            JOIN sales s ON si.sale_id = s.id
+            JOIN products p ON si.product_id = p.id
+            WHERE DATE(s.sale_date) BETWEEN ? AND ?
+            GROUP BY p.id
+            ORDER BY profit DESC
+            LIMIT 20
+        """
+        products = self.db.execute_query(q_product, [start, end])
+        
+        # By Category
+        q_category = """
+            SELECT c.name,
+                   SUM(si.quantity) as qty,
+                   SUM(si.total_price) as sales,
+                   SUM(si.profit) as profit,
+                   (SUM(si.profit) * 100.0 / SUM(si.total_price)) as margin
+            FROM sale_items si
+            JOIN sales s ON si.sale_id = s.id
+            JOIN products p ON si.product_id = p.id
+            LEFT JOIN categories c ON p.category_id = c.id
+            WHERE DATE(s.sale_date) BETWEEN ? AND ?
+            GROUP BY c.id
+            ORDER BY profit DESC
+        """
+        categories = self.db.execute_query(q_category, [start, end])
+        
+        # By Customer
+        q_customer = """
+            SELECT c.name,
+                   COUNT(s.id) as orders,
+                   SUM(s.final_amount) as sales,
+                   SUM(si.profit) as profit
+            FROM sales s
+            JOIN customers c ON s.customer_id = c.id
+            LEFT JOIN sale_items si ON si.sale_id = s.id
+            WHERE DATE(s.sale_date) BETWEEN ? AND ?
+            GROUP BY c.id
+            ORDER BY profit DESC
+            LIMIT 20
+        """
+        customers = self.db.execute_query(q_customer, [start, end])
+        
+        return {
+            "by_product": products,
+            "by_category": categories,
+            "by_customer": customers
+        }
+    
+    def generate_period_comparison_report(self, filters: ReportFilter) -> Dict[str, Any]:
+        """
+        تقرير المقارنة مع الفترة السابقة
+        
+        Returns:
+            Dict with current vs previous period comparison
+        """
+        start = filters.start_date or (date.today() - timedelta(days=30))
+        end = filters.end_date or date.today()
+        
+        period_days = (end - start).days
+        prev_end = start - timedelta(days=1)
+        prev_start = prev_end - timedelta(days=period_days)
+        
+        def get_period_metrics(period_start, period_end):
+            q = """
+                SELECT 
+                    COUNT(DISTINCT s.id) as invoice_count,
+                    COALESCE(SUM(s.final_amount), 0) as total_sales,
+                    COALESCE(SUM(si.profit), 0) as total_profit,
+                    COALESCE(SUM(si.quantity), 0) as total_qty,
+                    COUNT(DISTINCT s.customer_id) as customer_count
+                FROM sales s
+                LEFT JOIN sale_items si ON si.sale_id = s.id
+                WHERE DATE(s.sale_date) BETWEEN ? AND ?
+            """
+            row = self.db.execute_query(q, [period_start, period_end])[0]
+            return {
+                "invoice_count": int(row['invoice_count']),
+                "total_sales": float(row['total_sales']),
+                "total_profit": float(row['total_profit']),
+                "total_qty": float(row['total_qty']),
+                "customer_count": int(row['customer_count']),
+                "avg_invoice_value": float(row['total_sales']) / int(row['invoice_count']) if int(row['invoice_count']) > 0 else 0.0
+            }
+        
+        current = get_period_metrics(start, end)
+        previous = get_period_metrics(prev_start, prev_end)
+        
+        def calc_change(curr, prev):
+            if prev == 0:
+                return 100.0 if curr > 0 else 0.0
+            return ((curr - prev) / prev) * 100
+        
+        comparison = {
+            "current_period": current,
+            "previous_period": previous,
+            "changes": {
+                "invoice_count_change": calc_change(current['invoice_count'], previous['invoice_count']),
+                "sales_change": calc_change(current['total_sales'], previous['total_sales']),
+                "profit_change": calc_change(current['total_profit'], previous['total_profit']),
+                "qty_change": calc_change(current['total_qty'], previous['total_qty']),
+                "customer_count_change": calc_change(current['customer_count'], previous['customer_count']),
+                "avg_invoice_change": calc_change(current['avg_invoice_value'], previous['avg_invoice_value']),
+            }
+        }
+        
+        return comparison
+    
+    def generate_margin_analysis_report(self, filters: ReportFilter) -> Dict[str, Any]:
+        """
+        تقرير تحليل الهوامش (Margins)
+        
+        Returns:
+            Dict with margin analysis by various dimensions
+        """
+        start = filters.start_date or (date.today() - timedelta(days=30))
+        end = filters.end_date or date.today()
+        
+        # Overall margin trend
+        q_daily = """
+            SELECT 
+                DATE(s.sale_date) as day,
+                SUM(si.total_price) as sales,
+                SUM(si.profit) as profit,
+                (SUM(si.profit) * 100.0 / SUM(si.total_price)) as margin
+            FROM sale_items si
+            JOIN sales s ON si.sale_id = s.id
+            WHERE DATE(s.sale_date) BETWEEN ? AND ?
+            GROUP BY DATE(s.sale_date)
+            ORDER BY DATE(s.sale_date)
+        """
+        daily_trend = self.db.execute_query(q_daily, [start, end])
+        
+        # Margin by price range
+        q_range = """
+            SELECT 
+                CASE 
+                    WHEN p.price < 100 THEN 'أقل من 100 دج'
+                    WHEN p.price < 500 THEN '100-500 دج'
+                    WHEN p.price < 1000 THEN '500-1000 دج'
+                    ELSE 'أكثر من 1000 دج'
+                END as price_range,
+                SUM(si.total_price) as sales,
+                SUM(si.profit) as profit,
+                (SUM(si.profit) * 100.0 / SUM(si.total_price)) as margin
+            FROM sale_items si
+            JOIN sales s ON si.sale_id = s.id
+            JOIN products p ON si.product_id = p.id
+            WHERE DATE(s.sale_date) BETWEEN ? AND ?
+            GROUP BY price_range
+            ORDER BY margin DESC
+        """
+        by_price_range = self.db.execute_query(q_range, [start, end])
+        
+        return {
+            "daily_trend": daily_trend,
+            "by_price_range": by_price_range
+        }
