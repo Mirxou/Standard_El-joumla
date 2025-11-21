@@ -45,6 +45,10 @@ logs/
 # Database
 *.db-journal
 *.sqlite3-journal
+*.db-wal
+*.db-shm
+data/*.db-wal
+data/*.db-shm
 
 # Temporary files
 *.tmp
