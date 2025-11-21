@@ -10,6 +10,9 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.txt)
 [![API Version](https://img.shields.io/badge/API_Version-3.5.0-blue.svg)](CHANGELOG.md)
 [![Coverage](https://img.shields.io/badge/Coverage-100%25-brightgreen.svg)](FINAL_ACHIEVEMENT_v3.5.0.md)
+[![Latest Release](https://img.shields.io/github/v/release/Mirxou/Standard_El-joumla?label=latest)](https://github.com/Mirxou/Standard_El-joumla/releases/latest)
+[![Release Date](https://img.shields.io/github/release-date/Mirxou/Standard_El-joumla)](https://github.com/Mirxou/Standard_El-joumla/releases)
+[![Downloads](https://img.shields.io/github/downloads/Mirxou/Standard_El-joumla/total)](https://github.com/Mirxou/Standard_El-joumla/releases)
 
 تطبيق سطح مكتب شامل مع ذكاء اصطناعي متقدم ومعايير عالمية للأمان والأداء<br/>
 Enterprise-grade desktop & REST API solution with AI, Advanced Security, Global Compliance.
@@ -455,7 +458,7 @@ python main.py
 
 ### النسخة المحمولة (للمستخدمين)
 
-1. قم بتنزيل `LogicalVersion_Portable.zip`
+1. قم بتنزيل الحزمة من صفحة الإصدار الأخيرة أو ملف `dist/v5.1.0.zip` (الإصدار الحالي v5.1.0)
 2. فك الضغط إلى أي مجلد
 3. شغّل `LogicalVersion.exe` أو `تشغيل التطبيق.bat`
 
@@ -997,6 +1000,7 @@ logs/
 - ✅ اكتب docstrings شاملة
 - ✅ أضف اختبارات للميزات الجديدة
 - ✅ حدّث الوثائق
+- ✅ استخدم فرع التطوير الحالي `v5.2.0-dev` لميزات الإصدار القادم
 
 ---
 
