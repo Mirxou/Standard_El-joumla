@@ -814,6 +814,7 @@ PRAGMA foreign_keys = ON;         -- تفعيل المفاتيح الخارجي�
 - 🔍 **البحث المتقدم**: `docs/search_features.md`
 - 💳 **المدفوعات**: `docs/payment_dashboard_features.md`
 - 📊 **لوحة المعلومات**: `docs/dashboard_features.md`
+- 📦 **دليل الجرد الدوري**: `CYCLE_COUNT_GUIDE.md`
 
 ### الملفات الفنية
 
