@@ -37,6 +37,9 @@ from src.services.inventory_service import InventoryService
 from src.services.sales_service import SalesService
 from src.services.reports_service import ReportsService
 from src.services.user_service import UserService
+from src.services.email_service import EmailService
+from src.services.reminder_service import init_reminder_service, ReminderService
+from src.services.scheduler_service import init_reminder_scheduler, ReminderScheduler
 
 # استيراد النوافذ والحوارات
 from src.ui.windows.main_window import MainWindow
@@ -280,6 +283,9 @@ class InventoryManagementApp(QApplication):
         self.sales_service: Optional[SalesService] = None
         self.reports_service: Optional[ReportsService] = None
         self.user_service: Optional[UserService] = None
+        self.email_service: Optional[EmailService] = None
+        self.reminder_service: Optional[ReminderService] = None
+        self.reminder_scheduler: Optional[ReminderScheduler] = None
         
         # النوافذ
         self.main_window: Optional[MainWindow] = None
@@ -365,6 +371,16 @@ class InventoryManagementApp(QApplication):
             self.user_service = UserService(self.db_manager)
             
             self.logger.info("تم تهيئة جميع الخدمات بنجاح")
+
+            # تهيئة البريد + التذكيرات + المجدول (اختياري عبر متغيرات البيئة)
+            try:
+                self.email_service = EmailService()
+                self.reminder_service = init_reminder_service(self.db_manager, self.email_service)
+                # يبدأ تلقائياً إذا كانت البيئة مفعّلة SCHEDULER_ENABLED=true
+                self.reminder_scheduler = init_reminder_scheduler(self.reminder_service)
+                self.logger.info("Reminder scheduler initialized (env-controlled)")
+            except Exception as e:
+                self.logger.warning(f"تعذرت تهيئة المجدول/التذكيرات: {e}")
             
         except Exception as e:
             self.logger.error(f"خطأ في تهيئة الخدمات: {str(e)}")
@@ -601,6 +617,13 @@ class InventoryManagementApp(QApplication):
         """تنظيف الموارد عند الإغلاق"""
         try:
             self.logger.info("بدء تنظيف الموارد")
+
+            # إيقاف المجدول إن كان يعمل
+            try:
+                if self.reminder_scheduler and self.reminder_scheduler.is_running():
+                    self.reminder_scheduler.stop()
+            except Exception:
+                pass
             
             # إيقاف العمال
             if self.init_worker and self.init_worker.isRunning():
