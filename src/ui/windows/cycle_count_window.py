@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QMessageBox,
     QInputDialog,
+    QFileDialog,
 )
 
 
@@ -36,12 +37,14 @@ class CycleCountWindow(QMainWindow):
         self.btn_new_session = QPushButton("بدء جلسة جرد")
         self.btn_close_session = QPushButton("إغلاق الجلسة")
         self.btn_refresh = QPushButton("تحديث")
+        self.btn_export = QPushButton("💾 تصدير CSV")
 
         header.addWidget(QLabel("إدارة الجرد الدوري"))
         header.addStretch(1)
         header.addWidget(self.btn_refresh)
         header.addWidget(self.btn_new_session)
         header.addWidget(self.btn_close_session)
+        header.addWidget(self.btn_export)
 
         layout.addLayout(header)
 
@@ -64,6 +67,7 @@ class CycleCountWindow(QMainWindow):
         self.btn_refresh.clicked.connect(self._on_refresh)
         self.btn_new_session.clicked.connect(self._on_new_session)
         self.btn_close_session.clicked.connect(self._on_close_session)
+        self.btn_export.clicked.connect(self._on_export_csv)
 
         # Initial load
         self._on_refresh()
@@ -144,3 +148,26 @@ class CycleCountWindow(QMainWindow):
             self._load_sessions()
         except Exception as e:
             QMessageBox.critical(self, "خطأ", f"فشل إغلاق الجلسة: {e}")
+
+    def _on_export_csv(self) -> None:
+        try:
+            svc = self._ensure_service()
+            sessions = svc.list_sessions(limit=10000)
+            if not sessions:
+                QMessageBox.information(self, "تصدير CSV", "لا توجد بيانات لتصديرها.")
+                return
+            path, _ = QFileDialog.getSaveFileName(self, "حفظ كملف CSV", "cycle_sessions.csv", "CSV Files (*.csv)")
+            if not path:
+                return
+            import csv
+            fields = [
+                "id","plan_id","plan_name","location_id","started_at","closed_at","status","accuracy","variance_qty","variance_value"
+            ]
+            with open(path, "w", newline="", encoding="utf-8-sig") as f:
+                writer = csv.DictWriter(f, fieldnames=fields)
+                writer.writeheader()
+                for row in sessions:
+                    writer.writerow({k: row.get(k, "") for k in fields})
+            QMessageBox.information(self, "تم", f"تم حفظ الملف:\n{path}")
+        except Exception as e:
+            QMessageBox.critical(self, "خطأ", f"فشل تصدير CSV: {e}")
