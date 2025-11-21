@@ -201,7 +201,7 @@ class SystemSettingsPage(QWizardPage):
         
         accounting_layout.addWidget(QLabel("العملة:"), 1, 0)
         self.currency = QComboBox()
-        self.currency.addItems(["ريال سعودي (SAR)", "دولار أمريكي (USD)", "يورو (EUR)"])
+        self.currency.addItems(["دينار جزائري (DZD)", "دولار أمريكي (USD)", "يورو (EUR)"])
         accounting_layout.addWidget(self.currency, 1, 1)
         self.registerField("currency", self.currency, "currentText")
         

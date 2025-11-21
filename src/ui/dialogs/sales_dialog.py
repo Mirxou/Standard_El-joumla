@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 نافذة فاتورة المبيعات - Sales Dialog
 واجهة شاملة لإنشاء وإدارة فواتير المبيعات مع دعم اللغة العربية
@@ -326,7 +326,7 @@ class SalesDialog(QDialog):
         
         # المجموع الفرعي
         summary_layout.addWidget(QLabel("المجموع الفرعي:"), 0, 0)
-        self.subtotal_label = QLabel("0.00 ريال")
+        self.subtotal_label = QLabel("0.00 دج")
         self.subtotal_label.setStyleSheet("font-weight: bold; font-size: 14px;")
         summary_layout.addWidget(self.subtotal_label, 0, 1)
         
@@ -337,7 +337,7 @@ class SalesDialog(QDialog):
         self.discount_spin = QDoubleSpinBox()
         self.discount_spin.setRange(0, 999999.99)
         self.discount_spin.setDecimals(2)
-        self.discount_spin.setSuffix(" ريال")
+        self.discount_spin.setSuffix(" دج")
         discount_layout.addWidget(self.discount_spin)
         
         self.discount_percent_button = QPushButton("%")
@@ -349,13 +349,13 @@ class SalesDialog(QDialog):
         
         # الضريبة
         summary_layout.addWidget(QLabel("الضريبة:"), 2, 0)
-        self.tax_label = QLabel("0.00 ريال")
+        self.tax_label = QLabel("0.00 دج")
         self.tax_label.setStyleSheet("font-weight: bold; color: #e74c3c;")
         summary_layout.addWidget(self.tax_label, 2, 1)
         
         # المجموع الكلي
         summary_layout.addWidget(QLabel("المجموع الكلي:"), 3, 0)
-        self.total_label = QLabel("0.00 ريال")
+        self.total_label = QLabel("0.00 دج")
         self.total_label.setStyleSheet("""
             font-weight: bold; 
             font-size: 18px; 
@@ -864,7 +864,7 @@ class SalesDialog(QDialog):
             discount_spin = QDoubleSpinBox()
             discount_spin.setRange(0, 999999.99)
             discount_spin.setValue(float(item.discount_amount))
-            discount_spin.setSuffix(" ريال")
+            discount_spin.setSuffix(" دج")
             discount_spin.valueChanged.connect(lambda value, i=row: self.update_item_discount(i, value))
             self.items_table.setCellWidget(row, 3, discount_spin)
             
@@ -988,9 +988,9 @@ class SalesDialog(QDialog):
             total = after_discount + tax_amount
             
             # تحديث التسميات
-            self.subtotal_label.setText(f"{subtotal:.2f} ريال")
-            self.tax_label.setText(f"{tax_amount:.2f} ريال")
-            self.total_label.setText(f"{total:.2f} ريال")
+            self.subtotal_label.setText(f"{subtotal:.2f} دج")
+            self.tax_label.setText(f"{tax_amount:.2f} دج")
+            self.total_label.setText(f"{total:.2f} دج")
             
             # حفظ القيم
             self.discount_amount = discount
@@ -1004,7 +1004,7 @@ class SalesDialog(QDialog):
             self.discount_spin.setSuffix("%")
             self.discount_spin.setRange(0, 100)
         else:
-            self.discount_spin.setSuffix(" ريال")
+            self.discount_spin.setSuffix(" دج")
             self.discount_spin.setRange(0, 999999.99)
         
         self.calculate_totals()
@@ -1196,7 +1196,7 @@ class SalesDialog(QDialog):
                 QMessageBox.information(
                     self, 
                     "نجح", 
-                    f"تم حفظ الفاتورة بنجاح\nرقم الفاتورة: {completed_sale.invoice_number}\nالمجموع: {total_amount:.2f} ريال"
+                    f"تم حفظ الفاتورة بنجاح\nرقم الفاتورة: {completed_sale.invoice_number}\nالمجموع: {total_amount:.2f} دج"
                 )
                 
                 self.accept()

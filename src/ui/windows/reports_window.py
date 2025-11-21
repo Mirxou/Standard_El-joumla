@@ -530,7 +530,7 @@ class ReportsWindow(QMainWindow):
         today_sales_label.setStyleSheet("font-weight: bold; color: #495057;")
         stats_layout.addWidget(today_sales_label, 0, 0)
         
-        self.today_sales_value = QLabel("0.00 ريال")
+        self.today_sales_value = QLabel("0.00 دج")
         self.today_sales_value.setStyleSheet("font-size: 18px; color: #28a745; font-weight: bold;")
         stats_layout.addWidget(self.today_sales_value, 0, 1)
         
@@ -804,7 +804,7 @@ class ReportsWindow(QMainWindow):
             
             # مبيعات اليوم
             today_sales = 0.0  # يمكن جلبها من قاعدة البيانات
-            self.today_sales_value.setText(f"{today_sales:.2f} ريال")
+            self.today_sales_value.setText(f"{today_sales:.2f} دج")
             
             # فواتير اليوم
             today_invoices = 0  # يمكن جلبها من قاعدة البيانات

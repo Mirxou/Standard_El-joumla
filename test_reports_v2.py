@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """اختبار توليد التقارير - محدث"""
 
@@ -103,7 +103,7 @@ try:
     sales_count = db_manager.fetch_one("SELECT COUNT(*) FROM sales")[0] or 0
     sales_total = db_manager.fetch_one("SELECT COALESCE(SUM(total_amount), 0) FROM sales")[0] or 0
     print(f"✓ عدد فواتير البيع: {sales_count}")
-    print(f"✓ إجمالي المبيعات: {float(sales_total):,.2f} ريال")
+    print(f"✓ إجمالي المبيعات: {float(sales_total):,.2f} دج")
 except Exception as e:
     print(f"✗ خطأ: {e}")
 
@@ -114,7 +114,7 @@ try:
     purchases_count = db_manager.fetch_one("SELECT COUNT(*) FROM purchases")[0] or 0
     purchases_total = db_manager.fetch_one("SELECT COALESCE(SUM(total_amount), 0) FROM purchases")[0] or 0
     print(f"✓ عدد فواتير الشراء: {purchases_count}")
-    print(f"✓ إجمالي المشتريات: {float(purchases_total):,.2f} ريال")
+    print(f"✓ إجمالي المشتريات: {float(purchases_total):,.2f} دج")
 except Exception as e:
     print(f"✗ خطأ: {e}")
 

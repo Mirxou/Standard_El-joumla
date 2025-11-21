@@ -450,7 +450,7 @@ class PurchaseOrdersWindow(QMainWindow):
         
         statusbar.addSpacing(20)
         
-        self.total_value_label = QLabel("القيمة الإجمالية: 0 ريال")
+        self.total_value_label = QLabel("القيمة الإجمالية: 0 دج")
         statusbar.addWidget(self.total_value_label)
         
         statusbar.addStretch()
@@ -526,7 +526,7 @@ class PurchaseOrdersWindow(QMainWindow):
             
             # تحديث الإحصائيات
             self.total_pos_label.setText(f"إجمالي الأوامر: {len(pos)}")
-            self.total_value_label.setText(f"القيمة الإجمالية: {total_value:,.2f} ريال")
+            self.total_value_label.setText(f"القيمة الإجمالية: {total_value:,.2f} دج")
             
             self.status_message.setText(f"تم تحميل {len(pos)} أمر شراء")
             

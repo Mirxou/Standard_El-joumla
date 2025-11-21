@@ -455,7 +455,7 @@ class BatchTrackingWindow(QWidget):
         self.summary_labels['active'].setText(str(active))
         self.summary_labels['expiring'].setText(str(expiring))
         self.summary_labels['expired'].setText(str(expired))
-        self.summary_labels['total_value'].setText(f"{total_value:,.2f} ريال")
+        self.summary_labels['total_value'].setText(f"{total_value:,.2f} دج")
     
     def apply_filters(self):
         """تطبيق الفلاتر"""

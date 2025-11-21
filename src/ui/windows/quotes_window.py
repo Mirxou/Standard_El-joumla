@@ -383,9 +383,9 @@ class QuotesWindow(QMainWindow):
             self.items_table.setItem(row, 5, total_item)
         
         # المجاميع
-        self.subtotal_label.setText(f"{float(quote.subtotal):,.2f} ريال")
-        self.discount_label.setText(f"{float(quote.discount_amount):,.2f} ريال")
-        self.total_label.setText(f"{float(quote.total_amount):,.2f} ريال")
+        self.subtotal_label.setText(f"{float(quote.subtotal):,.2f} دج")
+        self.discount_label.setText(f"{float(quote.discount_amount):,.2f} دج")
+        self.total_label.setText(f"{float(quote.total_amount):,.2f} دج")
         
         # الملاحظات
         self.notes_text.setText(quote.notes or "لا توجد ملاحظات")
@@ -439,7 +439,7 @@ class QuotesWindow(QMainWindow):
             stats = self.quote_service.get_quote_statistics()
             
             self.total_quotes_label.setText(f"إجمالي العروض: {stats.get('total_count', 0)}")
-            self.total_value_label.setText(f"القيمة الإجمالية: {stats.get('total_value', 0):,.2f} ريال")
+            self.total_value_label.setText(f"القيمة الإجمالية: {stats.get('total_value', 0):,.2f} دج")
             self.acceptance_rate_label.setText(f"معدل القبول: {stats.get('acceptance_rate', 0):.1f}%")
             
         except Exception as e:

@@ -590,7 +590,7 @@ class MainWindow(QMainWindow):
             set_label("total_categories", f"{getattr(report, 'total_categories', 0):,}")
             set_label(
                 "total_stock_value",
-                f"{getattr(report, 'total_stock_value', 0):,.2f} ريال"
+                f"{getattr(report, 'total_stock_value', 0):,.2f} دج"
             )
             set_label("low_stock_items", f"{getattr(report, 'low_stock_items', 0):,}")
             set_label("out_of_stock_items", f"{getattr(report, 'out_of_stock_items', 0):,}")
@@ -1740,7 +1740,7 @@ class MainWindow(QMainWindow):
                 "<h3>ملخص المخزون</h3>"
                 f"<p>إجمالي المنتجات: <b>{report.total_products:,}</b></p>"
                 f"<p>إجمالي الفئات: <b>{report.total_categories:,}</b></p>"
-                f"<p>قيمة المخزون: <b>{report.total_stock_value:,.2f} ريال</b></p>"
+                f"<p>قيمة المخزون: <b>{report.total_stock_value:,.2f} دج</b></p>"
                 f"<p>منتجات ذات مخزون منخفض: <b>{report.low_stock_items:,}</b></p>"
                 f"<p>منتجات نفدت من المخزون: <b>{report.out_of_stock_items:,}</b></p>"
             )

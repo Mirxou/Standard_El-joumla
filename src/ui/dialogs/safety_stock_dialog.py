@@ -1,4 +1,4 @@
-"""
+﻿"""
 Safety Stock Configuration Dialog - حوار تكوين الأرصدة الآمنة
 """
 
@@ -143,7 +143,7 @@ class SafetyStockDialog(QDialog):
         self.order_cost_spin.setDecimals(2)
         self.order_cost_spin.setValue(100)
         self.order_cost_spin.valueChanged.connect(self.calculate_eoq)
-        layout.addRow("كلفة الطلب (ريال):", self.order_cost_spin)
+        layout.addRow("كلفة الطلب (دج):", self.order_cost_spin)
         
         # كلفة الاحتفاظ
         self.holding_cost_spin = QDoubleSpinBox()

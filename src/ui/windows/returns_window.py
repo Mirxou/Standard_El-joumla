@@ -393,13 +393,13 @@ class ReturnsWindow(QMainWindow):
         
         # معلومات الاسترداد
         self.refund_method_label.setText(ret.refund_method.value if ret.refund_method else "-")
-        self.refund_amount_label.setText(f"{float(ret.refund_amount):,.2f} ريال")
+        self.refund_amount_label.setText(f"{float(ret.refund_amount):,.2f} دج")
         self.refund_date_label.setText(ret.refund_date.strftime("%Y-%m-%d") if ret.refund_date else "-")
         self.refund_reference_label.setText(ret.refund_reference or "-")
         self.credit_note_label.setText(ret.credit_note_number or "-")
         
         # المجموع
-        self.total_label.setText(f"{float(ret.total_amount):,.2f} ريال")
+        self.total_label.setText(f"{float(ret.total_amount):,.2f} دج")
     
     def _clear_details(self):
         """مسح التفاصيل"""
@@ -442,8 +442,8 @@ class ReturnsWindow(QMainWindow):
             stats = self.return_service.get_return_statistics()
             
             self.total_returns_label.setText(f"إجمالي المرتجعات: {stats.get('total_count', 0)}")
-            self.total_value_label.setText(f"القيمة الإجمالية: {stats.get('total_value', 0):,.2f} ريال")
-            self.total_refunded_label.setText(f"المبلغ المسترد: {stats.get('total_refunded', 0):,.2f} ريال")
+            self.total_value_label.setText(f"القيمة الإجمالية: {stats.get('total_value', 0):,.2f} دج")
+            self.total_refunded_label.setText(f"المبلغ المسترد: {stats.get('total_refunded', 0):,.2f} دج")
             
         except Exception as e:
             print(f"خطأ في تحديث الإحصائيات: {e}")

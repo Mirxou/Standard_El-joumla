@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """اختبار توليد التقارير"""
 
@@ -39,7 +39,7 @@ try:
     if top_balance:
         print(f"✓ وجدت {len(top_balance)} عملاء بأرصدة مستحقة:")
         for name, balance in top_balance:
-            print(f"  - {name}: {float(balance):,.2f} ريال")
+            print(f"  - {name}: {float(balance):,.2f} دج")
     else:
         print("✓ لا توجد أرصدة مستحقة")
 except Exception as e:
@@ -62,7 +62,7 @@ try:
     if top_buyers:
         print(f"✓ وجدت {len(top_buyers)} عملاء نشطين:")
         for name, count, amount in top_buyers:
-            print(f"  - {name}: {count} فاتورة ({float(amount):,.2f} ريال)")
+            print(f"  - {name}: {count} فاتورة ({float(amount):,.2f} دج)")
     else:
         print("✓ لا توجد عمليات شراء مسجلة")
 except Exception as e:
@@ -89,7 +89,7 @@ try:
     if top_balance:
         print(f"✓ وجدت {len(top_balance)} موردين برصيد:")
         for name, balance in top_balance:
-            print(f"  - {name}: {float(balance):,.2f} ريال")
+            print(f"  - {name}: {float(balance):,.2f} دج")
     else:
         print("✓ لا توجد أرصدة مستحقة للموردين")
 except Exception as e:
@@ -102,7 +102,7 @@ try:
     sales_count = db_manager.fetch_one("SELECT COUNT(*) FROM sales")[0] or 0
     sales_total = db_manager.fetch_one("SELECT COALESCE(SUM(total_amount), 0) FROM sales")[0] or 0
     print(f"✓ عدد فواتير البيع: {sales_count}")
-    print(f"✓ إجمالي المبيعات: {float(sales_total):,.2f} ريال")
+    print(f"✓ إجمالي المبيعات: {float(sales_total):,.2f} دج")
 except Exception as e:
     print(f"✗ خطأ: {e}")
 
@@ -113,7 +113,7 @@ try:
     purchases_count = db_manager.fetch_one("SELECT COUNT(*) FROM purchases")[0] or 0
     purchases_total = db_manager.fetch_one("SELECT COALESCE(SUM(total_amount), 0) FROM purchases")[0] or 0
     print(f"✓ عدد فواتير الشراء: {purchases_count}")
-    print(f"✓ إجمالي المشتريات: {float(purchases_total):,.2f} ريال")
+    print(f"✓ إجمالي المشتريات: {float(purchases_total):,.2f} دج")
 except Exception as e:
     print(f"✗ خطأ: {e}")
 
@@ -146,7 +146,7 @@ try:
     if top_balance:
         print(f"✓ وجدت {len(top_balance)} عملاء بأرصدة مستحقة:")
         for name, balance in top_balance:
-            print(f"  - {name}: {float(balance):,.2f} ريال")
+            print(f"  - {name}: {float(balance):,.2f} دج")
     else:
         print("✓ لا توجد أرصدة مستحقة")
 except Exception as e:
@@ -169,7 +169,7 @@ try:
     if top_buyers:
         print(f"✓ وجدت {len(top_buyers)} عملاء نشطين:")
         for name, count, amount in top_buyers:
-            print(f"  - {name}: {count} فاتورة ({float(amount):,.2f} ريال)")
+            print(f"  - {name}: {count} فاتورة ({float(amount):,.2f} دج)")
     else:
         print("✓ لا توجد عمليات شراء مسجلة")
 except Exception as e:
@@ -196,7 +196,7 @@ try:
     if top_balance:
         print(f"✓ وجدت {len(top_balance)} موردين برصيد:")
         for name, balance in top_balance:
-            print(f"  - {name}: {float(balance):,.2f} ريال")
+            print(f"  - {name}: {float(balance):,.2f} دج")
     else:
         print("✓ لا توجد أرصدة مستحقة للموردين")
 except Exception as e:
@@ -209,7 +209,7 @@ try:
     sales_count = db_manager.fetch_one("SELECT COUNT(*) FROM sales")[0] or 0
     sales_total = db_manager.fetch_one("SELECT COALESCE(SUM(total_amount), 0) FROM sales")[0] or 0
     print(f"✓ عدد فواتير البيع: {sales_count}")
-    print(f"✓ إجمالي المبيعات: {float(sales_total):,.2f} ريال")
+    print(f"✓ إجمالي المبيعات: {float(sales_total):,.2f} دج")
 except Exception as e:
     print(f"✗ خطأ: {e}")
 
@@ -220,7 +220,7 @@ try:
     purchases_count = db_manager.fetch_one("SELECT COUNT(*) FROM purchases")[0] or 0
     purchases_total = db_manager.fetch_one("SELECT COALESCE(SUM(total_amount), 0) FROM purchases")[0] or 0
     print(f"✓ عدد فواتير الشراء: {purchases_count}")
-    print(f"✓ إجمالي المشتريات: {float(purchases_total):,.2f} ريال")
+    print(f"✓ إجمالي المشتريات: {float(purchases_total):,.2f} دج")
 except Exception as e:
     print(f"✗ خطأ: {e}")
 

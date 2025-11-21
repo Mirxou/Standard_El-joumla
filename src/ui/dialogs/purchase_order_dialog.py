@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 نافذة حوار إنشاء/تحرير أمر الشراء
@@ -136,7 +136,7 @@ class PurchaseOrderDialog(QDialog):
         priority_layout.addSpacing(20)
         
         self.currency_combo = QComboBox()
-        self.currency_combo.addItems(["SAR", "USD", "EUR", "AED"])
+        self.currency_combo.addItems(["DZD", "USD", "EUR", "SAR"])
         priority_layout.addWidget(QLabel("العملة:"))
         priority_layout.addWidget(self.currency_combo)
         
@@ -239,7 +239,7 @@ class PurchaseOrderDialog(QDialog):
         self.discount_spin = QDoubleSpinBox()
         self.discount_spin.setMaximum(999999.99)
         self.discount_spin.setPrefix("- ")
-        self.discount_spin.setSuffix(" ريال")
+        self.discount_spin.setSuffix(" دج")
         self.discount_spin.valueChanged.connect(self._calculate_totals)
         discount_layout.addWidget(self.discount_spin)
         layout.addRow("الخصم:", discount_layout)
@@ -249,7 +249,7 @@ class PurchaseOrderDialog(QDialog):
         self.tax_spin = QDoubleSpinBox()
         self.tax_spin.setMaximum(999999.99)
         self.tax_spin.setPrefix("+ ")
-        self.tax_spin.setSuffix(" ريال")
+        self.tax_spin.setSuffix(" دج")
         self.tax_spin.valueChanged.connect(self._calculate_totals)
         tax_layout.addWidget(self.tax_spin)
         layout.addRow("الضريبة:", tax_layout)
@@ -259,7 +259,7 @@ class PurchaseOrderDialog(QDialog):
         self.shipping_spin = QDoubleSpinBox()
         self.shipping_spin.setMaximum(999999.99)
         self.shipping_spin.setPrefix("+ ")
-        self.shipping_spin.setSuffix(" ريال")
+        self.shipping_spin.setSuffix(" دج")
         self.shipping_spin.valueChanged.connect(self._calculate_totals)
         shipping_layout.addWidget(self.shipping_spin)
         layout.addRow("الشحن:", shipping_layout)

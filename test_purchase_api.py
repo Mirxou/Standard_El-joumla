@@ -18,7 +18,7 @@ def test_create_purchase_order(token):
         "supplier_id": 1,
         "supplier_name": "مورد تجريبي",
         "required_date": (datetime.now() + timedelta(days=7)).date().isoformat(),
-        "currency": "SAR",
+        "currency": "DZD",
         "notes": "طلب شراء تجريبي",
         "items": [
             {"product_id": 1, "product_name": "منتج 1", "quantity_ordered": 10, "unit_price": 50.0},
