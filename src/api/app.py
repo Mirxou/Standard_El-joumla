@@ -95,7 +95,14 @@ except ImportError:
     MFAMethod = None
 
 
-app = FastAPI(title="Logical Version API", version="3.5.0")
+app = FastAPI(title="Logical Version API", version="3.5.2")
+
+# Register mobile API routes
+try:
+    from .routes import mobile_router
+    app.include_router(mobile_router)
+except ImportError:
+    pass
 
 db_manager: Optional[DatabaseManager] = None
 user_service: Optional[UserService] = None
