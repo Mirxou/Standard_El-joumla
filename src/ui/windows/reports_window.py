@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 نافذة التقارير - Reports Window
 واجهة شاملة لعرض وتصدير التقارير المختلفة مع دعم اللغة العربية
@@ -1097,9 +1097,9 @@ class ReportsWindow(QMainWindow):
                 
                 summary_text += f"""
                 <ul>
-                    <li><strong>إجمالي المبيعات:</strong> {total_sales:.2f} ريال</li>
+                    <li><strong>إجمالي المبيعات:</strong> {total_sales:.2f} دج</li>
                     <li><strong>إجمالي الكمية:</strong> {total_quantity}</li>
-                    <li><strong>متوسط قيمة الفاتورة:</strong> {total_sales/len(report_data.data) if report_data.data else 0:.2f} ريال</li>
+                    <li><strong>متوسط قيمة الفاتورة:</strong> {total_sales/len(report_data.data) if report_data.data else 0:.2f} دج</li>
                 </ul>
                 """
             

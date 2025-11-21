@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 النافذة الرئيسية - Main Window
@@ -700,7 +700,7 @@ class MainWindow(QMainWindow):
                 f"إجمالي العملاء: {report.get('total_customers', 0):,} | "
                 f"العملاء النشطون: {report.get('active_customers', 0):,} | "
                 f"عملاء لديهم رصيد مستحق: {report.get('customers_with_balance', 0):,} | "
-                f"إجمالي الأرصدة المستحقة: {report.get('total_outstanding_balance', 0):,.2f} ريال"
+                f"إجمالي الأرصدة المستحقة: {report.get('total_outstanding_balance', 0):,.2f} دج"
             )
             self.customers_summary_label.setText(summary_text)
         except Exception as e:
@@ -795,7 +795,7 @@ class MainWindow(QMainWindow):
                 f"إجمالي الموردين: {report.get('total_suppliers', 0):,} | "
                 f"الموردون النشطون: {report.get('active_suppliers', 0):,} | "
                 f"موردون لديهم رصيد مستحق: {report.get('suppliers_with_balance', 0):,} | "
-                f"إجمالي الأرصدة المستحقة: {report.get('total_outstanding_balance', 0):,.2f} ريال"
+                f"إجمالي الأرصدة المستحقة: {report.get('total_outstanding_balance', 0):,.2f} دج"
             )
             self.suppliers_summary_label.setText(summary_text)
         except Exception as e:
