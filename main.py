@@ -40,6 +40,7 @@ from src.services.user_service import UserService
 from src.services.email_service import EmailService
 from src.services.reminder_service import init_reminder_service, ReminderService
 from src.services.scheduler_service import init_reminder_scheduler, ReminderScheduler
+from src.ui.notifications_manager import get_notifications_manager, SmartNotificationsManager
 
 # استيراد النوافذ والحوارات
 from src.ui.windows.main_window import MainWindow
@@ -289,6 +290,7 @@ class InventoryManagementApp(QApplication):
         self.email_service: Optional[EmailService] = None
         self.reminder_service: Optional[ReminderService] = None
         self.reminder_scheduler: Optional[ReminderScheduler] = None
+        self.notifications_manager: Optional[SmartNotificationsManager] = None
         
         # النوافذ
         self.main_window: Optional[MainWindow] = None
@@ -394,6 +396,13 @@ class InventoryManagementApp(QApplication):
                 self.logger.info("Reminder scheduler initialized (env-controlled)")
             except Exception as e:
                 self.logger.warning(f"تعذرت تهيئة المجدول/التذكيرات: {e}")
+            
+            # تهيئة نظام الإشعارات الذكية (سيبدأ بعد عرض النافذة الرئيسية)
+            try:
+                self.notifications_manager = get_notifications_manager(self.db_manager)
+                self.logger.info("تم تهيئة نظام الإشعارات الذكية")
+            except Exception as e:
+                self.logger.warning(f"تعذرت تهيئة نظام الإشعارات: {e}")
             
         except Exception as e:
             self.logger.error(f"خطأ في تهيئة الخدمات: {str(e)}")
@@ -579,6 +588,16 @@ class InventoryManagementApp(QApplication):
             self.main_window.show()
             self.logger.info("تم عرض النافذة الرئيسية")
             
+            # بدء نظام الإشعارات بعد عرض النافذة
+            if self.notifications_manager:
+                try:
+                    # ربط النافذة الرئيسية بمدير الإشعارات
+                    self.notifications_manager.main_window = self.main_window
+                    self.notifications_manager.start()
+                    self.logger.info("تم بدء نظام الإشعارات الذكية")
+                except Exception as e:
+                    self.logger.warning(f"فشل بدء نظام الإشعارات: {e}")
+            
         except Exception as e:
             self.logger.error(f"خطأ في عرض النافذة الرئيسية: {str(e)}")
             self.show_error_message("خطأ في النافذة الرئيسية", f"فشل في عرض النافذة الرئيسية: {str(e)}")
@@ -630,6 +649,14 @@ class InventoryManagementApp(QApplication):
         """تنظيف الموارد عند الإغلاق"""
         try:
             self.logger.info("بدء تنظيف الموارد")
+
+            # إيقاف نظام الإشعارات
+            if self.notifications_manager:
+                try:
+                    self.notifications_manager.stop()
+                    self.logger.info("تم إيقاف نظام الإشعارات")
+                except Exception as e:
+                    self.logger.warning(f"خطأ في إيقاف الإشعارات: {e}")
 
             # إيقاف المجدول إن كان يعمل
             try:

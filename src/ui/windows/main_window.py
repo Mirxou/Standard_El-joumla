@@ -51,6 +51,9 @@ class MainWindow(QMainWindow):
         # إعداد اختصارات لوحة المفاتيح
         self.setup_keyboard_shortcuts()
         
+        # إعداد شريط الإجراءات السريعة
+        self.setup_quick_actions()
+        
         # تطبيق الإعدادات
         self.apply_settings()
         
@@ -1195,6 +1198,13 @@ class MainWindow(QMainWindow):
         theme_action.triggered.connect(self.show_theme_selector)
         view_menu.addAction(theme_action)
         
+        # مركز الإشعارات
+        notifications_action = QAction("🔔 مركز الإشعارات", self)
+        notifications_action.setToolTip("عرض جميع الإشعارات والتنبيهات")
+        notifications_action.setShortcut("Ctrl+Shift+N")
+        notifications_action.triggered.connect(self.show_notifications_center)
+        view_menu.addAction(notifications_action)
+        
         view_menu.addSeparator()
         
         # قائمة أدوات
@@ -2327,6 +2337,35 @@ class MainWindow(QMainWindow):
         """عرض نافذة مساعدة الاختصارات"""
         if hasattr(self, 'shortcuts_manager'):
             self.shortcuts_manager.show_shortcuts_dialog()
+    
+    def show_notifications_center(self):
+        """عرض مركز الإشعارات"""
+        try:
+            from ..notifications_manager import get_notifications_manager
+            notifications_manager = get_notifications_manager(self.db_manager, self)
+            
+            if notifications_manager:
+                notifications_manager.show_notification_center()
+                if self.logger:
+                    self.logger.info("تم فتح مركز الإشعارات")
+            else:
+                QMessageBox.information(self, "معلومات", "نظام الإشعارات غير متاح حالياً")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح مركز الإشعارات: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح مركز الإشعارات:\n{str(e)}")
+    
+    def setup_quick_actions(self):
+        """إعداد شريط الإجراءات السريعة"""
+        try:
+            from ..quick_actions_toolbar import add_quick_actions_toolbar
+            self.quick_actions_toolbar = add_quick_actions_toolbar(self)
+            
+            if self.logger:
+                self.logger.info("تم إعداد شريط الإجراءات السريعة")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في إعداد شريط الإجراءات: {str(e)}")
     
     def closeEvent(self, event):
         """حدث إغلاق النافذة"""
