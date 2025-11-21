@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 نماذج Pydantic للتحقق من صحة البيانات
@@ -525,7 +525,7 @@ if __name__ == "__main__":
             tax_rate=15.0
         )
         print(f"   ✅ المنتج: {product.name}")
-        print(f"      السعر: {product.sale_price} ريال")
+        print(f"      السعر: {product.sale_price} دج")
     except Exception as e:
         print(f"   ❌ خطأ: {e}")
     

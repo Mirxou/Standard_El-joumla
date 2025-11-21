@@ -1,4 +1,4 @@
-"""
+﻿"""
 Payment Plan Payment Dialog - نافذة تسجيل الدفعات على خطط التقسيط
 """
 
@@ -95,15 +95,15 @@ class InstallmentPaymentDialog(QDialog):
         layout.addWidget(QLabel(self.plan.customer_name or "---"), 0, 3)
         
         layout.addWidget(QLabel("المبلغ الكلي:"), 1, 0)
-        layout.addWidget(QLabel(f"{self.plan.total_amount:,.2f} ريال"), 1, 1)
+        layout.addWidget(QLabel(f"{self.plan.total_amount:,.2f} دج"), 1, 1)
         
         layout.addWidget(QLabel("المدفوع:"), 1, 2)
-        paid_label = QLabel(f"{self.plan.total_paid:,.2f} ريال")
+        paid_label = QLabel(f"{self.plan.total_paid:,.2f} دج")
         paid_label.setStyleSheet("color: green; font-weight: bold;")
         layout.addWidget(paid_label, 1, 3)
         
         layout.addWidget(QLabel("المتبقي:"), 2, 0)
-        remaining_label = QLabel(f"{self.plan.total_remaining:,.2f} ريال")
+        remaining_label = QLabel(f"{self.plan.total_remaining:,.2f} دج")
         remaining_label.setStyleSheet("color: red; font-weight: bold;")
         layout.addWidget(remaining_label, 2, 1)
         
@@ -154,7 +154,7 @@ class InstallmentPaymentDialog(QDialog):
         self.payment_amount_spin = QDoubleSpinBox()
         self.payment_amount_spin.setMaximum(10000000)
         self.payment_amount_spin.setDecimals(2)
-        self.payment_amount_spin.setSuffix(" ريال")
+        self.payment_amount_spin.setSuffix(" دج")
         self.payment_amount_spin.valueChanged.connect(self.on_payment_amount_changed)
         layout.addWidget(self.payment_amount_spin, 0, 3)
         
@@ -182,7 +182,7 @@ class InstallmentPaymentDialog(QDialog):
         
         # معلومات إضافية
         layout.addWidget(QLabel("المبلغ المتبقي بعد الدفع:"), 3, 0)
-        self.remaining_after_label = QLabel("0.00 ريال")
+        self.remaining_after_label = QLabel("0.00 دج")
         self.remaining_after_label.setFont(QFont("Arial", 10, QFont.Bold))
         layout.addWidget(self.remaining_after_label, 3, 1)
         
@@ -262,7 +262,7 @@ class InstallmentPaymentDialog(QDialog):
         payment_amount = Decimal(str(self.payment_amount_spin.value()))
         remaining = self.selected_installment.remaining_amount - payment_amount
         
-        self.remaining_after_label.setText(f"{remaining:,.2f} ريال")
+        self.remaining_after_label.setText(f"{remaining:,.2f} دج")
         
         # تحديد الحالة الجديدة
         if remaining <= 0:
@@ -326,7 +326,7 @@ class InstallmentPaymentDialog(QDialog):
             QMessageBox.information(
                 self,
                 "نجح",
-                f"تم تسجيل دفعة بمبلغ {payment_amount:,.2f} ريال بنجاح"
+                f"تم تسجيل دفعة بمبلغ {payment_amount:,.2f} دج بنجاح"
             )
             
             self.accept()
@@ -432,26 +432,26 @@ class PaymentPlanDetailsDialog(QDialog):
         
         # الصف الثالث
         layout.addWidget(QLabel("المبلغ الكلي:"), 2, 0)
-        layout.addWidget(QLabel(f"{self.plan.total_amount:,.2f} ريال"), 2, 1)
+        layout.addWidget(QLabel(f"{self.plan.total_amount:,.2f} دج"), 2, 1)
         
         layout.addWidget(QLabel("المقدم:"), 2, 2)
-        layout.addWidget(QLabel(f"{self.plan.down_payment:,.2f} ريال"), 2, 3)
+        layout.addWidget(QLabel(f"{self.plan.down_payment:,.2f} دج"), 2, 3)
         
         # الصف الرابع
         layout.addWidget(QLabel("المبلغ المقسط:"), 3, 0)
-        layout.addWidget(QLabel(f"{self.plan.financed_amount:,.2f} ريال"), 3, 1)
+        layout.addWidget(QLabel(f"{self.plan.financed_amount:,.2f} دج"), 3, 1)
         
         layout.addWidget(QLabel("عدد الأقساط:"), 3, 2)
         layout.addWidget(QLabel(str(self.plan.number_of_installments)), 3, 3)
         
         # الصف الخامس
         layout.addWidget(QLabel("المدفوع:"), 4, 0)
-        paid_label = QLabel(f"{self.plan.total_paid:,.2f} ريال")
+        paid_label = QLabel(f"{self.plan.total_paid:,.2f} دج")
         paid_label.setStyleSheet("color: green; font-weight: bold;")
         layout.addWidget(paid_label, 4, 1)
         
         layout.addWidget(QLabel("المتبقي:"), 4, 2)
-        remaining_label = QLabel(f"{self.plan.total_remaining:,.2f} ريال")
+        remaining_label = QLabel(f"{self.plan.total_remaining:,.2f} دج")
         remaining_label.setStyleSheet("color: red; font-weight: bold;")
         layout.addWidget(remaining_label, 4, 3)
         

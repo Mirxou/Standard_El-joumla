@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 سكريبت اختبار خدمة البحث المتقدم
@@ -144,7 +144,7 @@ def test_search_service():
         if result.records:
             print("\nعملاء لديهم رصيد:")
             for item in result.records[:5]:
-                print(f"- {item.get('name', 'N/A')}: {item.get('current_balance', 0)} ريال")
+                print(f"- {item.get('name', 'N/A')}: {item.get('current_balance', 0)} دج")
         
         # اختبار 6: البحث في المبيعات
         print("\n" + "-" * 80)
@@ -165,7 +165,7 @@ def test_search_service():
             print("\nآخر 3 فواتير:")
             for i, item in enumerate(result.records[:3], 1):
                 print(f"{i}. فاتورة #{item.get('invoice_number', 'N/A')} - "
-                      f"المبلغ: {item.get('final_amount', 0):.2f} ريال - "
+                      f"المبلغ: {item.get('final_amount', 0):.2f} دج - "
                       f"التاريخ: {item.get('sale_date', 'N/A')}")
         
         # اختبار 7: البحث العام (في جميع الكيانات)

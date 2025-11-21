@@ -240,7 +240,7 @@ All notable changes to this project will be documented in this file.
 - **Platinum**: 10000+ points (5% cashback)
 
 #### Features
-- Automatic points accumulation (1 SAR = 1 point)
+- Automatic points accumulation (1 DZD = 1 point)
 - Points redemption for discounts
 - Automatic tier upgrades
 - Special offers and promotions

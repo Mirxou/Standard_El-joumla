@@ -43,7 +43,7 @@ POST /purchase/orders
   "supplier_name": "المورد العربي",
   "supplier_contact": "+966500000000",
   "required_date": "2025-11-30",
-  "currency": "SAR",
+  "currency": "DZD",
   "notes": "شحنة أولية",
   "items": [
     {

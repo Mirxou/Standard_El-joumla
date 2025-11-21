@@ -377,7 +377,7 @@ class ABCAnalysisWindow(QWidget):
         self.pie_chart_view.setChart(pie_chart)
         
         # رسم أعمدة للقيمة
-        bar_set = QBarSet("القيمة (ريال)")
+        bar_set = QBarSet("القيمة (دج)")
         bar_set.append(float(summary.get('category_a_value', 0)))
         bar_set.append(float(summary.get('category_b_value', 0)))
         bar_set.append(float(summary.get('category_c_value', 0)))

@@ -345,7 +345,7 @@ print(f"✅ تم إنشاء طلب البيع برقم: {order_id}")
 order_detail = requests.get(f"{BASE_URL}/sales/orders/{order_id}", headers=headers).json()
 print(f"\n📋 تفاصيل الطلب:")
 print(f"   رقم الفاتورة: {order_detail['invoice_number']}")
-print(f"   المبلغ الإجمالي: {order_detail['total_amount']} ريال")
+print(f"   المبلغ الإجمالي: {order_detail['total_amount']} دج")
 print(f"   طريقة الدفع: {order_detail['payment_method']}")
 ```
 

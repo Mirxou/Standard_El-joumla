@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 نافذة إدارة المدفوعات - Payment Dialog
 واجهة شاملة لإدارة المدفوعات والحسابات المدينة والدائنة
@@ -179,7 +179,7 @@ class PaymentDialog(QDialog):
         self.amount_spinbox = QDoubleSpinBox()
         self.amount_spinbox.setRange(0.01, 999999.99)
         self.amount_spinbox.setDecimals(2)
-        self.amount_spinbox.setSuffix(" ريال")
+        self.amount_spinbox.setSuffix(" دج")
         form_layout.addRow("المبلغ:", self.amount_spinbox)
         
         # طريقة الدفع
@@ -652,7 +652,7 @@ class PaymentDialog(QDialog):
                         entity_name = supplier.name
                         
                 self.recent_payments_table.setItem(row, 1, QTableWidgetItem(entity_name))
-                self.recent_payments_table.setItem(row, 2, QTableWidgetItem(f"{payment.amount:.2f} ريال"))
+                self.recent_payments_table.setItem(row, 2, QTableWidgetItem(f"{payment.amount:.2f} دج"))
                 self.recent_payments_table.setItem(row, 3, QTableWidgetItem(payment.payment_method.value))
                 self.recent_payments_table.setItem(row, 4, QTableWidgetItem(payment.reference_number or ""))
                 self.recent_payments_table.setItem(row, 5, QTableWidgetItem(payment.status.value))
@@ -700,7 +700,7 @@ class PaymentDialog(QDialog):
             for row, account in enumerate(all_accounts):
                 self.accounts_table.setItem(row, 0, QTableWidgetItem(account['name']))
                 self.accounts_table.setItem(row, 1, QTableWidgetItem(account['type']))
-                self.accounts_table.setItem(row, 2, QTableWidgetItem(f"{account['balance']:.2f} ريال"))
+                self.accounts_table.setItem(row, 2, QTableWidgetItem(f"{account['balance']:.2f} دج"))
                 self.accounts_table.setItem(row, 3, QTableWidgetItem(""))  # آخر معاملة
                 self.accounts_table.setItem(row, 4, QTableWidgetItem(str(account['last_transaction'])))
                 self.accounts_table.setItem(row, 5, QTableWidgetItem(account['status']))
