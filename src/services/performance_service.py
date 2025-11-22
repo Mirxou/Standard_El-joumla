@@ -6,17 +6,44 @@ from __future__ import annotations
 from typing import List, Dict, Any, Optional
 import sqlite3
 import time
+import threading
 from datetime import datetime, timedelta
 from pathlib import Path
+from collections import deque
 
 from ..core.database_manager import DatabaseManager
+
+
+class PerformanceMetrics:
+    """مقاييس الأداء"""
+    
+    def __init__(self):
+        self.timestamp = datetime.now()
+        self.query_count = 0
+        self.avg_query_time_ms = 0.0
+        self.cache_hit_rate = 0.0
+        self.db_size_mb = 0.0
+        self.active_connections = 0
 
 
 class PerformanceService:
     """خدمة تحسين الأداء والصيانة"""
     
-    def __init__(self, db: DatabaseManager):
+    def __init__(self, db: DatabaseManager, cache_service=None):
         self.db = db
+        self.cache = cache_service
+        
+        # Query performance tracking
+        self.query_times = deque(maxlen=1000)
+        self.slow_queries = deque(maxlen=100)
+        self.slow_query_threshold_ms = 100
+        
+        # Metrics history (last hour)
+        self.metrics_history = deque(maxlen=360)  # 1 per 10 seconds
+        
+        # Monitoring state
+        self._monitoring = False
+        self._monitoring_thread = None
     
     # ==================== Database Optimization ====================
     
@@ -461,4 +488,184 @@ class PerformanceService:
             return {
                 'success': False,
                 'error': str(e)
+            }
+    
+    # ==================== Real-time Monitoring ====================
+    
+    def start_monitoring(self):
+        """بدء المراقبة المستمرة"""
+        if self._monitoring:
+            return
+        
+        def monitor_loop():
+            self._monitoring = True
+            while self._monitoring:
+                try:
+                    metrics = self.collect_current_metrics()
+                    self.metrics_history.append(metrics)
+                    time.sleep(10)  # Collect every 10 seconds
+                except Exception:
+                    pass
+        
+        self._monitoring_thread = threading.Thread(target=monitor_loop, daemon=True)
+        self._monitoring_thread.start()
+    
+    def stop_monitoring(self):
+        """إيقاف المراقبة"""
+        self._monitoring = False
+        if self._monitoring_thread:
+            self._monitoring_thread.join(timeout=5)
+    
+    def collect_current_metrics(self) -> PerformanceMetrics:
+        """جمع المقاييس الحالية"""
+        metrics = PerformanceMetrics()
+        
+        try:
+            # Database size
+            db_size = Path(self.db.db_path).stat().st_size
+            metrics.db_size_mb = round(db_size / (1024 * 1024), 2)
+            
+            # Query metrics
+            metrics.query_count = len(self.query_times)
+            if self.query_times:
+                metrics.avg_query_time_ms = sum(self.query_times) / len(self.query_times)
+            
+            # Cache metrics
+            if self.cache:
+                cache_stats = self.cache.get_all_stats()
+                if '_totals' in cache_stats:
+                    metrics.cache_hit_rate = cache_stats['_totals']['overall_hit_rate']
+        
+        except Exception:
+            pass
+        
+        return metrics
+    
+    def log_query_time(self, query_time_ms: float, query: str = None):
+        """تسجيل وقت استعلام"""
+        self.query_times.append(query_time_ms)
+        
+        # Log slow queries
+        if query_time_ms > self.slow_query_threshold_ms and query:
+            self.slow_queries.append({
+                'timestamp': datetime.now(),
+                'duration_ms': query_time_ms,
+                'query': query[:200]  # Truncate long queries
+            })
+    
+    def get_current_metrics(self) -> Dict[str, Any]:
+        """الحصول على المقاييس الحالية"""
+        try:
+            import psutil
+            
+            metrics = self.collect_current_metrics()
+            
+            return {
+                'timestamp': metrics.timestamp.isoformat(),
+                'cpu': {
+                    'percent': round(psutil.cpu_percent(interval=0.1), 2)
+                },
+                'memory': {
+                    'percent': round(psutil.virtual_memory().percent, 2),
+                    'used_mb': round(psutil.virtual_memory().used / (1024 * 1024), 2),
+                    'available_mb': round(psutil.virtual_memory().available / (1024 * 1024), 2)
+                },
+                'database': {
+                    'size_mb': metrics.db_size_mb,
+                    'query_count': metrics.query_count,
+                    'avg_query_time_ms': round(metrics.avg_query_time_ms, 2),
+                    'cache_hit_rate': round(metrics.cache_hit_rate, 2)
+                }
+            }
+        except ImportError:
+            # Fallback without psutil
+            metrics = self.collect_current_metrics()
+            return {
+                'timestamp': metrics.timestamp.isoformat(),
+                'database': {
+                    'size_mb': metrics.db_size_mb,
+                    'query_count': metrics.query_count,
+                    'avg_query_time_ms': round(metrics.avg_query_time_ms, 2),
+                    'cache_hit_rate': round(metrics.cache_hit_rate, 2)
+                }
+            }
+    
+    def get_metrics_history(self, minutes: int = 60) -> List[Dict]:
+        """الحصول على تاريخ المقاييس"""
+        cutoff_time = datetime.now() - timedelta(minutes=minutes)
+        
+        history = []
+        for metrics in self.metrics_history:
+            if metrics.timestamp >= cutoff_time:
+                history.append({
+                    'timestamp': metrics.timestamp.isoformat(),
+                    'db_size_mb': metrics.db_size_mb,
+                    'query_count': metrics.query_count,
+                    'avg_query_time_ms': round(metrics.avg_query_time_ms, 2),
+                    'cache_hit_rate': round(metrics.cache_hit_rate, 2)
+                })
+        
+        return history
+    
+    def get_slow_queries_report(self, limit: int = 20) -> List[Dict]:
+        """الحصول على تقرير الاستعلامات البطيئة"""
+        slow_queries = list(self.slow_queries)[-limit:]
+        
+        return [
+            {
+                'timestamp': q['timestamp'].isoformat(),
+                'duration_ms': round(q['duration_ms'], 2),
+                'query': q['query']
+            }
+            for q in slow_queries
+        ]
+    
+    def get_health_status(self) -> Dict[str, Any]:
+        """الحصول على حالة صحة النظام"""
+        try:
+            import psutil
+            
+            metrics = self.collect_current_metrics()
+            
+            health = 'healthy'
+            issues = []
+            
+            # Check CPU
+            cpu_percent = psutil.cpu_percent(interval=0.1)
+            if cpu_percent > 80:
+                health = 'warning'
+                issues.append(f'CPU usage high ({cpu_percent:.1f}%)')
+            
+            # Check Memory
+            memory_percent = psutil.virtual_memory().percent
+            if memory_percent > 85:
+                health = 'warning'
+                issues.append(f'Memory usage high ({memory_percent:.1f}%)')
+            
+            # Check Disk
+            disk_percent = psutil.disk_usage('.').percent
+            if disk_percent > 90:
+                health = 'critical'
+                issues.append(f'Disk usage critical ({disk_percent:.1f}%)')
+            
+            # Check query performance
+            if metrics.avg_query_time_ms > 200:
+                health = 'warning'
+                issues.append(f'Slow queries detected (avg {metrics.avg_query_time_ms:.1f}ms)')
+            
+            # Check cache hit rate
+            if metrics.cache_hit_rate > 0 and metrics.cache_hit_rate < 50:
+                issues.append(f'Low cache hit rate ({metrics.cache_hit_rate:.1f}%)')
+            
+            return {
+                'status': health,
+                'issues': issues,
+                'checked_at': datetime.now().isoformat()
+            }
+        
+        except ImportError:
+            return {
+                'status': 'unknown',
+                'issues': ['psutil not available for system monitoring'],
+                'checked_at': datetime.now().isoformat()
             }

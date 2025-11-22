@@ -16,6 +16,7 @@ from PySide6.QtCore import Qt, QTimer, Signal, QThread
 from PySide6.QtGui import QFont, QPixmap, QIcon, QPalette, QColor
 
 from ...services.user_service import UserService, UserSession
+from ...services.security_service import SecurityService
 
 
 class LoginWorker(QThread):
@@ -53,6 +54,7 @@ class LoginDialog(QDialog):
         self.user_service = user_service
         self.current_session: Optional[UserSession] = None
         self.login_worker: Optional[LoginWorker] = None
+        self.security_service = SecurityService(user_service.db)  # 2FA & brute-force support
         
         # رسالة التحذير (مخفية افتراضياً) - يجب إنشاؤها قبل setup_ui
         self.warning_label = QLabel()
@@ -352,6 +354,38 @@ class LoginDialog(QDialog):
         if success and session:
             self.current_session = session
             
+            # خطوة ثانية: التحقق الثنائي (إن كان مفعلًا للمستخدم)
+            try:
+                needs_2fa = False
+                rows = self.user_service.db.execute_query(
+                    "SELECT 1 FROM user_2fa WHERE user_id = ?",
+                    (session.user_id,)
+                )
+                needs_2fa = bool(rows)
+            except Exception:
+                needs_2fa = False
+
+            if needs_2fa:
+                from PySide6.QtWidgets import QInputDialog
+                code, ok = QInputDialog.getText(self, "التحقق بخطوتين", "أدخل رمز التحقق (TOTP):")
+                if not ok or not code:
+                    # إنهاء الجلسة التي تم إنشاؤها مؤقتاً
+                    try:
+                        self.user_service._terminate_session(session.session_id, "إلغاء التحقق الثنائي")
+                    except Exception:
+                        pass
+                    self.show_error("تم إلغاء التحقق الثنائي")
+                    return
+                # تحقق من الرمز
+                if not self.security_service.verify_2fa(session.user_id, code):
+                    try:
+                        self.security_service.record_login_attempt(session.username, False, session.ip_address, session.user_agent)
+                        self.user_service._terminate_session(session.session_id, "فشل التحقق الثنائي")
+                    except Exception:
+                        pass
+                    self.show_error("رمز التحقق غير صحيح")
+                    return
+
             # حفظ بيانات الدخول إذا كان المستخدم يريد ذلك
             if self.remember_checkbox.isChecked():
                 self.save_credentials()

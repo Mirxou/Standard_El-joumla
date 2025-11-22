@@ -15,6 +15,39 @@ class RBACService:
         self.db = db_manager
         self.logger = logger or logging.getLogger(__name__)
         self._permission_cache = {}  # Cache for user permissions
+        self._roles_cols = self._detect_roles_schema()
+
+    def _detect_roles_schema(self) -> dict:
+        """Detect roles table schema and return column name mapping.
+        Maps to a canonical interface: role_id, role_name, display_name, description, is_active, is_system, created_at, updated_at
+        """
+        try:
+            cursor = self.db.conn.cursor()
+            cursor.execute("PRAGMA table_info(roles)")
+            cols = {row[1] for row in cursor.fetchall()}
+        except Exception:
+            cols = set()
+
+        mapping = {}
+        # ID
+        mapping['id'] = 'role_id' if 'role_id' in cols else ('id' if 'id' in cols else None)
+        # Name
+        mapping['name'] = 'role_name' if 'role_name' in cols else ('name' if 'name' in cols else None)
+        # Display name
+        if 'display_name' in cols:
+            mapping['display'] = 'display_name'
+        else:
+            # Fallback to name
+            mapping['display'] = mapping['name']
+        # Description
+        mapping['desc'] = 'description' if 'description' in cols else None
+        # Active/System
+        mapping['active'] = 'is_active' if 'is_active' in cols else None
+        mapping['system'] = 'is_system' if 'is_system' in cols else None
+        # Timestamps
+        mapping['created'] = 'created_at' if 'created_at' in cols else None
+        mapping['updated'] = 'updated_at' if 'updated_at' in cols else None
+        return mapping
     
     # ========================================================================
     # ROLE MANAGEMENT
@@ -25,10 +58,21 @@ class RBACService:
         """إنشاء دور جديد"""
         try:
             cursor = self.db.conn.cursor()
-            cursor.execute('''
-                INSERT INTO roles (role_name, display_name, description)
-                VALUES (?, ?, ?)
-            ''', (role_name, display_name, description))
+            # Build dynamic insert based on available columns
+            cols = []
+            vals = []
+            if self._roles_cols['name']:
+                cols.append(self._roles_cols['name'])
+                vals.append(role_name)
+            if self._roles_cols['display']:
+                cols.append(self._roles_cols['display'])
+                vals.append(display_name)
+            if self._roles_cols['desc']:
+                cols.append(self._roles_cols['desc'])
+                vals.append(description)
+            placeholders = ', '.join(['?'] * len(vals))
+            sql = f"INSERT INTO roles ({', '.join(cols)}) VALUES ({placeholders})"
+            cursor.execute(sql, tuple(vals))
             
             role_id = cursor.lastrowid
             self.db.conn.commit()
@@ -44,11 +88,19 @@ class RBACService:
     def get_role(self, role_id: int) -> Optional[Dict]:
         """الحصول على دور بالمعرف"""
         cursor = self.db.conn.cursor()
-        cursor.execute('''
-            SELECT role_id, role_name, display_name, description,
-                   is_active, is_system, created_at, updated_at
+        id_col = self._roles_cols['id']
+        name_col = self._roles_cols['name']
+        disp_col = self._roles_cols['display']
+        desc_col = self._roles_cols['desc'] or "''"
+        act_col = self._roles_cols['active'] or '1'
+        sys_col = self._roles_cols['system'] or '0'
+        crt_col = self._roles_cols['created'] or 'CURRENT_TIMESTAMP'
+        upd_col = self._roles_cols['updated'] or 'CURRENT_TIMESTAMP'
+        cursor.execute(f'''
+            SELECT {id_col}, {name_col}, {disp_col}, {desc_col},
+                   {act_col}, {sys_col}, {crt_col}, {upd_col}
             FROM roles
-            WHERE role_id = ?
+            WHERE {id_col} = ?
         ''', (role_id,))
         
         row = cursor.fetchone()
@@ -58,8 +110,8 @@ class RBACService:
                 'role_name': row[1],
                 'display_name': row[2],
                 'description': row[3],
-                'is_active': bool(row[4]),
-                'is_system': bool(row[5]),
+                'is_active': bool(row[4]) if isinstance(row[4], (int, bool)) else True,
+                'is_system': bool(row[5]) if isinstance(row[5], (int, bool)) else False,
                 'created_at': row[6],
                 'updated_at': row[7]
             }
@@ -68,19 +120,19 @@ class RBACService:
     def list_roles(self, include_inactive: bool = False) -> List[Dict]:
         """قائمة جميع الأدوار"""
         cursor = self.db.conn.cursor()
-        
-        query = '''
-            SELECT role_id, role_name, display_name, description,
-                   is_active, is_system, created_at
-            FROM roles
-        '''
-        
-        if not include_inactive:
-            query += ' WHERE is_active = 1'
-        
-        query += ' ORDER BY display_name'
-        
-        cursor.execute(query)
+        id_col = self._roles_cols['id']
+        name_col = self._roles_cols['name']
+        disp_col = self._roles_cols['display']
+        desc_col = self._roles_cols['desc'] or "''"
+        act_col = self._roles_cols['active'] or '1'
+        sys_col = self._roles_cols['system'] or '0'
+        crt_col = self._roles_cols['created'] or 'CURRENT_TIMESTAMP'
+
+        base = f"SELECT {id_col}, {name_col}, {disp_col}, {desc_col}, {act_col}, {sys_col}, {crt_col} FROM roles"
+        if not include_inactive and self._roles_cols['active']:
+            base += f" WHERE {act_col} = 1"
+        base += f" ORDER BY {disp_col}"
+        cursor.execute(base)
         roles = []
         
         for row in cursor.fetchall():
@@ -89,8 +141,8 @@ class RBACService:
                 'role_name': row[1],
                 'display_name': row[2],
                 'description': row[3],
-                'is_active': bool(row[4]),
-                'is_system': bool(row[5]),
+                'is_active': bool(row[4]) if isinstance(row[4], (int, bool)) else True,
+                'is_system': bool(row[5]) if isinstance(row[5], (int, bool)) else False,
                 'created_at': row[6]
             })
         
@@ -110,15 +162,26 @@ class RBACService:
             if role and role['is_system'] and 'is_active' in updates:
                 raise ValueError("Cannot deactivate system role")
             
-            set_clause = ', '.join([f"{k} = ?" for k in updates.keys()])
+            # Map keys to actual columns
+            col_map = {
+                'display_name': self._roles_cols['display'],
+                'description': self._roles_cols['desc'],
+                'is_active': self._roles_cols['active']
+            }
+            set_parts = []
+            values = []
+            for k, v in updates.items():
+                if col_map[k]:
+                    set_parts.append(f"{col_map[k]} = ?")
+                    values.append(v)
+            if not set_parts:
+                return False
+            set_clause = ', '.join(set_parts)
             values = list(updates.values()) + [role_id]
             
             cursor = self.db.conn.cursor()
-            cursor.execute(f'''
-                UPDATE roles 
-                SET {set_clause}
-                WHERE role_id = ?
-            ''', values)
+            id_col = self._roles_cols['id']
+            cursor.execute(f'''UPDATE roles SET {set_clause} WHERE {id_col} = ?''', values)
             
             self.db.conn.commit()
             self.logger.info(f"Updated role {role_id}")
@@ -140,7 +203,8 @@ class RBACService:
                 raise ValueError("Cannot delete system role")
             
             cursor = self.db.conn.cursor()
-            cursor.execute('DELETE FROM roles WHERE role_id = ?', (role_id,))
+            id_col = self._roles_cols['id']
+            cursor.execute(f'DELETE FROM roles WHERE {id_col} = ?', (role_id,))
             self.db.conn.commit()
             
             self.logger.info(f"Deleted role {role_id}")
@@ -315,13 +379,18 @@ class RBACService:
     def get_user_roles(self, user_id: int) -> List[Dict]:
         """الحصول على أدوار المستخدم"""
         cursor = self.db.conn.cursor()
-        cursor.execute('''
-            SELECT r.role_id, r.role_name, r.display_name, r.description,
+        rid = self._roles_cols['id']
+        rname = self._roles_cols['name']
+        rdisp = self._roles_cols['display']
+        rdesc = self._roles_cols['desc'] or "''"
+        ractive = self._roles_cols['active'] or '1'
+        cursor.execute(f'''
+            SELECT r.{rid}, r.{rname}, r.{rdisp}, {rdesc},
                    ur.assigned_at, ur.expires_at
             FROM roles r
-            INNER JOIN user_roles ur ON r.role_id = ur.role_id
+            INNER JOIN user_roles ur ON r.{rid} = ur.role_id
             WHERE ur.user_id = ?
-            AND r.is_active = 1
+            AND {ractive} = 1
             AND (ur.expires_at IS NULL OR ur.expires_at > CURRENT_TIMESTAMP)
         ''', (user_id,))
         

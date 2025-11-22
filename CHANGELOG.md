@@ -5,6 +5,63 @@ All notable changes to this project will be documented in this file.
 ---
 
 ## [5.1.0] - 2025-11-21 (UX Polish)
+## [5.2.0] - 2025-11-22 (Security, Performance & Reliability)
+
+### 🚀 Highlights
+- Advanced multi-layer caching (LRU + TTL, optional Redis) with live stats panel.
+- Real-time performance dashboard: CPU, RAM, DB size, query latency, slow queries list.
+- Encrypted backup system (password-derived AES-256 via PBKDF2HMAC + Fernet) with checksum verification.
+- Scheduled automatic backups + old backup cleanup + integrity verification API (`verify_backup`).
+- Adaptive RBAC & Audit services handling divergent legacy schemas without destructive migrations.
+- Integrated TOTP 2FA step in login dialog + brute-force attempt logging and lockout.
+- Password strength heuristic with user feedback in security flows.
+- New admin panels: Roles Manager, Audit Viewer (lite), Active Sessions, Performance, Cache Stats.
+- Added integration tests: 2FA flow, RBAC schema variants, backup encrypted restore checksum.
+- README updated with v5.2.0 features and deployment/testing notes.
+
+### 🔐 Security & Access Control
+- Added adaptive column detection for `roles` and audit tables to avoid "no such column" runtime errors.
+- Integrated secondary TOTP verification after password authentication in `login_dialog`.
+- Implemented brute-force protection using `login_attempts` table (window + max failure threshold).
+- Strength feedback (length, class diversity, repetition, common words) returned by `SecurityService.password_strength`.
+
+### 💾 Backup & Restore
+- Metadata now includes `database_checksum_sha256` and encrypted payload checksum for integrity.
+- Restore flow validates checksum pre-replacement; aborts if mismatch.
+- Added `verify_backup(backup_name)` method for non-invasive integrity checks.
+- Auto-backup scheduling with interval hours and cleanup of old backups beyond retention.
+
+### ⚡ Performance & Caching
+- Performance panel enhanced: auto-refresh (5s), slow queries table, count column for slow queries.
+- Cache stats panel shows per-cache metrics (hits, misses, evictions, expirations, usage %) + top hot keys.
+- PerformanceService collects metrics history (10s cadence) and aggregates cache hit rate.
+
+### 🧪 Tests
+- Added: `test_security_2fa_flow.py`, `test_rbac_schema_detection.py`, `test_backup_restore_checksum.py`.
+- Existing cache and backup tests extended implicitly by new metadata logic.
+
+### 📝 Documentation
+- README updated (new v5.2.0 section, security & backup expansions).
+- Release body and checklist (to be published) reflect new operational and verification steps.
+
+### 🔧 Internal Refactors
+- Non-destructive adaptation logic avoids new migrations while supporting dual 011 schemas.
+- Centralized cache stats aggregation via `CacheService.get_all_stats()` consumed by UI panels.
+
+### ✅ Upgrade Notes
+1. Pull latest `v5.2.0-dev`.
+2. Ensure environment variables if using Redis: `CACHE_USE_REDIS=1`, `REDIS_URL=redis://...`.
+3. (Optional) Set backup encryption password before creating encrypted backups.
+4. Run `pytest -q` to validate integrity and new security tests.
+
+### 🔮 Next (Target v5.2.1)
+- Slow query capture instrumentation at DB layer.
+- Exportable performance metrics (CSV/JSON).
+- Extended role assignment UI (expiry, bulk operations).
+- Incremental backup delta strategy.
+
+---
+
 
 ### ✨ Enhancements
 - Performance tab in main window with live metrics and quick access to full Performance Dashboard.

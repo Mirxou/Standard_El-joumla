@@ -6,7 +6,7 @@ Inventory and Sales Management System - Logical Version
 A comprehensive inventory and sales management system with modern Arabic UI
 """
 
-__version__ = "1.0.0"
+__version__ = "5.2.0"
 __author__ = "Inventory Management Team"
 __email__ = "support@inventory-system.com"
 __description__ = "نظام إدارة المخزون والمبيعات - الإصدار المنطقي"

@@ -27,3 +27,5 @@ weasyprint>=60.0             # HTML to PDF conversion (best Arabic support)
 
 # System Monitoring
 psutil>=5.9.0                # System and process monitoring
+schedule>=1.2.0              # Lightweight job scheduling for auto-backups
+redis>=5.0.0                 # Optional Redis cache backend (set CACHE_USE_REDIS=1)

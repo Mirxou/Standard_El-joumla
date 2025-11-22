@@ -3,7 +3,7 @@ Audit Log Service - Comprehensive Activity Tracking
 خدمة سجل التدقيق - تتبع شامل للنشاطات
 """
 
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timedelta
 import json
 import logging
@@ -14,6 +14,80 @@ class AuditLogService:
     def __init__(self, db_manager, logger=None):
         self.db = db_manager
         self.logger = logger or logging.getLogger(__name__)
+        self._audit = self._detect_audit_schema()
+
+    def _table_exists(self, name: str) -> bool:
+        try:
+            cur = self.db.conn.cursor()
+            cur.execute("SELECT name FROM sqlite_master WHERE type IN ('table','view') AND name = ?", (name,))
+            return cur.fetchone() is not None
+        except Exception:
+            return False
+
+    def _detect_audit_schema(self) -> dict:
+        """Detects whether audit_log or audit_logs is present and maps columns.
+        Canonical fields: id, user_id, username, action, module, entity_type, entity_id, old_values, new_values, changes_summary, ip_address, user_agent, session_id, status, error_message, timestamp
+        """
+        res = {
+            'table': None,
+            'id': None,
+            'user_id': 'user_id',
+            'username': 'username',
+            'action': 'action',
+            'module': 'module',
+            'entity_type': 'entity_type',
+            'entity_id': 'entity_id',
+            'old_values': 'old_values',
+            'new_values': 'new_values',
+            'changes_summary': 'changes_summary',
+            'ip_address': 'ip_address',
+            'user_agent': 'user_agent',
+            'session_id': 'session_id',
+            'status': 'status',
+            'error_message': 'error_message',
+            'timestamp': 'timestamp'
+        }
+        # Prefer comprehensive audit_log if present
+        if self._table_exists('audit_log'):
+            cur = self.db.conn.cursor()
+            cur.execute("PRAGMA table_info(audit_log)")
+            cols = {row[1] for row in cur.fetchall()}
+            res['table'] = 'audit_log'
+            # id column name
+            res['id'] = 'audit_id' if 'audit_id' in cols else ('id' if 'id' in cols else None)
+            # Timestamp may be different
+            if 'timestamp' not in cols and 'created_at' in cols:
+                res['timestamp'] = 'created_at'
+            # Some implementations use table_name/record_id
+            if 'module' not in cols and 'table_name' in cols:
+                res['module'] = 'table_name'
+            if 'entity_id' not in cols and 'record_id' in cols:
+                res['entity_id'] = 'record_id'
+            if 'old_values' not in cols and 'old_value' in cols:
+                res['old_values'] = 'old_value'
+            if 'new_values' not in cols and 'new_value' in cols:
+                res['new_values'] = 'new_value'
+            # Optional fields fallback to NULL via SELECT
+        elif self._table_exists('audit_logs'):
+            cur = self.db.conn.cursor()
+            cur.execute("PRAGMA table_info(audit_logs)")
+            cols = {row[1] for row in cur.fetchall()}
+            res['table'] = 'audit_logs'
+            res['id'] = 'id'
+            # Column name mappings
+            if 'resource_type' in cols:
+                res['entity_type'] = 'resource_type'
+            if 'resource_id' in cols:
+                res['entity_id'] = 'resource_id'
+            if 'old_value' in cols:
+                res['old_values'] = 'old_value'
+            if 'new_value' in cols:
+                res['new_values'] = 'new_value'
+            if 'created_at' in cols:
+                res['timestamp'] = 'created_at'
+        else:
+            res['table'] = None
+        return res
     
     # ========================================================================
     # AUDIT LOGGING
@@ -35,17 +109,45 @@ class AuditLogService:
             new_json = json.dumps(new_values, ensure_ascii=False) if new_values else None
             
             cursor = self.db.conn.cursor()
-            cursor.execute('''
-                INSERT INTO audit_log (
-                    user_id, username, action, module, entity_type, entity_id,
-                    old_values, new_values, changes_summary,
-                    ip_address, user_agent, session_id, status, error_message
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                user_id, username, action, module, entity_type, entity_id,
-                old_json, new_json, changes_summary,
-                ip_address, user_agent, session_id, status, error_message
-            ))
+            tbl = self._audit['table']
+            if tbl is None:
+                return 0
+            # Try to insert matching available columns
+            if tbl == 'audit_log':
+                # Check which columns exist
+                cursor.execute("PRAGMA table_info(audit_log)")
+                cols = {row[1] for row in cursor.fetchall()}
+                # Minimal schema (id,user_id,action,table_name,record_id,old_values,new_values,timestamp)
+                if {'table_name', 'record_id'}.issubset(cols) and 'module' not in cols:
+                    cursor.execute('''
+                        INSERT INTO audit_log (
+                            user_id, action, table_name, record_id, old_values, new_values
+                        ) VALUES (?, ?, ?, ?, ?, ?)
+                    ''', (
+                        user_id, action, module or (entity_type or ''), entity_id, old_json, new_json
+                    ))
+                else:
+                    cursor.execute('''
+                        INSERT INTO audit_log (
+                            user_id, username, action, module, entity_type, entity_id,
+                            old_values, new_values, changes_summary,
+                            ip_address, user_agent, session_id, status, error_message
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        user_id, username, action, module, entity_type, entity_id,
+                        old_json, new_json, changes_summary,
+                        ip_address, user_agent, session_id, status, error_message
+                    ))
+            else:  # audit_logs
+                cursor.execute('''
+                    INSERT INTO audit_logs (
+                        user_id, username, action, resource_type, resource_id,
+                        old_value, new_value, ip_address, user_agent, status, error_message
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    user_id, username, action, entity_type or module, entity_id,
+                    old_json, new_json, ip_address, user_agent, status, error_message
+                ))
             
             audit_id = cursor.lastrowid
             self.db.conn.commit()
@@ -164,14 +266,13 @@ class AuditLogService:
     
     def get_audit_log(self, audit_id: int) -> Optional[Dict]:
         """الحصول على سجل تدقيق محدد"""
+        tbl = self._audit['table']
+        if tbl is None:
+            return None
         cursor = self.db.conn.cursor()
-        cursor.execute('''
-            SELECT audit_id, user_id, username, action, module,
-                   entity_type, entity_id, old_values, new_values, changes_summary,
-                   ip_address, user_agent, session_id, status, error_message, timestamp
-            FROM audit_log
-            WHERE audit_id = ?
-        ''', (audit_id,))
+        sel = self._select_clause()
+        idcol = self._audit['id']
+        cursor.execute(f'''SELECT {sel} FROM {tbl} WHERE {idcol} = ?''', (audit_id,))
         
         row = cursor.fetchone()
         if row:
@@ -227,22 +328,22 @@ class AuditLogService:
         where_clause = ' AND '.join(conditions) if conditions else '1=1'
         
         # Get total count
+        tbl = self._audit['table']
+        if tbl is None:
+            return [], 0
+        idcol = self._audit['id']
         cursor = self.db.conn.cursor()
-        cursor.execute(f'''
-            SELECT COUNT(*)
-            FROM audit_log
-            WHERE {where_clause}
-        ''', params)
+        cursor.execute(f'''SELECT COUNT(*) FROM {tbl} WHERE {where_clause}''', params)
         total = cursor.fetchone()[0]
         
         # Get records
+        sel = self._select_clause()
+        ts = self._audit['timestamp']
         cursor.execute(f'''
-            SELECT audit_id, user_id, username, action, module,
-                   entity_type, entity_id, old_values, new_values, changes_summary,
-                   ip_address, user_agent, session_id, status, error_message, timestamp
-            FROM audit_log
+            SELECT {sel}
+            FROM {tbl}
             WHERE {where_clause}
-            ORDER BY timestamp DESC
+            ORDER BY {ts} DESC
             LIMIT ? OFFSET ?
         ''', params + [limit, offset])
         
@@ -286,54 +387,32 @@ class AuditLogService:
         """إحصائيات نشاط مستخدم"""
         cursor = self.db.conn.cursor()
         start_date = datetime.now() - timedelta(days=days)
+        tbl = self._audit['table']
+        if tbl is None:
+            return {'total_actions': 0, 'actions_by_type': {}, 'actions_by_module': {}, 'success_rate': 0, 'most_active_day': {'date': None, 'count': 0}}
+        ts = self._audit['timestamp']
+        mod = self._audit['module']
         
         stats = {}
         
         # Total actions
-        cursor.execute('''
-            SELECT COUNT(*) FROM audit_log
-            WHERE user_id = ? AND timestamp >= ?
-        ''', (user_id, start_date))
+        cursor.execute(f'''SELECT COUNT(*) FROM {tbl} WHERE user_id = ? AND {ts} >= ?''', (user_id, start_date))
         stats['total_actions'] = cursor.fetchone()[0]
         
         # Actions by type
-        cursor.execute('''
-            SELECT action, COUNT(*) as count
-            FROM audit_log
-            WHERE user_id = ? AND timestamp >= ?
-            GROUP BY action
-            ORDER BY count DESC
-        ''', (user_id, start_date))
+        cursor.execute(f'''SELECT action, COUNT(*) as count FROM {tbl} WHERE user_id = ? AND {ts} >= ? GROUP BY action ORDER BY count DESC''', (user_id, start_date))
         stats['actions_by_type'] = {row[0]: row[1] for row in cursor.fetchall()}
         
         # Actions by module
-        cursor.execute('''
-            SELECT module, COUNT(*) as count
-            FROM audit_log
-            WHERE user_id = ? AND timestamp >= ?
-            GROUP BY module
-            ORDER BY count DESC
-        ''', (user_id, start_date))
+        cursor.execute(f'''SELECT {mod}, COUNT(*) as count FROM {tbl} WHERE user_id = ? AND {ts} >= ? GROUP BY {mod} ORDER BY count DESC''', (user_id, start_date))
         stats['actions_by_module'] = {row[0]: row[1] for row in cursor.fetchall()}
         
         # Success rate
-        cursor.execute('''
-            SELECT 
-                SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) * 1.0 / COUNT(*) * 100
-            FROM audit_log
-            WHERE user_id = ? AND timestamp >= ?
-        ''', (user_id, start_date))
+        cursor.execute(f'''SELECT SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) * 1.0 / COUNT(*) * 100 FROM {tbl} WHERE user_id = ? AND {ts} >= ?''', (user_id, start_date))
         stats['success_rate'] = round(cursor.fetchone()[0] or 0, 2)
         
         # Most active day
-        cursor.execute('''
-            SELECT date(timestamp) as day, COUNT(*) as count
-            FROM audit_log
-            WHERE user_id = ? AND timestamp >= ?
-            GROUP BY day
-            ORDER BY count DESC
-            LIMIT 1
-        ''', (user_id, start_date))
+        cursor.execute(f'''SELECT date({ts}) as day, COUNT(*) as count FROM {tbl} WHERE user_id = ? AND {ts} >= ? GROUP BY day ORDER BY count DESC LIMIT 1''', (user_id, start_date))
         row = cursor.fetchone()
         stats['most_active_day'] = {
             'date': row[0] if row else None,
@@ -346,37 +425,27 @@ class AuditLogService:
         """إحصائيات وحدة"""
         cursor = self.db.conn.cursor()
         start_date = datetime.now() - timedelta(days=days)
+        tbl = self._audit['table']
+        if tbl is None:
+            return {'total_actions': 0, 'top_users': [], 'actions': {}}
+        ts = self._audit['timestamp']
+        mod = self._audit['module']
         
         stats = {}
         
         # Total actions
-        cursor.execute('''
-            SELECT COUNT(*) FROM audit_log
-            WHERE module = ? AND timestamp >= ?
-        ''', (module, start_date))
+        cursor.execute(f'''SELECT COUNT(*) FROM {tbl} WHERE {mod} = ? AND {ts} >= ?''', (module, start_date))
         stats['total_actions'] = cursor.fetchone()[0]
         
         # Top users
-        cursor.execute('''
-            SELECT username, COUNT(*) as count
-            FROM audit_log
-            WHERE module = ? AND timestamp >= ?
-            GROUP BY user_id
-            ORDER BY count DESC
-            LIMIT 5
-        ''', (module, start_date))
+        cursor.execute(f'''SELECT username, COUNT(*) as count FROM {tbl} WHERE {mod} = ? AND {ts} >= ? GROUP BY user_id ORDER BY count DESC LIMIT 5''', (module, start_date))
         stats['top_users'] = [
             {'username': row[0], 'count': row[1]}
             for row in cursor.fetchall()
         ]
         
         # Actions breakdown
-        cursor.execute('''
-            SELECT action, COUNT(*) as count
-            FROM audit_log
-            WHERE module = ? AND timestamp >= ?
-            GROUP BY action
-        ''', (module, start_date))
+        cursor.execute(f'''SELECT action, COUNT(*) as count FROM {tbl} WHERE {mod} = ? AND {ts} >= ? GROUP BY action''', (module, start_date))
         stats['actions'] = {row[0]: row[1] for row in cursor.fetchall()}
         
         return stats
@@ -384,16 +453,20 @@ class AuditLogService:
     def get_daily_summary(self, days: int = 7) -> List[Dict]:
         """ملخص يومي"""
         cursor = self.db.conn.cursor()
-        cursor.execute('''
+        tbl = self._audit['table']
+        if tbl is None:
+            return []
+        ts = self._audit['timestamp']
+        cursor.execute(f'''
             SELECT 
-                date(timestamp) as date,
+                date({ts}) as date,
                 COUNT(*) as total,
                 COUNT(DISTINCT user_id) as unique_users,
                 SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful,
                 SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
-            FROM audit_log
-            WHERE timestamp >= date('now', ? || ' days')
-            GROUP BY date(timestamp)
+            FROM {tbl}
+            WHERE {ts} >= date('now', ? || ' days')
+            GROUP BY date({ts})
             ORDER BY date DESC
         ''', (f'-{days}',))
         
@@ -451,11 +524,30 @@ class AuditLogService:
     def get_active_sessions(self, user_id: int = None) -> List[Dict]:
         """الحصول على الجلسات النشطة"""
         cursor = self.db.conn.cursor()
-        
-        if user_id:
-            cursor.execute('SELECT * FROM v_active_sessions WHERE user_id = ?', (user_id,))
+        if self._table_exists('v_active_sessions'):
+            if user_id:
+                cursor.execute('SELECT * FROM v_active_sessions WHERE user_id = ?', (user_id,))
+            else:
+                cursor.execute('SELECT * FROM v_active_sessions')
+        elif self._table_exists('user_sessions') and self._table_exists('users'):
+            if user_id:
+                cursor.execute('''
+                    SELECT s.session_id, s.user_id, u.username, u.full_name, s.login_time, s.last_activity, s.ip_address, s.user_agent,
+                           ROUND((JULIANDAY('now') - JULIANDAY(COALESCE(s.last_activity, s.login_time))) * 24 * 60, 2) AS idle_minutes
+                    FROM user_sessions s
+                    INNER JOIN users u ON s.user_id = u.id
+                    WHERE s.is_active = 1 AND s.logout_time IS NULL AND s.user_id = ?
+                ''', (user_id,))
+            else:
+                cursor.execute('''
+                    SELECT s.session_id, s.user_id, u.username, u.full_name, s.login_time, s.last_activity, s.ip_address, s.user_agent,
+                           ROUND((JULIANDAY('now') - JULIANDAY(COALESCE(s.last_activity, s.login_time))) * 24 * 60, 2) AS idle_minutes
+                    FROM user_sessions s
+                    INNER JOIN users u ON s.user_id = u.id
+                    WHERE s.is_active = 1 AND s.logout_time IS NULL
+                ''')
         else:
-            cursor.execute('SELECT * FROM v_active_sessions')
+            return []
         
         sessions = []
         for row in cursor.fetchall():
@@ -514,6 +606,30 @@ class AuditLogService:
             'error_message': row[14],
             'timestamp': row[15]
         }
+
+    def _select_clause(self) -> str:
+        """Build a SELECT list that maps available columns to canonical order used in _row_to_dict"""
+        a = self._audit
+        # Use NULLs for missing fields to keep index positions stable
+        parts = [
+            a['id'] or 'NULL',
+            a['user_id'] or 'NULL',
+            a['username'] or "''",
+            a['action'] or "''",
+            a['module'] or "''",
+            a['entity_type'] or "''",
+            a['entity_id'] or 'NULL',
+            a['old_values'] or 'NULL',
+            a['new_values'] or 'NULL',
+            a['changes_summary'] or 'NULL',
+            a['ip_address'] or "''",
+            a['user_agent'] or "''",
+            a['session_id'] or "''",
+            a['status'] or "''",
+            a['error_message'] or 'NULL',
+            a['timestamp'] or 'CURRENT_TIMESTAMP'
+        ]
+        return ', '.join(parts)
     
     def cleanup_old_logs(self, days: int = 365) -> int:
         """تنظيف السجلات القديمة"""
@@ -521,10 +637,11 @@ class AuditLogService:
             cutoff_date = datetime.now() - timedelta(days=days)
             
             cursor = self.db.conn.cursor()
-            cursor.execute('''
-                DELETE FROM audit_log
-                WHERE timestamp < ?
-            ''', (cutoff_date,))
+            tbl = self._audit['table']
+            ts = self._audit['timestamp']
+            if not tbl:
+                return 0
+            cursor.execute(f'''DELETE FROM {tbl} WHERE {ts} < ?''', (cutoff_date,))
             
             deleted = cursor.rowcount
             self.db.conn.commit()

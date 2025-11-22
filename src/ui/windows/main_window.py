@@ -1585,6 +1585,12 @@ class MainWindow(QMainWindow):
         permissions_action.triggered.connect(self.show_permissions_window)
         security_menu.addAction(permissions_action)
         
+        # لوحات الإدارة الجديدة (تجريبية)
+        roles_admin_action = QAction("👤 إدارة الأدوار (جديدة)", self)
+        roles_admin_action.setToolTip("عرض لوحة إدارة الأدوار المبسطة")
+        roles_admin_action.triggered.connect(self.show_roles_manager_admin)
+        security_menu.addAction(roles_admin_action)
+
         security_menu.addSeparator()
         
         audit_action = QAction("📋 سجل التدقيق", self)
@@ -1592,12 +1598,32 @@ class MainWindow(QMainWindow):
         audit_action.triggered.connect(self.show_audit_viewer)
         security_menu.addAction(audit_action)
         
+        audit_viewer_new_action = QAction("📋 سجل التدقيق (جديد)", self)
+        audit_viewer_new_action.setToolTip("فتح عارض سجل التدقيق المبسط")
+        audit_viewer_new_action.triggered.connect(self.show_audit_viewer_admin)
+        security_menu.addAction(audit_viewer_new_action)
+
         security_menu.addSeparator()
         
         system_mgmt_action = QAction("⚙️ إدارة النظام", self)
         system_mgmt_action.setToolTip("النسخ الاحتياطي والأداء وصيانة النظام")
         system_mgmt_action.triggered.connect(self.show_system_management)
         security_menu.addAction(system_mgmt_action)
+
+        sessions_action = QAction("🖥️ الجلسات النشطة (جديد)", self)
+        sessions_action.setToolTip("عرض الجلسات النشطة للمستخدمين")
+        sessions_action.triggered.connect(self.show_sessions_panel_admin)
+        security_menu.addAction(sessions_action)
+
+        perf_admin_action = QAction("⚡ أداء النظام (جديد)", self)
+        perf_admin_action.setToolTip("لوحة أداء مبسطة في واجهة منفصلة")
+        perf_admin_action.triggered.connect(self.show_performance_panel_admin)
+        security_menu.addAction(perf_admin_action)
+
+        cache_stats_action = QAction("🧠 إحصائيات الذاكرة المؤقتة", self)
+        cache_stats_action.setToolTip("عرض إحصائيات الذاكرة المؤقتة وعناصرها الأعلى استخداماً")
+        cache_stats_action.triggered.connect(self.show_cache_stats_panel_admin)
+        security_menu.addAction(cache_stats_action)
         
         # قائمة مساعدة
         help_menu = menubar.addMenu("مساعدة")
@@ -2616,6 +2642,86 @@ class MainWindow(QMainWindow):
             if self.logger:
                 self.logger.error(f"خطأ في فتح لوحة الأداء: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح لوحة مراقبة الأداء:\n{str(e)}")
+
+    def show_roles_manager_admin(self):
+        """عرض لوحة إدارة الأدوار (جديدة)"""
+        try:
+            from ..admin.roles_manager import RolesManagerWidget
+            if not hasattr(self, "_roles_manager_admin") or self._roles_manager_admin is None:
+                self._roles_manager_admin = RolesManagerWidget(self.db_manager, parent=self)
+            self._roles_manager_admin.show()
+            self._roles_manager_admin.raise_()
+            self._roles_manager_admin.activateWindow()
+            if self.logger:
+                self.logger.info("تم فتح لوحة إدارة الأدوار (جديدة)")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح لوحة الأدوار (جديدة): {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح لوحة الأدوار (جديدة):\n{str(e)}")
+
+    def show_audit_viewer_admin(self):
+        """عرض عارض سجل التدقيق المبسط (جديد)"""
+        try:
+            from ..admin.audit_viewer import AuditViewerWidget
+            if not hasattr(self, "_audit_viewer_admin") or self._audit_viewer_admin is None:
+                self._audit_viewer_admin = AuditViewerWidget(self.db_manager, parent=self)
+            self._audit_viewer_admin.show()
+            self._audit_viewer_admin.raise_()
+            self._audit_viewer_admin.activateWindow()
+            if self.logger:
+                self.logger.info("تم فتح سجل التدقيق (جديد)")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح سجل التدقيق (جديد): {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح سجل التدقيق (جديد):\n{str(e)}")
+
+    def show_sessions_panel_admin(self):
+        """عرض لوحة الجلسات النشطة (جديد)"""
+        try:
+            from ..admin.sessions_panel import SessionsPanel
+            if not hasattr(self, "_sessions_panel_admin") or self._sessions_panel_admin is None:
+                self._sessions_panel_admin = SessionsPanel(self.db_manager, parent=self)
+            self._sessions_panel_admin.show()
+            self._sessions_panel_admin.raise_()
+            self._sessions_panel_admin.activateWindow()
+            if self.logger:
+                self.logger.info("تم فتح الجلسات النشطة (جديد)")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح الجلسات النشطة (جديد): {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح الجلسات النشطة (جديد):\n{str(e)}")
+
+    def show_performance_panel_admin(self):
+        """عرض لوحة الأداء المبسطة (جديد)"""
+        try:
+            from ..admin.performance_panel import PerformancePanel
+            if not hasattr(self, "_performance_panel_admin") or self._performance_panel_admin is None:
+                self._performance_panel_admin = PerformancePanel(self.db_manager, parent=self)
+            self._performance_panel_admin.show()
+            self._performance_panel_admin.raise_()
+            self._performance_panel_admin.activateWindow()
+            if self.logger:
+                self.logger.info("تم فتح لوحة الأداء (جديد)")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح لوحة الأداء (جديد): {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح لوحة الأداء (جديد):\n{str(e)}")
+
+    def show_cache_stats_panel_admin(self):
+        """عرض لوحة إحصائيات الذاكرة المؤقتة"""
+        try:
+            from ..admin.cache_stats_panel import CacheStatsPanel
+            if not hasattr(self, "_cache_stats_panel_admin") or self._cache_stats_panel_admin is None:
+                self._cache_stats_panel_admin = CacheStatsPanel(parent=self)
+            self._cache_stats_panel_admin.show()
+            self._cache_stats_panel_admin.raise_()
+            self._cache_stats_panel_admin.activateWindow()
+            if self.logger:
+                self.logger.info("تم فتح لوحة إحصائيات الذاكرة المؤقتة")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح لوحة إحصائيات الذاكرة المؤقتة: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح لوحة إحصائيات الذاكرة المؤقتة:\n{str(e)}")
     
     def closeEvent(self, event):
         """حدث إغلاق النافذة"""
