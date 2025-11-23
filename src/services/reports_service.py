@@ -22,12 +22,14 @@ try:
 except ImportError:
     EXCEL_AVAILABLE = False
 
+from jinja2 import Template
 try:
-    from weasyprint import HTML, CSS
-    from jinja2 import Template
+    from weasyprint import HTML, CSS  # type: ignore
     PDF_AVAILABLE = True
-except ImportError:
+except Exception:
+    # يشمل ImportError و OSError الناتج عن عدم توفر مكتبات نظام مثل gobject/pango
     PDF_AVAILABLE = False
+    HTML = CSS = None  # تعيين قيم افتراضية آمنة
 
 from ..core.database_manager import DatabaseManager
 from ..utils.logger import setup_logger, DatabaseLogger
@@ -509,6 +511,8 @@ class ReportsService:
     
     def _export_to_pdf(self, report_data: ReportData, filepath: str) -> str:
         """تصدير إلى PDF"""
+        if not PDF_AVAILABLE or HTML is None:
+            raise RuntimeError("مكتبات WeasyPrint غير متوفرة في هذا البيئة، لا يمكن التصدير إلى PDF")
         # قالب HTML للتقرير
         html_template = """
         <!DOCTYPE html>

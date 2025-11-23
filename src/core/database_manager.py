@@ -8,6 +8,8 @@
 import sqlite3
 import os
 import shutil
+import json
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple
@@ -41,6 +43,8 @@ class DatabaseManager:
         self.encrypted_backup_service: Optional[EncryptedBackupService] = None
         self._pool_options = pool_options or {}
         self._backup_options = backup_options or {}
+        # عتبة الاستعلام البطيء بالمللي ثانية (يمكن ضبطها لاحقاً)
+        self.slow_query_threshold_ms: float = 100.0
         
         self._ensure_data_directory()
         
@@ -156,6 +160,16 @@ class DatabaseManager:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (parent_id) REFERENCES categories(id)
+            )
+        """)
+        # جدول لتسجيل الاستعلامات البطيئة
+        self.connection.execute("""
+            CREATE TABLE IF NOT EXISTS slow_queries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                query_text TEXT NOT NULL,
+                params TEXT,
+                duration_ms REAL NOT NULL,
+                executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
         
@@ -533,7 +547,11 @@ class DatabaseManager:
     def execute_query(self, query: str, params: Tuple = ()) -> Any:
         """تنفيذ استعلام وإرجاع النتائج أو cursor للعمليات الأخرى"""
         with self.get_cursor() as cursor:
+            start_t = time.perf_counter()
             cursor.execute(query, params)
+            duration_ms = (time.perf_counter() - start_t) * 1000.0
+            if duration_ms >= self.slow_query_threshold_ms:
+                self._log_slow_query(query, params, duration_ms)
             # إذا كان الاستعلام يحتوي على نتائج (SELECT)
             if cursor.description:
                 columns = [description[0] for description in cursor.description]
@@ -551,19 +569,31 @@ class DatabaseManager:
     def fetch_one(self, query: str, params: Tuple = ()) -> Optional[Any]:
         """تنفيذ استعلام وإرجاع صف واحد"""
         with self.get_cursor() as cursor:
+            start_t = time.perf_counter()
             cursor.execute(query, params)
+            duration_ms = (time.perf_counter() - start_t) * 1000.0
+            if duration_ms >= self.slow_query_threshold_ms:
+                self._log_slow_query(query, params, duration_ms)
             return cursor.fetchone()
     
     def fetch_all(self, query: str, params: Tuple = ()) -> List[Any]:
         """تنفيذ استعلام وإرجاع جميع الصفوف"""
         with self.get_cursor() as cursor:
+            start_t = time.perf_counter()
             cursor.execute(query, params)
+            duration_ms = (time.perf_counter() - start_t) * 1000.0
+            if duration_ms >= self.slow_query_threshold_ms:
+                self._log_slow_query(query, params, duration_ms)
             return cursor.fetchall()
     
     def execute_non_query(self, query: str, params: Tuple = ()) -> int:
         """تنفيذ استعلام INSERT/UPDATE/DELETE وإرجاع عدد الصفوف المتأثرة"""
         with self.get_cursor() as cursor:
+            start_t = time.perf_counter()
             cursor.execute(query, params)
+            duration_ms = (time.perf_counter() - start_t) * 1000.0
+            if duration_ms >= self.slow_query_threshold_ms:
+                self._log_slow_query(query, params, duration_ms)
             if self.pool is None:
                 self.connection.commit()
             else:
@@ -573,7 +603,11 @@ class DatabaseManager:
     def execute_scalar(self, query: str, params: Tuple = ()) -> Any:
         """تنفيذ استعلام وإرجاع قيمة واحدة"""
         with self.get_cursor() as cursor:
+            start_t = time.perf_counter()
             cursor.execute(query, params)
+            duration_ms = (time.perf_counter() - start_t) * 1000.0
+            if duration_ms >= self.slow_query_threshold_ms:
+                self._log_slow_query(query, params, duration_ms)
             result = cursor.fetchone()
             return result[0] if result else None
     
@@ -582,6 +616,25 @@ class DatabaseManager:
         with self.get_cursor() as cursor:
             cursor.execute("SELECT last_insert_rowid()")
             return cursor.fetchone()[0]
+
+    def _log_slow_query(self, query: str, params: Tuple, duration_ms: float) -> None:
+        """تسجيل الاستعلامات البطيئة في جدول slow_queries"""
+        try:
+            # تحويل المعاملات إلى JSON نصي لسهولة القراءة
+            params_text = None
+            if params:
+                try:
+                    params_text = json.dumps(params, ensure_ascii=False)
+                except Exception:
+                    params_text = str(params)
+            self.connection.execute(
+                "INSERT INTO slow_queries (query_text, params, duration_ms) VALUES (?, ?, ?)",
+                (query, params_text, float(f"{duration_ms:.3f}"))
+            )
+            self.connection.commit()
+        except Exception:
+            # عدم رفع الاستثناء للحفاظ على استقرار التنفيذ الأساسي
+            pass
     
     def backup_database(self, backup_path: Optional[str] = None) -> bool:
         """إنشاء نسخة احتياطية من قاعدة البيانات"""

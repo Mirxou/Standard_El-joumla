@@ -163,6 +163,20 @@ class CacheService:
         # Multiple caches for different purposes
         use_redis = os.environ.get('CACHE_USE_REDIS', '0') == '1'
         redis_url = os.environ.get('REDIS_URL')
+        # إعادة تقييم توفر Redis ديناميكياً حتى لو تم استيراد الوحدة سابقاً ثم إزالتها
+        redis_available = False
+        if use_redis:
+            try:
+                import importlib
+                import redis  # type: ignore
+                # محاولة ping للتأكد من الصحة، وإذا فشلت نستخدم LRU
+                try:
+                    redis.Redis.from_url(redis_url or 'redis://localhost:6379/0').ping()
+                    redis_available = True
+                except Exception:
+                    redis_available = False
+            except Exception:
+                redis_available = False
         self.caches = {
             'products': LRUCache(max_size=500, default_ttl=300),      # 5 min
             'customers': LRUCache(max_size=500, default_ttl=300),     # 5 min
@@ -170,8 +184,8 @@ class CacheService:
             'users': LRUCache(max_size=100, default_ttl=600),         # 10 min
             'permissions': LRUCache(max_size=100, default_ttl=300),   # 5 min
             'reports': LRUCache(max_size=50, default_ttl=1800),       # 30 min
-            'queries': (RedisCache(redis_url, prefix='queries:') if (use_redis and _HAS_REDIS) else LRUCache(max_size=200, default_ttl=60)),
-            'general': (RedisCache(redis_url, prefix='general:') if (use_redis and _HAS_REDIS) else LRUCache(max_size=500, default_ttl=300))
+            'queries': (RedisCache(redis_url, prefix='queries:') if (use_redis and redis_available and RedisCache) else LRUCache(max_size=200, default_ttl=60)),
+            'general': (RedisCache(redis_url, prefix='general:') if (use_redis and redis_available and RedisCache) else LRUCache(max_size=500, default_ttl=300))
         }
         
         # Start cleanup thread

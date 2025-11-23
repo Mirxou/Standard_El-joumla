@@ -669,3 +669,84 @@ class PerformanceService:
                 'issues': ['psutil not available for system monitoring'],
                 'checked_at': datetime.now().isoformat()
             }
+    
+    # ==================== Metrics Export ====================
+    
+    def export_metrics_to_csv(self, output_path: str, minutes: int = 60) -> Dict[str, Any]:
+        """تصدير المقاييس إلى ملف CSV"""
+        try:
+            import csv
+            
+            metrics_data = self.get_metrics_history(minutes=minutes)
+            
+            if not metrics_data:
+                return {
+                    'success': False,
+                    'error': 'لا توجد بيانات للتصدير'
+                }
+            
+            with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
+                fieldnames = ['timestamp', 'db_size_mb', 'query_count', 'avg_query_time_ms', 'cache_hit_rate']
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                
+                writer.writeheader()
+                for metric in metrics_data:
+                    writer.writerow(metric)
+            
+            return {
+                'success': True,
+                'file_path': output_path,
+                'records_exported': len(metrics_data)
+            }
+        
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e)
+            }
+    
+    def export_metrics_to_json(self, output_path: str, minutes: int = 60) -> Dict[str, Any]:
+        """تصدير المقاييس إلى ملف JSON"""
+        try:
+            import json
+            
+            metrics_data = self.get_metrics_history(minutes=minutes)
+            
+            if not metrics_data:
+                return {
+                    'success': False,
+                    'error': 'لا توجد بيانات للتصدير'
+                }
+            
+            export_data = {
+                'export_timestamp': datetime.now().isoformat(),
+                'time_range_minutes': minutes,
+                'total_records': len(metrics_data),
+                'metrics': metrics_data
+            }
+            
+            with open(output_path, 'w', encoding='utf-8') as jsonfile:
+                json.dump(export_data, jsonfile, ensure_ascii=False, indent=2)
+            
+            return {
+                'success': True,
+                'file_path': output_path,
+                'records_exported': len(metrics_data)
+            }
+        
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e)
+            }
+    
+    def get_slow_queries_from_db(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """الحصول على الاستعلامات البطيئة من جدول slow_queries"""
+        try:
+            result = self.db.execute_query(
+                "SELECT * FROM slow_queries ORDER BY executed_at DESC LIMIT ?",
+                (limit,)
+            )
+            return result if result else []
+        except Exception:
+            return []

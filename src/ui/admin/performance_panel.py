@@ -22,17 +22,25 @@ class PerformancePanelWidget(QWidget):
         layout = QVBoxLayout(self)
 
         self.table = QTableWidget(self)
-        self.table.setColumnCount(7)
-        self.table.setHorizontalHeaderLabels(["CPU%", "RAM%", "DB حجم (MB)", "#استعلامات", "متوسط (ms)", "Hit%", "بطيئة"])
+        self.table.setColumnCount(8)
+        self.table.setHorizontalHeaderLabels(["CPU%", "RAM%", "DB حجم (MB)", "#استعلامات", "متوسط (ms)", "Hit%", "بطيئة (ذاكرة)", "بطيئة (مخزنة)"])
         self.table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.table)
 
         # جدول الاستعلامات البطيئة
-        self.slow_table = QTableWidget(self)
-        self.slow_table.setColumnCount(3)
-        self.slow_table.setHorizontalHeaderLabels(["الزمن (ms)", "التاريخ", "الاستعلام المختصر"])
-        layout.addWidget(QLabel("أحدث الاستعلامات البطيئة:"))
-        layout.addWidget(self.slow_table)
+        # جدول الاستعلامات البطيئة (في الذاكرة)
+        self.slow_table_mem = QTableWidget(self)
+        self.slow_table_mem.setColumnCount(3)
+        self.slow_table_mem.setHorizontalHeaderLabels(["الزمن (ms)", "التاريخ", "الاستعلام المختصر"])
+        layout.addWidget(QLabel("أحدث الاستعلامات البطيئة (ذاكرة):"))
+        layout.addWidget(self.slow_table_mem)
+
+        # جدول الاستعلامات البطيئة من قاعدة البيانات (persisted)
+        self.slow_table_db = QTableWidget(self)
+        self.slow_table_db.setColumnCount(4)
+        self.slow_table_db.setHorizontalHeaderLabels(["الزمن (ms)", "التاريخ", "الاستعلام", "المعرف"])
+        layout.addWidget(QLabel("أحدث الاستعلامات البطيئة (مخزنة في DB):"))
+        layout.addWidget(self.slow_table_db)
 
         self.btn_refresh = QPushButton("تحديث يدوي", self)
         self.btn_refresh.clicked.connect(self.refresh)
@@ -48,7 +56,8 @@ class PerformancePanelWidget(QWidget):
         # تحديث المقاييس الرئيسية
         try:
             data = self.perf.get_current_metrics()
-            slow = self.perf.get_slow_queries_report(limit=10)
+            slow_mem = self.perf.get_slow_queries_report(limit=10)
+            slow_db = self.perf.get_slow_queries_from_db(limit=10)
             self.table.setRowCount(1)
             self.table.setItem(0, 0, QTableWidgetItem(str(data.get('cpu', {}).get('percent', ''))))
             self.table.setItem(0, 1, QTableWidgetItem(str(data.get('memory', {}).get('percent', ''))))
@@ -56,21 +65,31 @@ class PerformancePanelWidget(QWidget):
             self.table.setItem(0, 3, QTableWidgetItem(str(data.get('database', {}).get('query_count', ''))))
             self.table.setItem(0, 4, QTableWidgetItem(str(data.get('database', {}).get('avg_query_time_ms', ''))))
             self.table.setItem(0, 5, QTableWidgetItem(str(data.get('database', {}).get('cache_hit_rate', ''))))
-            self.table.setItem(0, 6, QTableWidgetItem(str(len(slow))))
+            self.table.setItem(0, 6, QTableWidgetItem(str(len(slow_mem))))
+            self.table.setItem(0, 7, QTableWidgetItem(str(len(slow_db))))
 
-            # الاستعلامات البطيئة
-            self.slow_table.setRowCount(len(slow))
-            for row, entry in enumerate(slow):
-                self.slow_table.setItem(row, 0, QTableWidgetItem(str(entry.get('duration_ms', ''))))
-                self.slow_table.setItem(row, 1, QTableWidgetItem(entry.get('timestamp', '')))
-                self.slow_table.setItem(row, 2, QTableWidgetItem(entry.get('query', '')))
+            # الاستعلامات البطيئة (ذاكرة)
+            self.slow_table_mem.setRowCount(len(slow_mem))
+            for row, entry in enumerate(slow_mem):
+                self.slow_table_mem.setItem(row, 0, QTableWidgetItem(str(entry.get('duration_ms', ''))))
+                self.slow_table_mem.setItem(row, 1, QTableWidgetItem(entry.get('timestamp', '')))
+                self.slow_table_mem.setItem(row, 2, QTableWidgetItem(entry.get('query', '')))
+
+            # الاستعلامات البطيئة (DB)
+            self.slow_table_db.setRowCount(len(slow_db))
+            for row, entry in enumerate(slow_db):
+                self.slow_table_db.setItem(row, 0, QTableWidgetItem(str(entry.get('duration_ms', ''))))
+                self.slow_table_db.setItem(row, 1, QTableWidgetItem(str(entry.get('executed_at', ''))))
+                self.slow_table_db.setItem(row, 2, QTableWidgetItem(str(entry.get('query_text', '')[:120])))
+                self.slow_table_db.setItem(row, 3, QTableWidgetItem(str(entry.get('id', ''))))
         except Exception as e:
             self.table.setRowCount(1)
             self.table.setItem(0, 0, QTableWidgetItem("خطأ"))
             self.table.setItem(0, 1, QTableWidgetItem(str(e)))
-            for c in range(2, 7):
+            for c in range(2, 8):
                 self.table.setItem(0, c, QTableWidgetItem(""))
-            self.slow_table.setRowCount(0)
+            self.slow_table_mem.setRowCount(0)
+            self.slow_table_db.setRowCount(0)
 
 # توافق مع الاستيراد الموجود في النافذة الرئيسية
 class PerformancePanel(PerformancePanelWidget):

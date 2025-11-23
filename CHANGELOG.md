@@ -4,6 +4,59 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [5.2.1] - 2025-11-23 (Performance Instrumentation & Extended Management)
+
+### 🚀 Highlights
+- Slow query instrumentation at database layer with automatic logging to `slow_queries` table.
+- Performance metrics export: CSV and JSON formats for historical analysis.
+- Extended RBAC UI: Add/edit/delete roles, bulk user assignment, detailed permissions display.
+- Incremental/delta backup system: Track table changes, create delta backups, restore chains.
+- Comprehensive test coverage for new instrumentation, export, and backup features.
+
+### 📊 Performance Monitoring
+- **Slow Query Logging**: All query execution methods (`execute_query`, `fetch_one`, `fetch_all`, etc.) now measure execution time and log queries exceeding threshold (default: 100ms) to `slow_queries` table with query text, params, and duration.
+- **Metrics Export**: Added `export_metrics_to_csv()` and `export_metrics_to_json()` to `PerformanceService` for exporting historical metrics (timestamp, DB size, query count, avg query time, cache hit rate).
+- **Database Slow Query Access**: New `get_slow_queries_from_db(limit)` method retrieves persisted slow queries from DB for UI display.
+
+### 🔐 RBAC Management Enhancements
+- **Enhanced Roles Manager UI**:
+  - Display role name, permissions list, user count, and action buttons in table.
+  - Add new role dialog with name and permissions (multi-line input).
+  - Edit role dialog: modify permissions, delete role with confirmation.
+  - Bulk assignment dialog: select role and multiple users for batch role assignment.
+- Supports dynamic schema detection from v5.2.0 for backward compatibility.
+
+### 💾 Incremental Backup System
+- **IncrementalBackupService**: New service class in `src/core/incremental_backup_service.py`.
+- **Full Backups**: Create complete DB snapshot with table checksums (SHA-256 hashes).
+- **Incremental Backups**: Detect changed tables since last snapshot, export only delta as SQL dump.
+- **Backup Chain**: Track base snapshots and incremental layers; `get_backup_chain()` returns restore order.
+- **Metadata Tracking**: Separate `backup_changes.db` stores snapshot metadata, table checksums, and relationships.
+- **Restore Logic**: Full restore implemented; incremental chain restore planned for future.
+
+### 🧪 Testing
+- **New Tests**:
+  - `test_slow_query_logging.py`: Validates `slow_queries` table creation, logging behavior, threshold configuration, data structure, and params serialization.
+  - `test_metrics_export.py`: Tests CSV/JSON export formats, empty metrics handling, and slow query retrieval from DB.
+  - `test_incremental_backup.py`: Covers full backup creation, incremental backups with/without changes, backup listing, chain retrieval, restoration, and checksum calculation.
+
+### 📝 Documentation
+- Updated CHANGELOG with v5.2.1 features and detailed explanations.
+- README updates (to be completed).
+
+### 🔧 Internal Changes
+- Database manager now imports `json` and `time` for query logging.
+- Performance service extended with export utilities and DB query retrieval.
+- Roles manager widget refactored with dialog-based add/edit/bulk assign flows.
+
+### ✅ Upgrade Notes
+1. Pull latest `v5.2.1`.
+2. Run `pytest tests/test_slow_query_logging.py tests/test_metrics_export.py tests/test_incremental_backup.py` to validate new features.
+3. Slow query threshold can be adjusted via `db.slow_query_threshold_ms = <value>`.
+4. Use `IncrementalBackupService` for delta backups: `create_full_backup()` first, then `create_incremental_backup()` after changes.
+
+---
+
 ## [5.1.0] - 2025-11-21 (UX Polish)
 ## [5.2.0] - 2025-11-22 (Security, Performance & Reliability)
 

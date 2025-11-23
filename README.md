@@ -8,7 +8,7 @@
 [![PySide6](https://img.shields.io/badge/PySide6-6.5+-green.svg)](https://www.qt.io/qt-for-python)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.txt)
-[![API Version](https://img.shields.io/badge/API_Version-3.5.0-blue.svg)](CHANGELOG.md)
+[![API Version](https://img.shields.io/badge/API_Version-5.2.1-blue.svg)](CHANGELOG.md)
 [![Coverage](https://img.shields.io/badge/Coverage-100%25-brightgreen.svg)](FINAL_ACHIEVEMENT_v3.5.0.md)
 [![Latest Release](https://img.shields.io/github/v/release/Mirxou/Standard_El-joumla?label=latest)](https://github.com/Mirxou/Standard_El-joumla/releases/latest)
 [![Release Date](https://img.shields.io/github/release-date/Mirxou/Standard_El-joumla)](https://github.com/Mirxou/Standard_El-joumla/releases)
@@ -17,7 +17,13 @@
 تطبيق سطح مكتب شامل مع ذكاء اصطناعي متقدم ومعايير عالمية للأمان والأداء<br/>
 Enterprise-grade desktop & REST API solution with AI, Advanced Security, Global Compliance.
 
-**✨ NEW in v3.5.0:**
+**✨ NEW in v5.2.1 (Final):**
+- ⚡ Slow Query Instrumentation & Logging
+- 📊 Metrics Export (CSV/JSON)
+- 🔐 Extended RBAC UI (Bulk Assignment)
+- 💾 Incremental/Delta Backup System
+
+**✨ v3.5.0:**
 - 🛡️ Multi-Factor Authentication (MFA)
 - 📢 Marketing Automation
 - 🤖 AI Chatbot (Bilingual)
@@ -102,11 +108,17 @@ python -m pytest -q
 python -m pytest test_ai_features.py::TestVendorPortal::test_get_dashboard_empty -v
 ```
 
-نتيجة الإصدار الحالي: مضافة اختبارات تكامل جديدة (2FA, RBAC Schema, Backup Checksum) ✅
-الاختبارات الجديدة (v5.2.0):
-- `tests/test_security_2fa_flow.py` التفعيل والتحقق الفعلي لكود TOTP
-- `tests/test_rbac_schema_detection.py` دعم مخططين مختلفين لجدول الأدوار بدون ترحيل مدمر
-- `tests/test_backup_restore_checksum.py` تحقق من البصمة قبل وبعد الاستعادة (Integrity)
+نتيجة الإصدار الحالي (v5.2.1): 92 اختبار ناجح / 1 متخطى (مع تغطية إجمالية ~38%) ✅
+
+**الاختبارات الجديدة (v5.2.1):**
+- `tests/test_slow_query_logging.py` - تسجيل الاستعلامات البطيئة تلقائياً
+- `tests/test_metrics_export.py` - تصدير مقاييس الأداء إلى CSV/JSON
+- `tests/test_incremental_backup.py` - نظام النسخ الاحتياطي التدريجي
+
+**الاختبارات السابقة (v5.2.0):**
+- `tests/test_security_2fa_flow.py` - التفعيل والتحقق الفعلي لكود TOTP
+- `tests/test_rbac_schema_detection.py` - دعم مخططين مختلفين لجدول الأدوار بدون ترحيل مدمر
+- `tests/test_backup_restore_checksum.py` - تحقق من البصمة قبل وبعد الاستعادة (Integrity)
 
 شغّل جميع الاختبارات:
 ```bash
@@ -997,9 +1009,82 @@ logs/
 ### الأداء
 
 ```
+### ✅ تغطية الاختبارات وقياس الجودة
+
+لتشغيل الاختبارات مع تقرير التغطية النصي و HTML:
+
+```powershell
+# تفعيل البيئة
 ⚡ وقت بدء التشغيل:    < 2 ثانية
+
+# تثبيت متطلبات الاختبار (عند الحاجة)
 ⚡ وقت تحميل الصفحة:   < 500 مللي ثانية
+
+# تشغيل التغطية (مخرجات نصية + مجلد htmlcov)
 ⚡ استجابة UI:         < 100 مللي ثانية
+```
+
+سينتج مجلد `htmlcov/` يحتوي الصفحة `index.html` لعرض التغطية بصرياً.
+
+مثال مقطع من مخرجات التغطية (متوقع):
+```
+Name                                     Stmts   Miss  Cover   Missing
+src/services/cache_service.py             310      5    98%    250-254
+src/services/security_service.py          190      3    98%    170, 185-186
+...
+```
+
+### 🔍 تشخيص الأداء والاستعلامات البطيئة
+
+لوحة الأداء تعرض الآن:
+- الاستعلامات البطيئة في الذاكرة (آخر 10) – مصدر فوري.
+- الاستعلامات البطيئة المخزّنة في قاعدة البيانات (جدول `slow_queries`).
+- عدد منفصل لكلٍ منهما في صف الملخص.
+
+ضبط العتبة:
+```python
+db_manager.slow_query_threshold_ms = 120.0  # القيمة الافتراضية 100ms
+```
+
+### 💾 النسخ الاحتياطي التدريجي (Delta)
+
+مثال استخدام سريع:
+```python
+from src.core.incremental_backup_service import IncrementalBackupService
+svc = IncrementalBackupService(db_manager.db_path, "data/incr_backups")
+full = svc.create_full_backup()
+# بعد تغييرات:
+incr = svc.create_incremental_backup()
+chain = svc.get_backup_chain(incr['snapshot_name'])
+```
+
+### 🛡️ تعزيزات الأمان المتقدمة
+- حماية brute-force عبر جدول `login_attempts` وحساب محاولات الفشل في نافذة زمنية.
+- فحص قوة كلمة المرور مع تغذية راجعة عربية قابلة للعرض في واجهة التسجيل.
+- دعم 2FA (TOTP) عبر `SecurityService.enable_2fa(user_id)` و `verify_2fa(..)`.
+
+### 🧪 اختبارات رئيسية مضافة في v5.2.1
+| الملف | الغرض |
+|-------|-------|
+| `tests/test_cache_service.py` | TTL, Hits/Misses, Evictions, Top Items |
+| `tests/test_cache_redis_fallback.py` | التحقق من السقوط إلى LRU عند غياب Redis |
+| `tests/test_auto_backup_schedule.py` | تفعيل وتعطيل النسخ الاحتياطي التلقائي |
+| `tests/test_password_strength.py` | تصنيفات قوة كلمة المرور والتغذية الراجعة |
+| `tests/test_bruteforce_blocking.py` | منطق الحجب بعد محاولات فاشلة |
+| `tests/test_slow_query_logging.py` | بنية وجدولة الاستعلامات البطيئة |
+| `tests/test_metrics_export.py` | تصدير مقاييس الأداء JSON/CSV |
+| `tests/test_incremental_backup.py` | النسخ الكامل والتدريجي وسلاسل الاستعادة |
+
+تشغيل مجموعة محددة:
+```powershell
+pytest tests/test_cache_service.py tests/test_password_strength.py -q
+```
+
+### 🧩 تحسينات مقترحة مستقبلية (مرحلة لاحقة)
+- استعادة تلقائية لسلسلة النسخ التدريجية (apply chain).
+- واجهة ضبط عتبة الاستعلام البطيء من الإعدادات.
+- دمج مخطط زمني تفاعلي لمقاييس الأداء.
+
 ⚡ استعلام متوسط:      < 50 مللي ثانية
 ```
 
