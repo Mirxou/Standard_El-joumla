@@ -10,6 +10,92 @@ import json
 import hashlib
 
 from fastapi import FastAPI, Depends, HTTPException, status, Query, Request, Header
+from .integration_models import AccountingWebhookPayload, PaymentWebhookPayload, SMSNotificationPayload
+from ..services.accounting_service import AccountingService
+from ..services.payment_service import PaymentService
+from ..services.notification_service import NotificationService
+import os
+import requests
+"""
+============================
+ EXTERNAL INTEGRATIONS ENDPOINTS
+============================
+"""
+
+
+# 1. Webhook: Accounting Integration
+@app.post("/webhooks/accounting", tags=["integrations"])
+def webhook_accounting(payload: AccountingWebhookPayload):
+    """
+    Webhook endpoint to receive invoice data for accounting integration.
+    Example payload: {"invoice_id": 123, "amount": 1000.0, ...}
+    """
+    db, *_ = get_services()
+    accounting = AccountingService(db)
+    # مثال: إضافة قيد محاسبي أو تسجيل الفاتورة
+    # يمكن تخصيص المنطق حسب النظام الخارجي
+    # accounting.create_invoice_entry(payload.invoice_id, ...)
+    # Placeholder: فقط تسجيل الاستلام
+    return {"status": "received", "integration": "accounting", "data": payload.dict()}
+
+
+# 2. Webhook: Payment Integration
+@app.post("/webhooks/payment", tags=["integrations"])
+def webhook_payment(payload: PaymentWebhookPayload):
+    """
+    Webhook endpoint to receive payment notifications from payment gateways.
+    Example payload: {"order_id": 456, "status": "paid", ...}
+    """
+    db, *_ = get_services()
+    payment_service = PaymentService(db)
+    # مثال: تحديث حالة الدفع/الطلب بناءً على order_id
+    # payment_service.update_payment_status(payload.order_id, payload.status)
+    # Placeholder: فقط تسجيل الاستلام
+    return {"status": "received", "integration": "payment", "data": payload.dict()}
+
+
+# 3. REST: SMS Notification Integration
+@app.post("/notifications/sms", tags=["integrations"])
+def send_sms_notification(payload: SMSNotificationPayload):
+    """
+    Send SMS notification via external provider (Twilio, Unifonic, etc).
+    Example payload: {"to": "+9665xxxxxxx", "message": "رمز التحقق: 123456"}
+    """
+    # Placeholder: منطق إرسال SMS عبر مزود خارجي (يمكن تخصيصه)
+    # مثال: requests.post('https://api.twilio.com/....', ...)
+    return {"status": "queued", "provider": "external_sms", "to": payload.to, "message": payload.message}
+
+# 4. Webhook: Slack/Teams Integration
+@app.post("/integrations/slack", tags=["integrations"])
+def send_slack_message(message: str):
+    """
+    Send a message to Slack/Teams via webhook URL (set SLACK_WEBHOOK_URL env variable).
+    """
+    webhook_url = os.getenv("SLACK_WEBHOOK_URL")
+    if not webhook_url:
+        raise HTTPException(status_code=500, detail="Slack webhook URL not configured")
+    resp = requests.post(webhook_url, json={"text": message})
+    if resp.status_code != 200:
+        raise HTTPException(status_code=500, detail="Failed to send to Slack/Teams")
+    return {"status": "sent", "platform": "slack/teams"}
+
+# 5. Export to Google Sheets (placeholder)
+@app.post("/integrations/google-sheets", tags=["integrations"])
+def export_to_google_sheets(data: dict):
+    """
+    Export data to Google Sheets (placeholder, requires Google API integration).
+    """
+    # TODO: integrate with Google Sheets API
+    return {"status": "queued", "integration": "google_sheets", "data": data}
+
+# 6. Push Notification (Firebase/OneSignal placeholder)
+@app.post("/integrations/push", tags=["integrations"])
+def send_push_notification(title: str, message: str, user_id: int = None):
+    """
+    Send push notification via Firebase/OneSignal (placeholder).
+    """
+    # TODO: integrate with Firebase/OneSignal
+    return {"status": "queued", "integration": "push_notification", "title": title, "message": message, "user_id": user_id}
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 

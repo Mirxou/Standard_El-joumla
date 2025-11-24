@@ -14,7 +14,8 @@
         "ms-azuretools.vscode-docker",
         "humao.rest-client",
         "redhat.vscode-yaml",
-        "tamasfe.even-better-toml"
+        "tamasfe.even-better-toml",
+        "google.geminicodeassist"
       ],
       "settings": {
         "python.defaultInterpreterPath": "/usr/local/bin/python",

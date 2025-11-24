@@ -1,0 +1,42 @@
+{
+  "export_timestamp": "2025-11-23T14:56:19.956179",
+  "time_range_minutes": 60,
+  "total_records": 5,
+  "metrics": [
+    {
+      "timestamp": "2025-11-23T14:56:19.452753",
+      "db_size_mb": 0.0,
+      "query_count": 10,
+      "avg_query_time_ms": 5.0,
+      "cache_hit_rate": 0.0
+    },
+    {
+      "timestamp": "2025-11-23T14:56:19.553204",
+      "db_size_mb": 0.0,
+      "query_count": 15,
+      "avg_query_time_ms": 6.0,
+      "cache_hit_rate": 0.0
+    },
+    {
+      "timestamp": "2025-11-23T14:56:19.653703",
+      "db_size_mb": 0.0,
+      "query_count": 20,
+      "avg_query_time_ms": 7.0,
+      "cache_hit_rate": 0.0
+    },
+    {
+      "timestamp": "2025-11-23T14:56:19.754257",
+      "db_size_mb": 0.0,
+      "query_count": 25,
+      "avg_query_time_ms": 8.0,
+      "cache_hit_rate": 0.0
+    },
+    {
+      "timestamp": "2025-11-23T14:56:19.854987",
+      "db_size_mb": 0.0,
+      "query_count": 30,
+      "avg_query_time_ms": 9.0,
+      "cache_hit_rate": 0.0
+    }
+  ]
+}

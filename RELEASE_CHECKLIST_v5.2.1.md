@@ -47,8 +47,8 @@ Date: 2025-11-23
 - [ ] Generate metrics sample export (optional)
 
 ## 10. Final Git Actions
-- [ ] Commit & tag `v5.2.1`
-- [ ] Push tag & create GitHub release using body
+- [x] Commit & tag `v5.2.1`
+- [x] Push tag & create GitHub release using body
 
 ## 11. Post-Release TODO (Not Blocking)
 - Incremental chain apply restore method

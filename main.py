@@ -291,6 +291,12 @@ class InventoryManagementApp(QApplication):
         self.reminder_service: Optional[ReminderService] = None
         self.reminder_scheduler: Optional[ReminderScheduler] = None
         self.notifications_manager: Optional[SmartNotificationsManager] = None
+        # الخدمات الجديدة
+        self.recurring_invoice_service = None
+        self.marketing_automation_service = None
+        self.mfa_service = None
+        self.encryption_service = None
+        self.support_service = None
         
         # النوافذ
         self.main_window: Optional[MainWindow] = None
@@ -384,8 +390,45 @@ class InventoryManagementApp(QApplication):
             self.sales_service = SalesService(self.db_manager, self.logger)
             self.reports_service = ReportsService(self.db_manager)
             self.user_service = UserService(self.db_manager)
-            
-            self.logger.info("تم تهيئة جميع الخدمات بنجاح")
+            self.logger.info("تم تهيئة جميع الخدمات الأساسية بنجاح")
+
+            # تهيئة الخدمات الجديدة (الفجوات المغلقة)
+            try:
+                from src.services.recurring_invoice_service import RecurringInvoiceService
+                self.recurring_invoice_service = RecurringInvoiceService(self.db_manager, self.logger)
+                self.logger.info("تم تهيئة خدمة الفوترة الدورية")
+            except Exception as e:
+                self.logger.warning(f"تعذر تهيئة خدمة الفوترة الدورية: {e}")
+
+            try:
+                from src.services.marketing_automation_service import MarketingAutomationService
+                self.marketing_automation_service = MarketingAutomationService(self.db_manager, self.logger)
+                self.logger.info("تم تهيئة خدمة أتمتة التسويق")
+            except Exception as e:
+                self.logger.warning(f"تعذر تهيئة خدمة أتمتة التسويق: {e}")
+
+            try:
+                from src.services.mfa_service import MFAService
+                self.mfa_service = MFAService(self.db_manager, self.logger)
+                self.logger.info("تم تهيئة خدمة المصادقة متعددة العوامل")
+            except Exception as e:
+                self.logger.warning(f"تعذر تهيئة خدمة المصادقة متعددة العوامل: {e}")
+
+            try:
+                from src.services.encryption_service import EncryptionService
+                # مفتاح التشفير من الإعدادات أو ثابت (للتجربة فقط)
+                encryption_key = self.config_manager.get("encryption_key", "default_secret_key")
+                self.encryption_service = EncryptionService(encryption_key)
+                self.logger.info("تم تهيئة خدمة التشفير")
+            except Exception as e:
+                self.logger.warning(f"تعذر تهيئة خدمة التشفير: {e}")
+
+            try:
+                from src.services.support_service import SupportService
+                self.support_service = SupportService(self.db_manager, self.logger)
+                self.logger.info("تم تهيئة خدمة الدعم الفني")
+            except Exception as e:
+                self.logger.warning(f"تعذر تهيئة خدمة الدعم الفني: {e}")
 
             # تهيئة البريد + التذكيرات + المجدول (اختياري عبر متغيرات البيئة)
             try:
@@ -396,14 +439,14 @@ class InventoryManagementApp(QApplication):
                 self.logger.info("Reminder scheduler initialized (env-controlled)")
             except Exception as e:
                 self.logger.warning(f"تعذرت تهيئة المجدول/التذكيرات: {e}")
-            
+
             # تهيئة نظام الإشعارات الذكية (سيبدأ بعد عرض النافذة الرئيسية)
             try:
                 self.notifications_manager = get_notifications_manager(self.db_manager)
                 self.logger.info("تم تهيئة نظام الإشعارات الذكية")
             except Exception as e:
                 self.logger.warning(f"تعذرت تهيئة نظام الإشعارات: {e}")
-            
+
         except Exception as e:
             self.logger.error(f"خطأ في تهيئة الخدمات: {str(e)}")
             self.show_error_message("خطأ في الخدمات", f"فشل في تهيئة الخدمات: {str(e)}")

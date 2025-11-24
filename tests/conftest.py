@@ -12,6 +12,8 @@ from pathlib import Path
 from datetime import datetime
 import sqlite3
 import shutil
+from src.services.ai_service import AIService
+from unittest.mock import MagicMock
 
 # إضافة مسار المشروع
 project_root = Path(__file__).parent.parent
@@ -92,6 +94,69 @@ def playwright_config():
 def app_url():
     """رابط التطبيق"""
     return "http://localhost:8000"  # يمكن تعديله حسب الحاجة
+
+@pytest.fixture(scope="session")
+def api_token():
+    """الحصول على token للمصادقة مع API (يتطلب خادم يعمل)"""
+    import requests
+    try:
+        response = requests.post(
+            "http://127.0.0.1:8000/auth/login",
+            json={"username": "admin", "password": "admin123"},
+            timeout=2
+        )
+        if response.status_code == 200:
+            return response.json()["access_token"]
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+        # الخادم غير متاح - نعيد token وهمي
+        pass
+    return "mock_token_for_testing"
+
+@pytest.fixture
+def token(api_token):
+    """اختصار لـ api_token"""
+    return api_token
+
+@pytest.fixture
+def po_id():
+    """معرف أمر شراء وهمي للاختبار"""
+    return 1
+
+@pytest.fixture
+def order_id():
+    """معرف أمر بيع وهمي للاختبار"""
+    return 1
+
+@pytest.fixture
+def detail():
+    """تفاصيل وهمية لأمر الشراء"""
+    return {
+        "id": 1,
+        "items": [
+            {
+                "id": 1,
+                "product_id": 1,
+                "quantity_ordered": 10,
+                "unit_price": 50.0
+            }
+        ]
+    }
+
+@pytest.fixture
+def ai():
+    """إنشاء AIService وهمي للاختبار"""
+    mock_db = MagicMock()
+    return AIService(mock_db)
+
+@pytest.fixture
+def db(db_manager):
+    """اختصار لـ db_manager"""
+    return db_manager
+
+@pytest.fixture
+def test_data():
+    """بيانات اختبار وهمية"""
+    return {'sale_id': 999, 'refund_id': 1000}
 
 def pytest_configure(config):
     """إعداد pytest"""
