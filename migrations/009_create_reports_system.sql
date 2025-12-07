@@ -1,5 +1,6 @@
 -- Migration 009: Advanced Reports System
 -- نظام التقارير المتقدمة
+PRAGMA foreign_keys = ON;
 
 -- =====================================================
 -- جدول قوالب التقارير (Report Templates)

@@ -101,6 +101,28 @@ class DatabaseLogger:
         try:
             import json
             
+            # التحقق من وجود user_id في قاعدة البيانات (إذا كان محدداً)
+            if self.user_id is not None:
+                try:
+                    check_query = "SELECT id FROM users WHERE id = ?"
+                    result = self.db_manager.execute_scalar(check_query, (self.user_id,))
+                    if result is None:
+                        # المستخدم غير موجود، استخدام NULL بدلاً من user_id
+                        user_id_to_log = None
+                        self.logger.warning(
+                            f"المستخدم {self.user_id} غير موجود في قاعدة البيانات. سيتم تسجيل العملية بدون user_id."
+                        )
+                    else:
+                        user_id_to_log = self.user_id
+                except Exception as check_error:
+                    # في حالة فشل التحقق، استخدام NULL
+                    user_id_to_log = None
+                    self.logger.warning(
+                        f"فشل التحقق من وجود المستخدم {self.user_id}: {check_error}. سيتم تسجيل العملية بدون user_id."
+                    )
+            else:
+                user_id_to_log = None
+            
             # تحويل القيم إلى JSON
             old_values_json = json.dumps(old_values, ensure_ascii=False) if old_values else None
             new_values_json = json.dumps(new_values, ensure_ascii=False) if new_values else None
@@ -113,19 +135,29 @@ class DatabaseLogger:
             
             self.db_manager.execute_non_query(
                 query,
-                (self.user_id, action, table_name, record_id, old_values_json, new_values_json)
+                (user_id_to_log, action, table_name, record_id, old_values_json, new_values_json)
             )
             
             # تسجيل في ملف السجل أيضاً
+            user_info = f"المستخدم: {user_id_to_log}" if user_id_to_log else "المستخدم: غير محدد"
             self.logger.info(
-                f"عملية {action} على جدول {table_name} - المعرف: {record_id} - المستخدم: {self.user_id}"
+                f"عملية {action} على جدول {table_name} - المعرف: {record_id} - {user_info}"
             )
             
         except Exception as e:
-            self.logger.error(f"خطأ في تسجيل العملية: {e}")
+            error_msg = str(e)
+            # تحسين رسالة الخطأ لتكون أكثر وضوحاً
+            if "FOREIGN KEY constraint failed" in error_msg:
+                self.logger.error(
+                    f"خطأ في تسجيل العملية: فشل القيد الخارجي (FOREIGN KEY). "
+                    f"السبب المحتمل: مرجع غير موجود في قاعدة البيانات. "
+                    f"التفاصيل: {error_msg}"
+                )
+            else:
+                self.logger.error(f"خطأ في تسجيل العملية: {error_msg}")
     
     def log_login(self, username: str, success: bool, ip_address: str = None):
-        """تسجيل محاولة تسجيل الدخول"""
+        """تسجيل محاولة تسجيل الدخول مع التحقق من صحة البيانات"""
         status = "نجح" if success else "فشل"
         message = f"محاولة تسجيل دخول {status} - المستخدم: {username}"
         if ip_address:

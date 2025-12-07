@@ -270,3 +270,8 @@ class RolesManagerWidget(QWidget):
         btn_cancel.clicked.connect(dialog.reject)
         
         dialog.exec()
+
+
+# توافق مع الاستيراد الموجود في النافذة الرئيسية
+class RolesManager(RolesManagerWidget):
+    pass

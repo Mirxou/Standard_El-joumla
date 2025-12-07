@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QDate, QSize
 from PySide6.QtGui import QIcon, QColor, QFont
+from PySide6.QtWidgets import QApplication, QStyle
+from pathlib import Path
 from decimal import Decimal
 from datetime import datetime
 
@@ -27,6 +29,11 @@ from ...models.journal_entry import JournalEntry, JournalLine
 class AccountingWindow(QMainWindow):
     """نافذة إدارة المحاسبة"""
     
+    # Window Manager attributes (للتسجيل التلقائي)
+    window_key = "accounting"
+    window_singleton = True
+    window_title = "إدارة المحاسبة"
+    
     def __init__(self, db_manager, parent=None):
         super().__init__(parent)
         self.db = db_manager
@@ -34,7 +41,18 @@ class AccountingWindow(QMainWindow):
         self.parent_window = parent
         
         self.setWindowTitle("إدارة المحاسبة")
-        self.setWindowIcon(QIcon("assets/icons/accounting.png"))
+        # استخدام أيقونة التطبيق الرئيسية بدلاً من accounting.png
+        icon_path = Path(__file__).parent.parent.parent.parent / "assets" / "icons" / "app_icon.ico"
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
+        else:
+            # Fallback: استخدام أيقونة Qt القياسية
+            from PySide6.QtWidgets import QStyle
+            app = QApplication.instance()
+            if app:
+                style = app.style()
+                if style:
+                    self.setWindowIcon(style.standardIcon(QStyle.SP_FileDialogInfoView))
         self.setGeometry(100, 100, 1200, 700)
         
         self._create_widgets()

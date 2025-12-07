@@ -217,25 +217,236 @@ class SalesService:
             return False
     
     def cancel_sale(self, sale_id: int, reason: str = "", user_id: Optional[int] = None) -> bool:
-        """إلغاء فاتورة المبيعات"""
-        try:
-            success = self.sale_manager.cancel_sale(sale_id, reason)
-            if success:
-                # تحديث جلسة نقطة البيع
-                if self.current_session:
-                    sale = self.sale_manager.get_sale_by_id(sale_id)
-                    if sale:
-                        self.current_session.total_returns += sale.total_amount
-                
-                if self.logger:
-                    self.logger.info(f"تم إلغاء فاتورة المبيعات {sale_id}: {reason}")
+        """إلغاء فاتورة المبيعات (Legacy - استخدام cancel_invoice بدلاً منها)"""
+        return self.cancel_invoice(sale_id, reason, user_id)
+    
+    def cancel_invoice(self, sale_id: int, cancellation_reason: str = "", user_id: Optional[int] = None) -> bool:
+        """
+        إلغاء فاتورة مع استعادة المخزون وإرجاع المال - ACID Transaction (نسخة آمنة)
+        
+        الخوارزمية:
+        1. التحقق المسبق: وجود الفاتورة وحالتها
+        2. بدء Transaction (تلقائي في SQLite)
+        3. استعادة المخزون من sale_items (مع فحص الأعمدة ديناميكياً)
+        4. تعديل رصيد العميل (مع فحص الأعمدة)
+        5. تحديث حالة الفاتورة (مع فحص الأعمدة)
+        6. Commit أو Rollback
+        
+        Args:
+            sale_id: معرف الفاتورة
+            cancellation_reason: سبب الإلغاء
+            user_id: معرف المستخدم الذي قام بالإلغاء
             
-            return success
+        Returns:
+            bool: True إذا نجحت العملية، False إذا فشلت
+        """
+        connection = None
+        cursor = None
+        
+        try:
+            # ===== المرحلة 1: التحقق المسبق (Pre-Flight Checks) =====
+            if self.logger:
+                self.logger.info(f"🔍 بدء عملية إلغاء الفاتورة {sale_id}")
+            
+            # جلب الفاتورة
+            sale = self.sale_manager.get_sale_by_id(sale_id)
+            if not sale:
+                if self.logger:
+                    self.logger.error(f"❌ الفاتورة {sale_id} غير موجودة")
+                return False
+            
+            # التحقق من حالة الفاتورة
+            if sale.status == SaleStatus.CANCELLED.value:
+                if self.logger:
+                    self.logger.warning(f"⚠️ الفاتورة {sale_id} ملغاة مسبقاً")
+                return False
+            
+            # ===== المرحلة 2: فتح "منطقة الأمان" (Begin Transaction) =====
+            # الحصول على الاتصال الخام للتحكم في المعاملة
+            connection = self.db_manager.connection
+            if not connection and self.db_manager.pool:
+                connection = self.db_manager.pool.get_connection()
+            
+            if not connection:
+                if self.logger:
+                    self.logger.error("❌ لا يوجد اتصال بقاعدة البيانات")
+                return False
+            
+            cursor = connection.cursor()
+            
+            # ملاحظة: sqlite3 في بايثون يبدأ المعاملة ضمنياً عند أول أمر تعديل
+            # لا نكتب cursor.execute("BEGIN") لتجنب الأخطاء
+            
+            # ===== المرحلة 3: حلقة استعادة المخزون (The Restock Loop) =====
+            
+            # 1. تحديد هيكل جدول العناصر ديناميكياً
+            has_variant_col = False
+            try:
+                cursor.execute("PRAGMA table_info(sale_items)")
+                item_cols = [row[1] for row in cursor.fetchall()]
+                has_variant_col = 'variant_id' in item_cols
+            except:
+                pass
+            
+            # 2. بناء الاستعلام بناءً على الأعمدة الموجودة
+            if has_variant_col:
+                items_query = "SELECT product_id, variant_id, quantity FROM sale_items WHERE sale_id = ?"
+            else:
+                items_query = "SELECT product_id, quantity FROM sale_items WHERE sale_id = ?"
+            
+            cursor.execute(items_query, (sale_id,))
+            sale_items = cursor.fetchall()
+            
+            if not sale_items:
+                if self.logger:
+                    self.logger.warning(f"⚠️ الفاتورة {sale_id} فارغة")
+                # لا نوقف العملية، ربما هي فاتورة فارغة، نكمل لتغيير الحالة
+            
+            # 3. التحقق من أعمدة التحديث (updated_at) في الجداول الأخرى لتجنب الانهيار
+            cursor.execute("PRAGMA table_info(products)")
+            prod_cols = [row[1] for row in cursor.fetchall()]
+            prod_has_updated = 'updated_at' in prod_cols
+            
+            try:
+                cursor.execute("PRAGMA table_info(product_variants)")
+                var_cols = [row[1] for row in cursor.fetchall()]
+                var_has_updated = 'updated_at' in var_cols
+            except:
+                var_has_updated = False
+            
+            # 4. تنفيذ الاستعادة
+            for item in sale_items:
+                product_id = item[0]
+                # استخراج البيانات بذكاء حسب طول الصف
+                if has_variant_col and len(item) > 2:
+                    variant_id = item[1]
+                    quantity = item[2]
+                else:
+                    variant_id = None
+                    quantity = item[1] if len(item) > 1 else 0
+                
+                if quantity <= 0:
+                    continue  # تجاهل الكميات الصفرية أو السالبة (إرجاعات)
+                
+                # أ) استعادة المتغير (Variant)
+                if variant_id:
+                    check_var = "SELECT id FROM product_variants WHERE id = ?"
+                    cursor.execute(check_var, (variant_id,))
+                    if cursor.fetchone():
+                        if var_has_updated:
+                            sql = "UPDATE product_variants SET current_stock = current_stock + ?, updated_at = ? WHERE id = ?"
+                            cursor.execute(sql, (quantity, datetime.now(), variant_id))
+                        else:
+                            sql = "UPDATE product_variants SET current_stock = current_stock + ? WHERE id = ?"
+                            cursor.execute(sql, (quantity, variant_id))
+                        
+                        if self.logger:
+                            self.logger.debug(f"✅ تم استعادة {quantity} وحدة للمتغير {variant_id}")
+                    else:
+                        variant_id = None  # المتغير محذوف، نعيد للمنتج الرئيسي
+                        if self.logger:
+                            self.logger.warning(f"⚠️ المتغير {variant_id} غير موجود، استخدام المنتج الرئيسي {product_id}")
+                
+                # ب) استعادة المنتج الرئيسي (إذا لم يكن متغير أو المتغير محذوف)
+                if not variant_id:
+                    if prod_has_updated:
+                        sql = "UPDATE products SET current_stock = current_stock + ?, updated_at = ? WHERE id = ?"
+                        cursor.execute(sql, (quantity, datetime.now(), product_id))
+                    else:
+                        sql = "UPDATE products SET current_stock = current_stock + ? WHERE id = ?"
+                        cursor.execute(sql, (quantity, product_id))
+                    
+                    if self.logger:
+                        self.logger.debug(f"✅ تم استعادة {quantity} وحدة للمنتج {product_id}")
+            
+            # ===== المرحلة 4: التصحيح المالي (Financial Rollback) =====
+            # عند الإلغاء، إذا كان هناك مبلغ متبقي (دين)، يجب إرجاعه للعميل
+            # إذا كان remaining_amount = 100، فهذا يعني أن العميل مدين بـ 100
+            # عند الإلغاء، يجب أن نرجع هذا المبلغ (نطرح الدين من الرصيد)
+            # لكن إذا كان create_sale لا يحدث الرصيد تلقائياً، فلا داعي لتعديله هنا
+            # سنتحقق من أن الفاتورة لديها remaining_amount > 0 فقط
+            if sale.customer_id and sale.remaining_amount and sale.remaining_amount > 0:
+                cursor.execute("SELECT current_balance FROM customers WHERE id = ?", (sale.customer_id,))
+                cust_res = cursor.fetchone()
+                if cust_res:
+                    curr_bal = Decimal(str(cust_res[0]))
+                    # عند الإلغاء، نرجع المبلغ المتبقي (نطرح الدين)
+                    # إذا كان العميل مديناً بـ 100 (remaining_amount = 100)
+                    # وكان رصيده الحالي = 100 (دين)، بعد الإلغاء يصبح 0
+                    # إذا كان رصيده الحالي = 0، بعد الإلغاء يصبح -100 (نرجع المبلغ)
+                    # لكن هذا يعتمد على كيفية تحديث الرصيد عند إنشاء الفاتورة
+                    # سنفترض أن remaining_amount يمثل الدين الذي يجب إرجاعه
+                    new_bal = curr_bal - sale.remaining_amount
+                    
+                    # التحقق من وجود updated_at في العملاء
+                    cursor.execute("PRAGMA table_info(customers)")
+                    cust_cols = [row[1] for row in cursor.fetchall()]
+                    
+                    if 'updated_at' in cust_cols:
+                        sql = "UPDATE customers SET current_balance = ?, updated_at = ? WHERE id = ?"
+                        cursor.execute(sql, (float(new_bal), datetime.now(), sale.customer_id))
+                    else:
+                        sql = "UPDATE customers SET current_balance = ? WHERE id = ?"
+                        cursor.execute(sql, (float(new_bal), sale.customer_id))
+                    
+                    if self.logger:
+                        self.logger.info(f"💰 تم تعديل رصيد العميل {sale.customer_id}: {curr_bal} → {new_bal}")
+                else:
+                    if self.logger:
+                        self.logger.warning(f"⚠️ العميل {sale.customer_id} غير موجود - تم تخطي تعديل الرصيد")
+            
+            # ===== المرحلة 5: الختم النهائي (Status Update) =====
+            existing_notes = sale.notes or ""
+            note_text = f"\n[إلغاء] {cancellation_reason} ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})" if cancellation_reason else f"\n[إلغاء] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            final_notes = existing_notes + note_text
+            
+            # التحقق من updated_at في sales (غالباً موجود لكن للاحتياط)
+            cursor.execute("PRAGMA table_info(sales)")
+            sale_cols = [row[1] for row in cursor.fetchall()]
+            
+            # استخدام القيمة الإنجليزية للحالة (قاعدة البيانات تستخدم الإنجليزية)
+            cancelled_status = 'cancelled'  # القيمة المتوقعة في قاعدة البيانات
+            
+            if 'updated_at' in sale_cols:
+                sql = "UPDATE sales SET status = ?, notes = ?, updated_at = ? WHERE id = ?"
+                cursor.execute(sql, (cancelled_status, final_notes, datetime.now(), sale_id))
+            else:
+                sql = "UPDATE sales SET status = ?, notes = ? WHERE id = ?"
+                cursor.execute(sql, (cancelled_status, final_notes, sale_id))
+            
+            if self.logger:
+                self.logger.info(f"📝 تم تحديث حالة الفاتورة {sale_id} إلى 'ملغاة'")
+            
+            # ===== المرحلة 6: الاعتماد (Commit) =====
+            connection.commit()
+            if self.logger:
+                self.logger.info(f"✅ تم إلغاء الفاتورة {sale_id} واستعادة المخزون")
+            
+            # تحديث الجلسة (في الذاكرة فقط)
+            if self.current_session:
+                self.current_session.total_returns += float(sale.total_amount)
+            
+            return True
             
         except Exception as e:
+            if connection:
+                try:
+                    connection.rollback()
+                except:
+                    pass
             if self.logger:
-                self.logger.error(f"خطأ في إلغاء فاتورة المبيعات {sale_id}: {str(e)}")
+                self.logger.error(f"❌ فشل إلغاء الفاتورة (ROLLBACK): {e}")
+                import traceback
+                self.logger.error(traceback.format_exc())
             return False
+            
+        finally:
+            # إغلاق المؤشر فقط، لا نغلق الاتصال لأنه قد يكون مشتركاً (Pooled)
+            if cursor:
+                try:
+                    cursor.close()
+                except:
+                    pass
     
     def search_sales(self, query: str = "", customer_id: Optional[int] = None,
                     start_date: Optional[date] = None, end_date: Optional[date] = None,

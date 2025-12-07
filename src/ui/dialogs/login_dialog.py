@@ -12,11 +12,13 @@ from PySide6.QtWidgets import (
     QFrame, QMessageBox, QProgressBar, QSpacerItem,
     QSizePolicy, QWidget, QApplication
 )
-from PySide6.QtCore import Qt, QTimer, Signal, QThread
-from PySide6.QtGui import QFont, QPixmap, QIcon, QPalette, QColor
+from PySide6.QtCore import Qt, QTimer, Signal, QThread, QPropertyAnimation, QEasingCurve, QRect, Property, QEvent
+from PySide6.QtGui import QFont, QPixmap, QIcon, QPalette, QColor, QPainter, QBrush, QLinearGradient, QShowEvent
 
 from ...services.user_service import UserService, UserSession
 from ...services.security_service import SecurityService
+from pathlib import Path
+from ...utils.i18n_api import I18n
 
 
 class LoginWorker(QThread):
@@ -56,6 +58,9 @@ class LoginDialog(QDialog):
         self.login_worker: Optional[LoginWorker] = None
         self.security_service = SecurityService(user_service.db)  # 2FA & brute-force support
         
+        # تهيئة نظام الترجمة
+        self.i18n = I18n(locales_dir=str(Path(__file__).parent.parent.parent.parent / "locales"))
+        
         # رسالة التحذير (مخفية افتراضياً) - يجب إنشاؤها قبل setup_ui
         self.warning_label = QLabel()
         self.warning_label.setVisible(False)
@@ -79,153 +84,371 @@ class LoginDialog(QDialog):
         
         # تحميل آخر اسم مستخدم محفوظ
         self.load_saved_credentials()
+        
+        # إصلاح التخطيط عند أول تحميل
+        QTimer.singleShot(0, self._fix_layout)
+        QTimer.singleShot(10, self._ensure_proper_display)
     
     def setup_ui(self):
-        """إعداد واجهة المستخدم"""
-        self.setWindowTitle("تسجيل الدخول - الإصدار المنطقي")
-        self.setFixedSize(400, 500)
+        """إعداد واجهة المستخدم الاحترافية العالمية"""
+        self.setWindowTitle(self.i18n.get_message("login_title"))
+        self.setMinimumSize(500, 650)
+        self.setMaximumSize(500, 650)
+        self.resize(500, 650)
         self.setModal(True)
+        
+        # تطبيق CSS احترافي شامل
+        self.setStyleSheet("""
+            QDialog {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #f8f9fa, stop:1 #ffffff);
+            }
+        """)
         
         # تخطيط رئيسي
         main_layout = QVBoxLayout(self)
-        main_layout.setSpacing(20)
-        main_layout.setContentsMargins(30, 30, 30, 30)
+        main_layout.setSpacing(0)
+        main_layout.setContentsMargins(0, 0, 0, 0)
         
-        # منطقة الشعار والعنوان
-        self.setup_header(main_layout)
+        # رأس احترافي بتدرج متقدم
+        header_frame = QFrame()
+        header_frame.setFixedHeight(200)
+        header_frame.setStyleSheet("""
+            QFrame {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #667eea, stop:0.5 #764ba2, stop:1 #f093fb);
+                border: none;
+            }
+        """)
+        header_layout = QVBoxLayout(header_frame)
+        header_layout.setContentsMargins(30, 30, 30, 30)
+        header_layout.setSpacing(12)
         
-        # رسالة التحذير
-        main_layout.addWidget(self.warning_label)
-        
-        # منطقة النموذج
-        self.setup_form(main_layout)
-        
-        # منطقة الأزرار
-        self.setup_buttons(main_layout)
-        
-        # شريط التقدم
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setVisible(False)
-        self.progress_bar.setRange(0, 0)  # شريط تقدم غير محدد
-        main_layout.addWidget(self.progress_bar)
-        
-        # مساحة فارغة
-        main_layout.addItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
-        
-        # معلومات النسخة
-        version_label = QLabel("الإصدار 1.0.0")
-        version_label.setAlignment(Qt.AlignCenter)
-        version_label.setStyleSheet("color: #666; font-size: 10px;")
-        main_layout.addWidget(version_label)
-    
-    def setup_header(self, layout: QVBoxLayout):
-        """إعداد منطقة الرأس"""
-        header_widget = QWidget()
-        header_layout = QVBoxLayout(header_widget)
-        header_layout.setAlignment(Qt.AlignCenter)
-        
-        # شعار التطبيق (يمكن إضافة صورة لاحقاً)
-        logo_label = QLabel("🏪")
+        # أيقونة احترافية مع تأثير
+        logo_label = QLabel("💼")
         logo_label.setAlignment(Qt.AlignCenter)
-        logo_label.setStyleSheet("font-size: 48px; margin-bottom: 10px;")
+        logo_label.setStyleSheet("""
+            QLabel {
+                font-size: 64px;
+                background: transparent;
+                padding: 10px;
+            }
+        """)
         header_layout.addWidget(logo_label)
         
-        # عنوان التطبيق
-        title_label = QLabel("الإصدار المنطقي")
+        # عنوان احترافي
+        title_label = QLabel(self.i18n.get_message("app_name_short"))
         title_label.setAlignment(Qt.AlignCenter)
         title_label.setStyleSheet("""
-            font-size: 24px;
+            QLabel {
+                font-size: 32px;
             font-weight: bold;
-            color: #2c3e50;
-            margin-bottom: 5px;
+                color: white;
+                background: transparent;
+                letter-spacing: 1px;
+            }
         """)
         header_layout.addWidget(title_label)
         
-        # وصف التطبيق
-        subtitle_label = QLabel("نظام إدارة المبيعات والمخزون")
+        # وصف احترافي
+        subtitle_label = QLabel(self.i18n.get_message("app_description"))
         subtitle_label.setAlignment(Qt.AlignCenter)
         subtitle_label.setStyleSheet("""
-            font-size: 14px;
-            color: #7f8c8d;
-            margin-bottom: 20px;
+            QLabel {
+                font-size: 13px;
+                color: rgba(255, 255, 255, 0.95);
+                background: transparent;
+                font-weight: 500;
+            }
         """)
         header_layout.addWidget(subtitle_label)
         
-        layout.addWidget(header_widget)
-    
-    def setup_form(self, layout: QVBoxLayout):
-        """إعداد نموذج تسجيل الدخول"""
-        form_frame = QFrame()
-        form_frame.setFrameStyle(QFrame.Box)
-        form_frame.setStyleSheet("""
-            QFrame {
-                border: 1px solid #ddd;
-                border-radius: 8px;
-                background-color: #f9f9f9;
-                padding: 20px;
+        main_layout.addWidget(header_frame)
+        
+        # محتوى النموذج مع خلفية بيضاء
+        content_widget = QWidget()
+        content_widget.setObjectName("contentWidget")
+        content_widget.setStyleSheet("""
+            QWidget#contentWidget {
+                background-color: white;
+                min-height: 400px;
             }
         """)
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setSpacing(20)
+        content_layout.setContentsMargins(40, 35, 40, 30)
+        content_layout.setSizeConstraint(QVBoxLayout.SetMinimumSize)
         
-        form_layout = QFormLayout(form_frame)
-        form_layout.setSpacing(15)
-        form_layout.setContentsMargins(20, 20, 20, 20)
+        # رسالة التحذير
+        content_layout.addWidget(self.warning_label)
         
-        # حقل اسم المستخدم
+        # منطقة النموذج
+        self.setup_form(content_layout)
+        
+        # منطقة الأزرار
+        self.setup_buttons(content_layout)
+        
+        # شريط التقدم الاحترافي
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+        self.progress_bar.setRange(0, 0)
+        self.progress_bar.setFixedHeight(3)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: none;
+                border-radius: 10px;
+                background-color: #e9ecef;
+            }
+            QProgressBar::chunk {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #667eea, stop:1 #764ba2);
+                border-radius: 10px;
+            }
+        """)
+        content_layout.addWidget(self.progress_bar)
+        
+        main_layout.addWidget(content_widget)
+        
+        # تذييل احترافي
+        footer_frame = QFrame()
+        footer_frame.setFixedHeight(45)
+        footer_frame.setStyleSheet("""
+            QFrame {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #f8f9fa, stop:1 #e9ecef);
+                border-top: 1px solid #dee2e6;
+            }
+        """)
+        footer_layout = QVBoxLayout(footer_frame)
+        footer_layout.setContentsMargins(20, 10, 20, 10)
+        
+        version_label = QLabel(self.i18n.get_message("app_version_copyright"))
+        version_label.setAlignment(Qt.AlignCenter)
+        version_label.setStyleSheet("""
+            QLabel {
+                color: #6c757d;
+                font-size: 10px;
+                background: transparent;
+                font-weight: 500;
+            }
+        """)
+        footer_layout.addWidget(version_label)
+        
+        main_layout.addWidget(footer_frame)
+    
+    
+    def setup_form(self, layout: QVBoxLayout):
+        """إعداد نموذج تسجيل الدخول الاحترافي العالمي"""
+        # حقل اسم المستخدم مع تصميم احترافي
+        username_container = QFrame()
+        username_container.setStyleSheet("""
+            QFrame {
+                background-color: transparent;
+                border: none;
+            }
+        """)
+        username_container_layout = QVBoxLayout(username_container)
+        username_container_layout.setContentsMargins(0, 0, 0, 0)
+        username_container_layout.setSpacing(8)
+        
+        username_label = QLabel(self.i18n.get_message("username_label"))
+        username_label.setStyleSheet("""
+            QLabel {
+                color: #495057;
+                font-size: 13px;
+                font-weight: 600;
+                background: transparent;
+                padding-left: 2px;
+            }
+        """)
+        username_container_layout.addWidget(username_label)
+        
         self.username_edit = QLineEdit()
-        self.username_edit.setPlaceholderText("أدخل اسم المستخدم")
-        self.username_edit.setMinimumHeight(35)
-        form_layout.addRow("اسم المستخدم:", self.username_edit)
+        self.username_edit.setPlaceholderText(self.i18n.get_message("enter_username"))
+        self.username_edit.setMinimumHeight(52)
+        self.username_edit.setStyleSheet("""
+            QLineEdit {
+                border: 2px solid #e1e8ed;
+                border-radius: 12px;
+                padding: 14px 18px;
+                font-size: 15px;
+                background-color: #f8f9fa;
+                selection-background-color: #667eea;
+                selection-color: white;
+            }
+            QLineEdit:hover {
+                border-color: #cbd5e0;
+                background-color: #ffffff;
+            }
+            QLineEdit:focus {
+                border: 2px solid #667eea;
+                background-color: #ffffff;
+            }
+        """)
+        username_container_layout.addWidget(self.username_edit)
+        layout.addWidget(username_container)
         
-        # حقل كلمة المرور
+        # حقل كلمة المرور مع تصميم احترافي
+        password_container = QFrame()
+        password_container.setStyleSheet("""
+            QFrame {
+                background-color: transparent;
+                border: none;
+            }
+        """)
+        password_container_layout = QVBoxLayout(password_container)
+        password_container_layout.setContentsMargins(0, 0, 0, 0)
+        password_container_layout.setSpacing(8)
+        
+        password_label = QLabel(self.i18n.get_message("password_label"))
+        password_label.setStyleSheet("""
+            QLabel {
+                color: #495057;
+                font-size: 13px;
+                font-weight: 600;
+                background: transparent;
+                padding-left: 2px;
+            }
+        """)
+        password_container_layout.addWidget(password_label)
+        
         self.password_edit = QLineEdit()
-        self.password_edit.setPlaceholderText("أدخل كلمة المرور")
+        self.password_edit.setPlaceholderText(self.i18n.get_message("enter_password"))
         self.password_edit.setEchoMode(QLineEdit.Password)
-        self.password_edit.setMinimumHeight(35)
-        form_layout.addRow("كلمة المرور:", self.password_edit)
+        self.password_edit.setMinimumHeight(52)
+        self.password_edit.setStyleSheet("""
+            QLineEdit {
+                border: 2px solid #e1e8ed;
+                border-radius: 12px;
+                padding: 14px 18px;
+                font-size: 15px;
+                background-color: #f8f9fa;
+                selection-background-color: #667eea;
+                selection-color: white;
+            }
+            QLineEdit:hover {
+                border-color: #cbd5e0;
+                background-color: #ffffff;
+            }
+            QLineEdit:focus {
+                border: 2px solid #667eea;
+                background-color: #ffffff;
+            }
+        """)
+        password_container_layout.addWidget(self.password_edit)
+        layout.addWidget(password_container)
         
-        # خيار تذكر بيانات الدخول
+        # خيار تذكر بيانات الدخول احترافي
+        remember_container = QHBoxLayout()
+        remember_container.setContentsMargins(2, 8, 2, 0)
+        
         self.remember_checkbox = QCheckBox("تذكر بيانات الدخول")
-        form_layout.addRow("", self.remember_checkbox)
-        
-        layout.addWidget(form_frame)
+        self.remember_checkbox.setStyleSheet("""
+            QCheckBox {
+                color: #495057;
+                font-size: 13px;
+                spacing: 10px;
+                background: transparent;
+            }
+            QCheckBox::indicator {
+                width: 20px;
+                height: 20px;
+                border: 2px solid #cbd5e0;
+                border-radius: 5px;
+                background-color: white;
+            }
+            QCheckBox::indicator:hover {
+                border-color: #667eea;
+            }
+            QCheckBox::indicator:checked {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #667eea, stop:1 #764ba2);
+                border-color: #667eea;
+                image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTIiIHZpZXdCb3g9IjAgMCAxNiAxMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEgNkw2IDExTDE1IDIiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMi41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KPC9zdmc+);
+            }
+        """)
+        remember_container.addWidget(self.remember_checkbox)
+        remember_container.addStretch()
+        layout.addLayout(remember_container)
     
     def setup_buttons(self, layout: QVBoxLayout):
-        """إعداد الأزرار"""
-        buttons_layout = QHBoxLayout()
-        buttons_layout.setSpacing(10)
-        
-        # زر تسجيل الدخول
-        self.login_button = QPushButton("تسجيل الدخول")
-        self.login_button.setMinimumHeight(40)
+        """إعداد الأزرار الاحترافية العالمية"""
+        # زر تسجيل الدخول الرئيسي بتدرج احترافي
+        self.login_button = QPushButton(self.i18n.get_message("login_button"))
+        self.login_button.setMinimumHeight(56)
         self.login_button.setDefault(True)
-        buttons_layout.addWidget(self.login_button)
+        self.login_button.setCursor(Qt.PointingHandCursor)
+        self.login_button.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #667eea, stop:1 #764ba2);
+                color: white;
+                border: none;
+                border-radius: 14px;
+                padding: 15px;
+                font-size: 16px;
+                font-weight: bold;
+                letter-spacing: 0.5px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #5568d3, stop:1 #6a3f8f);
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #4a5bc0, stop:1 #5d357c);
+            }
+            QPushButton:disabled {
+                background-color: #dee2e6;
+                color: #adb5bd;
+            }
+        """)
+        layout.addWidget(self.login_button)
         
-        # زر الإلغاء
-        self.cancel_button = QPushButton("إلغاء")
-        self.cancel_button.setMinimumHeight(40)
-        buttons_layout.addWidget(self.cancel_button)
+        # زر الإلغاء احترافي
+        self.cancel_button = QPushButton(self.i18n.get_message("cancel"))
+        self.cancel_button.setMinimumHeight(48)
+        self.cancel_button.setCursor(Qt.PointingHandCursor)
+        self.cancel_button.setStyleSheet("""
+            QPushButton {
+                background-color: #ffffff;
+                color: #495057;
+                border: 2px solid #e1e8ed;
+                border-radius: 12px;
+                padding: 12px;
+                font-size: 14px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background-color: #f8f9fa;
+                border-color: #cbd5e0;
+                color: #212529;
+            }
+            QPushButton:pressed {
+                background-color: #e9ecef;
+                border-color: #adb5bd;
+            }
+        """)
+        layout.addWidget(self.cancel_button)
         
-        layout.addLayout(buttons_layout)
-        
-        # رابط نسيان كلمة المرور
-        forgot_layout = QHBoxLayout()
-        forgot_layout.setAlignment(Qt.AlignCenter)
-        
-        self.forgot_password_button = QPushButton("نسيت كلمة المرور؟")
+        # رابط نسيان كلمة المرور احترافي
+        self.forgot_password_button = QPushButton(self.i18n.get_message("forgot_password"))
+        self.forgot_password_button.setCursor(Qt.PointingHandCursor)
         self.forgot_password_button.setStyleSheet("""
             QPushButton {
                 border: none;
-                color: #3498db;
-                text-decoration: underline;
-                font-size: 12px;
+                color: #667eea;
+                font-size: 13px;
+                background: transparent;
+                padding: 10px;
+                font-weight: 500;
             }
             QPushButton:hover {
-                color: #2980b9;
+                color: #764ba2;
+                text-decoration: underline;
             }
         """)
-        forgot_layout.addWidget(self.forgot_password_button)
-        
-        layout.addLayout(forgot_layout)
+        layout.addWidget(self.forgot_password_button, alignment=Qt.AlignCenter)
     
     def setup_connections(self):
         """إعداد الاتصالات"""
@@ -238,82 +461,55 @@ class LoginDialog(QDialog):
         self.password_edit.returnPressed.connect(self.handle_login)
     
     def setup_styles(self):
-        """إعداد الأنماط"""
-        self.setStyleSheet("""
-            QDialog {
-                background-color: #ffffff;
-            }
-            
-            QLineEdit {
-                border: 2px solid #ddd;
-                border-radius: 5px;
-                padding: 8px;
-                font-size: 14px;
-                background-color: white;
-            }
-            
-            QLineEdit:focus {
-                border-color: #3498db;
-            }
-            
-            QPushButton {
-                background-color: #3498db;
-                color: white;
-                border: none;
-                border-radius: 5px;
-                padding: 10px;
-                font-size: 14px;
-                font-weight: bold;
-            }
-            
-            QPushButton:hover {
-                background-color: #2980b9;
-            }
-            
-            QPushButton:pressed {
-                background-color: #21618c;
-            }
-            
-            QPushButton:disabled {
-                background-color: #bdc3c7;
-                color: #7f8c8d;
-            }
-            
-            QCheckBox {
-                font-size: 12px;
-                color: #2c3e50;
-            }
-            
-            QCheckBox::indicator {
-                width: 18px;
-                height: 18px;
-            }
-            
-            QCheckBox::indicator:unchecked {
-                border: 2px solid #bdc3c7;
-                border-radius: 3px;
-                background-color: white;
-            }
-            
-            QCheckBox::indicator:checked {
-                border: 2px solid #3498db;
-                border-radius: 3px;
-                background-color: #3498db;
-                image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIiIGhlaWdodD0iOSIgdmlld0JveD0iMCAwIDEyIDkiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ik0xIDQuNUw0LjUgOEwxMSAxIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPgo8L3N2Zz4K);
-            }
-            
-            QProgressBar {
-                border: 2px solid #bdc3c7;
-                border-radius: 5px;
-                text-align: center;
-                background-color: #ecf0f1;
-            }
-            
-            QProgressBar::chunk {
-                background-color: #3498db;
-                border-radius: 3px;
-            }
-        """)
+        """إعداد الأنماط الاحترافية العالمية"""
+        # تم تطبيق الأنماط مباشرة في setup_ui
+        pass
+    
+    def showEvent(self, event: QShowEvent):
+        """معالجة حدث العرض لضمان التخطيط الصحيح"""
+        super().showEvent(event)
+        # إصلاح التخطيط عند العرض
+        QTimer.singleShot(0, self._fix_layout_on_show)
+    
+    def _fix_layout_on_show(self):
+        """إصلاح التخطيط عند العرض"""
+        try:
+            # ضمان الحجم الصحيح
+            self.setFixedSize(500, 650)
+            # تحديث التخطيط
+            self.updateGeometry()
+            if self.layout():
+                self.layout().update()
+            # تحديث جميع العناصر الفرعية
+            for widget in self.findChildren(QWidget):
+                widget.updateGeometry()
+                widget.update()
+            # إعادة الرسم
+            self.repaint()
+            QApplication.processEvents()
+        except Exception as e:
+            print(f"خطأ في إصلاح التخطيط: {e}")
+    
+    def _fix_layout(self):
+        """إصلاح التخطيط عند أول تحميل"""
+        try:
+            self.setFixedSize(500, 650)
+            self.updateGeometry()
+            self.update()
+            QApplication.processEvents()
+        except Exception:
+            pass
+    
+    def _ensure_proper_display(self):
+        """ضمان العرض الصحيح"""
+        try:
+            # تحديث جميع العناصر
+            self.setFixedSize(500, 650)
+            self.updateGeometry()
+            self.repaint()
+            QApplication.processEvents()
+        except Exception:
+            pass
     
     def handle_login(self):
         """معالجة تسجيل الدخول"""
@@ -346,12 +542,13 @@ class LoginDialog(QDialog):
         self.login_worker.start()
     
     def on_login_completed(self, success: bool, session: Optional[UserSession], message: str):
-        """معالجة اكتمال تسجيل الدخول"""
-        # إعادة تفعيل الواجهة
-        self.set_ui_enabled(True)
+        """معالجة اكتمال تسجيل الدخول (محسّنة)"""
+        # إعادة تفعيل الواجهة فوراً
         self.progress_bar.setVisible(False)
+        QApplication.processEvents()
         
         if success and session:
+            self.set_ui_enabled(False)  # منع التفاعل أثناء المعالجة
             self.current_session = session
             
             # خطوة ثانية: التحقق الثنائي (إن كان مفعلًا للمستخدم)
@@ -388,18 +585,22 @@ class LoginDialog(QDialog):
 
             # حفظ بيانات الدخول إذا كان المستخدم يريد ذلك
             if self.remember_checkbox.isChecked():
-                self.save_credentials()
+                QTimer.singleShot(0, self.save_credentials)
             
             # إرسال إشارة نجاح تسجيل الدخول
+            self.current_session = session
             self.login_successful.emit(session)
             
             # إغلاق النافذة
-            self.accept()
+            QTimer.singleShot(50, self.accept)
         else:
+            # إعادة تفعيل الواجهة
+            self.set_ui_enabled(True)
+            
             # عرض رسالة الخطأ
-            self.show_error(message or "فشل في تسجيل الدخول")
+            QTimer.singleShot(0, lambda: self.show_error(message or "فشل في تسجيل الدخول"))
             self.password_edit.clear()
-            self.password_edit.setFocus()
+            QTimer.singleShot(100, lambda: self.password_edit.setFocus())
     
     def handle_forgot_password(self):
         """معالجة نسيان كلمة المرور"""
@@ -419,11 +620,11 @@ class LoginDialog(QDialog):
     
     def show_error(self, message: str):
         """عرض رسالة خطأ"""
-        QMessageBox.critical(self, "خطأ", message)
+        QMessageBox.critical(self, self.i18n.get_message("error"), message)
     
     def show_info(self, message: str):
         """عرض رسالة معلومات"""
-        QMessageBox.information(self, "معلومات", message)
+        QMessageBox.information(self, self.i18n.get_message("info"), message)
     
     def save_credentials(self):
         """حفظ بيانات الدخول"""
@@ -500,12 +701,15 @@ class ForgotPasswordDialog(QDialog):
         super().__init__(parent)
         self.user_service = user_service
         
+        # تهيئة نظام الترجمة
+        self.i18n = I18n(locales_dir=str(Path(__file__).parent.parent.parent.parent / "locales"))
+        
         self.setup_ui()
         self.setup_connections()
     
     def setup_ui(self):
         """إعداد واجهة المستخدم"""
-        self.setWindowTitle("استعادة كلمة المرور")
+        self.setWindowTitle(self.i18n.get_message("forgot_password_title"))
         self.setFixedSize(350, 200)
         self.setModal(True)
         
@@ -514,23 +718,23 @@ class ForgotPasswordDialog(QDialog):
         layout.setContentsMargins(20, 20, 20, 20)
         
         # تعليمات
-        info_label = QLabel("أدخل اسم المستخدم لاستعادة كلمة المرور:")
+        info_label = QLabel(self.i18n.get_message("forgot_password_info"))
         layout.addWidget(info_label)
         
         # حقل اسم المستخدم
         self.username_edit = QLineEdit()
-        self.username_edit.setPlaceholderText("اسم المستخدم")
+        self.username_edit.setPlaceholderText(self.i18n.get_message("username_placeholder"))
         self.username_edit.setMinimumHeight(35)
         layout.addWidget(self.username_edit)
         
         # الأزرار
         buttons_layout = QHBoxLayout()
         
-        self.reset_button = QPushButton("استعادة كلمة المرور")
+        self.reset_button = QPushButton(self.i18n.get_message("reset_password"))
         self.reset_button.setMinimumHeight(35)
         buttons_layout.addWidget(self.reset_button)
         
-        self.cancel_button = QPushButton("إلغاء")
+        self.cancel_button = QPushButton(self.i18n.get_message("cancel"))
         self.cancel_button.setMinimumHeight(35)
         buttons_layout.addWidget(self.cancel_button)
         
@@ -547,7 +751,7 @@ class ForgotPasswordDialog(QDialog):
         username = self.username_edit.text().strip()
         
         if not username:
-            QMessageBox.warning(self, "تحذير", "يرجى إدخال اسم المستخدم")
+            QMessageBox.warning(self, self.i18n.get_message("warning"), self.i18n.get_message("username_required"))
             return
         
         try:
@@ -556,15 +760,15 @@ class ForgotPasswordDialog(QDialog):
             if success:
                 QMessageBox.information(
                     self, 
-                    "تم بنجاح", 
-                    f"تم إنشاء كلمة مرور مؤقتة: {temp_password}\n\nيرجى تغيير كلمة المرور بعد تسجيل الدخول."
+                    self.i18n.get_message("success"), 
+                    f"{self.i18n.get_message('password_reset_success', temp_password=temp_password)}"
                 )
                 self.accept()
             else:
-                QMessageBox.critical(self, "خطأ", message or "فشل في استعادة كلمة المرور")
+                QMessageBox.critical(self, self.i18n.get_message("error"), message or self.i18n.get_message("password_reset_failed"))
                 
         except Exception as e:
-            QMessageBox.critical(self, "خطأ", f"حدث خطأ في النظام: {str(e)}")
+            QMessageBox.critical(self, self.i18n.get_message("error"), f"{self.i18n.get_message('system_error_occurred_msg')}: {str(e)}")
 
 
 # اختبار النافذة

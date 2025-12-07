@@ -18,6 +18,8 @@ except ImportError:
 class PrintingService:
     def __init__(self, logger=None):
         self.logger = logger
+        self.can_discover_usb = _USB_AVAILABLE
+        self._usb_failure_reason = None
         if not _USB_AVAILABLE and logger:
             logger.warning("USB printing libraries not available (usb, escpos). USB printer features disabled.")
 
@@ -26,9 +28,9 @@ class PrintingService:
         Discovers connected USB ESC/POS printers.
         Returns a list of dictionaries, each containing vendor and product IDs.
         """
-        if not _USB_AVAILABLE:
+        if not _USB_AVAILABLE or not self.can_discover_usb:
             if self.logger:
-                self.logger.warning("USB libraries not installed. Cannot discover printers.")
+                self.logger.info("USB printer discovery disabled on this system.")
             return []
         
         printers = []
@@ -55,8 +57,14 @@ class PrintingService:
                                 })
                                 break
         except Exception as e:
+            self._usb_failure_reason = str(e)
+            self.can_discover_usb = False
             if self.logger:
-                self.logger.error(f"Error discovering USB printers: {e}")
+                if "No backend available" in self._usb_failure_reason:
+                    self.logger.warning("USB backend not available; disabling printer discovery.")
+                else:
+                    self.logger.error(f"Error discovering USB printers: {self._usb_failure_reason}")
+            return []
         
         # Deduplicate
         unique_printers = []

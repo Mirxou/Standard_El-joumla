@@ -22,6 +22,11 @@ from ...models.inventory_optimization import ReorderRecommendation
 class ReorderRecommendationsWindow(QWidget):
     """نافذة توصيات إعادة الطلب"""
     
+    # Window Manager attributes (للتسجيل التلقائي)
+    window_key = "reorder_recommendations"
+    window_singleton = True
+    window_title = "توصيات إعادة الطلب"
+    
     # إشارات
     create_purchase_order = Signal(int, float)  # product_id, quantity
     
@@ -375,8 +380,8 @@ class ReorderRecommendationsWindow(QWidget):
         
         colors = {
             ReorderStatus.NORMAL.value: QColor(200, 255, 200),
-            ReorderStatus.APPROACHING_REORDER.value: QColor(255, 255, 200),
-            ReorderStatus.REORDER_NEEDED.value: QColor(255, 220, 200),
+            ReorderStatus.APPROACHING.value: QColor(255, 255, 200),
+            ReorderStatus.REORDER.value: QColor(255, 220, 200),
             ReorderStatus.CRITICAL.value: QColor(255, 180, 180),
             ReorderStatus.STOCKOUT.value: QColor(255, 100, 100)
         }

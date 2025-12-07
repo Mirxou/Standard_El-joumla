@@ -7,7 +7,7 @@
 
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from decimal import Decimal
 from enum import Enum
 import sys
@@ -335,6 +335,17 @@ class PurchaseManager:
                     item.purchase_id = purchase_id
                     self._create_purchase_item(item)
                 
+                # 🔥 إطلاق الإشارات: إعلام النظام بالتغييرات
+                try:
+                    from ...core.signals import signals
+                    signals.purchases_updated.emit()
+                    signals.purchase_created.emit(purchase_id)
+                    if self.logger:
+                        self.logger.debug(f"✅ تم إطلاق إشارات: purchases_updated, purchase_created")
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"⚠️ فشل إطلاق الإشارات: {e}")
+                
                 if self.logger:
                     self.logger.info(f"تم إنشاء فاتورة شراء جديدة: {purchase.invoice_number} (ID: {purchase_id})")
                 
@@ -486,6 +497,121 @@ class PurchaseManager:
                 self.logger.error(f"خطأ في البحث في فواتير الشراء: {str(e)}")
             return []
     
+    def list_purchases(self, search_term: str = "", supplier_id: Optional[int] = None,
+                       status: Optional[str] = None, payment_status: Optional[str] = None,
+                       start_date: Optional[date] = None, end_date: Optional[date] = None,
+                       limit: int = 200) -> List[Dict[str, Any]]:
+        """جلب قائمة مبسطة من فواتير الشراء للاستخدام في الواجهة"""
+        try:
+            query = """
+            SELECT
+                p.id,
+                p.invoice_number,
+                COALESCE(s.name, '') as supplier_name,
+                p.purchase_date,
+                p.total_amount,
+                p.paid_amount,
+                p.remaining_amount,
+                p.status,
+                p.payment_status
+            FROM purchases p
+            LEFT JOIN suppliers s ON p.supplier_id = s.id
+            WHERE 1=1
+            """
+            params: List[Any] = []
+            
+            if search_term:
+                query += " AND (p.invoice_number LIKE ? OR p.supplier_invoice_number LIKE ? OR s.name LIKE ?)"
+                pattern = f"%{search_term}%"
+                params.extend([pattern, pattern, pattern])
+            
+            if supplier_id:
+                query += " AND p.supplier_id = ?"
+                params.append(supplier_id)
+            
+            if status:
+                query += " AND p.status = ?"
+                params.append(status)
+            
+            if payment_status:
+                query += " AND p.payment_status = ?"
+                params.append(payment_status)
+            
+            if start_date:
+                query += " AND p.purchase_date >= ?"
+                params.append(start_date)
+            
+            if end_date:
+                query += " AND p.purchase_date <= ?"
+                params.append(end_date)
+            
+            query += " ORDER BY p.purchase_date DESC, p.id DESC"
+            if limit > 0:
+                query += " LIMIT ?"
+                params.append(limit)
+            
+            results = self.db_manager.fetch_all(query, params)
+            return [self._row_to_purchase_dict(row) for row in results]
+        
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في جلب قائمة المشتريات: {str(e)}")
+            return []
+    
+    def get_purchases_summary(self, start_date: Optional[date] = None,
+                              end_date: Optional[date] = None) -> Dict[str, Any]:
+        """ملخص رقمي لفواتير الشراء"""
+        if not start_date and not end_date:
+            end_date = date.today()
+            start_date = end_date - timedelta(days=30)
+        elif start_date and not end_date:
+            end_date = start_date
+        elif end_date and not start_date:
+            start_date = end_date
+        
+        try:
+            query = """
+            SELECT
+                COUNT(*) as total_purchases,
+                SUM(total_amount) as total_amount,
+                SUM(paid_amount) as total_paid,
+                SUM(remaining_amount) as total_remaining
+            FROM purchases
+            WHERE purchase_date BETWEEN ? AND ? AND (status IS NULL OR status != 'ملغية')
+            """
+            result = self.db_manager.fetch_one(query, (start_date, end_date))
+            total_invoices = int(result[0] or 0) if result else 0
+            total_amount = float(result[1] or 0) if result else 0.0
+            total_paid = float(result[2] or 0) if result else 0.0
+            total_remaining = float(result[3] or 0) if result else 0.0
+            avg_value = total_amount / total_invoices if total_invoices else 0.0
+            
+            return {
+                'total_purchases': total_invoices,
+                'total_amount': total_amount,
+                'total_paid': total_paid,
+                'total_remaining': total_remaining,
+                'avg_purchase_value': avg_value,
+                'period_start': start_date.isoformat() if start_date else None,
+                'period_end': end_date.isoformat() if end_date else None
+            }
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في حساب ملخص المشتريات: {str(e)}")
+            return {
+                'total_purchases': 0,
+                'total_amount': 0.0,
+                'total_paid': 0.0,
+                'total_remaining': 0.0,
+                'avg_purchase_value': 0.0,
+                'period_start': start_date.isoformat() if start_date else None,
+                'period_end': end_date.isoformat() if end_date else None
+            }
+    
+    def get_recent_purchases(self, limit: int = 5) -> List[Dict[str, Any]]:
+        """الحصول على أحدث فواتير الشراء"""
+        return self.list_purchases(limit=limit)
+    
     def update_purchase(self, purchase: Purchase) -> bool:
         """تحديث فاتورة شراء"""
         try:
@@ -571,7 +697,22 @@ class PurchaseManager:
                 purchase.status = PurchaseStatus.PARTIAL.value
             
             # حفظ التحديثات
-            return self.update_purchase(purchase)
+            success = self.update_purchase(purchase)
+            
+            if success:
+                # 🔥 إطلاق الإشارات: إعلام النظام بالتغييرات
+                try:
+                    from ...core.signals import signals
+                    signals.purchases_updated.emit()
+                    signals.purchase_received.emit(purchase_id)
+                    signals.inventory_updated.emit()  # المخزون تغير
+                    if self.logger:
+                        self.logger.debug(f"✅ تم إطلاق إشارات: purchases_updated, purchase_received, inventory_updated")
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"⚠️ فشل إطلاق الإشارات: {e}")
+            
+            return success
             
         except Exception as e:
             if self.logger:
@@ -759,3 +900,40 @@ class PurchaseManager:
             product_name=row[14] if len(row) > 14 else "",
             product_barcode=row[15] if len(row) > 15 else None
         )
+    
+    def _row_to_purchase_dict(self, row) -> Dict[str, Any]:
+        """تحويل صف مختصر إلى قاموس مبسط"""
+        try:
+            purchase_date = row[3]
+            if isinstance(purchase_date, datetime):
+                purchase_date_str = purchase_date.date().isoformat()
+            elif isinstance(purchase_date, date):
+                purchase_date_str = purchase_date.isoformat()
+            else:
+                purchase_date_str = purchase_date
+            
+            return {
+                'id': row[0],
+                'invoice_number': row[1],
+                'supplier_name': row[2] or "",
+                'purchase_date': purchase_date_str,
+                'total_amount': float(row[4] or 0),
+                'paid_amount': float(row[5] or 0),
+                'remaining_amount': float(row[6] or 0),
+                'status': row[7] or "",
+                'payment_status': row[8] or ""
+            }
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في تحويل صف المشتريات إلى قاموس: {e}")
+            return {
+                'id': row[0],
+                'invoice_number': row[1],
+                'supplier_name': "",
+                'purchase_date': None,
+                'total_amount': 0.0,
+                'paid_amount': 0.0,
+                'remaining_amount': 0.0,
+                'status': "",
+                'payment_status': ""
+            }

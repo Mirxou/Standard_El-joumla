@@ -71,3 +71,27 @@ htmlcov/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# Database files (keep structure, ignore data)
+database/*.db
+database/*.db-journal
+database/*.db-wal
+database/*.db-shm
+
+# Scripts output
+scripts/**/*.log
+scripts/**/__pycache__/
+
+# API collections (may contain sensitive data)
+api/collections/*.json
+!api/collections/README.md
+
+# Documentation build
+docs/_build/
+docs/.doctrees/
+
+# Product Images (user-uploaded content)
+assets/images/products/
+assets/images/thumbnails/
+assets/images/previews/
+!assets/images/.gitkeep

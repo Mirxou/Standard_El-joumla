@@ -1,6 +1,24 @@
 """
-نظام اللغات المتعددة
-Internationalization (i18n) System
+⚠️ DEPRECATED - نظام اللغات المتعددة (قديم)
+Internationalization (i18n) System - DEPRECATED
+
+هذا الملف قديم ولم يعد مستخدماً في التطبيق.
+يُرجى استخدام src.utils.i18n_api.I18n بدلاً منه.
+
+⚠️ DEPRECATED - This file is deprecated and no longer used.
+Please use src.utils.i18n_api.I18n instead.
+
+الفرق الرئيسي:
+- هذا الملف يستخدم data/translations كمجلد للترجمات
+- i18n_api.py يستخدم locales كمجلد للترجمات
+- هذا الملف يحتوي على ترجمات افتراضية مدمجة
+- i18n_api.py يحمل الترجمات من ملفات JSON فقط
+
+Main differences:
+- This file uses data/translations directory
+- i18n_api.py uses locales directory
+- This file has embedded default translations
+- i18n_api.py loads translations from JSON files only
 """
 
 import json
@@ -18,8 +36,10 @@ class Language(Enum):
 
 class TranslationManager:
     """
-    مدير الترجمة للتطبيق
+    مدير الترجمة للتطبيق (قديم - DEPRECATED)
     يدعم اللغة العربية والإنجليزية مع تبديل فوري
+    
+    ⚠️ DEPRECATED: يُرجى استخدام src.utils.i18n_api.I18n بدلاً منه
     """
     
     def __init__(self, default_language: Language = Language.ARABIC):
@@ -29,6 +49,13 @@ class TranslationManager:
         Args:
             default_language: اللغة الافتراضية
         """
+        import warnings
+        warnings.warn(
+            "TranslationManager is deprecated. Use src.utils.i18n_api.I18n instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        
         self.current_language = default_language
         self.translations: Dict[str, Dict[str, str]] = {}
         self.translations_dir = Path("data/translations")
@@ -527,7 +554,18 @@ _translation_manager = None
 
 
 def get_translation_manager() -> TranslationManager:
-    """الحصول على instance مدير الترجمة"""
+    """
+    الحصول على instance مدير الترجمة
+    
+    ⚠️ DEPRECATED: يُرجى استخدام src.utils.i18n_api.I18n بدلاً منه
+    """
+    import warnings
+    warnings.warn(
+        "get_translation_manager() is deprecated. Use src.utils.i18n_api.I18n instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    
     global _translation_manager
     if _translation_manager is None:
         _translation_manager = TranslationManager()
@@ -538,6 +576,8 @@ def t(key: str, **kwargs) -> str:
     """
     دالة مختصرة للترجمة
     
+    ⚠️ DEPRECATED: يُرجى استخدام src.utils.i18n_api.I18n.get_message() بدلاً منه
+    
     Args:
         key: مفتاح الترجمة
         **kwargs: متغيرات للاستبدال
@@ -545,4 +585,11 @@ def t(key: str, **kwargs) -> str:
     Returns:
         النص المترجم
     """
+    import warnings
+    warnings.warn(
+        "t() from i18n.py is deprecated. Use src.utils.i18n_api.I18n.get_message() instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    
     return get_translation_manager().t(key, **kwargs)

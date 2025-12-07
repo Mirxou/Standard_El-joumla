@@ -1,0 +1,34 @@
+/* ============================================
+   CSS Variables - Theme Colors
+   متغيرات الألوان للسمات
+   ============================================ */
+
+/* Light Theme Colors (Default) */
+@define-color bg-primary #ffffff;
+@define-color bg-secondary #f8fafc;
+@define-color bg-tertiary #f1f5f9;
+@define-color text-primary #1e293b;
+@define-color text-secondary #64748b;
+@define-color text-tertiary #94a3b8;
+@define-color border-color #e2e8f0;
+@define-color border-light #f1f3f5;
+@define-color primary #3b82f6;
+@define-color primary-hover #2563eb;
+@define-color primary-pressed #1d4ed8;
+@define-color danger #ef4444;
+@define-color danger-hover #dc2626;
+@define-color danger-pressed #b91c1c;
+@define-color success #10b981;
+@define-color warning #f59e0b;
+@define-color radius-small 4px;
+@define-color radius-medium 6px;
+@define-color radius-large 8px;
+@define-color spacing-xs 4px;
+@define-color spacing-sm 8px;
+@define-color spacing-md 12px;
+@define-color spacing-lg 16px;
+@define-color spacing-xl 24px;
+
+/* Note: QSS doesn't support CSS variables natively,
+   so we'll use these as reference and replace in code */
+

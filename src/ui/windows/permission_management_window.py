@@ -3,15 +3,15 @@
 Permission Management & Audit Window
 """
 
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
     QTableWidget, QTableWidgetItem, QPushButton, QLabel,
     QLineEdit, QComboBox, QDateEdit, QMessageBox,
     QHeaderView, QGroupBox, QCheckBox, QDialog, QSpinBox,
     QTextEdit
 )
-from PyQt6.QtCore import Qt, QDate
-from PyQt6.QtGui import QColor
+from PySide6.QtCore import Qt, QDate
+from PySide6.QtGui import QColor
 from typing import Optional, List
 from datetime import datetime, timedelta
 
@@ -24,8 +24,13 @@ from ...models.permission import Role, User, AuditLog, PermissionAction, Resourc
 class PermissionManagementWindow(QWidget):
     """نافذة إدارة الصلاحيات الشاملة"""
     
-    def __init__(self, db_manager: DatabaseManager):
-        super().__init__()
+    # Window Manager attributes (للتسجيل التلقائي)
+    window_key = "permissions"
+    window_singleton = True
+    window_title = "إدارة الصلاحيات"
+    
+    def __init__(self, db_manager: DatabaseManager, parent=None):
+        super().__init__(parent)
         self.db = db_manager
         self.permission_service = PermissionService(db_manager)
         self.audit_service = AuditService(db_manager)

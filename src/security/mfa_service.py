@@ -63,55 +63,54 @@ class MFAService:
     
     def _create_tables(self):
         """إنشاء جداول MFA"""
-        cursor = self.db.get_cursor()
-        
-        # جدول إعدادات MFA
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS mfa_settings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER UNIQUE NOT NULL,
-                mfa_enabled BOOLEAN DEFAULT 0,
-                methods_enabled TEXT,
-                phone_number TEXT,
-                email TEXT,
-                totp_secret TEXT,
-                backup_codes TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(id)
-            )
-        ''')
-        
-        # جدول OTP المؤقت
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS mfa_otp (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                method TEXT NOT NULL,
-                code_hash TEXT NOT NULL,
-                expires_at TEXT NOT NULL,
-                attempts INTEGER DEFAULT 0,
-                verified BOOLEAN DEFAULT 0,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(id)
-            )
-        ''')
-        
-        # جدول سجل التحقق
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS mfa_verification_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                method TEXT NOT NULL,
-                success BOOLEAN NOT NULL,
-                ip_address TEXT,
-                user_agent TEXT,
-                verified_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(id)
-            )
-        ''')
-        
-        self.db.connection.commit()
+        with self.db.get_cursor() as cursor:
+            # جدول إعدادات MFA
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS mfa_settings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER UNIQUE NOT NULL,
+                    mfa_enabled BOOLEAN DEFAULT 0,
+                    methods_enabled TEXT,
+                    phone_number TEXT,
+                    email TEXT,
+                    totp_secret TEXT,
+                    backup_codes TEXT,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            ''')
+            
+            # جدول OTP المؤقت
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS mfa_otp (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    method TEXT NOT NULL,
+                    code_hash TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    attempts INTEGER DEFAULT 0,
+                    verified BOOLEAN DEFAULT 0,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            ''')
+            
+            # جدول سجل التحقق
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS mfa_verification_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    method TEXT NOT NULL,
+                    success BOOLEAN NOT NULL,
+                    ip_address TEXT,
+                    user_agent TEXT,
+                    verified_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            ''')
+            
+            cursor.connection.commit()
     
     def enable_mfa(
         self,
@@ -132,8 +131,6 @@ class MFAService:
         Returns:
             معلومات التفعيل
         """
-        cursor = self.db.get_cursor()
-        
         # إنشاء TOTP secret إذا كان TOTP مفعل
         totp_secret = None
         if MFAMethod.TOTP in methods:
@@ -145,33 +142,34 @@ class MFAService:
         
         import json
         
-        cursor.execute('''
-            INSERT INTO mfa_settings 
-            (user_id, mfa_enabled, methods_enabled, phone_number, email, totp_secret, backup_codes)
-            VALUES (?, 1, ?, ?, ?, ?, ?)
-            ON CONFLICT(user_id) DO UPDATE SET
-                mfa_enabled = 1,
-                methods_enabled = ?,
-                phone_number = ?,
-                email = ?,
-                totp_secret = ?,
-                backup_codes = ?,
-                updated_at = CURRENT_TIMESTAMP
-        ''', (
-            user_id,
-            json.dumps([m.value for m in methods]),
-            phone_number,
-            email,
-            totp_secret,
-            json.dumps(backup_codes_hashed),
-            json.dumps([m.value for m in methods]),
-            phone_number,
-            email,
-            totp_secret,
-            json.dumps(backup_codes_hashed)
-        ))
-        
-        self.db.connection.commit()
+        with self.db.get_cursor() as cursor:
+            cursor.execute('''
+                INSERT INTO mfa_settings 
+                (user_id, mfa_enabled, methods_enabled, phone_number, email, totp_secret, backup_codes)
+                VALUES (?, 1, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    mfa_enabled = 1,
+                    methods_enabled = ?,
+                    phone_number = ?,
+                    email = ?,
+                    totp_secret = ?,
+                    backup_codes = ?,
+                    updated_at = CURRENT_TIMESTAMP
+            ''', (
+                user_id,
+                json.dumps([m.value for m in methods]),
+                phone_number,
+                email,
+                totp_secret,
+                json.dumps(backup_codes_hashed),
+                json.dumps([m.value for m in methods]),
+                phone_number,
+                email,
+                totp_secret,
+                json.dumps(backup_codes_hashed)
+            ))
+            
+            cursor.connection.commit()
         
         response = {
             "mfa_enabled": True,
@@ -186,18 +184,44 @@ class MFAService:
         
         return response
     
-    def disable_mfa(self, user_id: int):
+    def disable_mfa(self, user_id: int) -> bool:
         """تعطيل MFA"""
-        cursor = self.db.get_cursor()
-        
-        cursor.execute('''
-            UPDATE mfa_settings
-            SET mfa_enabled = 0,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE user_id = ?
-        ''', (user_id,))
-        
-        self.db.connection.commit()
+        with self.db.get_cursor() as cursor:
+            cursor.execute('''
+                UPDATE mfa_settings
+                SET mfa_enabled = 0,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = ?
+            ''', (user_id,))
+            
+            cursor.connection.commit()
+            return cursor.rowcount > 0
+    
+    def get_mfa_config(self, user_id: int) -> Optional[MFAConfig]:
+        """الحصول على إعدادات MFA للمستخدم"""
+        import json
+        with self.db.get_cursor() as cursor:
+            cursor.execute('''
+                SELECT mfa_enabled, methods_enabled, phone_number, email, totp_secret, backup_codes
+                FROM mfa_settings
+                WHERE user_id = ?
+            ''', (user_id,))
+            
+            row = cursor.fetchone()
+            if not row or not row[0]:  # mfa_enabled is False or None
+                return None
+            
+            methods_enabled = json.loads(row[1] or '[]') if row[1] else []
+            backup_codes = json.loads(row[5] or '[]') if row[5] else []
+            
+            return MFAConfig(
+                user_id=user_id,
+                methods_enabled=[MFAMethod(m) for m in methods_enabled],
+                phone_number=row[2],
+                email=row[3],
+                totp_secret=row[4],
+                backup_codes=backup_codes
+            )
     
     def send_otp(
         self,
@@ -221,28 +245,27 @@ class MFAService:
         # حساب وقت انتهاء الصلاحية
         expires_at = (datetime.now() + timedelta(minutes=self.OTP_VALIDITY_MINUTES)).isoformat()
         
-        cursor = self.db.get_cursor()
-        
-        # حذف OTP القديم غير المستخدم
-        cursor.execute('''
-            DELETE FROM mfa_otp
-            WHERE user_id = ? AND method = ? AND verified = 0
-        ''', (user_id, method.value))
-        
-        # حفظ OTP الجديد
-        cursor.execute('''
-            INSERT INTO mfa_otp (user_id, method, code_hash, expires_at)
-            VALUES (?, ?, ?, ?)
-        ''', (user_id, method.value, code_hash, expires_at))
-        
-        self.db.connection.commit()
-        
-        # الحصول على معلومات الاتصال
-        cursor.execute('''
-            SELECT phone_number, email FROM mfa_settings WHERE user_id = ?
-        ''', (user_id,))
-        
-        row = cursor.fetchone()
+        with self.db.get_cursor() as cursor:
+            # حذف OTP القديم غير المستخدم
+            cursor.execute('''
+                DELETE FROM mfa_otp
+                WHERE user_id = ? AND method = ? AND verified = 0
+            ''', (user_id, method.value))
+            
+            # حفظ OTP الجديد
+            cursor.execute('''
+                INSERT INTO mfa_otp (user_id, method, code_hash, expires_at)
+                VALUES (?, ?, ?, ?)
+            ''', (user_id, method.value, code_hash, expires_at))
+            
+            cursor.connection.commit()
+            
+            # الحصول على معلومات الاتصال
+            cursor.execute('''
+                SELECT phone_number, email FROM mfa_settings WHERE user_id = ?
+            ''', (user_id,))
+            
+            row = cursor.fetchone()
         if not row:
             return {"success": False, "message": "MFA not configured"}
         
@@ -292,63 +315,62 @@ class MFAService:
         Returns:
             نتيجة التحقق
         """
-        cursor = self.db.get_cursor()
-        
-        # الحصول على OTP
-        cursor.execute('''
-            SELECT id, code_hash, expires_at, attempts
-            FROM mfa_otp
-            WHERE user_id = ? AND method = ? AND verified = 0
-            ORDER BY created_at DESC
-            LIMIT 1
-        ''', (user_id, method.value))
-        
-        row = cursor.fetchone()
-        if not row:
-            self._log_verification(user_id, method, False, ip_address)
-            return {"success": False, "message": "لا يوجد OTP صالح"}
-        
-        otp_id, code_hash, expires_at, attempts = row
-        
-        # التحقق من انتهاء الصلاحية
-        if datetime.fromisoformat(expires_at) < datetime.now():
-            self._log_verification(user_id, method, False, ip_address)
-            return {"success": False, "message": "انتهت صلاحية الكود"}
-        
-        # التحقق من المحاولات
-        if attempts >= self.MAX_ATTEMPTS:
-            self._log_verification(user_id, method, False, ip_address)
-            return {"success": False, "message": "تم تجاوز الحد الأقصى للمحاولات"}
-        
-        # التحقق من الكود
-        if self._hash_code(code) == code_hash:
-            # نجح التحقق
+        with self.db.get_cursor() as cursor:
+            # الحصول على OTP
             cursor.execute('''
-                UPDATE mfa_otp
-                SET verified = 1
-                WHERE id = ?
-            ''', (otp_id,))
+                SELECT id, code_hash, expires_at, attempts
+                FROM mfa_otp
+                WHERE user_id = ? AND method = ? AND verified = 0
+                ORDER BY created_at DESC
+                LIMIT 1
+            ''', (user_id, method.value))
             
-            self.db.connection.commit()
-            self._log_verification(user_id, method, True, ip_address)
+            row = cursor.fetchone()
+            if not row:
+                self._log_verification(user_id, method, False, ip_address)
+                return {"success": False, "message": "لا يوجد OTP صالح"}
             
-            return {"success": True, "message": "تم التحقق بنجاح"}
-        else:
-            # فشل التحقق
-            cursor.execute('''
-                UPDATE mfa_otp
-                SET attempts = attempts + 1
-                WHERE id = ?
-            ''', (otp_id,))
+            otp_id, code_hash, expires_at, attempts = row
             
-            self.db.connection.commit()
-            self._log_verification(user_id, method, False, ip_address)
+            # التحقق من انتهاء الصلاحية
+            if datetime.fromisoformat(expires_at) < datetime.now():
+                self._log_verification(user_id, method, False, ip_address)
+                return {"success": False, "message": "انتهت صلاحية الكود"}
             
-            remaining = self.MAX_ATTEMPTS - attempts - 1
-            return {
-                "success": False,
-                "message": f"كود خاطئ. المحاولات المتبقية: {remaining}"
-            }
+            # التحقق من المحاولات
+            if attempts >= self.MAX_ATTEMPTS:
+                self._log_verification(user_id, method, False, ip_address)
+                return {"success": False, "message": "تم تجاوز الحد الأقصى للمحاولات"}
+            
+            # التحقق من الكود
+            if self._hash_code(code) == code_hash:
+                # نجح التحقق
+                cursor.execute('''
+                    UPDATE mfa_otp
+                    SET verified = 1
+                    WHERE id = ?
+                ''', (otp_id,))
+                
+                cursor.connection.commit()
+                self._log_verification(user_id, method, True, ip_address)
+                
+                return {"success": True, "message": "تم التحقق بنجاح"}
+            else:
+                # فشل التحقق
+                cursor.execute('''
+                    UPDATE mfa_otp
+                    SET attempts = attempts + 1
+                    WHERE id = ?
+                ''', (otp_id,))
+                
+                cursor.connection.commit()
+                self._log_verification(user_id, method, False, ip_address)
+                
+                remaining = self.MAX_ATTEMPTS - attempts - 1
+                return {
+                    "success": False,
+                    "message": f"كود خاطئ. المحاولات المتبقية: {remaining}"
+                }
     
     def verify_totp(
         self,
@@ -367,14 +389,13 @@ class MFAService:
         Returns:
             نتيجة التحقق
         """
-        cursor = self.db.get_cursor()
-        
-        # الحصول على TOTP secret
-        cursor.execute('''
-            SELECT totp_secret FROM mfa_settings WHERE user_id = ?
-        ''', (user_id,))
-        
-        row = cursor.fetchone()
+        with self.db.get_cursor() as cursor:
+            # الحصول على TOTP secret
+            cursor.execute('''
+                SELECT totp_secret FROM mfa_settings WHERE user_id = ?
+            ''', (user_id,))
+            
+            row = cursor.fetchone()
         if not row or not row[0]:
             return {"success": False, "message": "TOTP غير مفعل"}
         
@@ -399,40 +420,39 @@ class MFAService:
         """التحقق من Backup Code"""
         import json
         
-        cursor = self.db.get_cursor()
-        
-        cursor.execute('''
-            SELECT backup_codes FROM mfa_settings WHERE user_id = ?
-        ''', (user_id,))
-        
-        row = cursor.fetchone()
-        if not row or not row[0]:
-            return {"success": False, "message": "لا توجد أكواد احتياطية"}
-        
-        backup_codes = json.loads(row[0])
-        code_hash = self._hash_code(code)
-        
-        if code_hash in backup_codes:
-            # إزالة الكود المستخدم
-            backup_codes.remove(code_hash)
-            
+        with self.db.get_cursor() as cursor:
             cursor.execute('''
-                UPDATE mfa_settings
-                SET backup_codes = ?
-                WHERE user_id = ?
-            ''', (json.dumps(backup_codes), user_id))
+                SELECT backup_codes FROM mfa_settings WHERE user_id = ?
+            ''', (user_id,))
             
-            self.db.connection.commit()
-            self._log_verification(user_id, MFAMethod.BACKUP_CODE, True, ip_address)
+            row = cursor.fetchone()
+            if not row or not row[0]:
+                return {"success": False, "message": "لا توجد أكواد احتياطية"}
             
-            return {
-                "success": True,
-                "message": "تم التحقق بنجاح",
-                "remaining_codes": len(backup_codes)
-            }
-        else:
-            self._log_verification(user_id, MFAMethod.BACKUP_CODE, False, ip_address)
-            return {"success": False, "message": "كود احتياطي خاطئ"}
+            backup_codes = json.loads(row[0])
+            code_hash = self._hash_code(code)
+            
+            if code_hash in backup_codes:
+                # إزالة الكود المستخدم
+                backup_codes.remove(code_hash)
+                
+                cursor.execute('''
+                    UPDATE mfa_settings
+                    SET backup_codes = ?
+                    WHERE user_id = ?
+                ''', (json.dumps(backup_codes), user_id))
+                
+                cursor.connection.commit()
+                self._log_verification(user_id, MFAMethod.BACKUP_CODE, True, ip_address)
+                
+                return {
+                    "success": True,
+                    "message": "تم التحقق بنجاح",
+                    "remaining_codes": len(backup_codes)
+                }
+            else:
+                self._log_verification(user_id, MFAMethod.BACKUP_CODE, False, ip_address)
+                return {"success": False, "message": "كود احتياطي خاطئ"}
     
     def _generate_otp(self) -> str:
         """إنشاء OTP عشوائي"""
@@ -489,14 +509,13 @@ class MFAService:
         ip_address: Optional[str] = None
     ):
         """تسجيل محاولة التحقق"""
-        cursor = self.db.get_cursor()
-        
-        cursor.execute('''
-            INSERT INTO mfa_verification_log (user_id, method, success, ip_address)
-            VALUES (?, ?, ?, ?)
-        ''', (user_id, method.value, success, ip_address))
-        
-        self.db.connection.commit()
+        with self.db.get_cursor() as cursor:
+            cursor.execute('''
+                INSERT INTO mfa_verification_log (user_id, method, success, ip_address)
+                VALUES (?, ?, ?, ?)
+            ''', (user_id, method.value, success, ip_address))
+            
+            cursor.connection.commit()
 
 
 if __name__ == "__main__":

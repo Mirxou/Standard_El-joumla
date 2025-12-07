@@ -1,0 +1,64 @@
+name: CI - Window Manager Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-qt
+    
+    - name: Run linting
+      run: |
+        pip install flake8 black
+        flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
+        black --check src/
+      continue-on-error: true
+    
+    - name: Run unit tests
+      run: |
+        pytest tests/unit/ -v
+      continue-on-error: true
+    
+    - name: Run integration tests
+      run: |
+        pytest tests/integration/ -v
+      continue-on-error: true
+    
+    - name: Run Window Manager smoke test
+      run: |
+        python test_window_manager_smoke_test.py
+      continue-on-error: false
+    
+    - name: Run Window Manager integration test
+      run: |
+        python test_window_manager_integration.py
+      continue-on-error: false
+    
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results
+        path: |
+          logs/
+          *.log
+      continue-on-error: true
+

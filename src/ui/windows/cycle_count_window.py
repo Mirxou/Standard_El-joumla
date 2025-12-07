@@ -21,6 +21,11 @@ class CycleCountWindow(QMainWindow):
 
     This is a scaffold window. It can be wired to services later.
     """
+    
+    # Window Manager attributes (للتسجيل التلقائي)
+    window_key = "cycle_count"
+    window_singleton = True
+    window_title = "العد الدوري"
 
     def __init__(self, parent: QWidget | None = None, service=None) -> None:
         super().__init__(parent)

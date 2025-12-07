@@ -13,9 +13,10 @@ from pathlib import Path
 from typing import Optional
 from datetime import datetime
 
-# إضافة مسار المشروع إلى sys.path
+# إضافة مجلد src إلى sys.path
 project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root))
+src_path = project_root / "src"
+sys.path.insert(0, str(src_path))
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -35,18 +36,21 @@ from src.utils.logger import setup_logger
 # استيراد الخدمات
 from src.services.inventory_service import InventoryService
 from src.services.sales_service import SalesService
-from src.services.reports_service import ReportsService
+from src.services.report_exporter import ReportExporter
 from src.services.user_service import UserService
 from src.services.email_service import EmailService
 from src.services.reminder_service import init_reminder_service, ReminderService
-from src.services.scheduler_service import init_reminder_scheduler, ReminderScheduler
+from src.services.task_scheduler_service import init_task_scheduler, TaskScheduler
 from src.ui.notifications_manager import get_notifications_manager, SmartNotificationsManager
+
+# استيراد عميل API الهجين
+from src.api.api_client import APIClient, HybridDataService
 
 # استيراد النوافذ والحوارات
 from src.ui.windows.main_window import MainWindow
 from src.ui.dialogs.login_dialog import LoginDialog
-from src.ui.dialogs.product_dialog import ProductDialog
-from src.ui.dialogs.sales_dialog import SalesDialog
+# 🔥 CLEANUP: إزالة الاستيرادات غير المستخدمة
+# ProductDialog و SalesDialog يتم استيرادهما داخل الدوال عند الحاجة
 from src.ui.windows.reports_window import ReportsWindow
 
 
@@ -262,9 +266,14 @@ class InventoryManagementApp(QApplication):
         
         # إعداد التطبيق
         self.setApplicationName("نظام إدارة المخزون والمبيعات")
-        self.setApplicationVersion("1.0.0")
+        self.setApplicationVersion("5.3.0")  # 🔥 FIX: تحديث الإصدار لتطابق VERSION.txt
         self.setOrganizationName("شركة التطوير")
         self.setOrganizationDomain("development.com")
+        
+        # تعيين أيقونة التطبيق الرئيسية
+        icon_path = project_root / "assets" / "icons" / "app_icon.ico"
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
         
         # إعداد الخط العربي
         font = QFont("Arial", 10)
@@ -274,7 +283,14 @@ class InventoryManagementApp(QApplication):
         self.setLayoutDirection(Qt.RightToLeft)
         
         # تطبيق السمة المحفوظة
-        self.apply_saved_theme()
+        theme = self.apply_saved_theme()
+        
+        # Phase 4: تطبيق الأنماط الحديثة مع دعم السمات
+        try:
+            from src.ui.styles.main import apply_style_to_app
+            apply_style_to_app(self, theme=theme)
+        except Exception as e:
+            print(f"تحذير: فشل تحميل الأنماط الحديثة: {e}")
         
         # إعداد المتغيرات
         self.logger = setup_logger(__name__)
@@ -285,11 +301,13 @@ class InventoryManagementApp(QApplication):
         # الخدمات
         self.inventory_service: Optional[InventoryService] = None
         self.sales_service: Optional[SalesService] = None
-        self.reports_service: Optional[ReportsService] = None
+        self.reports_service: Optional[ReportExporter] = None
         self.user_service: Optional[UserService] = None
+        self.payment_service = None
+        self.dashboard_service = None
         self.email_service: Optional[EmailService] = None
         self.reminder_service: Optional[ReminderService] = None
-        self.reminder_scheduler: Optional[ReminderScheduler] = None
+        self.task_scheduler: Optional[TaskScheduler] = None
         self.notifications_manager: Optional[SmartNotificationsManager] = None
         # الخدمات الجديدة
         self.recurring_invoice_service = None
@@ -297,6 +315,10 @@ class InventoryManagementApp(QApplication):
         self.mfa_service = None
         self.encryption_service = None
         self.support_service = None
+        
+        # عميل API الهجين
+        self.api_client: Optional[APIClient] = None
+        self.hybrid_service: Optional[HybridDataService] = None
         
         # النوافذ
         self.main_window: Optional[MainWindow] = None
@@ -311,15 +333,17 @@ class InventoryManagementApp(QApplication):
         # إعداد معالج الإغلاق
         self.aboutToQuit.connect(self.cleanup)
     
-    def apply_saved_theme(self):
+    def apply_saved_theme(self) -> str:
         """تطبيق السمة المحفوظة"""
         try:
             from src.ui.theme_manager import get_theme_manager
             theme_manager = get_theme_manager()
             saved_theme = theme_manager.get_current_theme()
             theme_manager.apply_theme(saved_theme)
+            return saved_theme
         except Exception as e:
             print(f"تحذير: فشل تحميل السمة: {e}")
+            return 'light'  # السمة الافتراضية
     
     def run(self):
         """تشغيل التطبيق"""
@@ -384,72 +408,110 @@ class InventoryManagementApp(QApplication):
             self.quit()
     
     def initialize_services(self):
-        """تهيئة الخدمات"""
+        """تهيئة الخدمات (محسّنة لتجنب التجميد)"""
         try:
+            # تهيئة الخدمات الأساسية فقط (سريعة)
             self.inventory_service = InventoryService(self.db_manager, self.logger)
             self.sales_service = SalesService(self.db_manager, self.logger)
-            self.reports_service = ReportsService(self.db_manager)
+            self.reports_service = ReportExporter(self.db_manager)
             self.user_service = UserService(self.db_manager)
+            
+            # تهيئة خدمة المدفوعات
+            try:
+                from src.services.payment_service import PaymentService
+                self.payment_service = PaymentService(self.db_manager, self.logger)
+            except Exception as e:
+                self.logger.warning(f"تعذر تهيئة خدمة المدفوعات: {e}")
+                self.payment_service = None
+            
+            # تهيئة خدمة لوحات المعلومات
+            try:
+                from src.services.dashboard_service import DashboardService
+                self.dashboard_service = DashboardService(self.db_manager)
+            except Exception as e:
+                self.logger.warning(f"تعذر تهيئة خدمة لوحات المعلومات: {e}")
+                self.dashboard_service = None
+            
             self.logger.info("تم تهيئة جميع الخدمات الأساسية بنجاح")
+            
+            # تهيئة الخدمات الثقيلة في الخلفية (async)
+            QTimer.singleShot(100, self._initialize_heavy_services)
 
+        except Exception as e:
+            self.logger.error(f"خطأ في تهيئة الخدمات: {str(e)}")
+            self.show_error_message("خطأ في الخدمات", f"فشل في تهيئة الخدمات: {str(e)}")
+    
+    def _initialize_heavy_services(self):
+        """تهيئة الخدمات الثقيلة في الخلفية (لتجنب التجميد)"""
+        try:
             # تهيئة الخدمات الجديدة (الفجوات المغلقة)
             try:
                 from src.services.recurring_invoice_service import RecurringInvoiceService
                 self.recurring_invoice_service = RecurringInvoiceService(self.db_manager, self.logger)
-                self.logger.info("تم تهيئة خدمة الفوترة الدورية")
+                self.logger.info("✓ خدمة الفوترة الدورية")
             except Exception as e:
                 self.logger.warning(f"تعذر تهيئة خدمة الفوترة الدورية: {e}")
 
             try:
                 from src.services.marketing_automation_service import MarketingAutomationService
                 self.marketing_automation_service = MarketingAutomationService(self.db_manager, self.logger)
-                self.logger.info("تم تهيئة خدمة أتمتة التسويق")
+                self.logger.info("✓ خدمة أتمتة التسويق")
             except Exception as e:
                 self.logger.warning(f"تعذر تهيئة خدمة أتمتة التسويق: {e}")
 
             try:
                 from src.services.mfa_service import MFAService
                 self.mfa_service = MFAService(self.db_manager, self.logger)
-                self.logger.info("تم تهيئة خدمة المصادقة متعددة العوامل")
+                self.logger.info("✓ خدمة المصادقة متعددة العوامل")
             except Exception as e:
                 self.logger.warning(f"تعذر تهيئة خدمة المصادقة متعددة العوامل: {e}")
 
             try:
                 from src.services.encryption_service import EncryptionService
-                # مفتاح التشفير من الإعدادات أو ثابت (للتجربة فقط)
                 encryption_key = self.config_manager.get("encryption_key", "default_secret_key")
                 self.encryption_service = EncryptionService(encryption_key)
-                self.logger.info("تم تهيئة خدمة التشفير")
+                self.logger.info("✓ خدمة التشفير")
             except Exception as e:
                 self.logger.warning(f"تعذر تهيئة خدمة التشفير: {e}")
 
             try:
                 from src.services.support_service import SupportService
                 self.support_service = SupportService(self.db_manager, self.logger)
-                self.logger.info("تم تهيئة خدمة الدعم الفني")
+                self.logger.info("✓ خدمة الدعم الفني")
             except Exception as e:
                 self.logger.warning(f"تعذر تهيئة خدمة الدعم الفني: {e}")
 
-            # تهيئة البريد + التذكيرات + المجدول (اختياري عبر متغيرات البيئة)
+            # تهيئة البريد + التذكيرات + المجدول (اختياري)
             try:
                 self.email_service = EmailService()
                 self.reminder_service = init_reminder_service(self.db_manager, self.email_service)
-                # يبدأ تلقائياً إذا كانت البيئة مفعّلة SCHEDULER_ENABLED=true
-                self.reminder_scheduler = init_reminder_scheduler(self.reminder_service)
-                self.logger.info("Reminder scheduler initialized (env-controlled)")
+                self.task_scheduler = init_task_scheduler(self.db_manager, self.reminder_service)
+                self.logger.info("✓ المجدول والتذكيرات")
             except Exception as e:
                 self.logger.warning(f"تعذرت تهيئة المجدول/التذكيرات: {e}")
 
-            # تهيئة نظام الإشعارات الذكية (سيبدأ بعد عرض النافذة الرئيسية)
+            # تهيئة عميل API الهجين
+            try:
+                api_url = self.config_manager.get("api_url", "http://127.0.0.1:8000")
+                self.api_client = APIClient(base_url=api_url, timeout=5)
+                self.hybrid_service = HybridDataService(self.db_manager, self.api_client)
+                
+                if self.api_client.is_online():
+                    self.logger.info(f"✅ الاتصال بـ API متاح: {api_url}")
+                else:
+                    self.logger.info("⚠️ الوضع المحلي: API غير متاح")
+            except Exception as e:
+                self.logger.warning(f"تعذر تهيئة عميل API الهجين: {e}")
+            
+            # تهيئة نظام الإشعارات
             try:
                 self.notifications_manager = get_notifications_manager(self.db_manager)
-                self.logger.info("تم تهيئة نظام الإشعارات الذكية")
+                self.logger.info("✓ نظام الإشعارات الذكية")
             except Exception as e:
                 self.logger.warning(f"تعذرت تهيئة نظام الإشعارات: {e}")
-
+                
         except Exception as e:
-            self.logger.error(f"خطأ في تهيئة الخدمات: {str(e)}")
-            self.show_error_message("خطأ في الخدمات", f"فشل في تهيئة الخدمات: {str(e)}")
+            self.logger.error(f"خطأ في تهيئة الخدمات الثقيلة: {str(e)}")
     
     def show_mandatory_login_dialog(self):
         """عرض نافذة تسجيل الدخول الإجباري مع إدارة جلسات محسنة"""
@@ -465,6 +527,12 @@ class InventoryManagementApp(QApplication):
                 if current_attempt > 0:
                     remaining_attempts = max_attempts - current_attempt
                     login_dialog.set_warning_message(f"تحذير: متبقي {remaining_attempts} محاولة/محاولات قبل إغلاق التطبيق")
+                
+                # التأكد من ظهور الحوار بشكل صحيح
+                login_dialog.raise_()
+                login_dialog.activateWindow()
+                login_dialog.show()
+                self.processEvents()
                 
                 result = login_dialog.exec()
                 
@@ -524,7 +592,7 @@ class InventoryManagementApp(QApplication):
         # إذا وصلنا هنا، فقد فشلت جميع المحاولات
         self.quit()
     
-    def _validate_session_security(self, session: 'UserSession') -> bool:
+    def _validate_session_security(self, session: 'UserSession') -> bool:  # pyright: ignore[reportUndefinedVariable]
         """التحقق من أمان الجلسة"""
         try:
             # التحقق من صحة الجلسة
@@ -551,7 +619,7 @@ class InventoryManagementApp(QApplication):
             self.logger.error(f"خطأ في التحقق من أمان الجلسة: {e}")
             return False
     
-    def _start_session_monitoring(self, session: 'UserSession'):
+    def _start_session_monitoring(self, session: 'UserSession'):  # pyright: ignore[reportUndefinedVariable]
         """بدء مراقبة الجلسة"""
         try:
             # إنشاء مؤقت لمراقبة الجلسة
@@ -573,7 +641,7 @@ class InventoryManagementApp(QApplication):
         except Exception as e:
             self.logger.error(f"خطأ في بدء مراقبة الجلسة: {e}")
     
-    def _check_session_validity(self, session: 'UserSession'):
+    def _check_session_validity(self, session: 'UserSession'):  # pyright: ignore[reportUndefinedVariable]
         """فحص صحة الجلسة بشكل دوري"""
         try:
             is_valid, validated_session = self.user_service.validate_session(session.session_id)
@@ -585,7 +653,7 @@ class InventoryManagementApp(QApplication):
         except Exception as e:
             self.logger.error(f"خطأ في فحص صحة الجلسة: {e}")
     
-    def _update_session_activity(self, session: 'UserSession'):
+    def _update_session_activity(self, session: 'UserSession'):  # pyright: ignore[reportUndefinedVariable]
         """تحديث نشاط الجلسة"""
         try:
             self.user_service.update_session_activity(session.session_id)
@@ -620,30 +688,41 @@ class InventoryManagementApp(QApplication):
             self.quit()
     
     def show_main_window(self):
-        """عرض النافذة الرئيسية"""
+        """عرض النافذة الرئيسية (محسّنة لتجنب التجميد)"""
         try:
+            # عرض النافذة فورًا (بدون انتظار) مع تمرير الخدمات
             self.main_window = MainWindow(
                 config_manager=self.config_manager,
                 db_manager=self.db_manager,
-                logger=self.logger
+                logger=self.logger,
+                inventory_service=self.inventory_service,
+                sales_service=self.sales_service,
+                reports_service=self.reports_service,
+                user_service=self.user_service,
+                payment_service=self.payment_service,
+                dashboard_service=self.dashboard_service,
+                notifications_manager=self.notifications_manager
             )
             
             self.main_window.show()
             self.logger.info("تم عرض النافذة الرئيسية")
             
-            # بدء نظام الإشعارات بعد عرض النافذة
-            if self.notifications_manager:
-                try:
-                    # ربط النافذة الرئيسية بمدير الإشعارات
-                    self.notifications_manager.main_window = self.main_window
-                    self.notifications_manager.start()
-                    self.logger.info("تم بدء نظام الإشعارات الذكية")
-                except Exception as e:
-                    self.logger.warning(f"فشل بدء نظام الإشعارات: {e}")
+            # بدء نظام الإشعارات بعد عرض النافذة (في الخلفية)
+            QTimer.singleShot(500, self._start_notifications_system)
             
         except Exception as e:
             self.logger.error(f"خطأ في عرض النافذة الرئيسية: {str(e)}")
             self.show_error_message("خطأ في النافذة الرئيسية", f"فشل في عرض النافذة الرئيسية: {str(e)}")
+    
+    def _start_notifications_system(self):
+        """بدء نظام الإشعارات (في الخلفية لتجنب التجميد)"""
+        if self.notifications_manager and self.main_window:
+            try:
+                self.notifications_manager.main_window = self.main_window
+                self.notifications_manager.start()
+                self.logger.info("✓ نظام الإشعارات الذكية يعمل")
+            except Exception as e:
+                self.logger.warning(f"فشل بدء نظام الإشعارات: {e}")
     
     def show_reports_window(self):
         """عرض نافذة التقارير"""
@@ -689,39 +768,45 @@ class InventoryManagementApp(QApplication):
         QMessageBox.critical(None, title, message)
     
     def cleanup(self):
-        """تنظيف الموارد عند الإغلاق"""
+        """تنظيف الموارد عند الإغلاق (محسّن لتجنب التجميد)"""
         try:
             self.logger.info("بدء تنظيف الموارد")
 
-            # إيقاف نظام الإشعارات
+            # إيقاف نظام الإشعارات بسرعة (بدون انتظار)
             if self.notifications_manager:
                 try:
-                    self.notifications_manager.stop()
-                    self.logger.info("تم إيقاف نظام الإشعارات")
-                except Exception as e:
-                    self.logger.warning(f"خطأ في إيقاف الإشعارات: {e}")
+                    QTimer.singleShot(0, self.notifications_manager.stop)
+                except Exception:
+                    pass
 
-            # إيقاف المجدول إن كان يعمل
-            try:
-                if self.reminder_scheduler and self.reminder_scheduler.is_running():
-                    self.reminder_scheduler.stop()
-            except Exception:
-                pass
+            # إيقاف المجدول (بدون انتظار)
+            if self.task_scheduler:
+                try:
+                    QTimer.singleShot(0, lambda: self.task_scheduler.stop() if hasattr(self.task_scheduler, 'stop') else None)
+                except Exception:
+                    pass
             
-            # إيقاف العمال
+            # إيقاف العمال (بدون انتظار طويل)
             if self.init_worker and self.init_worker.isRunning():
                 self.init_worker.terminate()
-                self.init_worker.wait()
+                # لا ننتظر أكثر من 100ms
+                self.init_worker.wait(100)
             
-            # إنهاء جلسة المستخدم
+            # إنهاء جلسة المستخدم (سريع)
             if self.current_user and self.user_service:
-                self.user_service.logout_user(self.current_user.id)
+                try:
+                    QTimer.singleShot(0, lambda: self.user_service.logout_user(self.current_user.id))
+                except Exception:
+                    pass
             
-            # إغلاق قاعدة البيانات
+            # إغلاق قاعدة البيانات (سريع)
             if self.db_manager:
-                self.db_manager.close()
+                try:
+                    QTimer.singleShot(0, self.db_manager.close)
+                except Exception:
+                    pass
             
-            self.logger.info("تم تنظيف الموارد بنجاح")
+            self.logger.info("✓ تم تنظيف الموارد")
             
         except Exception as e:
             self.logger.error(f"خطأ في تنظيف الموارد: {str(e)}")
@@ -752,6 +837,7 @@ def setup_exception_handler():
 
 def main():
     """الدالة الرئيسية"""
+    exit_code = 1
     try:
         # إعداد معالج الاستثناءات
         setup_exception_handler()
@@ -762,14 +848,20 @@ def main():
         # تشغيل التطبيق
         if app.run():
             # تشغيل حلقة الأحداث
-            return app.exec()
+            exit_code = app.exec()
+            # Qt exec() يعيد 0 للإغلاق الطبيعي
+            return 0 if exit_code == 0 else exit_code
         else:
             return 1
             
+    except KeyboardInterrupt:
+        print("\n✓ تم إيقاف التطبيق بواسطة المستخدم")
+        return 0
     except Exception as e:
         print(f"خطأ فادح في التطبيق: {str(e)}")
         return 1
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    exit_code = main()
+    sys.exit(exit_code)

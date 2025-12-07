@@ -17,6 +17,8 @@ from datetime import datetime
 import json
 
 from .exceptions import ErrorSeverity, ErrorCategory
+from pathlib import Path
+from ..utils.i18n_api import I18n
 
 
 class ErrorDialog(QDialog):
@@ -27,7 +29,11 @@ class ErrorDialog(QDialog):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("خطأ في النظام - System Error")
+        
+        # تهيئة نظام الترجمة
+        self.i18n = I18n(locales_dir=str(Path(__file__).parent.parent.parent / "locales"))
+        
+        self.setWindowTitle(self.i18n.get_message("system_error_title"))
         self.setModal(True)
         self.setMinimumSize(500, 300)
         self.setMaximumSize(800, 600)
@@ -71,7 +77,7 @@ class ErrorDialog(QDialog):
         # معلومات الخطأ الأساسية - Basic error info
         info_layout = QVBoxLayout()
         
-        self.title_label = QLabel("حدث خطأ في النظام")
+        self.title_label = QLabel(self.i18n.get_message("system_error_occurred"))
         self.title_label.setFont(QFont("Arial", 14, QFont.Bold))
         info_layout.addWidget(self.title_label)
         
@@ -98,7 +104,7 @@ class ErrorDialog(QDialog):
         details_layout = QVBoxLayout(self.details_frame)
         
         # تفاصيل الخطأ - Error details
-        details_label = QLabel("تفاصيل الخطأ:")
+        details_label = QLabel(self.i18n.get_message("error_details"))
         details_label.setFont(QFont("Arial", 10, QFont.Bold))
         details_layout.addWidget(details_label)
         
@@ -115,12 +121,12 @@ class ErrorDialog(QDialog):
         buttons_layout = QHBoxLayout()
         
         # زر عرض التفاصيل - Show details button
-        self.details_button = QPushButton("عرض التفاصيل")
+        self.details_button = QPushButton(self.i18n.get_message("show_details"))
         self.details_button.clicked.connect(self._toggle_details)
         buttons_layout.addWidget(self.details_button)
         
         # زر الإبلاغ عن الخطأ - Report error button
-        self.report_button = QPushButton("إبلاغ عن الخطأ")
+        self.report_button = QPushButton(self.i18n.get_message("report_error"))
         self.report_button.clicked.connect(self._report_error)
         buttons_layout.addWidget(self.report_button)
         
@@ -128,7 +134,7 @@ class ErrorDialog(QDialog):
         buttons_layout.addStretch()
         
         # زر الإغلاق - Close button
-        self.close_button = QPushButton("إغلاق")
+        self.close_button = QPushButton(self.i18n.get_message("close_button"))
         self.close_button.clicked.connect(self.accept)
         self.close_button.setDefault(True)
         buttons_layout.addWidget(self.close_button)
@@ -199,7 +205,7 @@ class ErrorDialog(QDialog):
         # إعداد الإغلاق التلقائي - Setup auto close
         if auto_close_seconds and auto_close_seconds > 0:
             self.auto_close_timer.start(auto_close_seconds * 1000)
-            self.close_button.setText(f"إغلاق ({auto_close_seconds})")
+            self.close_button.setText(f"{self.i18n.get_message('close_button')} ({auto_close_seconds})")
             self._start_countdown(auto_close_seconds)
         
         # عرض النافذة - Show dialog
@@ -232,7 +238,7 @@ class ErrorDialog(QDialog):
         except:
             time_str = timestamp
         
-        self.time_label.setText(f"الوقت: {time_str}")
+        self.time_label.setText(self.i18n.get_message("time_label", time=time_str))
         
         # تحديث التفاصيل - Update details
         self._update_details()
@@ -261,39 +267,39 @@ class ErrorDialog(QDialog):
     def _get_title_by_category(self, category: str) -> str:
         """الحصول على العنوان حسب الفئة - Get title by category"""
         titles = {
-            "database": "خطأ في قاعدة البيانات",
-            "authentication": "خطأ في المصادقة",
-            "validation": "خطأ في البيانات",
-            "business_logic": "خطأ في العملية",
-            "ui": "خطأ في الواجهة",
-            "network": "خطأ في الشبكة",
-            "file_system": "خطأ في الملف",
-            "system": "خطأ في النظام"
+            "database": self.i18n.get_message("error_database"),
+            "authentication": self.i18n.get_message("error_authentication"),
+            "validation": self.i18n.get_message("error_validation"),
+            "business_logic": self.i18n.get_message("error_business_logic"),
+            "ui": self.i18n.get_message("error_ui"),
+            "network": self.i18n.get_message("error_network"),
+            "file_system": self.i18n.get_message("error_file_system"),
+            "system": self.i18n.get_message("error_system")
         }
-        return titles.get(category, "خطأ في النظام")
+        return titles.get(category, self.i18n.get_message("error_system"))
     
     def _update_details(self):
         """تحديث تفاصيل الخطأ - Update error details"""
         details = []
         
         # معلومات أساسية - Basic info
-        details.append(f"رمز الخطأ: {self.error_info.get('error_code', 'غير محدد')}")
-        details.append(f"الفئة: {self.error_info.get('category', 'غير محدد')}")
-        details.append(f"الخطورة: {self.error_info.get('severity', 'غير محدد')}")
+        details.append(f"{self.i18n.get_message('error_code')} {self.error_info.get('error_code', 'غير محدد')}")
+        details.append(f"{self.i18n.get_message('error_category')} {self.error_info.get('category', 'غير محدد')}")
+        details.append(f"{self.i18n.get_message('error_severity')} {self.error_info.get('severity', 'غير محدد')}")
         
         # تفاصيل إضافية - Additional details
         if self.error_info.get("details"):
-            details.append("\nتفاصيل إضافية:")
+            details.append(f"\n{self.i18n.get_message('additional_details')}")
             for key, value in self.error_info["details"].items():
                 details.append(f"  {key}: {value}")
         
         # السياق - Context
         if self.error_info.get("context"):
-            details.append(f"\nالسياق: {self.error_info['context']}")
+            details.append(f"\n{self.i18n.get_message('context_label')} {self.error_info['context']}")
         
         # تتبع المكدس - Stack trace
         if self.error_info.get("traceback"):
-            details.append(f"\nتتبع المكدس:\n{self.error_info['traceback']}")
+            details.append(f"\n{self.i18n.get_message('stack_trace')}:\n{self.error_info['traceback']}")
         
         self.details_text.setPlainText("\n".join(details))
     
@@ -301,11 +307,11 @@ class ErrorDialog(QDialog):
         """تبديل عرض التفاصيل - Toggle details display"""
         if self.details_frame.isVisible():
             self.details_frame.hide()
-            self.details_button.setText("عرض التفاصيل")
+            self.details_button.setText(self.i18n.get_message("show_details"))
             self.resize(self.width(), self.minimumHeight())
         else:
             self.details_frame.show()
-            self.details_button.setText("إخفاء التفاصيل")
+            self.details_button.setText(self.i18n.get_message("hide_details"))
             self.resize(self.width(), 600)
     
     def _report_error(self):
@@ -314,12 +320,12 @@ class ErrorDialog(QDialog):
         self.error_reported.emit(self.error_info)
         
         # تغيير نص الزر
-        self.report_button.setText("تم الإبلاغ ✓")
+        self.report_button.setText(self.i18n.get_message("error_reported"))
         self.report_button.setEnabled(False)
         
         # إعادة تفعيل الزر بعد 3 ثوان
         QTimer.singleShot(3000, lambda: (
-            self.report_button.setText("إبلاغ عن الخطأ"),
+            self.report_button.setText(self.i18n.get_message("report_error")),
             self.report_button.setEnabled(True)
         ))
     
@@ -329,10 +335,10 @@ class ErrorDialog(QDialog):
             nonlocal seconds
             seconds -= 1
             if seconds > 0:
-                self.close_button.setText(f"إغلاق ({seconds})")
+                self.close_button.setText(f"{self.i18n.get_message('close_button')} ({seconds})")
                 QTimer.singleShot(1000, update_countdown)
             else:
-                self.close_button.setText("إغلاق")
+                self.close_button.setText(self.i18n.get_message("close_button"))
         
         QTimer.singleShot(1000, update_countdown)
     

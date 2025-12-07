@@ -4,10 +4,10 @@
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QPushButton, QDateEdit, QGridLayout, QGroupBox, QCheckBox, QTableWidget,
-    QTableWidgetItem, QHeaderView
+    QTableWidgetItem, QHeaderView, QDialog, QMessageBox, QTextEdit, QScrollArea
 )
 from PySide6.QtCore import Qt, QDate, QSettings, QTimer
-from PySide6.QtGui import QFont, QColor, QPixmap
+from PySide6.QtGui import QFont, QColor
 from PySide6.QtCharts import QChart, QChartView, QLineSeries, QBarSeries, QBarSet, QBarCategoryAxis, QValueAxis, QPieSeries
 from datetime import date, timedelta
 from typing import Optional
@@ -15,9 +15,15 @@ from typing import Optional
 from ...core.database_manager import DatabaseManager
 from ...services.dashboard_service import DashboardService
 from ...services.cycle_count_service import CycleCountService
+from ...ai.chatbot import ChatbotEngine
 
 
 class DashboardWindow(QMainWindow):
+    # Window Manager attributes (للتسجيل التلقائي)
+    window_key = "dashboard"
+    window_singleton = True
+    window_title = "📊 لوحة المعلومات الرئيسية"
+    
     def __init__(self, db_manager: DatabaseManager, parent=None):
         super().__init__(parent)
         self.db = db_manager
@@ -30,6 +36,16 @@ class DashboardWindow(QMainWindow):
 
         self.refresh_timer = QTimer()
         self.refresh_timer.timeout.connect(self._load)
+        self._blink_timer = None  # Timer للوميض
+        self._blink_state = False
+        
+        # تهيئة Chatbot
+        try:
+            self.chatbot = ChatbotEngine()
+            self.chatbot_enabled = True
+        except Exception:
+            self.chatbot = None
+            self.chatbot_enabled = False
 
         self._setup_ui()
         self._load()
@@ -172,6 +188,11 @@ class DashboardWindow(QMainWindow):
         export_dist_btn.clicked.connect(lambda: self._export_chart(self.pie_chart, "distribution"))
         toggles.addWidget(export_dist_btn)
         root.addLayout(toggles)
+        
+        # Chatbot Widget (في الزاوية السفلية)
+        if self.chatbot_enabled:
+            chatbot_widget = self._create_chatbot_widget()
+            root.addWidget(chatbot_widget)
 
     def _update_widgets_visibility(self):
         self.sales_chart_view.setVisible(self.toggle_sales.isChecked())
@@ -182,7 +203,7 @@ class DashboardWindow(QMainWindow):
         self.settings.setValue("show_top", self.toggle_top.isChecked())
         self.settings.setValue("show_pie", self.toggle_pie.isChecked())
 
-    def _add_kpi_card(self, row: int, col: int, title: str, value: str, color: str, change: float|None=None, icon: str = "📊"):
+    def _add_kpi_card(self, row: int, col: int, title: str, value: str, color: str, change: float|None=None, icon: str = "📊", kpi_key: str = ""):
         """إنشاء بطاقة KPI محسّنة مع أيقونة وتدرج لوني"""
         card = QGroupBox()
         # Gradient background effect
@@ -225,6 +246,57 @@ class DashboardWindow(QMainWindow):
             lay.addWidget(ch)
         
         self.kpi_grid.addWidget(card, row, col)
+        return card  # إرجاع البطاقة للسماح بالتفاعل
+    
+    def _add_blink_effect(self, card: QGroupBox):
+        """إضافة تأثير وميض للبطاقة"""
+        # تأثير بسيط باستخدام QTimer
+        if self._blink_timer:
+            self._blink_timer.stop()
+        self._blink_timer = QTimer(self)
+        self._blink_timer.timeout.connect(lambda: self._toggle_blink(card))
+        self._blink_timer.start(1000)  # وميض كل ثانية
+        self._blink_state = False
+    
+    def _toggle_blink(self, card: QGroupBox):
+        """تبديل حالة الوميض"""
+        self._blink_state = not self._blink_state
+        if self._blink_state:
+            # لون أحمر فاتح
+            card.setStyleSheet("""
+                QGroupBox { 
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                        stop:0 #F44336, stop:1 #D32F2F);
+                    border-radius: 12px;
+                    padding: 10px;
+                    min-height: 100px;
+                    border: 2px solid #FF5252;
+                }
+            """)
+        else:
+            # لون أحمر عادي
+            card.setStyleSheet("""
+                QGroupBox { 
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                        stop:0 #F44336, stop:1 #D32F2F);
+                    border-radius: 12px;
+                    padding: 10px;
+                    min-height: 100px;
+                }
+            """)
+    
+    def _show_low_stock_dialog(self):
+        """عرض نافذة المنتجات منخفضة المخزون"""
+        try:
+            products = self.service.get_low_stock_products()
+            if not products:
+                QMessageBox.information(self, "معلومات", "لا توجد منتجات منخفضة المخزون حالياً.")
+                return
+            
+            dialog = LowStockDialog(products, self, db_manager=self.db)
+            dialog.exec()
+        except Exception as e:
+            QMessageBox.critical(self, "خطأ", f"فشل في تحميل المنتجات منخفضة المخزون:\n{str(e)}")
     
     def _darken_color(self, hex_color: str) -> str:
         """تعتيم اللون للتدرج"""
@@ -271,7 +343,14 @@ class DashboardWindow(QMainWindow):
             r, c = divmod(i, 4)
             value_str = f"{k.value:,.2f}{(' ' + k.unit) if k.unit else ''}"
             icon = kpi_icons.get(k.key, "📊")
-            self._add_kpi_card(r, c, k.title, value_str, k.color, k.change, icon)
+            card = self._add_kpi_card(r, c, k.title, value_str, k.color, k.change, icon, k.key)
+            
+            # جعل بطاقة low_stock قابلة للنقر وتظهر تحذير
+            if k.key == "low_stock" and k.value > 0:
+                card.setCursor(Qt.PointingHandCursor)
+                card.mousePressEvent = lambda e, kpi_key=k.key: self._show_low_stock_dialog()
+                # إضافة تأثير وميض
+                self._add_blink_effect(card)
 
         # Sales series -> line chart
         self._render_sales_chart(data)
@@ -392,3 +471,356 @@ class DashboardWindow(QMainWindow):
             pixmap.save(path, "PNG")
             from PySide6.QtWidgets import QMessageBox
             QMessageBox.information(self, "نجح", f"تم حفظ الرسم في:\n{path}")
+    
+    def _create_chatbot_widget(self):
+        """إنشاء widget للشات بوت"""
+        chatbot_group = QGroupBox("🤖 المساعد الذكي")
+        chatbot_group.setMaximumHeight(300)
+        chatbot_group.setCheckable(True)
+        chatbot_group.setChecked(False)  # مطوي افتراضياً
+        chatbot_group.toggled.connect(lambda checked: self._toggle_chatbot(checked))
+        
+        layout = QVBoxLayout(chatbot_group)
+        
+        # منطقة المحادثة
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setMaximumHeight(200)
+        
+        self.chat_display = QTextEdit()
+        self.chat_display.setReadOnly(True)
+        self.chat_display.setPlaceholderText("اسألني عن المبيعات، المخزون، أو أي شيء آخر...")
+        scroll.setWidget(self.chat_display)
+        layout.addWidget(scroll)
+        
+        # حقل الإدخال
+        input_layout = QHBoxLayout()
+        self.chat_input = QLineEdit()
+        self.chat_input.setPlaceholderText("اكتب سؤالك هنا...")
+        self.chat_input.returnPressed.connect(self._send_chat_message)
+        input_layout.addWidget(self.chat_input)
+        
+        send_btn = QPushButton("إرسال")
+        send_btn.clicked.connect(self._send_chat_message)
+        input_layout.addWidget(send_btn)
+        
+        layout.addLayout(input_layout)
+        
+        # إضافة رسالة ترحيبية
+        self._add_chat_message("المساعد", "مرحباً! أنا المساعد الذكي. اسألني عن:\n- مبيعات اليوم\n- المنتجات الأكثر مبيعاً\n- المنتجات منخفضة المخزون\n- أو أي سؤال آخر!")
+        
+        return chatbot_group
+    
+    def _toggle_chatbot(self, visible: bool):
+        """تبديل حالة الشات بوت"""
+        if visible and self.chatbot:
+            self.chat_input.setFocus()
+    
+    def _send_chat_message(self):
+        """إرسال رسالة للشات بوت"""
+        if not self.chatbot_enabled or not self.chatbot:
+            return
+        
+        message = self.chat_input.text().strip()
+        if not message:
+            return
+        
+        # إضافة رسالة المستخدم
+        self._add_chat_message("أنت", message)
+        self.chat_input.clear()
+        
+        # معالجة الرسالة والحصول على الرد
+        try:
+            # محاولة الحصول على معلومات من لوحة التحكم
+            response = self._process_chat_query(message)
+            
+            if not response:
+                # استخدام chatbot الافتراضي
+                result = self.chatbot.process_message(message, user_id="dashboard_user")
+                response = result.get("response", "عذراً، لم أفهم السؤال. يمكنك إعادة صياغته.")
+            
+            self._add_chat_message("المساعد", response)
+        except Exception as e:
+            self._add_chat_message("المساعد", f"حدث خطأ: {str(e)}")
+    
+    def _add_chat_message(self, sender: str, message: str):
+        """إضافة رسالة إلى عرض المحادثة"""
+        color = "#1976D2" if sender == "المساعد" else "#4CAF50"
+        self.chat_display.append(f'<div style="margin: 5px 0;"><b style="color: {color};">{sender}:</b> {message}</div>')
+        # التمرير للأسفل
+        scrollbar = self.chat_display.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+    
+    def _process_chat_query(self, message: str) -> str:
+        """معالجة استعلامات خاصة من لوحة التحكم"""
+        message_lower = message.lower()
+        
+        # استعلامات المبيعات
+        if any(word in message_lower for word in ["مبيعات اليوم", "مبيعات اليوم", "مبيعات", "sales today"]):
+            try:
+                today = QDate.currentDate().toPython()
+                data = self.service.load_dashboard(today, today)
+                today_sales = next((k for k in data.kpis if k.key == "today_sales"), None)
+                if today_sales:
+                    return f"مبيعات اليوم: {today_sales.value:,.2f} {today_sales.unit}"
+            except:
+                pass
+        
+        # استعلامات المنتجات الأكثر مبيعاً
+        if any(word in message_lower for word in ["أكثر منتج", "أفضل منتج", "top product", "best seller"]):
+            try:
+                end = QDate.currentDate().toPython()
+                start = end - timedelta(days=30)
+                top_products = self.service._top_products(start, end, limit=3)
+                if top_products:
+                    result = "أفضل 3 منتجات مبيعاً:\n"
+                    for i, p in enumerate(top_products, 1):
+                        result += f"{i}. {p.get('name', 'غير محدد')}: {p.get('total', 0):,.2f} د.ج\n"
+                    return result
+            except:
+                pass
+        
+        # استعلامات المنتجات منخفضة المخزون
+        if any(word in message_lower for word in ["منخفض", "ناقص", "low stock", "نواقص"]):
+            try:
+                low_stock = self.service._kpi_low_stock_count()
+                if low_stock.value > 0:
+                    products = self.service.get_low_stock_products()
+                    result = f"يوجد {low_stock.value} منتج منخفض المخزون:\n"
+                    for p in products[:5]:  # أول 5 منتجات
+                        result += f"- {p.get('name', 'غير محدد')}: {p.get('current_stock', 0):,.0f} (الحد الأدنى: {p.get('min_stock', 0):,.0f})\n"
+                    if len(products) > 5:
+                        result += f"... و {len(products) - 5} منتج آخر"
+                    return result
+                else:
+                    return "✅ لا توجد منتجات منخفضة المخزون حالياً."
+            except:
+                pass
+        
+        # استعلامات الربح
+        if any(word in message_lower for word in ["ربح", "profit", "أرباح"]):
+            try:
+                end = QDate.currentDate().toPython()
+                start = end - timedelta(days=30)
+                data = self.service.load_dashboard(start, end)
+                profit = next((k for k in data.kpis if k.key == "gross_profit"), None)
+                if profit:
+                    return f"إجمالي الربح (آخر 30 يوم): {profit.value:,.2f} {profit.unit}"
+            except:
+                pass
+        
+        return None  # لم يتم التعرف على الاستعلام، استخدم chatbot الافتراضي
+    
+    def closeEvent(self, event):
+        """تنظيف الموارد عند إغلاق النافذة"""
+        if self._blink_timer:
+            self._blink_timer.stop()
+        super().closeEvent(event)
+
+
+class LowStockDialog(QDialog):
+    """نافذة عرض المنتجات منخفضة المخزون"""
+    
+    def __init__(self, products: list, parent=None, db_manager=None):
+        super().__init__(parent)
+        self.products = products
+        self.db_manager = db_manager
+        self.setWindowTitle("⚠️ منتجات منخفضة المخزون")
+        self.setMinimumSize(800, 500)
+        self.setLayoutDirection(Qt.RightToLeft)
+        
+        self._setup_ui()
+    
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        
+        # العنوان
+        title = QLabel("⚠️ منتجات منخفضة المخزون")
+        title_font = QFont()
+        title_font.setPointSize(16)
+        title_font.setBold(True)
+        title.setFont(title_font)
+        title.setStyleSheet("color: #F44336; padding: 10px;")
+        layout.addWidget(title)
+        
+        # الجدول
+        self.table = QTableWidget()
+        self.table.setColumnCount(7)
+        self.table.setHorizontalHeaderLabels([
+            "المنتج", "الباركود", "المخزون الحالي", 
+            "الحد الأدنى", "الحالة", "سعر التكلفة", "سعر البيع"
+        ])
+        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.setAlternatingRowColors(True)
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        
+        # ملء الجدول
+        self._populate_table()
+        
+        layout.addWidget(self.table)
+        
+        # الأزرار
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addStretch()
+        
+        self.btn_create_purchase = QPushButton("🛒 إنشاء طلب شراء")
+        self.btn_create_purchase.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 10px 20px;
+                font-weight: bold;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+        """)
+        self.btn_create_purchase.clicked.connect(self._create_purchase_order)
+        buttons_layout.addWidget(self.btn_create_purchase)
+        
+        self.btn_close = QPushButton("إغلاق")
+        self.btn_close.clicked.connect(self.accept)
+        buttons_layout.addWidget(self.btn_close)
+        
+        layout.addLayout(buttons_layout)
+    
+    def _populate_table(self):
+        """ملء الجدول بالمنتجات"""
+        self.table.setRowCount(len(self.products))
+        
+        for row, product in enumerate(self.products):
+            # اسم المنتج
+            name_item = QTableWidgetItem(str(product.get('name', 'غير محدد')))
+            self.table.setItem(row, 0, name_item)
+            
+            # الباركود
+            barcode_item = QTableWidgetItem(str(product.get('barcode', '-')))
+            self.table.setItem(row, 1, barcode_item)
+            
+            # المخزون الحالي
+            current_stock = float(product.get('current_stock', 0))
+            stock_item = QTableWidgetItem(f"{current_stock:,.0f}")
+            if current_stock == 0:
+                stock_item.setForeground(QColor("#F44336"))  # أحمر للنفاد
+            else:
+                stock_item.setForeground(QColor("#FF9800"))  # برتقالي للمنخفض
+            self.table.setItem(row, 2, stock_item)
+            
+            # الحد الأدنى
+            min_stock = float(product.get('min_stock', 0))
+            min_item = QTableWidgetItem(f"{min_stock:,.0f}")
+            self.table.setItem(row, 3, min_item)
+            
+            # الحالة
+            status = product.get('status', 'عادي')
+            status_item = QTableWidgetItem(status)
+            if status == 'نفذ من المخزون':
+                status_item.setForeground(QColor("#F44336"))
+            else:
+                status_item.setForeground(QColor("#FF9800"))
+            self.table.setItem(row, 4, status_item)
+            
+            # سعر التكلفة
+            cost = float(product.get('cost_price', 0))
+            cost_item = QTableWidgetItem(f"{cost:,.2f} د.ج")
+            self.table.setItem(row, 5, cost_item)
+            
+            # سعر البيع
+            selling = float(product.get('selling_price', 0))
+            selling_item = QTableWidgetItem(f"{selling:,.2f} د.ج")
+            self.table.setItem(row, 6, selling_item)
+        
+        # ضبط عرض الأعمدة
+        self.table.resizeColumnsToContents()
+    
+    def _create_purchase_order(self):
+        """إنشاء طلب شراء للمنتجات المحددة"""
+        selected_rows = self.table.selectionModel().selectedRows()
+        if not selected_rows:
+            QMessageBox.warning(self, "تحذير", "الرجاء تحديد منتج واحد على الأقل من الجدول.")
+            return
+        
+        # جمع المنتجات المحددة
+        selected_products = []
+        for index in selected_rows:
+            row = index.row()
+            product = self.products[row]
+            selected_products.append({
+                'id': product.get('id'),
+                'name': product.get('name'),
+                'barcode': product.get('barcode', ''),
+                'min_stock': float(product.get('min_stock', 0)),
+                'current_stock': float(product.get('current_stock', 0)),
+                'cost_price': float(product.get('cost_price', 0))
+            })
+        
+        # عرض رسالة تأكيد
+        product_names = "\n".join([f"- {p['name']}" for p in selected_products])
+        reply = QMessageBox.question(
+            self,
+            "تأكيد",
+            f"هل تريد إنشاء طلب شراء للمنتجات التالية؟\n\n{product_names}",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                # الحصول على db_manager
+                db_manager = self.db_manager
+                
+                if not db_manager:
+                    # محاولة الحصول من النافذة الأم
+                    parent = self.parent()
+                    if hasattr(parent, 'db'):
+                        db_manager = parent.db
+                    elif hasattr(parent, 'db_manager'):
+                        db_manager = parent.db_manager
+                
+                if not db_manager:
+                    QMessageBox.critical(
+                        self,
+                        "خطأ",
+                        "لا يمكن الوصول إلى قاعدة البيانات.\n"
+                        "يرجى فتح نافذة إنشاء طلب الشراء يدوياً."
+                    )
+                    return
+                
+                # استيراد PurchaseOrderDialog
+                from ...dialogs.purchase_order_dialog import PurchaseOrderDialog
+                
+                # فتح نافذة إنشاء طلب الشراء مع المنتجات المسبقة
+                dialog = PurchaseOrderDialog(
+                    db_manager=db_manager,
+                    parent=parent,
+                    prefill_products=selected_products
+                )
+                
+                if dialog.exec():
+                    # تم إنشاء طلب الشراء بنجاح
+                    QMessageBox.information(
+                        self,
+                        "نجاح",
+                        f"تم إنشاء طلب شراء لـ {len(selected_products)} منتج بنجاح."
+                    )
+                    self.accept()  # إغلاق نافذة النواقص
+                else:
+                    # المستخدم ألغى العملية
+                    pass
+                    
+            except ImportError as e:
+                QMessageBox.critical(
+                    self,
+                    "خطأ",
+                    f"فشل في استيراد نافذة إنشاء طلب الشراء:\n{str(e)}"
+                )
+            except Exception as e:
+                QMessageBox.critical(
+                    self,
+                    "خطأ",
+                    f"حدث خطأ أثناء إنشاء طلب الشراء:\n{str(e)}"
+                )

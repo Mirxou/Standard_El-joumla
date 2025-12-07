@@ -22,6 +22,11 @@ from ...core.database_manager import DatabaseManager
 class PaymentPlansWindow(QWidget):
     """نافذة إدارة خطط الدفع"""
     
+    # Window Manager attributes (للتسجيل التلقائي)
+    window_key = "payment_plans"
+    window_singleton = True
+    window_title = "إدارة خطط الدفع"
+    
     plan_updated = Signal()  # إشارة عند تحديث خطة
     
     def __init__(self, db_manager: DatabaseManager, parent=None):

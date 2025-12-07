@@ -35,6 +35,12 @@ except Exception:
     EnhancedProductService = None
     EnhancedProduct = None
 
+# Try to use image manager service
+try:
+    from ...services.image_manager_service import ImageManagerService
+except Exception:
+    ImageManagerService = None
+
 
 class ProductValidationWorker(QThread):
     """عامل التحقق من صحة بيانات المنتج"""
@@ -116,6 +122,7 @@ class ProductDialog(QDialog):
         self.is_edit_mode = product is not None
         self.validation_worker = None
         self.current_image_path = None
+        self.original_image_path = None  # مسار الصورة الأصلية قبل التعديل
         
         # إعداد المدراء
         self.product_manager = ProductManager(db_manager)
@@ -127,11 +134,25 @@ class ProductDialog(QDialog):
                 self.product_service = None
         else:
             self.product_service = None
+        
+        # إعداد خدمة إدارة الصور
+        if ImageManagerService:
+            try:
+                self.image_manager = ImageManagerService(logger=setup_logger('image_manager'))
+            except Exception:
+                self.image_manager = None
+        else:
+            self.image_manager = None
         self.category_manager = CategoryManager(db_manager)
         self.supplier_manager = SupplierManager(db_manager)
         
         # إعداد السجل
         self.logger = setup_logger(__name__)
+        
+        # تهيئة نظام الترجمة
+        from pathlib import Path
+        from ...utils.i18n_api import I18n
+        self.i18n = I18n(locales_dir=str(Path(__file__).parent.parent.parent.parent / "locales"))
         
         # إعداد الواجهة
         self.setup_ui()
@@ -146,7 +167,7 @@ class ProductDialog(QDialog):
     
     def setup_ui(self):
         """إعداد واجهة المستخدم المحسنة"""
-        title = "تعديل المنتج" if self.is_edit_mode else "إضافة منتج جديد"
+        title = self.i18n.get_message("product_edit_title") if self.is_edit_mode else self.i18n.get_message("product_new_title")
         self.setWindowTitle(title)
         self.setMinimumSize(900, 700)
         self.resize(1000, 750)
@@ -233,7 +254,7 @@ class ProductDialog(QDialog):
         info_layout.addWidget(title_label)
         
         if self.is_edit_mode and self.product:
-            subtitle_label = QLabel(f"المنتج: {self.product.name}")
+            subtitle_label = QLabel(self.i18n.get_message("product_name_label", name=self.product.name))
             subtitle_label.setStyleSheet("font-size: 12px; color: #ecf0f1;")
             info_layout.addWidget(subtitle_label)
         
@@ -248,26 +269,26 @@ class ProductDialog(QDialog):
         
         # تبويب المعلومات الأساسية
         self.basic_tab = self.create_basic_tab()
-        self.tab_widget.addTab(self.basic_tab, "المعلومات الأساسية")
+        self.tab_widget.addTab(self.basic_tab, self.i18n.get_message("tab_basic_info"))
         
         # تبويب الأسعار والمخزون
         self.pricing_tab = self.create_pricing_tab()
-        self.tab_widget.addTab(self.pricing_tab, "الأسعار والمخزون")
+        self.tab_widget.addTab(self.pricing_tab, self.i18n.get_message("tab_pricing_stock"))
         
         # تبويب التفاصيل الإضافية
         self.details_tab = self.create_details_tab()
-        self.tab_widget.addTab(self.details_tab, "التفاصيل الإضافية")
+        self.tab_widget.addTab(self.details_tab, self.i18n.get_message("tab_additional_details"))
         
         # تبويب سجل المخزون (للتعديل فقط)
         if self.is_edit_mode:
             self.history_tab = self.create_history_tab()
-            self.tab_widget.addTab(self.history_tab, "سجل المخزون")
+            self.tab_widget.addTab(self.history_tab, self.i18n.get_message("tab_stock_history"))
         
         layout.addWidget(self.tab_widget)
     
     def setup_image_preview(self, layout: QVBoxLayout):
         """إعداد معاينة الصورة"""
-        self.image_preview_widget = QGroupBox("صورة المنتج")
+        self.image_preview_widget = QGroupBox(self.i18n.get_message("product_image"))
         image_layout = QVBoxLayout(self.image_preview_widget)
         
         # معاينة الصورة
@@ -282,18 +303,18 @@ class ProductDialog(QDialog):
                 color: #7f8c8d;
             }
         """)
-        self.image_label.setText("لا توجد صورة\nانقر لإضافة صورة")
+        self.image_label.setText(self.i18n.get_message("no_image"))
         self.image_label.mousePressEvent = self.select_image
         image_layout.addWidget(self.image_label)
         
         # أزرار الصورة
         image_buttons_layout = QHBoxLayout()
         
-        self.select_image_btn = QPushButton("اختيار صورة")
+        self.select_image_btn = QPushButton(self.i18n.get_message("select_image"))
         self.select_image_btn.clicked.connect(self.select_image)
         image_buttons_layout.addWidget(self.select_image_btn)
         
-        self.remove_image_btn = QPushButton("حذف الصورة")
+        self.remove_image_btn = QPushButton(self.i18n.get_message("remove_image"))
         self.remove_image_btn.clicked.connect(self.remove_image)
         self.remove_image_btn.setEnabled(False)
         image_buttons_layout.addWidget(self.remove_image_btn)
@@ -303,21 +324,21 @@ class ProductDialog(QDialog):
     
     def setup_quick_tools(self, layout: QVBoxLayout):
         """إعداد الأدوات السريعة"""
-        self.quick_tools_widget = QGroupBox("أدوات سريعة")
+        self.quick_tools_widget = QGroupBox(self.i18n.get_message("quick_tools"))
         tools_layout = QVBoxLayout(self.quick_tools_widget)
         
         # بحث سريع في المنتجات المشابهة
-        self.quick_search_btn = QPushButton("البحث عن منتجات مشابهة")
+        self.quick_search_btn = QPushButton(self.i18n.get_message("search_similar_products"))
         self.quick_search_btn.clicked.connect(self.search_similar_products)
         tools_layout.addWidget(self.quick_search_btn)
         
         # نسخ من منتج موجود
-        self.copy_from_btn = QPushButton("نسخ من منتج موجود")
+        self.copy_from_btn = QPushButton(self.i18n.get_message("copy_from_existing"))
         self.copy_from_btn.clicked.connect(self.copy_from_existing)
         tools_layout.addWidget(self.copy_from_btn)
         
         # حاسبة هامش الربح
-        self.profit_calc_btn = QPushButton("حاسبة هامش الربح")
+        self.profit_calc_btn = QPushButton(self.i18n.get_message("profit_margin_calculator"))
         self.profit_calc_btn.clicked.connect(self.show_profit_calculator)
         tools_layout.addWidget(self.profit_calc_btn)
         
@@ -325,23 +346,23 @@ class ProductDialog(QDialog):
     
     def setup_quick_info(self, layout: QVBoxLayout):
         """إعداد معلومات سريعة"""
-        self.quick_info_widget = QGroupBox("معلومات سريعة")
+        self.quick_info_widget = QGroupBox(self.i18n.get_message("quick_info"))
         info_layout = QVBoxLayout(self.quick_info_widget)
         
         # معلومات الربح
-        self.profit_info_label = QLabel("هامش الربح: 0.00%")
+        self.profit_info_label = QLabel(self.i18n.get_message("profit_margin_label", percent="0.00"))
         self.profit_info_label.setStyleSheet("font-weight: bold; color: #7f8c8d;")
         info_layout.addWidget(self.profit_info_label)
         
         # معلومات المخزون
-        self.stock_info_label = QLabel("حالة المخزون: جيدة")
+        self.stock_info_label = QLabel(self.i18n.get_message("stock_status_good"))
         self.stock_info_label.setStyleSheet("color: #27ae60;")
         info_layout.addWidget(self.stock_info_label)
         
         # آخر تحديث
         if self.is_edit_mode and self.product:
             last_update = getattr(self.product, 'updated_at', 'غير محدد')
-            self.last_update_label = QLabel(f"آخر تحديث: {last_update}")
+            self.last_update_label = QLabel(self.i18n.get_message("last_update", date=str(last_update)))
             self.last_update_label.setStyleSheet("font-size: 10px; color: #7f8c8d;")
             info_layout.addWidget(self.last_update_label)
         
@@ -361,15 +382,15 @@ class ProductDialog(QDialog):
         
         # اسم المنتج
         self.name_edit = QLineEdit()
-        self.name_edit.setPlaceholderText("أدخل اسم المنتج")
+        self.name_edit.setPlaceholderText(self.i18n.get_message("enter_product_name"))
         self.name_edit.setMaxLength(200)
         basic_layout.addRow("اسم المنتج *:", self.name_edit)
         
         # الباركود
         barcode_layout = QHBoxLayout()
         self.barcode_edit = QLineEdit()
-        self.barcode_edit.setPlaceholderText("أدخل الباركود أو اتركه فارغاً للتوليد التلقائي")
-        self.generate_barcode_btn = QPushButton("توليد")
+        self.barcode_edit.setPlaceholderText(self.i18n.get_message("enter_barcode"))
+        self.generate_barcode_btn = QPushButton(self.i18n.get_message("generate"))
         self.generate_barcode_btn.setMaximumWidth(80)
         barcode_layout.addWidget(self.barcode_edit)
         barcode_layout.addWidget(self.generate_barcode_btn)
@@ -387,7 +408,7 @@ class ProductDialog(QDialog):
         
         # الوحدة
         self.unit_edit = QLineEdit()
-        self.unit_edit.setPlaceholderText("مثال: قطعة، كيلو، لتر")
+        self.unit_edit.setPlaceholderText(self.i18n.get_message("enter_unit"))
         basic_layout.addRow("الوحدة:", self.unit_edit)
         
         layout.addWidget(basic_group)
@@ -397,7 +418,7 @@ class ProductDialog(QDialog):
         desc_layout = QVBoxLayout(desc_group)
         
         self.description_edit = QTextEdit()
-        self.description_edit.setPlaceholderText("أدخل وصف المنتج...")
+        self.description_edit.setPlaceholderText(self.i18n.get_message("enter_description"))
         self.description_edit.setMaximumHeight(100)
         desc_layout.addWidget(self.description_edit)
         
@@ -460,7 +481,7 @@ class ProductDialog(QDialog):
         
         # موقع المخزون
         self.location_edit = QLineEdit()
-        self.location_edit.setPlaceholderText("مثال: رف A1، مخزن رقم 2")
+        self.location_edit.setPlaceholderText(self.i18n.get_message("enter_location"))
         stock_layout.addRow("موقع المخزون:", self.location_edit)
         
         layout.addWidget(stock_group)
@@ -511,7 +532,7 @@ class ProductDialog(QDialog):
         self.weight_spin.setRange(0, 999999.99)
         self.weight_spin.setDecimals(3)
         self.weight_spin.setSuffix(" كجم")
-        extra_layout.addRow("الوزن:", self.weight_spin)
+        extra_layout.addRow(self.i18n.get_message("weight"), self.weight_spin)
         
         # الأبعاد
         dimensions_layout = QHBoxLayout()
@@ -519,37 +540,38 @@ class ProductDialog(QDialog):
         self.length_spin = QDoubleSpinBox()
         self.length_spin.setRange(0, 999999.99)
         self.length_spin.setDecimals(2)
-        self.length_spin.setSuffix(" سم")
-        dimensions_layout.addWidget(QLabel("الطول:"))
+        cm_unit = self.i18n.get_message("cm_unit")
+        self.length_spin.setSuffix(f" {cm_unit}")
+        dimensions_layout.addWidget(QLabel(self.i18n.get_message("length")))
         dimensions_layout.addWidget(self.length_spin)
         
         self.width_spin = QDoubleSpinBox()
         self.width_spin.setRange(0, 999999.99)
         self.width_spin.setDecimals(2)
-        self.width_spin.setSuffix(" سم")
-        dimensions_layout.addWidget(QLabel("العرض:"))
+        self.width_spin.setSuffix(f" {cm_unit}")
+        dimensions_layout.addWidget(QLabel(self.i18n.get_message("width")))
         dimensions_layout.addWidget(self.width_spin)
         
         self.height_spin = QDoubleSpinBox()
         self.height_spin.setRange(0, 999999.99)
         self.height_spin.setDecimals(2)
-        self.height_spin.setSuffix(" سم")
-        dimensions_layout.addWidget(QLabel("الارتفاع:"))
+        self.height_spin.setSuffix(f" {cm_unit}")
+        dimensions_layout.addWidget(QLabel(self.i18n.get_message("height")))
         dimensions_layout.addWidget(self.height_spin)
         
-        extra_layout.addRow("الأبعاد:", dimensions_layout)
+        extra_layout.addRow(self.i18n.get_message("dimensions"), dimensions_layout)
         
         # تاريخ انتهاء الصلاحية
         self.expiry_date_edit = QDateEdit()
         self.expiry_date_edit.setDate(QDate.currentDate().addYears(1))
         self.expiry_date_edit.setCalendarPopup(True)
-        extra_layout.addRow("تاريخ انتهاء الصلاحية:", self.expiry_date_edit)
+        extra_layout.addRow(self.i18n.get_message("expiry_date"), self.expiry_date_edit)
         
         # ملاحظات إضافية
         self.notes_edit = QTextEdit()
-        self.notes_edit.setPlaceholderText("ملاحظات إضافية...")
+        self.notes_edit.setPlaceholderText(self.i18n.get_message("enter_notes"))
         self.notes_edit.setMaximumHeight(80)
-        extra_layout.addRow("ملاحظات:", self.notes_edit)
+        extra_layout.addRow(self.i18n.get_message("notes_label"), self.notes_edit)
         
         layout.addWidget(extra_group)
         
@@ -584,7 +606,7 @@ class ProductDialog(QDialog):
         buttons_layout.setSpacing(10)
         
         # زر الحفظ
-        self.save_button = QPushButton("حفظ")
+        self.save_button = QPushButton(self.i18n.get_message("save"))
         self.save_button.setMinimumHeight(40)
         self.save_button.setDefault(True)
         self.save_button.setStyleSheet("""
@@ -602,12 +624,12 @@ class ProductDialog(QDialog):
         
         # زر الحفظ والإضافة الجديدة (للإضافة فقط)
         if not self.is_edit_mode:
-            self.save_and_new_button = QPushButton("حفظ وإضافة جديد")
+            self.save_and_new_button = QPushButton(self.i18n.get_message("save_and_new"))
             self.save_and_new_button.setMinimumHeight(40)
             buttons_layout.addWidget(self.save_and_new_button)
         
         # زر الإلغاء
-        self.cancel_button = QPushButton("إلغاء")
+        self.cancel_button = QPushButton(self.i18n.get_message("cancel"))
         self.cancel_button.setMinimumHeight(40)
         buttons_layout.addWidget(self.cancel_button)
         
@@ -765,7 +787,7 @@ class ProductDialog(QDialog):
                     
         except Exception as e:
             self.logger.error(f"خطأ في تحميل البيانات: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في تحميل البيانات: {str(e)}")
+            QMessageBox.critical(self, self.i18n.get_message("error"), f"{self.i18n.get_message('load_failed')}: {str(e)}")
     
     def populate_form(self):
         """ملء النموذج ببيانات المنتج (للتعديل)"""
@@ -785,19 +807,28 @@ class ProductDialog(QDialog):
                 if index >= 0:
                     self.category_combo.setCurrentIndex(index)
             
-            # المورد
-            if self.product.supplier_id:
-                index = self.supplier_combo.findData(self.product.supplier_id)
+            # المورد (supplier_id غير موجود في Product - استخدام getattr مع fallback)
+            supplier_id = getattr(self.product, 'supplier_id', None)
+            if supplier_id:
+                index = self.supplier_combo.findData(supplier_id)
                 if index >= 0:
                     self.supplier_combo.setCurrentIndex(index)
             
             # الأسعار والمخزون
             self.cost_price_spin.setValue(float(self.product.cost_price or 0))
             self.selling_price_spin.setValue(float(self.product.selling_price or 0))
-            self.stock_quantity_spin.setValue(self.product.stock_quantity or 0)
-            self.min_stock_spin.setValue(self.product.min_stock_level or 0)
-            self.max_stock_spin.setValue(self.product.max_stock_level or 0)
-            self.location_edit.setText(self.product.location or "")
+            # stock_quantity -> current_stock
+            stock_qty = getattr(self.product, 'stock_quantity', None) or getattr(self.product, 'current_stock', 0)
+            self.stock_quantity_spin.setValue(stock_qty)
+            # min_stock_level -> min_stock
+            min_stock = getattr(self.product, 'min_stock_level', None) or getattr(self.product, 'min_stock', 0)
+            self.min_stock_spin.setValue(min_stock)
+            # max_stock_level (غير موجود في Product - استخدام 0 كقيمة افتراضية)
+            max_stock = getattr(self.product, 'max_stock_level', None) or 0
+            self.max_stock_spin.setValue(max_stock)
+            # location (غير موجود في Product - استخدام "" كقيمة افتراضية)
+            location = getattr(self.product, 'location', None) or ""
+            self.location_edit.setText(location)
             
             # التفاصيل الإضافية
             self.is_active_check.setChecked(self.product.is_active)
@@ -816,6 +847,11 @@ class ProductDialog(QDialog):
             
             self.notes_edit.setPlainText(getattr(self.product, 'notes', '') or "")
             
+            # تحميل صورة المنتج
+            if hasattr(self.product, 'image_path') and self.product.image_path:
+                self.original_image_path = self.product.image_path
+                self._load_product_image(self.product.image_path)
+            
             # حساب هامش الربح
             self.calculate_profit_margin()
             
@@ -824,7 +860,7 @@ class ProductDialog(QDialog):
             
         except Exception as e:
             self.logger.error(f"خطأ في ملء النموذج: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في تحميل بيانات المنتج: {str(e)}")
+            QMessageBox.critical(self, self.i18n.get_message("error"), f"{self.i18n.get_message('load_failed')}: {str(e)}")
     
     def load_stock_history(self):
         """تحميل سجل المخزون"""
@@ -873,7 +909,7 @@ class ProductDialog(QDialog):
             
         except Exception as e:
             self.logger.error(f"خطأ في توليد الباركود: {str(e)}")
-            QMessageBox.warning(self, "تحذير", "فشل في توليد الباركود")
+            QMessageBox.warning(self, self.i18n.get_message("warning"), self.i18n.get_message("barcode_generation_failed"))
     
     def calculate_profit_margin(self):
         """حساب هامش الربح"""
@@ -883,7 +919,7 @@ class ProductDialog(QDialog):
             
             if cost_price > 0 and selling_price > 0:
                 profit_margin = ((selling_price - cost_price) / selling_price) * 100
-                self.profit_margin_label.setText(f"{profit_margin:.2f}%")
+                self.profit_margin_label.setText(self.i18n.get_message("profit_margin_label", percent=f"{profit_margin:.2f}"))
                 
                 # تغيير لون النص حسب هامش الربح
                 if profit_margin < 10:
@@ -895,7 +931,7 @@ class ProductDialog(QDialog):
                 
                 self.profit_margin_label.setStyleSheet(f"font-weight: bold; color: {color};")
             else:
-                self.profit_margin_label.setText("0.00%")
+                self.profit_margin_label.setText(self.i18n.get_message("profit_margin_label", percent="0.00"))
                 self.profit_margin_label.setStyleSheet("font-weight: bold; color: #7f8c8d;")
                 
         except Exception as e:
@@ -934,7 +970,7 @@ class ProductDialog(QDialog):
             'height': getattr(self, 'height_spin', None) and self.height_spin.value() or None,
             'expiry_date': getattr(self, 'expiry_date_edit', None) and self.expiry_date_edit.date().toString(Qt.ISODate) or None,
             'notes': getattr(self, 'notes_edit', None) and self.notes_edit.toPlainText().strip() or None,
-            'image_path': self.current_image_path
+            'image_path': self._process_image_path()  # معالجة الصورة باستخدام الخدمة
         }
     
     def handle_save(self):
@@ -948,6 +984,48 @@ class ProductDialog(QDialog):
     def save_product(self, close_after_save: bool = True):
         """حفظ المنتج"""
         try:
+            # 🛡️ التحقق من صحة البيانات قبل الحفظ
+            product_name = self.name_edit.text().strip()
+            if not product_name:
+                QMessageBox.warning(self, self.i18n.get_message("error"), self.i18n.get_message("product_name_required"))
+                return
+            
+            # التحقق من السعر
+            try:
+                cost_price = self.cost_price_spin.value()
+                selling_price = self.selling_price_spin.value()
+                
+                if cost_price < 0:
+                    QMessageBox.warning(self, self.i18n.get_message("error"), self.i18n.get_message("cost_price_negative"))
+                    return
+                
+                if selling_price <= 0:
+                    QMessageBox.warning(self, self.i18n.get_message("error"), self.i18n.get_message("selling_price_zero"))
+                    return
+                
+                if selling_price < cost_price:
+                    reply = QMessageBox.question(
+                        self,
+                        "تحذير",
+                        f"سعر البيع ({selling_price:.2f}) أقل من سعر التكلفة ({cost_price:.2f}). هل تريد المتابعة؟",
+                        QMessageBox.Yes | QMessageBox.No
+                    )
+                    if reply == QMessageBox.No:
+                        return
+            except (ValueError, TypeError) as e:
+                QMessageBox.warning(self, self.i18n.get_message("error"), f"{self.i18n.get_message('invalid_prices')}: {str(e)}")
+                return
+            
+            # التحقق من الكمية
+            try:
+                stock_quantity = self.stock_quantity_spin.value()
+                if stock_quantity < 0:
+                    QMessageBox.warning(self, self.i18n.get_message("error"), self.i18n.get_message("quantity_negative"))
+                    return
+            except (ValueError, TypeError) as e:
+                QMessageBox.warning(self, self.i18n.get_message("error"), f"{self.i18n.get_message('invalid_quantity')}: {str(e)}")
+                return
+            
             # جمع البيانات
             product_data = self.collect_form_data()
             
@@ -973,7 +1051,7 @@ class ProductDialog(QDialog):
             self.set_ui_enabled(True)
             self.progress_bar.setVisible(False)
             self.logger.error(f"خطأ في حفظ المنتج: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في حفظ المنتج: {str(e)}")
+            QMessageBox.critical(self, self.i18n.get_message("error"), f"{self.i18n.get_message('save_failed')}: {str(e)}")
     
     def on_validation_completed(self, success: bool, message: str, data: Dict[str, Any], close_after_save: bool):
         """معالجة اكتمال التحقق من صحة البيانات"""
@@ -981,7 +1059,7 @@ class ProductDialog(QDialog):
         self.progress_bar.setVisible(False)
         
         if not success:
-            QMessageBox.critical(self, "خطأ في البيانات", message)
+            QMessageBox.critical(self, self.i18n.get_message("data_error"), message)
             return
         
         try:
@@ -1015,13 +1093,25 @@ class ProductDialog(QDialog):
                         if updated_product:
                             self.product = updated_product
                             self.product_saved.emit(updated_product)
-                            QMessageBox.information(self, "نجح", "تم تحديث المنتج بنجاح")
+                            
+                            # 🔥 إطلاق الإشارات: إعلام النظام بالتغييرات
+                            try:
+                                from ...core.signals import signals
+                                signals.inventory_updated.emit()
+                                signals.inventory_item_updated.emit(self.product.id)
+                                if self.logger:
+                                    self.logger.debug(f"✅ تم إطلاق إشارات: inventory_updated, inventory_item_updated")
+                            except Exception as e:
+                                if self.logger:
+                                    self.logger.warning(f"⚠️ فشل إطلاق الإشارات: {e}")
+                            
+                            QMessageBox.information(self, self.i18n.get_message("success"), self.i18n.get_message("product_updated"))
                             if close_after_save:
                                 self.accept()
                         else:
-                            QMessageBox.critical(self, "خطأ", "فشل في إعادة تحميل المنتج")
+                            QMessageBox.critical(self, self.i18n.get_message("error"), self.i18n.get_message("load_failed"))
                     else:
-                        QMessageBox.critical(self, "خطأ", "فشل في تحديث المنتج")
+                        QMessageBox.critical(self, self.i18n.get_message("error"), self.i18n.get_message("update_failed"))
                 else:
                     # legacy update
                     success = self.product_manager.update_product(self.product.id, data)
@@ -1030,13 +1120,25 @@ class ProductDialog(QDialog):
                         if updated_product:
                             self.product = updated_product
                             self.product_saved.emit(updated_product)
-                            QMessageBox.information(self, "نجح", "تم تحديث المنتج بنجاح")
+                            
+                            # 🔥 إطلاق الإشارات: إعلام النظام بالتغييرات
+                            try:
+                                from ...core.signals import signals
+                                signals.inventory_updated.emit()
+                                signals.inventory_item_updated.emit(self.product.id)
+                                if self.logger:
+                                    self.logger.debug(f"✅ تم إطلاق إشارات: inventory_updated, inventory_item_updated")
+                            except Exception as e:
+                                if self.logger:
+                                    self.logger.warning(f"⚠️ فشل إطلاق الإشارات: {e}")
+                            
+                            QMessageBox.information(self, self.i18n.get_message("success"), self.i18n.get_message("product_updated"))
                             if close_after_save:
                                 self.accept()
                         else:
-                            QMessageBox.critical(self, "خطأ", "فشل في إعادة تحميل المنتج")
+                            QMessageBox.critical(self, self.i18n.get_message("error"), self.i18n.get_message("load_failed"))
                     else:
-                        QMessageBox.critical(self, "خطأ", "فشل في تحديث المنتج")
+                        QMessageBox.critical(self, self.i18n.get_message("error"), self.i18n.get_message("update_failed"))
             else:
                 # إنشاء منتج جديد (افضلية للخدمة المحسنة)
                 if self.product_service:
@@ -1065,6 +1167,18 @@ class ProductDialog(QDialog):
                         created_product = self.product_service.get_product_by_id(product_id)
                         if created_product:
                             self.product_saved.emit(created_product)
+                            
+                            # 🔥 إطلاق الإشارات: إعلام النظام بالتغييرات
+                            try:
+                                from ...core.signals import signals
+                                signals.inventory_updated.emit()
+                                signals.inventory_item_added.emit(product_id)
+                                if self.logger:
+                                    self.logger.debug(f"✅ تم إطلاق إشارات: inventory_updated, inventory_item_added")
+                            except Exception as e:
+                                if self.logger:
+                                    self.logger.warning(f"⚠️ فشل إطلاق الإشارات: {e}")
+                            
                             QMessageBox.information(self, "نجح", f"تم إضافة المنتج بنجاح\nرقم المنتج: {product_id}")
                             if close_after_save:
                                 self.accept()
@@ -1096,6 +1210,18 @@ class ProductDialog(QDialog):
                         created_product = self.product_manager.get_product_by_id(product_id)
                         if created_product:
                             self.product_saved.emit(created_product)
+                            
+                            # 🔥 إطلاق الإشارات: إعلام النظام بالتغييرات
+                            try:
+                                from ...core.signals import signals
+                                signals.inventory_updated.emit()
+                                signals.inventory_item_added.emit(product_id)
+                                if self.logger:
+                                    self.logger.debug(f"✅ تم إطلاق إشارات: inventory_updated, inventory_item_added")
+                            except Exception as e:
+                                if self.logger:
+                                    self.logger.warning(f"⚠️ فشل إطلاق الإشارات: {e}")
+                            
                             QMessageBox.information(self, "نجح", f"تم إضافة المنتج بنجاح\nرقم المنتج: {product_id}")
                             if close_after_save:
                                 self.accept()
@@ -1120,7 +1246,7 @@ class ProductDialog(QDialog):
                 self,
                 "اختيار صورة المنتج",
                 "",
-                "Image Files (*.png *.jpg *.jpeg *.bmp *.gif)"
+                "Image Files (*.png *.jpg *.jpeg *.bmp *.gif *.webp)"
             )
             
             if file_path:
@@ -1134,6 +1260,7 @@ class ProductDialog(QDialog):
                         Qt.SmoothTransformation
                     )
                     self.image_label.setPixmap(scaled_pixmap)
+                    # حفظ المسار المؤقت (سيتم نسخه عند الحفظ)
                     self.current_image_path = file_path
                     self.remove_image_btn.setEnabled(True)
                 else:
@@ -1146,9 +1273,118 @@ class ProductDialog(QDialog):
     def remove_image(self):
         """حذف صورة المنتج"""
         self.image_label.clear()
-        self.image_label.setText("لا توجد صورة\nانقر لإضافة صورة")
+        self.image_label.setText(self.i18n.get_message("no_image"))
         self.current_image_path = None
+        self.original_image_path = None
         self.remove_image_btn.setEnabled(False)
+    
+    def _process_image_path(self) -> Optional[str]:
+        """
+        معالجة مسار الصورة باستخدام خدمة إدارة الصور
+        
+        Returns:
+            مسار الصورة المحفوظة أو None
+        """
+        try:
+            # إذا لم تكن هناك صورة جديدة، استخدم الصورة الأصلية
+            if not self.current_image_path:
+                return self.original_image_path
+            
+            # إذا كانت الصورة الجديدة هي نفس الصورة الأصلية (لم يتم التغيير)
+            if self.current_image_path == self.original_image_path:
+                return self.original_image_path
+            
+            # إذا كانت الصورة في مجلد المنتجات بالفعل (تم حفظها مسبقاً)
+            if self.image_manager and 'assets/images/products' in str(self.current_image_path):
+                return self.current_image_path
+            
+            # حفظ الصورة الجديدة باستخدام الخدمة
+            if self.image_manager:
+                product_id = self.product.id if self.is_edit_mode and self.product else None
+                product_name = self.name_edit.text().strip() if hasattr(self, 'name_edit') else None
+                
+                saved_path = self.image_manager.save_product_image(
+                    self.current_image_path,
+                    product_id=product_id,
+                    product_name=product_name,
+                    create_thumbnails=True
+                )
+                
+                if saved_path:
+                    # حذف الصورة القديمة إذا كانت موجودة
+                    if self.original_image_path and self.original_image_path != saved_path:
+                        self.image_manager.delete_product_image(self.original_image_path)
+                    
+                    return saved_path
+                else:
+                    self.logger.warning("فشل في حفظ الصورة باستخدام الخدمة، استخدام المسار الأصلي")
+                    return self.current_image_path
+            else:
+                # إذا لم تكن الخدمة متاحة، استخدم المسار الأصلي
+                return self.current_image_path
+                
+        except Exception as e:
+            self.logger.error(f"خطأ في معالجة مسار الصورة: {str(e)}", exc_info=True)
+            return self.current_image_path if self.current_image_path else self.original_image_path
+    
+    def _load_product_image(self, image_path: str):
+        """
+        تحميل وعرض صورة المنتج
+        
+        Args:
+            image_path: مسار الصورة (نسبي أو مطلق)
+        """
+        try:
+            if not image_path:
+                return
+            
+            # محاولة استخدام خدمة إدارة الصور للحصول على الصورة
+            if self.image_manager:
+                # محاولة استخدام صورة المعاينة أولاً
+                preview_path = self.image_manager.get_image_path(image_path, 'preview')
+                if preview_path and preview_path.exists():
+                    pixmap = QPixmap(str(preview_path))
+                else:
+                    # استخدام الصورة الأصلية
+                    original_path = self.image_manager.get_image_path(image_path, 'original')
+                    if original_path and original_path.exists():
+                        pixmap = QPixmap(str(original_path))
+                    else:
+                        # محاولة استخدام المسار مباشرة
+                        full_path = Path(image_path)
+                        if not full_path.is_absolute():
+                            full_path = Path(__file__).parent.parent.parent.parent / image_path
+                        if full_path.exists():
+                            pixmap = QPixmap(str(full_path))
+                        else:
+                            self.logger.warning(f"لم يتم العثور على الصورة: {image_path}")
+                            return
+            else:
+                # استخدام المسار مباشرة
+                full_path = Path(image_path)
+                if not full_path.is_absolute():
+                    full_path = Path(__file__).parent.parent.parent.parent / image_path
+                if full_path.exists():
+                    pixmap = QPixmap(str(full_path))
+                else:
+                    self.logger.warning(f"لم يتم العثور على الصورة: {image_path}")
+                    return
+            
+            if not pixmap.isNull():
+                # تغيير حجم الصورة للمعاينة
+                scaled_pixmap = pixmap.scaled(
+                    200, 200,
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation
+                )
+                self.image_label.setPixmap(scaled_pixmap)
+                self.current_image_path = image_path
+                self.remove_image_btn.setEnabled(True)
+            else:
+                self.logger.warning(f"فشل في تحميل الصورة: {image_path}")
+                
+        except Exception as e:
+            self.logger.error(f"خطأ في تحميل صورة المنتج: {str(e)}", exc_info=True)
     
     def search_similar_products(self):
         """البحث عن منتجات مشابهة"""

@@ -91,43 +91,87 @@ class Customer:
 class CustomerManager:
     """مدير العملاء"""
     
+    # القائمة الذهبية: ترتيب ثابت للأعمدة نلتزم به في القراءة والكتابة
+    DB_COLUMNS = [
+        'id', 'name', 'name_en', 'phone', 'phone2', 'email', 
+        'address', 'city', 'country', 'tax_number', 
+        'credit_limit', 'current_balance', 'notes', 'is_active', 
+        'created_at', 'updated_at'
+    ]
+    
     def __init__(self, db_manager, logger=None):
         self.db_manager = db_manager
         self.logger = logger
+        self._available_columns = None  # سيتم التخزين المؤقت للأعمدة المتاحة
+    
+    def _get_available_columns(self) -> List[str]:
+        """الحصول على الأعمدة المتاحة في جدول customers مع التخزين المؤقت"""
+        if self._available_columns is None:
+            try:
+                table_info = self.db_manager.fetch_all("PRAGMA table_info(customers)")
+                self._available_columns = [row[1] for row in table_info] if table_info else []
+            except Exception:
+                # في حالة الخطأ، نستخدم الأعمدة الأساسية فقط
+                self._available_columns = ['id', 'name', 'phone', 'email', 'address', 
+                                          'credit_limit', 'current_balance', 'is_active', 
+                                          'created_at', 'updated_at']
+        return self._available_columns
+    
+    def _get_select_columns(self) -> List[str]:
+        """الحصول على قائمة الأعمدة المتاحة فقط من DB_COLUMNS"""
+        available = set(self._get_available_columns())
+        return [col for col in self.DB_COLUMNS if col in available]
     
     def create_customer(self, customer: Customer) -> Optional[int]:
         """إنشاء عميل جديد"""
         try:
-            query = """
-            INSERT INTO customers (
-                name, name_en, phone, phone2, email, address, city, country,
-                tax_number, credit_limit, current_balance, notes, is_active,
-                created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """
+            # بناء الاستعلام ديناميكياً بناءً على الأعمدة الموجودة
+            columns = ['name', 'phone', 'email', 'address', 'credit_limit', 'current_balance', 'is_active', 'created_at', 'updated_at']
+            placeholders = ['?'] * len(columns)
             
             now = datetime.now()
-            params = (
+            params = [
                 customer.name,
-                customer.name_en,
                 customer.phone,
-                customer.phone2,
                 customer.email,
                 customer.address,
-                customer.city,
-                customer.country,
-                customer.tax_number,
                 float(customer.credit_limit),
                 float(customer.current_balance),
-                customer.notes,
                 customer.is_active,
                 now,
                 now
-            )
+            ]
             
-            result = self.db_manager.execute_query(query, params)
-            if result and hasattr(result, 'lastrowid'):
-                customer_id = result.lastrowid
+            # محاولة إضافة الأعمدة الاختيارية إذا كانت موجودة
+            try:
+                table_info = self.db_manager.fetch_all("PRAGMA table_info(customers)")
+                available_columns = {row[1] for row in table_info} if table_info else set()
+                
+                optional_fields = [
+                    ('name_en', customer.name_en),
+                    ('phone2', customer.phone2),
+                    ('city', customer.city),
+                    ('country', customer.country),
+                    ('tax_number', customer.tax_number),
+                    ('notes', customer.notes)
+                ]
+                
+                for col_name, col_value in optional_fields:
+                    if col_name in available_columns:
+                        columns.append(col_name)
+                        placeholders.append('?')
+                        params.append(col_value)
+            except Exception:
+                pass
+            
+            query = f"""
+            INSERT INTO customers ({', '.join(columns)})
+            VALUES ({', '.join(placeholders)})
+            """
+            
+            # استخدام execute_insert للحصول على lastrowid
+            customer_id = self.db_manager.execute_insert(query, tuple(params))
+            if customer_id:
                 if self.logger:
                     self.logger.info(f"تم إنشاء عميل جديد: {customer.name} (ID: {customer_id})")
                 return customer_id
@@ -138,42 +182,57 @@ class CustomerManager:
             return None
     
     def get_customer_by_id(self, customer_id: int) -> Optional[Customer]:
-        """الحصول على عميل بالمعرف"""
+        """الحصول على عميل بالمعرف - باستخدام التحديد الصريح"""
         try:
-            query = """
-            SELECT c.*,
-                   (SELECT MAX(sale_date) FROM sales WHERE customer_id = c.id) as last_purchase_date,
-                   (SELECT SUM(total_amount) FROM sales WHERE customer_id = c.id AND status != 'ملغية') as total_purchases,
-                   (SELECT COUNT(*) FROM sales WHERE customer_id = c.id AND status != 'ملغية') as purchases_count
-            FROM customers c
-            WHERE c.id = ?
-            """
+            # نطلب الأعمدة المتاحة فقط بالاسم وبالترتيب المحدد
+            columns = self._get_select_columns()
+            columns_str = ", ".join(columns)
+            query = f"SELECT {columns_str} FROM customers WHERE id = ?"
             
-            result = self.db_manager.fetch_one(query, (customer_id,))
-            if result:
-                return self._row_to_customer(result)
+            # استخدام fetch_one للحصول على صف واحد
+            row = self.db_manager.fetch_one(query, (customer_id,))
+            
+            if row:
+                # نحول الصف الأساسي إلى قاموس
+                customer_data = self._map_row_to_dict(row, columns)
+                
+                # جلب البيانات الإضافية (المبيعات)
+                self._enrich_with_sales_data(customer_id, customer_data)
+                
+                return self._dict_to_object(customer_data)
+                
+            return None
             
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في الحصول على العميل {customer_id}: {str(e)}")
-        
-        return None
+            return None
     
     def get_customer_by_phone(self, phone: str) -> Optional[Customer]:
-        """الحصول على عميل برقم الهاتف"""
+        """الحصول على عميل برقم الهاتف - باستخدام التحديد الصريح"""
         try:
-            query = """
-            SELECT c.*,
-                   (SELECT MAX(sale_date) FROM sales WHERE customer_id = c.id) as last_purchase_date,
-                   (SELECT SUM(total_amount) FROM sales WHERE customer_id = c.id AND status != 'ملغية') as total_purchases,
-                   (SELECT COUNT(*) FROM sales WHERE customer_id = c.id AND status != 'ملغية') as purchases_count
-            FROM customers c
-            WHERE c.phone = ? OR c.phone2 = ?
-            """
+            columns = self._get_select_columns()
+            columns_str = ", ".join(columns)
             
-            result = self.db_manager.fetch_one(query, (phone, phone))
-            if result:
-                return self._row_to_customer(result)
+            # التحقق من وجود عمود phone2 قبل استخدامه
+            available_cols = set(self._get_available_columns())
+            if 'phone2' in available_cols:
+                query = f"SELECT {columns_str} FROM customers WHERE phone = ? OR phone2 = ?"
+                params = (phone, phone)
+            else:
+                query = f"SELECT {columns_str} FROM customers WHERE phone = ?"
+                params = (phone,)
+            
+            row = self.db_manager.fetch_one(query, params)
+            
+            if row:
+                customer_data = self._map_row_to_dict(row, columns)
+                customer_id = customer_data.get('id')
+                
+                # إضافة بيانات المبيعات
+                self._enrich_with_sales_data(customer_id, customer_data)
+                
+                return self._dict_to_object(customer_data)
             
         except Exception as e:
             if self.logger:
@@ -182,45 +241,45 @@ class CustomerManager:
         return None
     
     def search_customers(self, search_term: str = "", active_only: bool = True) -> List[Customer]:
-        """البحث في العملاء"""
+        """البحث في العملاء - باستخدام التحديد الصريح"""
         try:
-            # التحقق من الأعمدة المتاحة في جدول sales
-            cols_info = self.db_manager.fetch_all("PRAGMA table_info(sales)")
-            available_cols = {row[1] for row in cols_info} if cols_info else set()
-            
-            # بناء شروط الفلتر بناءً على الأعمدة المتاحة
-            total_purchases_filter = ""
-            purchases_count_filter = ""
-            if "status" in available_cols:
-                total_purchases_filter = "AND status != 'ملغية'"
-                purchases_count_filter = "AND status != 'ملغية'"
-            
-            query = f"""
-            SELECT c.*,
-                   (SELECT MAX(sale_date) FROM sales WHERE customer_id = c.id) as last_purchase_date,
-                   (SELECT SUM(total_amount) FROM sales WHERE customer_id = c.id {total_purchases_filter}) as total_purchases,
-                   (SELECT COUNT(*) FROM sales WHERE customer_id = c.id {purchases_count_filter}) as purchases_count
-            FROM customers c
-            WHERE 1=1
-            """
+            columns = self._get_select_columns()
+            columns_str = ", ".join(columns)
+            query = f"SELECT {columns_str} FROM customers WHERE 1=1"
             params = []
             
             if search_term:
-                query += " AND (c.name LIKE ? OR c.name_en LIKE ? OR c.phone LIKE ? OR c.phone2 LIKE ? OR c.email LIKE ?)"
-                search_pattern = f"%{search_term}%"
-                params.extend([search_pattern] * 5)
+                query += " AND (name LIKE ? OR phone LIKE ? OR email LIKE ?)"
+                pattern = f"%{search_term}%"
+                params.extend([pattern] * 3)
             
             if active_only:
-                query += " AND c.is_active = 1"
+                query += " AND is_active = 1"
             
-            query += " ORDER BY c.name"
+            query += " ORDER BY name"
             
-            results = self.db_manager.fetch_all(query, params)
-            return [self._row_to_customer(row) for row in results]
+            rows = self.db_manager.fetch_all(query, tuple(params))
+            
+            customers = []
+            for row in rows:
+                customer_data = self._map_row_to_dict(row, columns)
+                customer_id = customer_data.get('id')
+                
+                # يمكن هنا إضافة بيانات المبيعات إذا تطلب الأمر (قد يبطئ البحث)
+                # self._enrich_with_sales_data(customer_id, customer_data)
+                
+                # تعيين قيم افتراضية للمبيعات لتجنب الأخطاء
+                customer_data.setdefault('last_purchase_date', None)
+                customer_data.setdefault('total_purchases', 0)
+                customer_data.setdefault('purchases_count', 0)
+                
+                customers.append(self._dict_to_object(customer_data))
+                
+            return customers
             
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في البحث في العملاء: {str(e)}")
+                self.logger.error(f"خطأ في البحث: {str(e)}")
             return []
     
     def get_all_customers(self, active_only: bool = True) -> List[Customer]:
@@ -230,159 +289,89 @@ class CustomerManager:
     def update_customer(self, customer: Customer) -> bool:
         """تحديث عميل"""
         try:
-            query = """
-            UPDATE customers SET
-                name = ?, name_en = ?, phone = ?, phone2 = ?, email = ?,
-                address = ?, city = ?, country = ?, tax_number = ?,
-                credit_limit = ?, current_balance = ?, notes = ?,
-                is_active = ?, updated_at = ?
-            WHERE id = ?
-            """
-            
-            params = (
+            # بناء الاستعلام ديناميكياً بناءً على الأعمدة الموجودة
+            updates = ['name = ?', 'phone = ?', 'email = ?', 'address = ?', 
+                      'credit_limit = ?', 'current_balance = ?', 'is_active = ?', 'updated_at = ?']
+            params = [
                 customer.name,
-                customer.name_en,
                 customer.phone,
-                customer.phone2,
                 customer.email,
                 customer.address,
-                customer.city,
-                customer.country,
-                customer.tax_number,
                 float(customer.credit_limit),
                 float(customer.current_balance),
-                customer.notes,
                 customer.is_active,
-                datetime.now(),
-                customer.id
-            )
+                datetime.now()
+            ]
             
-            result = self.db_manager.execute_query(query, params)
-            if result and result.rowcount > 0:
-                if self.logger:
-                    self.logger.info(f"تم تحديث العميل: {customer.name} (ID: {customer.id})")
-                return True
+            # محاولة إضافة الأعمدة الاختيارية إذا كانت موجودة
+            try:
+                table_info = self.db_manager.fetch_all("PRAGMA table_info(customers)")
+                available_columns = {row[1] for row in table_info} if table_info else set()
+                
+                optional_updates = [
+                    ('name_en', customer.name_en),
+                    ('phone2', customer.phone2),
+                    ('city', customer.city),
+                    ('country', customer.country),
+                    ('tax_number', customer.tax_number),
+                    ('notes', customer.notes)
+                ]
+                
+                for col_name, col_value in optional_updates:
+                    if col_name in available_columns:
+                        updates.append(f'{col_name} = ?')
+                        params.append(col_value)
+            except Exception:
+                pass
+            
+            query = f"""
+            UPDATE customers SET {', '.join(updates)}
+            WHERE id = ?
+            """
+            params.append(customer.id)
+            
+            result = self.db_manager.execute_non_query(query, tuple(params))
+            return result > 0
             
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في تحديث العميل {customer.id}: {str(e)}")
-        
-        return False
+            return False
     
-    def delete_customer(self, customer_id: int, soft_delete: bool = True) -> bool:
-        """حذف عميل"""
+    def delete_customer(self, customer_id: int) -> bool:
+        """حذف عميل (soft delete)"""
         try:
-            # التحقق من وجود مبيعات للعميل
-            sales_count = self.get_customer_sales_count(customer_id)
-            if sales_count > 0:
-                if self.logger:
-                    self.logger.warning(f"لا يمكن حذف العميل {customer_id} - يحتوي على {sales_count} فاتورة")
-                return False
-            
-            if soft_delete:
-                # حذف ناعم - تعطيل العميل فقط
-                query = "UPDATE customers SET is_active = 0, updated_at = ? WHERE id = ?"
-                params = (datetime.now(), customer_id)
-            else:
-                # حذف صلب - حذف نهائي
-                query = "DELETE FROM customers WHERE id = ?"
-                params = (customer_id,)
-            
-            result = self.db_manager.execute_query(query, params)
-            if result and result.rowcount > 0:
-                if self.logger:
-                    action = "تعطيل" if soft_delete else "حذف"
-                    self.logger.info(f"تم {action} العميل (ID: {customer_id})")
-                return True
+            query = "UPDATE customers SET is_active = 0, updated_at = ? WHERE id = ?"
+            result = self.db_manager.execute_non_query(query, (datetime.now(), customer_id))
+            return result > 0
             
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في حذف العميل {customer_id}: {str(e)}")
-        
-        return False
+            return False
     
-    def update_customer_balance(self, customer_id: int, amount_change: Decimal, 
-                              operation_type: str = "manual") -> bool:
-        """تحديث رصيد العميل"""
+    def get_customers_with_balance(self) -> List[Customer]:
+        """الحصول على العملاء ذوي الرصيد المستحق"""
         try:
-            customer = self.get_customer_by_id(customer_id)
-            if not customer:
-                return False
-            
-            new_balance = customer.current_balance + amount_change
-            
-            query = "UPDATE customers SET current_balance = ?, updated_at = ? WHERE id = ?"
-            params = (float(new_balance), datetime.now(), customer_id)
-            
-            result = self.db_manager.execute_query(query, params)
-            if result and result.rowcount > 0:
-                if self.logger:
-                    self.logger.info(f"تم تحديث رصيد العميل {customer_id}: {amount_change:+} ({operation_type})")
-                return True
-            
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في تحديث رصيد العميل {customer_id}: {str(e)}")
-        
-        return False
-    
-    def get_customer_sales_count(self, customer_id: int) -> int:
-        """الحصول على عدد فواتير العميل"""
-        try:
-            query = "SELECT COUNT(*) FROM sales WHERE customer_id = ? AND status != 'ملغية'"
-            result = self.db_manager.fetch_one(query, (customer_id,))
-            return result[0] if result else 0
-            
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في حساب فواتير العميل {customer_id}: {str(e)}")
-            return 0
-    
-    def get_customer_sales_history(self, customer_id: int, limit: int = 10) -> List[Dict[str, Any]]:
-        """الحصول على تاريخ مبيعات العميل"""
-        try:
-            query = """
-            SELECT invoice_number, sale_date, total_amount, paid_amount, 
-                   remaining_amount, status
-            FROM sales
-            WHERE customer_id = ? AND status != 'ملغية'
-            ORDER BY sale_date DESC, id DESC
-            LIMIT ?
+            columns = self._get_select_columns()
+            columns_str = ", ".join(columns)
+            query = f"""
+            SELECT {columns_str}
+            FROM customers
+            WHERE current_balance > 0 AND is_active = 1
+            ORDER BY current_balance DESC
             """
             
-            results = self.db_manager.fetch_all(query, (customer_id, limit))
-            return [
-                {
-                    'invoice_number': row[0],
-                    'sale_date': row[1],
-                    'total_amount': float(row[2]),
-                    'paid_amount': float(row[3]),
-                    'remaining_amount': float(row[4]),
-                    'status': row[5]
-                }
-                for row in results
-            ]
+            rows = self.db_manager.fetch_all(query)
+            customers = []
+            for row in rows:
+                customer_data = self._map_row_to_dict(row, columns)
+                customer_data.setdefault('last_purchase_date', None)
+                customer_data.setdefault('total_purchases', 0)
+                customer_data.setdefault('purchases_count', 0)
+                customers.append(self._dict_to_object(customer_data))
             
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في الحصول على تاريخ مبيعات العميل {customer_id}: {str(e)}")
-            return []
-    
-    def get_customers_with_outstanding_balance(self) -> List[Customer]:
-        """الحصول على العملاء الذين لديهم رصيد مستحق"""
-        try:
-            query = """
-            SELECT c.*,
-                   (SELECT MAX(sale_date) FROM sales WHERE customer_id = c.id) as last_purchase_date,
-                   (SELECT SUM(total_amount) FROM sales WHERE customer_id = c.id AND status != 'ملغية') as total_purchases,
-                   (SELECT COUNT(*) FROM sales WHERE customer_id = c.id AND status != 'ملغية') as purchases_count
-            FROM customers c
-            WHERE c.current_balance > 0 AND c.is_active = 1
-            ORDER BY c.current_balance DESC
-            """
-            
-            results = self.db_manager.fetch_all(query)
-            return [self._row_to_customer(row) for row in results]
+            return customers
             
         except Exception as e:
             if self.logger:
@@ -392,20 +381,27 @@ class CustomerManager:
     def get_top_customers(self, limit: int = 10) -> List[Customer]:
         """الحصول على أفضل العملاء حسب المبيعات"""
         try:
-            query = """
-            SELECT c.*,
-                   (SELECT MAX(sale_date) FROM sales WHERE customer_id = c.id) as last_purchase_date,
-                   (SELECT SUM(total_amount) FROM sales WHERE customer_id = c.id AND status != 'ملغية') as total_purchases,
-                   (SELECT COUNT(*) FROM sales WHERE customer_id = c.id AND status != 'ملغية') as purchases_count
-            FROM customers c
-            WHERE c.is_active = 1
-            AND (SELECT COUNT(*) FROM sales WHERE customer_id = c.id AND status != 'ملغية') > 0
-            ORDER BY (SELECT SUM(total_amount) FROM sales WHERE customer_id = c.id AND status != 'ملغية') DESC
+            columns = self._get_select_columns()
+            columns_str = ", ".join(columns)
+            query = f"""
+            SELECT {columns_str}
+            FROM customers
+            WHERE is_active = 1
+            ORDER BY credit_limit DESC
             LIMIT ?
             """
             
-            results = self.db_manager.fetch_all(query, (limit,))
-            return [self._row_to_customer(row) for row in results]
+            rows = self.db_manager.fetch_all(query, (limit,))
+            customers = []
+            for row in rows:
+                customer_data = self._map_row_to_dict(row, columns)
+                customer_id = customer_data.get('id')
+                self._enrich_with_sales_data(customer_id, customer_data)
+                customers.append(self._dict_to_object(customer_data))
+            
+            # ترتيب حسب المبيعات
+            customers.sort(key=lambda c: float(c.total_purchases), reverse=True)
+            return customers[:limit]
             
         except Exception as e:
             if self.logger:
@@ -450,26 +446,118 @@ class CustomerManager:
             'avg_credit_limit': 0.0
         }
     
-    def _row_to_customer(self, row) -> Customer:
-        """تحويل صف قاعدة البيانات إلى كائن عميل"""
+    # --- دوال مساعدة (Helper Methods) لجعل الكود نظيفاً ---
+    
+    def _map_row_to_dict(self, row, columns: Optional[List[str]] = None) -> Dict[str, Any]:
+        """تحويل الصف (Tuple) إلى قاموس بناءً على الترتيب الثابت"""
+        if isinstance(row, dict):
+            # إذا كان dict، نضيف القيم المفقودة من DB_COLUMNS
+            result = dict(row)
+            for col in self.DB_COLUMNS:
+                if col not in result:
+                    result[col] = None
+            return result
+        
+        # استخدام الأعمدة المحددة أو DB_COLUMNS
+        if columns is None:
+            columns = self.DB_COLUMNS
+        
+        # الحل السحري: دمج أسماء الأعمدة مع القيم
+        # zip يربط الاسم بالقيمة: id=row[0], name=row[1]...
+        row_dict = {}
+        for i, col_name in enumerate(columns):
+            if i < len(row):
+                row_dict[col_name] = row[i]
+            else:
+                row_dict[col_name] = None
+        
+        # إضافة القيم المفقودة من DB_COLUMNS كـ None
+        for col in self.DB_COLUMNS:
+            if col not in row_dict:
+                row_dict[col] = None
+        
+        return row_dict
+    
+    def _enrich_with_sales_data(self, customer_id: int, customer_data: Dict[str, Any]):
+        """إضافة بيانات المبيعات للقاموس"""
+        try:
+            sales_query = """
+                SELECT MAX(sale_date), SUM(total_amount), COUNT(*)
+                FROM sales 
+                WHERE customer_id = ? AND status != 'ملغية'
+            """
+            sales_row = self.db_manager.fetch_one(sales_query, (customer_id,))
+            
+            if sales_row:
+                # التعامل مع القيم التي قد تكون None
+                customer_data['last_purchase_date'] = sales_row[0]
+                customer_data['total_purchases'] = sales_row[1] or 0
+                customer_data['purchases_count'] = sales_row[2] or 0
+            else:
+                customer_data['last_purchase_date'] = None
+                customer_data['total_purchases'] = 0
+                customer_data['purchases_count'] = 0
+                
+        except Exception:
+            # قيم افتراضية في حالة الخطأ
+            customer_data['last_purchase_date'] = None
+            customer_data['total_purchases'] = 0
+            customer_data['purchases_count'] = 0
+    
+    def _dict_to_object(self, data: Dict[str, Any]) -> Customer:
+        """تحويل القاموس النهائي إلى كائن Customer"""
         return Customer(
-            id=row[0],
-            name=row[1],
-            name_en=row[2],
-            phone=row[3],
-            phone2=row[4],
-            email=row[5],
-            address=row[6],
-            city=row[7],
-            country=row[8],
-            tax_number=row[9],
-            credit_limit=Decimal(str(row[10])),
-            current_balance=Decimal(str(row[11])),
-            notes=row[12],
-            is_active=bool(row[13]),
-            created_at=datetime.fromisoformat(row[14]) if row[14] else None,
-            updated_at=datetime.fromisoformat(row[15]) if row[15] else None,
-            last_purchase_date=date.fromisoformat(row[16]) if row[16] else None,
-            total_purchases=Decimal(str(row[17] or 0)),
-            purchases_count=row[18] or 0
+            id=data.get('id'),
+            name=data.get('name', ''),
+            name_en=data.get('name_en'),
+            phone=data.get('phone'),
+            phone2=data.get('phone2'),
+            email=data.get('email'),
+            address=data.get('address'),
+            city=data.get('city'),
+            country=data.get('country', 'الجزائر'),
+            tax_number=data.get('tax_number'),
+            credit_limit=Decimal(str(data.get('credit_limit', 0))),
+            current_balance=Decimal(str(data.get('current_balance', 0))),
+            notes=data.get('notes'),
+            is_active=bool(data.get('is_active', True)),
+            # تحويل آمن للتواريخ
+            created_at=self._parse_datetime(data.get('created_at')),
+            updated_at=self._parse_datetime(data.get('updated_at')),
+            last_purchase_date=self._parse_date(data.get('last_purchase_date')),
+            total_purchases=Decimal(str(data.get('total_purchases', 0))),
+            purchases_count=int(data.get('purchases_count', 0))
         )
+    
+    def _parse_datetime(self, val):
+        """تحويل آمن للتاريخ والوقت"""
+        if not val:
+            return None
+        if isinstance(val, datetime):
+            return val
+        try:
+            return datetime.fromisoformat(str(val))
+        except:
+            return None
+    
+    def _parse_date(self, val):
+        """تحويل آمن للتاريخ"""
+        if not val:
+            return None
+        if isinstance(val, date):
+            return val
+        try:
+            if isinstance(val, datetime):
+                return val.date()
+            return datetime.fromisoformat(str(val)).date()
+        except:
+            return None
+    
+    def _row_to_customer(self, row) -> Customer:
+        """تحويل صف قاعدة البيانات إلى كائن عميل (للتوافق مع الكود القديم)"""
+        # استخدام الدوال المساعدة الجديدة
+        if isinstance(row, dict):
+            return self._dict_to_object(row)
+        else:
+            customer_data = self._map_row_to_dict(row)
+            return self._dict_to_object(customer_data)

@@ -44,3 +44,8 @@ class AuditViewerWidget(QWidget):
             self.table.setItem(0, 2, QTableWidgetItem(""))
             self.table.setItem(0, 3, QTableWidgetItem(""))
             self.table.setItem(0, 4, QTableWidgetItem(""))
+
+
+# توافق مع الاستيراد الموجود في النافذة الرئيسية
+class AuditViewer(AuditViewerWidget):
+    pass

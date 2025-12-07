@@ -14,6 +14,7 @@ from typing import Optional, List, Dict, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
+from pathlib import Path
 import json
 
 
@@ -117,6 +118,28 @@ class NotificationChecker(QThread):
         notifications.extend(reminders)
         
         return notifications
+
+    # ----------------- Helpers للجداول -----------------
+    def _table_exists(self, table_name: str) -> bool:
+        """يتحقق هل الجدول موجود في قاعدة البيانات"""
+        try:
+            conn = self.db_manager.get_connection()
+            cur = conn.cursor()
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+            return cur.fetchone() is not None
+        except Exception:
+            return False
+
+    def _table_has_columns(self, table_name: str, columns: List[str]) -> bool:
+        """يتحقق من وجود الأعمدة المطلوبة داخل الجدول"""
+        try:
+            conn = self.db_manager.get_connection()
+            cur = conn.cursor()
+            cur.execute(f"PRAGMA table_info({table_name})")
+            existing = {row[1] for row in cur.fetchall()}
+            return all(col in existing for col in columns)
+        except Exception:
+            return False
     
     def check_low_stock(self) -> List[Notification]:
         """فحص المنتجات ذات المخزون المنخفض"""
@@ -128,10 +151,10 @@ class NotificationChecker(QThread):
             
             # المنتجات تحت الحد الأدنى
             cursor.execute("""
-                SELECT p.id, p.name, p.current_stock, p.minimum_stock
+                SELECT p.id, p.name, p.current_stock, COALESCE(p.min_stock, 0) as min_stock
                 FROM products p
-                WHERE p.current_stock <= p.minimum_stock
-                AND p.active = 1
+                WHERE p.current_stock <= COALESCE(p.min_stock, 0)
+                AND p.is_active = 1
                 LIMIT 10
             """)
             
@@ -162,33 +185,38 @@ class NotificationChecker(QThread):
         try:
             conn = self.db_manager.get_connection()
             cursor = conn.cursor()
-            
-            # الفواتير المستحقة خلال 7 أيام
+            # نتأكد أن جدول المبيعات موجود و الأعمدة الضرورية متوفرة
+            if not (self._table_exists('sales') and self._table_has_columns('sales', ['id','invoice_number','customer_name','total_amount','due_date','paid_amount'])):
+                return notifications  # لا يوجد ما يمكن فحصه حالياً
+
             seven_days = (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d')
-            
+
+            # الفواتير (المبيعات الآجلة) غير المسددة كلياً و المستحقة خلال 7 أيام
             cursor.execute("""
-                SELECT id, invoice_number, customer_name, total_amount, due_date
-                FROM invoices
-                WHERE status = 'pending'
+                SELECT id, invoice_number, customer_name, total_amount, due_date, paid_amount
+                FROM sales
+                WHERE due_date IS NOT NULL
                 AND due_date <= ?
                 AND due_date >= date('now')
+                AND (paid_amount < total_amount)
+                AND status NOT IN ('ملغية','مرتجعة')
                 ORDER BY due_date
                 LIMIT 5
             """, (seven_days,))
-            
+
             for row in cursor.fetchall():
-                inv_id, number, customer, amount, due_date = row
-                
+                inv_id, number, customer, amount, due_date, paid_amount = row
+                remaining = (amount - paid_amount) if (amount is not None and paid_amount is not None) else amount
+
                 notification = Notification(
                     id=f"payment_due_{inv_id}_{int(datetime.now().timestamp())}",
                     type=NotificationType.PAYMENT_DUE,
                     title="💰 دفعة مستحقة",
-                    message=f"فاتورة #{number} لـ {customer} بقيمة {amount:.2f} مستحقة في {due_date}",
+                    message=f"فاتورة #{number} لـ {customer} المتبقي {remaining:.2f} مستحق في {due_date}",
                     timestamp=datetime.now(),
                     priority=1,
                     action_label="عرض الفاتورة"
                 )
-                
                 notifications.append(notification)
             
         except Exception as e:
@@ -203,8 +231,10 @@ class NotificationChecker(QThread):
         try:
             conn = self.db_manager.get_connection()
             cursor = conn.cursor()
-            
-            # التذكيرات المستحقة الآن
+            # التأكد من وجود جدول التذكيرات و الأعمدة
+            if not (self._table_exists('reminders') and self._table_has_columns('reminders', ['id','title','description','reminder_time','status'])):
+                return notifications
+
             cursor.execute("""
                 SELECT id, title, description, reminder_time
                 FROM reminders
@@ -213,10 +243,9 @@ class NotificationChecker(QThread):
                 ORDER BY reminder_time
                 LIMIT 5
             """)
-            
+
             for row in cursor.fetchall():
                 rem_id, title, description, reminder_time = row
-                
                 notification = Notification(
                     id=f"reminder_{rem_id}_{int(datetime.now().timestamp())}",
                     type=NotificationType.REMINDER,
@@ -226,7 +255,6 @@ class NotificationChecker(QThread):
                     priority=1,
                     action_label="عرض التفاصيل"
                 )
-                
                 notifications.append(notification)
             
         except Exception as e:
@@ -538,14 +566,43 @@ class SmartNotificationsManager:
     
     def stop(self):
         """إيقاف نظام الإشعارات"""
-        if self.checker:
+        if self.checker and self.checker.isRunning():
             self.checker.stop()
-            self.checker.wait()
+            # إعطاء الـ thread وقت كافي للإغلاق النظيف
+            if not self.checker.wait(3000):  # 3 ثواني
+                self.checker.terminate()
+                self.checker.wait(1000)
     
     def setup_system_tray(self):
         """إعداد System Tray"""
         try:
             self.system_tray = QSystemTrayIcon(self.main_window)
+            
+            # إنشاء أيقونة افتراضية إذا لم تكن موجودة
+            from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor
+            from PySide6.QtCore import QSize
+            
+            # محاولة تحميل أيقونة من الملفات
+            icon_path = Path(__file__).parent.parent.parent / "assets" / "icon.png"
+            if icon_path.exists():
+                icon = QIcon(str(icon_path))
+            else:
+                # إنشاء أيقونة بسيطة برمجياً
+                pixmap = QPixmap(64, 64)
+                pixmap.fill(QColor(0, 120, 215))  # لون أزرق
+                painter = QPainter(pixmap)
+                painter.setPen(QColor(255, 255, 255))
+                from PySide6.QtGui import QFont
+                font = QFont()
+                font.setPixelSize(40)
+                font.setBold(True)
+                painter.setFont(font)
+                painter.drawText(pixmap.rect(), Qt.AlignCenter, "🔔")
+                painter.end()
+                icon = QIcon(pixmap)
+            
+            self.system_tray.setIcon(icon)
+            self.system_tray.setToolTip("نظام الإشعارات - Standard El-Joumla")
             
             # القائمة
             menu = QMenu()

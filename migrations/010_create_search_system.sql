@@ -3,6 +3,7 @@
 -- Created: 2025-11-17
 -- Description: Tables for saved filters and search history
 -- ====================================
+PRAGMA foreign_keys = ON;
 
 -- ====================================
 -- جدول الفلاتر المحفوظة (Saved Filters)

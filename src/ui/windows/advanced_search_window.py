@@ -25,6 +25,11 @@ from ...models.search import (
 class AdvancedSearchWindow(QMainWindow):
     """نافذة البحث المتقدم"""
     
+    # Window Manager attributes (للتسجيل التلقائي)
+    window_key = "advanced_search"
+    window_singleton = True
+    window_title = "البحث المتقدم"
+    
     def __init__(self, db_manager: DatabaseManager, parent=None):
         super().__init__(parent)
         self.db = db_manager

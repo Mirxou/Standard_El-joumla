@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>أمر شراء - {{ order_id }}</title>
+    <link rel="stylesheet" href="invoice.css">
+</head>
+<body>
+    <div class="invoice-box">
+        <!-- Header -->
+        <div class="header">
+            <div class="company-info">
+                {% if company_logo %}
+                <img src="{{ company_logo }}" alt="شعار الشركة" class="company-logo">
+                {% endif %}
+                <h1>{{ company_name or "الإصدار المنطقي" }}</h1>
+                <p>
+                    {{ company_address or "شارع التقنية، الجزائر العاصمة" }}<br>
+                    هاتف: {{ company_phone or "0123456789" }}<br>
+                    {% if company_email %}
+                    البريد: {{ company_email }}<br>
+                    {% endif %}
+                </p>
+            </div>
+            
+            <div class="invoice-details">
+                <h3>أمر شراء رقم: #{{ order_id }}</h3>
+                <p><strong>التاريخ:</strong> {{ date }}</p>
+                <p><strong>تاريخ التسليم المتوقع:</strong> {{ delivery_date or "غير محدد" }}</p>
+                <p><strong>المورد:</strong> {{ supplier_name }}</p>
+                {% if supplier_phone %}
+                <p><strong>الهاتف:</strong> {{ supplier_phone }}</p>
+                {% endif %}
+                {% if supplier_address %}
+                <p><strong>العنوان:</strong> {{ supplier_address }}</p>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Items Table -->
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 5%;">#</th>
+                    <th style="width: 40%;">المنتج</th>
+                    <th style="width: 15%; text-align: center;">الكمية المطلوبة</th>
+                    <th style="width: 20%; text-align: left;">سعر الوحدة</th>
+                    <th style="width: 20%; text-align: left;">الإجمالي</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td style="text-align: center; color: #94a3b8;">{{ loop.index }}</td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            {% if item.image %}
+                            <img src="{{ item.image }}" alt="{{ item.name }}" class="product-image">
+                            {% endif %}
+                            <div>
+                                <strong>{{ item.name }}</strong>
+                                {% if item.sku %}
+                                <br><small style="color: #94a3b8;">SKU: {{ item.sku }}</small>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                    <td style="text-align: center;">{{ item.qty }}</td>
+                    <td style="text-align: left;">{{ "{:,.2f}".format(item.price) }} د.ج</td>
+                    <td style="text-align: left; font-weight: 600;">{{ "{:,.2f}".format(item.total) }} د.ج</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        <!-- Totals -->
+        <div class="total-section">
+            {% if subtotal %}
+            <div class="total-row">
+                <label>المجموع الفرعي:</label>
+                <span class="value">{{ "{:,.2f}".format(subtotal) }} د.ج</span>
+            </div>
+            {% endif %}
+            
+            {% if discount and discount > 0 %}
+            <div class="total-row">
+                <label>الخصم:</label>
+                <span class="value" style="color: #ef4444;">- {{ "{:,.2f}".format(discount) }} د.ج</span>
+            </div>
+            {% endif %}
+            
+            {% if tax and tax > 0 %}
+            <div class="total-row">
+                <label>الضريبة:</label>
+                <span class="value">{{ "{:,.2f}".format(tax) }} د.ج</span>
+            </div>
+            {% endif %}
+            
+            {% if shipping and shipping > 0 %}
+            <div class="total-row">
+                <label>الشحن:</label>
+                <span class="value">{{ "{:,.2f}".format(shipping) }} د.ج</span>
+            </div>
+            {% endif %}
+            
+            <div class="total-row">
+                <label>الإجمالي النهائي:</label>
+                <span class="value">{{ "{:,.2f}".format(grand_total) }} د.ج</span>
+            </div>
+        </div>
+        
+        <!-- Delivery Info -->
+        {% if delivery_address or delivery_method %}
+        <div class="notes" style="background: #dbeafe; border-right-color: #3b82f6;">
+            <h4>معلومات التسليم:</h4>
+            {% if delivery_address %}
+            <p><strong>عنوان التسليم:</strong> {{ delivery_address }}</p>
+            {% endif %}
+            {% if delivery_method %}
+            <p><strong>طريقة التسليم:</strong> {{ delivery_method }}</p>
+            {% endif %}
+            {% if delivery_date %}
+            <p><strong>تاريخ التسليم المتوقع:</strong> {{ delivery_date }}</p>
+            {% endif %}
+        </div>
+        {% endif %}
+        
+        <!-- Notes -->
+        {% if notes %}
+        <div class="notes">
+            <h4>ملاحظات:</h4>
+            <p>{{ notes }}</p>
+        </div>
+        {% endif %}
+        
+        <!-- Footer -->
+        <div class="footer">
+            <p><strong>يرجى تأكيد هذا الأمر خلال 7 أيام</strong></p>
+            <p>تم إصدار هذا الأمر إلكترونياً - {{ print_date }}</p>
+        </div>
+    </div>
+</body>
+</html>
+

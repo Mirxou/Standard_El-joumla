@@ -11,7 +11,7 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 import logging
 
-from src.core.database_manager import get_db_manager
+## نقل الاستيراد داخل الدوال لتفادي الحلقة الدائرية
 from src.core.print_manager import PrintManager, TemplateType, PaperSize
 from src.services.pdf_export_service import PDFExportService
 
@@ -31,6 +31,7 @@ class PrintService:
     
     def __init__(self):
         """تهيئة الخدمة"""
+        from src.core.database_manager import get_db_manager
         db_manager = get_db_manager()
         self.print_manager = PrintManager(db_manager)
         self.pdf_service = PDFExportService()
@@ -329,6 +330,7 @@ class PrintService:
     def _get_invoice_data(self, sale_id: int) -> Optional[Dict[str, Any]]:
         """جلب بيانات الفاتورة"""
         try:
+            from src.core.database_manager import get_db_manager
             db_manager = get_db_manager()
             
             # جلب الفاتورة
@@ -401,6 +403,7 @@ class PrintService:
     def _get_quote_data(self, quote_id: int) -> Optional[Dict[str, Any]]:
         """جلب بيانات عرض السعر"""
         try:
+            from src.core.database_manager import get_db_manager
             db_manager = get_db_manager()
             
             # جلب العرض
@@ -424,7 +427,8 @@ class PrintService:
             items = db_manager.execute_query(
                 """
                 SELECT 
-                    qi.*,
+                    from src.core.database_manager import get_db_manager
+                    db_manager = get_db_manager()
                     p.name as product_name,
                     p.barcode
                 FROM quote_items qi

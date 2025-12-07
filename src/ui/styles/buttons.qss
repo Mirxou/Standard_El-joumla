@@ -1,0 +1,118 @@
+/* ============================================
+   Button Styles - QPushButton
+   أنماط الأزرار
+   ============================================ */
+
+QPushButton {
+    background-color: #f1f5f9;
+    color: #1e293b;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-weight: 500;
+    font-size: 13px;
+    min-height: 36px;
+}
+
+QPushButton:hover {
+    background-color: #e2e8f0;
+    border-color: #cbd5e1;
+}
+
+QPushButton:pressed {
+    background-color: #cbd5e1;
+}
+
+QPushButton:disabled {
+    background-color: #f8fafc;
+    color: #94a3b8;
+    border-color: #e2e8f0;
+}
+
+/* Primary Button */
+QPushButton[class="primary"] {
+    background-color: #3b82f6;
+    color: #ffffff;
+    border: none;
+}
+
+QPushButton[class="primary"]:hover {
+    background-color: #2563eb;
+}
+
+QPushButton[class="primary"]:pressed {
+    background-color: #1d4ed8;
+}
+
+QPushButton[class="primary"]:disabled {
+    background-color: #cbd5e1;
+    color: #94a3b8;
+}
+
+/* Danger Button */
+QPushButton[class="danger"] {
+    background-color: #ef4444;
+    color: #ffffff;
+    border: none;
+}
+
+QPushButton[class="danger"]:hover {
+    background-color: #dc2626;
+}
+
+QPushButton[class="danger"]:pressed {
+    background-color: #b91c1c;
+}
+
+QPushButton[class="danger"]:disabled {
+    background-color: #cbd5e1;
+    color: #94a3b8;
+}
+
+/* Success Button */
+QPushButton[class="success"] {
+    background-color: #10b981;
+    color: #ffffff;
+    border: none;
+}
+
+QPushButton[class="success"]:hover {
+    background-color: #059669;
+}
+
+QPushButton[class="success"]:pressed {
+    background-color: #047857;
+}
+
+/* Warning Button */
+QPushButton[class="warning"] {
+    background-color: #f59e0b;
+    color: #ffffff;
+    border: none;
+}
+
+QPushButton[class="warning"]:hover {
+    background-color: #d97706;
+}
+
+QPushButton[class="warning"]:pressed {
+    background-color: #b45309;
+}
+
+/* Secondary Button */
+QPushButton[class="secondary"] {
+    background-color: transparent;
+    color: #3b82f6;
+    border: 2px solid #3b82f6;
+}
+
+QPushButton[class="secondary"]:hover {
+    background-color: #3b82f6;
+    color: #ffffff;
+}
+
+QPushButton[class="secondary"]:pressed {
+    background-color: #2563eb;
+    color: #ffffff;
+}
+

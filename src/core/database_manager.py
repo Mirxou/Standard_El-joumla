@@ -12,7 +12,7 @@ import json
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any, Tuple, Set
 from contextlib import contextmanager
 from .encryption_manager import EncryptionManager
 from .exceptions import DatabaseException
@@ -20,6 +20,34 @@ from src.database.connection_pool import ConnectionPool, PoolConfig
 from src.core.encrypted_backup_service import EncryptedBackupService
 
 class DatabaseManager:
+    def get_connection(self):
+        """الحصول على اتصال فعلي من الـ ConnectionPool.
+        يعيد اتصالاً جاهزاً للاستخدام (cursor()).
+        يتم تتبع الاتصالات المستأجرة لإغلاقها لاحقاً في close().
+        """
+        if not hasattr(self, 'pool') or self.pool is None:
+            raise Exception("Database connection pool is not initialized.")
+        cm = self.pool.get_connection()
+        conn = cm.__enter__()
+        if not hasattr(self, '_leased_connections'):
+            self._leased_connections = []
+        self._leased_connections.append(cm)
+        return conn
+
+    def close(self):
+        """إغلاق الاتصالات المستأجرة ثم إغلاق الـ ConnectionPool"""
+        if hasattr(self, '_leased_connections'):
+            for cm in self._leased_connections:
+                try:
+                    cm.__exit__(None, None, None)
+                except Exception:
+                    pass
+            self._leased_connections.clear()
+        if hasattr(self, 'pool') and self.pool is not None:
+            try:
+                self.pool.close()
+            except Exception:
+                pass
     """مدير قاعدة البيانات"""
     
     def __init__(
@@ -72,7 +100,7 @@ class DatabaseManager:
                 self.connection = sqlite3.connect(
                     temp_db_path,
                     check_same_thread=False,
-                    timeout=30.0
+                    timeout=60.0  # زيادة من 30.0 إلى 60.0 للتعامل مع العمليات الثقيلة
                 )
                 
                 # حذف الملف المؤقت بعد الاتصال
@@ -83,7 +111,7 @@ class DatabaseManager:
                 self.connection = sqlite3.connect(
                     self.db_path,
                     check_same_thread=False,
-                    timeout=30.0
+                    timeout=60.0  # زيادة من 30.0 إلى 60.0 للتعامل مع العمليات الثقيلة
                 )
             
             # تفعيل WAL mode للأداء والموثوقية
@@ -98,11 +126,17 @@ class DatabaseManager:
             # إنشاء الجداول إذا لم تكن موجودة
             self._create_tables()
             
+            # ترقية الجداول الحالية لتتوافق مع المخططات المحدثة
+            self._upgrade_existing_schema()
+            
             # إنشاء الفهارس
             self._create_indexes()
             
             # تشغيل الهجرات
             self._run_migrations()
+            
+            # 🔥 تشغيل ترحيل الميزات المحسنة (Enhanced Features Migration)
+            self.check_and_migrate_db()
 
             # تهيئة Connection Pool للاستخدام العام (تخطي الذاكرة)
             if self.pool is None:
@@ -112,9 +146,9 @@ class DatabaseManager:
                     enabled = self._pool_options.get('enabled', True)
                     if enabled:
                         cfg = PoolConfig(
-                            pool_size=int(self._pool_options.get('pool_size', 10)),
-                            max_overflow=int(self._pool_options.get('max_overflow', 20)),
-                            timeout=float(self._pool_options.get('timeout', 30.0))
+                            pool_size=int(self._pool_options.get('pool_size', 15)),  # زيادة من 10 إلى 15
+                            max_overflow=int(self._pool_options.get('max_overflow', 30)),  # زيادة من 20 إلى 30
+                            timeout=float(self._pool_options.get('timeout', 60.0))  # زيادة من 30.0 إلى 60.0
                         )
                         self.pool = ConnectionPool(self.db_path, cfg)
 
@@ -202,6 +236,7 @@ class DatabaseManager:
                 name TEXT NOT NULL,
                 contact_person TEXT,
                 phone TEXT,
+                phone2 TEXT,
                 email TEXT,
                 address TEXT,
                 tax_number TEXT,
@@ -485,7 +520,239 @@ class DatabaseManager:
             )
         """)
 
+        # جدول قوالب المستندات
+        self.connection.execute("""
+            CREATE TABLE IF NOT EXISTS document_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                template_type TEXT NOT NULL, -- 'invoice', 'quote', 'delivery_note', etc.
+                definition TEXT NOT NULL,    -- JSON string defining the template structure and style
+                is_default BOOLEAN DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(name, template_type)
+            )
+        """)
+
         self.connection.commit()
+
+    # ============================================================
+    # 🧱 المرحلة 1: نظام ترحيل قاعدة البيانات (Schema Migration)
+    # ============================================================
+    def check_and_migrate_db(self):
+        """
+        يفحص هيكل قاعدة البيانات ويضيف الجداول أو الأعمدة الناقصة تلقائياً.
+        يعمل عند بدء التشغيل لضمان توافق النسخة الجديدة مع بيانات العميل القديمة.
+        """
+        print("🔍 Checking database schema for updates...")
+        # استخدام الاتصال المباشر إذا لم يكن الـ Pool جاهزاً بعد
+        conn = self.connection if self.connection else self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # 1. ترحيل جدول المبيعات (إضافة أعمدة جديدة)
+            # ----------------------------------------------------
+            # ملاحظة: اسم الجدول في هذا المشروع هو 'sales' وليس 'sales_invoices'
+            cursor.execute("PRAGMA table_info(sales)")
+            columns = [info[1] for info in cursor.fetchall()]
+            
+            # إضافة عمود 'status' إذا لم يكن موجوداً
+            if 'status' not in columns:
+                print("⚙️ Migrating: Adding 'status' column to sales...")
+                cursor.execute("ALTER TABLE sales ADD COLUMN status TEXT DEFAULT 'completed'")
+            
+            # إضافة عمود 'return_status' (للمرتجعات)
+            if 'return_status' not in columns:
+                print("⚙️ Migrating: Adding 'return_status' column...")
+                cursor.execute("ALTER TABLE sales ADD COLUMN return_status TEXT DEFAULT 'none'")
+
+            # 2. إنشاء جداول المرتجعات (Returns Tables) - للميزات المحسنة
+            # ----------------------------------------------------
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS returns (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    original_invoice_id INTEGER,
+                    return_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    reason TEXT,
+                    total_refund_amount REAL,
+                    status TEXT DEFAULT 'approved',
+                    FOREIGN KEY(original_invoice_id) REFERENCES sales(id)
+                )
+            """)
+            
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS return_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    return_id INTEGER,
+                    product_id INTEGER,
+                    quantity REAL,
+                    refund_price REAL,
+                    FOREIGN KEY(return_id) REFERENCES returns(id),
+                    FOREIGN KEY(product_id) REFERENCES products(id)
+                )
+            """)
+
+            # 3. إتمام التغييرات
+            conn.commit()
+            print("✅ Database schema is up to date.")
+            
+        except Exception as e:
+            print(f"❌ Migration Error: {e}")
+            # لا نوقف البرنامج، لكن نسجل الخطأ
+        finally:
+            # لا نغلق الاتصال هنا لأنه قد يكون الاتصال الرئيسي
+            pass
+
+    def _create_enhanced_tables(self):
+        """إنشاء جداول الميزات المحسنة (المرتجعات، الاسترداد)"""
+        # جدول المرتجعات
+        self.connection.execute("""
+            CREATE TABLE IF NOT EXISTS returns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sale_id INTEGER NOT NULL,
+                reason TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (sale_id) REFERENCES sales(id)
+            )
+        """)
+        
+        # جدول عناصر المرتجعات
+        self.connection.execute("""
+            CREATE TABLE IF NOT EXISTS return_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                return_id INTEGER NOT NULL,
+                product_id INTEGER NOT NULL,
+                quantity INTEGER NOT NULL,
+                unit_price DECIMAL(10,2) NOT NULL,
+                FOREIGN KEY (return_id) REFERENCES returns(id),
+                FOREIGN KEY (product_id) REFERENCES products(id)
+            )
+        """)
+        
+        # جدول الاسترداد (Refunds)
+        self.connection.execute("""
+            CREATE TABLE IF NOT EXISTS refunds (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sale_id INTEGER NOT NULL,
+                amount DECIMAL(10,2) NOT NULL,
+                reason TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (sale_id) REFERENCES sales(id)
+            )
+        """)
+        self.connection.commit()
+    
+    def _get_table_columns(self, table_name: str) -> Set[str]:
+        """الحصول على الأعمدة الحالية لجدول معين"""
+        try:
+            cursor = self.connection.execute(f"PRAGMA table_info('{table_name}')")
+            return {row[1] for row in cursor.fetchall()}
+        except Exception:
+            return set()
+    
+    def _add_column_if_missing(self, table: str, column: str, definition: str) -> None:
+        """إضافة عمود إذا لم يكن موجوداً"""
+        existing = self._get_table_columns(table)
+        if column not in existing:
+            self.connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+    
+    def _upgrade_existing_schema(self) -> None:
+        """ضمان توافق قاعدة البيانات مع المخطط الأحدث"""
+        try:
+            # أعمدة جدول المبيعات
+            sales_columns = [
+                ("customer_name", "TEXT"),
+                ("customer_phone", "TEXT"),
+                ("due_date", "DATE"),
+                ("status", "TEXT DEFAULT 'مؤكدة'"),
+                ("subtotal", "DECIMAL(10,2) DEFAULT 0"),
+                ("discount_percentage", "DECIMAL(5,2) DEFAULT 0"),
+                ("tax_amount", "DECIMAL(10,2) DEFAULT 0"),
+                ("tax_percentage", "DECIMAL(5,2) DEFAULT 0"),
+                ("paid_amount", "DECIMAL(10,2) DEFAULT 0"),
+                ("remaining_amount", "DECIMAL(10,2) DEFAULT 0")
+            ]
+            for column, definition in sales_columns:
+                self._add_column_if_missing("sales", column, definition)
+            
+            # أعمدة جدول المشتريات
+            purchase_columns = [
+                ("supplier_invoice_number", "TEXT"),
+                ("expected_delivery_date", "DATE"),
+                ("received_date", "DATE"),
+                ("status", "TEXT DEFAULT 'معلقة'"),
+                ("payment_status", "TEXT DEFAULT 'غير مدفوعة'"),
+                ("payment_terms", "TEXT"),
+                ("subtotal_amount", "DECIMAL(10,2) DEFAULT 0"),
+                ("tax_amount", "DECIMAL(10,2) DEFAULT 0"),
+                ("shipping_cost", "DECIMAL(10,2) DEFAULT 0"),
+                ("paid_amount", "DECIMAL(10,2) DEFAULT 0"),
+                ("remaining_amount", "DECIMAL(10,2) DEFAULT 0")
+            ]
+            for column, definition in purchase_columns:
+                self._add_column_if_missing("purchases", column, definition)
+            
+            # أعمدة جدول الموردين (الرصيد وحد الائتمان)
+            supplier_columns = [
+                ("credit_limit", "DECIMAL(10,2) DEFAULT 0"),
+                ("current_balance", "DECIMAL(10,2) DEFAULT 0")
+            ]
+            for column, definition in supplier_columns:
+                self._add_column_if_missing("suppliers", column, definition)
+            
+            # أعمدة جدول المدفوعات
+            payment_columns = [
+                ("payment_number", "TEXT"),
+                ("currency", "TEXT DEFAULT 'DZD'"),
+                ("exchange_rate", "DECIMAL(10,4) DEFAULT 1.0"),
+                ("amount_in_base_currency", "DECIMAL(15,2) DEFAULT 0"),
+                ("payment_status", "TEXT DEFAULT 'مكتمل'"),
+                ("due_date", "DATE"),
+                ("customer_id", "INTEGER"),
+                ("supplier_id", "INTEGER"),
+                ("sale_id", "INTEGER"),
+                ("purchase_id", "INTEGER"),
+                ("bank_name", "TEXT"),
+                ("account_number", "TEXT"),
+                ("account_code", "TEXT"),
+                ("cost_center", "TEXT")
+            ]
+            for column, definition in payment_columns:
+                self._add_column_if_missing("payments", column, definition)
+            
+            # أعمدة جدول جدولة المدفوعات
+            schedules_columns = [
+                ("installment_number", "INTEGER DEFAULT 1"),
+                ("paid_amount", "DECIMAL(15,2) DEFAULT 0"),
+                ("remaining_amount", "DECIMAL(15,2) DEFAULT 0")
+            ]
+            for column, definition in schedules_columns:
+                self._add_column_if_missing("payment_schedules", column, definition)
+            
+            # تحديث القيم الافتراضية للصفوف الحالية لضمان الاتساق
+            self.connection.execute("""
+                UPDATE sales SET 
+                    status = COALESCE(status, 'مؤكدة'),
+                    paid_amount = COALESCE(paid_amount, total_amount),
+                    remaining_amount = COALESCE(remaining_amount, total_amount - COALESCE(paid_amount, total_amount))
+            """)
+            self.connection.execute("""
+                UPDATE purchases SET 
+                    status = COALESCE(status, 'معلقة'),
+                    payment_status = COALESCE(payment_status, 'غير مدفوعة'),
+                    paid_amount = COALESCE(paid_amount, 0),
+                    remaining_amount = COALESCE(remaining_amount, total_amount - COALESCE(paid_amount, 0))
+            """)
+            self.connection.execute("""
+                UPDATE payments SET 
+                    payment_status = COALESCE(payment_status, status),
+                    amount_in_base_currency = COALESCE(amount_in_base_currency, amount)
+            """)
+            
+            self.connection.commit()
+        except Exception:
+            # في حال حدوث خطأ نكمل التشغيل بدون إيقاف التهيئة
+            self.connection.rollback()
     
     def _create_indexes(self):
         """إنشاء الفهارس لتحسين الأداء"""
@@ -493,6 +760,10 @@ class DatabaseManager:
             "CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode)",
             "CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id)",
             "CREATE INDEX IF NOT EXISTS idx_products_name ON products(name)",
+            # فهارس مركبة لتحسين البحث والتصفية
+            "CREATE INDEX IF NOT EXISTS idx_products_active_category ON products(is_active, category_id)",
+            "CREATE INDEX IF NOT EXISTS idx_products_stock_levels ON products(current_stock, min_stock) WHERE is_active = 1",
+            "CREATE INDEX IF NOT EXISTS idx_products_search ON products(is_active, category_id, name)",
             "CREATE INDEX IF NOT EXISTS idx_batches_product ON batches(product_id)",
             "CREATE INDEX IF NOT EXISTS idx_batches_expiry ON batches(expiry_date)",
             "CREATE INDEX IF NOT EXISTS idx_batches_supplier ON batches(supplier_id)",
@@ -504,6 +775,7 @@ class DatabaseManager:
             "CREATE INDEX IF NOT EXISTS idx_purchases_invoice ON purchases(invoice_number)",
             "CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id)",
             "CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp)",
+            "CREATE INDEX IF NOT EXISTS idx_stock_movements_query ON stock_movements(product_id, movement_type, created_at)",
             # فهارس جداول المدفوعات
             "CREATE INDEX IF NOT EXISTS idx_payments_type ON payments(payment_type)",
             "CREATE INDEX IF NOT EXISTS idx_payments_entity ON payments(entity_id)",
@@ -599,6 +871,38 @@ class DatabaseManager:
             else:
                 cursor.connection.commit()
             return cursor.rowcount
+    
+    def execute_insert(self, query: str, params: Tuple = ()) -> Optional[int]:
+        """
+        🔥 CRITICAL FIX: تنفيذ استعلام INSERT وإرجاع lastrowid مباشرة
+        هذا يحل مشكلة last_insert_rowid() التي تعيد 0 عند استخدام cursor منفصل
+        
+        Returns:
+            Optional[int]: آخر ID تم إدراجه، أو None إذا فشل
+        """
+        with self.get_cursor() as cursor:
+            start_t = time.perf_counter()
+            cursor.execute(query, params)
+            duration_ms = (time.perf_counter() - start_t) * 1000.0
+            if duration_ms >= self.slow_query_threshold_ms:
+                self._log_slow_query(query, params, duration_ms)
+            
+            # 🔥 CRITICAL: الحصول على lastrowid من نفس cursor قبل commit
+            # lastrowid يعمل فقط على نفس cursor الذي نفذ INSERT
+            lastrowid = cursor.lastrowid
+            
+            # Commit يجب أن يتم قبل إغلاق cursor
+            if self.pool is None:
+                self.connection.commit()
+            else:
+                cursor.connection.commit()
+            
+            # إرجاع lastrowid (عادةً يكون > 0 للـ INSERT الناجح)
+            # في SQLite، lastrowid يكون 0 فقط إذا لم يتم إدراج صف أو إذا كان هناك خطأ
+            # لكن يجب التحقق من أن lastrowid موجود و > 0
+            if lastrowid is not None and lastrowid > 0:
+                return lastrowid
+            return None
     
     def execute_scalar(self, query: str, params: Tuple = ()) -> Any:
         """تنفيذ استعلام وإرجاع قيمة واحدة"""
@@ -709,15 +1013,185 @@ class DatabaseManager:
             if not backup_dir.exists():
                 return
             
-            backup_files = list(backup_dir.glob("backup_*.db"))
+            # البحث عن جميع أنواع النسخ الاحتياطية
+            backup_files = []
+            backup_files.extend(backup_dir.glob("backup_*.db"))
+            backup_files.extend(backup_dir.glob("backup_*.db.encrypted"))
+            backup_files.extend(backup_dir.glob("*.backup"))
+            backup_files.extend(backup_dir.glob("*.bak"))
+            
+            # ترتيب حسب تاريخ التعديل (الأحدث أولاً)
             backup_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
             
             # حذف النسخ الزائدة
+            deleted_count = 0
             for backup_file in backup_files[max_backups:]:
-                backup_file.unlink()
+                try:
+                    backup_file.unlink()
+                    deleted_count += 1
+                except Exception as e:
+                    print(f"تحذير: فشل حذف {backup_file}: {e}")
+            
+            if deleted_count > 0:
+                print(f"تم حذف {deleted_count} نسخة احتياطية قديمة")
                 
         except Exception as e:
             print(f"خطأ في تنظيف النسخ الاحتياطية: {e}")
+    
+    def checkpoint_wal(self) -> bool:
+        """
+        دمج ملفات WAL في قاعدة البيانات الرئيسية
+        
+        Returns:
+            True إذا نجحت العملية، False خلاف ذلك
+        """
+        try:
+            if not self.connection:
+                return False
+            
+            # تنفيذ checkpoint لدمج WAL
+            cursor = self.connection.cursor()
+            cursor.execute("PRAGMA wal_checkpoint(FULL)")
+            result = cursor.fetchone()
+            
+            # التحقق من النتيجة
+            if result and result[0] == 0:
+                print("تم دمج ملفات WAL بنجاح")
+                return True
+            else:
+                print(f"تحذير: فشل دمج WAL - النتيجة: {result}")
+                return False
+                
+        except Exception as e:
+            print(f"خطأ في دمج ملفات WAL: {e}")
+            return False
+    
+    def get_database_size_info(self) -> Dict[str, Any]:
+        """
+        الحصول على معلومات حجم قاعدة البيانات
+        
+        Returns:
+            قاموس يحتوي على معلومات الحجم
+        """
+        try:
+            db_path = Path(self.db_path)
+            wal_path = db_path.with_suffix('.db-wal')
+            shm_path = db_path.with_suffix('.db-shm')
+            
+            info = {
+                'database_size': db_path.stat().st_size if db_path.exists() else 0,
+                'wal_size': wal_path.stat().st_size if wal_path.exists() else 0,
+                'shm_size': shm_path.stat().st_size if shm_path.exists() else 0,
+                'total_size': 0
+            }
+            
+            info['total_size'] = info['database_size'] + info['wal_size'] + info['shm_size']
+            
+            # تحويل إلى MB
+            info['database_size_mb'] = round(info['database_size'] / (1024 * 1024), 2)
+            info['wal_size_mb'] = round(info['wal_size'] / (1024 * 1024), 2)
+            info['shm_size_kb'] = round(info['shm_size'] / 1024, 2)
+            info['total_size_mb'] = round(info['total_size'] / (1024 * 1024), 2)
+            
+            return info
+            
+        except Exception as e:
+            print(f"خطأ في الحصول على معلومات الحجم: {e}")
+            return {}
+    
+    def vacuum_database(self) -> bool:
+        """
+        تنظيف قاعدة البيانات وتحسينها
+        
+        Returns:
+            True إذا نجحت العملية، False خلاف ذلك
+        """
+        try:
+            if not self.connection:
+                return False
+            
+            print("بدء تنظيف قاعدة البيانات...")
+            
+            # دمج WAL أولاً
+            self.checkpoint_wal()
+            
+            # تنفيذ VACUUM
+            self.connection.execute("VACUUM")
+            self.connection.commit()
+            
+            print("تم تنظيف قاعدة البيانات بنجاح")
+            return True
+            
+        except Exception as e:
+            print(f"خطأ في تنظيف قاعدة البيانات: {e}")
+            return False
+    
+    def cleanup_old_data(self, days: int = 90, tables: Optional[List[str]] = None) -> Dict[str, int]:
+        """
+        تنظيف البيانات القديمة من قاعدة البيانات
+        
+        Args:
+            days: عدد الأيام للاحتفاظ بالبيانات (افتراضي 90 يوم)
+            tables: قائمة الجداول المراد تنظيفها (None = جميع الجداول المدعومة)
+        
+        Returns:
+            قاموس يحتوي على عدد السجلات المحذوفة لكل جدول
+        """
+        try:
+            if not self.connection:
+                return {}
+            
+            # الجداول المدعومة للتنظيف مع أعمدة التاريخ
+            supported_tables = tables or {
+                'audit_logs': 'created_at',
+                'login_history': 'login_time',
+                'slow_queries': 'executed_at',
+                'backup_history': 'created_at',
+                'session_logs': 'created_at',
+            }
+            
+            deleted_counts = {}
+            cutoff_date = datetime.now() - timedelta(days=days)
+            
+            print(f"بدء تنظيف البيانات الأقدم من {cutoff_date.strftime('%Y-%m-%d')}...")
+            
+            for table_name, date_column in supported_tables.items():
+                if not self.table_exists(table_name):
+                    continue
+                
+                try:
+                    # التحقق من وجود العمود
+                    cursor = self.connection.execute(f"PRAGMA table_info('{table_name}')")
+                    columns = [col[1] for col in cursor.fetchall()]
+                    
+                    if date_column not in columns:
+                        continue
+                    
+                    # حذف السجلات القديمة
+                    delete_query = f"DELETE FROM {table_name} WHERE {date_column} < ?"
+                    cursor = self.connection.execute(delete_query, (cutoff_date,))
+                    deleted_count = cursor.rowcount
+                    
+                    if deleted_count > 0:
+                        deleted_counts[table_name] = deleted_count
+                        print(f"تم حذف {deleted_count} سجل من {table_name}")
+                    
+                except Exception as e:
+                    print(f"تحذير: فشل تنظيف {table_name}: {e}")
+                    continue
+            
+            # حفظ التغييرات
+            self.connection.commit()
+            
+            total_deleted = sum(deleted_counts.values())
+            print(f"تم حذف {total_deleted} سجل إجمالاً")
+            
+            return deleted_counts
+            
+        except Exception as e:
+            print(f"خطأ في تنظيف البيانات القديمة: {e}")
+            self.connection.rollback()
+            return {}
     
     def get_database_info(self) -> Dict[str, Any]:
         """الحصول على معلومات قاعدة البيانات"""
@@ -895,17 +1369,24 @@ class DatabaseManager:
         except Exception as e:
             pass
     def execute(self, query: str, params: Tuple = ()) -> Any:
-        """تنفيذ استعلام وإرجاع cursor"""
+        """تنفيذ استعلام باستخدام الاتصال الأساسي (للاستخدام الداخلي)"""
+        if not self.connection:
+            raise DatabaseException("Base connection not initialized")
         cursor = self.connection.cursor()
         cursor.execute(query, params)
         self.connection.commit()
         return cursor
 
-    def close(self):
-        """إغلاق الاتصال بقاعدة البيانات"""
-        if self.connection:
-            self.connection.close()
-            self.connection = None
-        if self.pool is not None:
-            self.pool.close()
-            self.pool = None
+    
+
+_db_manager_instance = None
+
+def get_db_manager():
+    """الحصول على مثيل مدير قاعدة البيانات (Singleton)
+    متاح للاستيراد من الوحدات الأخرى بدون الدخول في تدوير الاستيراد داخل الصنف.
+    """
+    global _db_manager_instance
+    if _db_manager_instance is None:
+        _db_manager_instance = DatabaseManager()
+        _db_manager_instance.initialize()
+    return _db_manager_instance

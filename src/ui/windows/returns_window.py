@@ -21,8 +21,8 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from services.return_service import ReturnService
-from models.return_invoice import (
+from ...services.return_service import ReturnService
+from ...models.return_invoice import (
     ReturnInvoice, ReturnItem, ReturnType, 
     ReturnReason, ReturnStatus, RefundMethod
 )
@@ -30,6 +30,11 @@ from models.return_invoice import (
 
 class ReturnsWindow(QMainWindow):
     """نافذة إدارة المرتجعات"""
+    
+    # Window Manager attributes (للتسجيل التلقائي)
+    window_key = "returns"
+    window_singleton = True
+    window_title = "إدارة المرتجعات"
     
     def __init__(self, db_manager, parent=None):
         super().__init__(parent)

@@ -4,8 +4,7 @@
 """
 from __future__ import annotations
 from typing import List, Dict, Any
-from datetime import date, datetime, timedelta
-from decimal import Decimal
+from datetime import date, timedelta
 
 from ..core.database_manager import DatabaseManager
 from ..models.dashboard import KPI, DashboardData, ChartSeries, TimeSeriesPoint
@@ -56,6 +55,7 @@ class DashboardService:
             SELECT COALESCE(SUM(final_amount), 0) AS total
             FROM sales
             WHERE DATE(sale_date) BETWEEN ? AND ?
+            AND status NOT IN ('cancelled', 'ملغية')
         """
         total = self._scalar(q, [start, end])
         prev_total = self._scalar(q, [start - (end - start), start])
@@ -67,6 +67,7 @@ class DashboardService:
             SELECT COALESCE(SUM(final_amount), 0) AS total
             FROM sales
             WHERE DATE(sale_date) = ?
+            AND status NOT IN ('cancelled', 'ملغية')
         """
         total = self._scalar(q, [today])
         y = today - timedelta(days=1)
@@ -80,6 +81,7 @@ class DashboardService:
             SELECT COALESCE(SUM(final_amount), 0) AS total
             FROM sales
             WHERE DATE(sale_date) BETWEEN ? AND ?
+            AND status NOT IN ('cancelled', 'ملغية')
         """
         total = self._scalar(q, [start, today])
         prev_start = (start - timedelta(days=1)).replace(day=1)
@@ -95,6 +97,7 @@ class DashboardService:
             JOIN sales s ON si.sale_id = s.id
             JOIN products p ON si.product_id = p.id
             WHERE DATE(s.sale_date) BETWEEN ? AND ?
+            AND s.status NOT IN ('cancelled', 'ملغية')
         """
         profit = self._scalar(q, [start, end])
         prev_profit = self._scalar(q, [start - (end - start), start])
@@ -137,13 +140,16 @@ class DashboardService:
     def _kpi_profit_margin(self, start: date, end: date) -> KPI:
         """هامش الربح (Profit Margin %) = (الربح / المبيعات) × 100"""
         q_sales = """
-            SELECT COALESCE(SUM(final_amount), 0) FROM sales WHERE DATE(sale_date) BETWEEN ? AND ?
+            SELECT COALESCE(SUM(final_amount), 0) FROM sales 
+            WHERE DATE(sale_date) BETWEEN ? AND ?
+            AND status NOT IN ('cancelled', 'ملغية')
         """
         q_profit = """
             SELECT COALESCE(SUM(si.profit), 0)
             FROM sale_items si
             JOIN sales s ON si.sale_id = s.id
             WHERE DATE(s.sale_date) BETWEEN ? AND ?
+            AND s.status NOT IN ('cancelled', 'ملغية')
         """
         sales = self._scalar(q_sales, [start, end])
         profit = self._scalar(q_profit, [start, end])
@@ -177,6 +183,7 @@ class DashboardService:
                 COUNT(*) as order_count
             FROM sales
             WHERE DATE(sale_date) BETWEEN ? AND ?
+            AND status NOT IN ('cancelled', 'ملغية')
         """
         rows = self.db.execute_query(q, [start, end])
         if not rows or rows[0]["order_count"] == 0:
@@ -214,6 +221,7 @@ class DashboardService:
             FROM sale_items si
             JOIN sales s ON si.sale_id = s.id
             WHERE DATE(s.sale_date) BETWEEN ? AND ?
+            AND s.status NOT IN ('cancelled', 'ملغية')
         """
         cogs = self._scalar(q_cogs, [start, end])
         
@@ -274,6 +282,7 @@ class DashboardService:
             SELECT DATE(sale_date) as d, COALESCE(SUM(final_amount), 0) as total
             FROM sales
             WHERE DATE(sale_date) BETWEEN ? AND ?
+            AND status NOT IN ('cancelled', 'ملغية')
             GROUP BY DATE(sale_date)
             ORDER BY DATE(sale_date)
         """
@@ -290,6 +299,7 @@ class DashboardService:
             JOIN sales s ON si.sale_id = s.id
             JOIN products p ON si.product_id = p.id
             WHERE DATE(s.sale_date) BETWEEN ? AND ?
+            AND s.status NOT IN ('cancelled', 'ملغية')
         """
         params: List[Any] = [start, end]
         if category_id:
@@ -342,6 +352,7 @@ class DashboardService:
             SELECT COUNT(DISTINCT customer_id) AS cnt
             FROM sales
             WHERE DATE(sale_date) BETWEEN ? AND ?
+            AND status NOT IN ('cancelled', 'ملغية')
         """
         return int(self._scalar(q, [start, end]))
 
@@ -360,6 +371,7 @@ class DashboardService:
                    COALESCE(SUM(final_amount), 0) AS value
             FROM sales
             WHERE DATE(sale_date) BETWEEN ? AND ?
+            AND status NOT IN ('cancelled', 'ملغية')
             GROUP BY payment_method
             ORDER BY value DESC
         """
@@ -374,6 +386,7 @@ class DashboardService:
             LEFT JOIN products p ON si.product_id = p.id
             LEFT JOIN categories c ON p.category_id = c.id
             WHERE DATE(s.sale_date) BETWEEN ? AND ?
+            AND s.status NOT IN ('cancelled', 'ملغية')
             GROUP BY c.id
             ORDER BY value DESC
         """
@@ -386,6 +399,7 @@ class DashboardService:
             SELECT DATE(sale_date) as day, COALESCE(SUM(final_amount), 0) as amount
             FROM sales
             WHERE DATE(sale_date) BETWEEN ? AND ?
+            AND status NOT IN ('cancelled', 'ملغية')
             GROUP BY DATE(sale_date)
             ORDER BY DATE(sale_date)
         """
@@ -433,6 +447,7 @@ class DashboardService:
             FROM sale_items si
             JOIN sales s ON si.sale_id = s.id
             WHERE DATE(s.sale_date) BETWEEN ? AND ?
+            AND s.status NOT IN ('cancelled', 'ملغية')
             GROUP BY DATE(s.sale_date)
             ORDER BY DATE(s.sale_date)
         """
@@ -444,6 +459,7 @@ class DashboardService:
             SELECT COUNT(DISTINCT customer_id) as total_customers
             FROM sales
             WHERE DATE(sale_date) BETWEEN ? AND ?
+            AND status NOT IN ('cancelled', 'ملغية')
         """
         q_repeat = """
             SELECT COUNT(*) as repeat_customers
@@ -451,6 +467,7 @@ class DashboardService:
                 SELECT customer_id
                 FROM sales
                 WHERE DATE(sale_date) BETWEEN ? AND ?
+                AND status NOT IN ('cancelled', 'ملغية')
                 GROUP BY customer_id
                 HAVING COUNT(*) > 1
             )
@@ -462,6 +479,7 @@ class DashboardService:
                 SELECT customer_id, SUM(final_amount) as customer_total
                 FROM sales
                 WHERE DATE(sale_date) BETWEEN ? AND ?
+                AND status NOT IN ('cancelled', 'ملغية')
                 GROUP BY customer_id
             )
         """
@@ -482,4 +500,28 @@ class DashboardService:
             "repeat_rate": (repeat / total * 100) if total > 0 else 0.0,
             "avg_customer_value": avg_val
         }
+
+    def get_low_stock_products(self) -> List[Dict[str, Any]]:
+        """الحصول على قائمة المنتجات منخفضة المخزون مع التفاصيل"""
+        q = """
+            SELECT 
+                p.id,
+                p.name,
+                p.barcode,
+                p.current_stock,
+                COALESCE(p.min_stock, 0) as min_stock,
+                p.cost_price,
+                p.selling_price,
+                c.name as category_name,
+                CASE 
+                    WHEN p.current_stock = 0 THEN 'نفذ من المخزون'
+                    WHEN p.current_stock <= COALESCE(p.min_stock, 0) THEN 'منخفض'
+                    ELSE 'عادي'
+                END as status
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            WHERE p.current_stock <= COALESCE(p.min_stock, 0) AND p.is_active = 1
+            ORDER BY p.current_stock ASC, p.name
+        """
+        return self.db.execute_query(q)
 

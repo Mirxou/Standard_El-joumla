@@ -21,12 +21,17 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from services.quote_service import QuoteService
-from models.quote import Quote, QuoteItem, QuoteStatus
+from ...services.quote_service import QuoteService
+from ...models.quote import Quote, QuoteItem, QuoteStatus
 
 
 class QuotesWindow(QMainWindow):
     """نافذة إدارة عروض الأسعار"""
+    
+    # Window Manager attributes (للتسجيل التلقائي)
+    window_key = "quotes"
+    window_singleton = True
+    window_title = "إدارة عروض الأسعار"
     
     def __init__(self, db_manager, parent=None):
         super().__init__(parent)

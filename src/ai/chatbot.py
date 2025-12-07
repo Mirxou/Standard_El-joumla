@@ -200,10 +200,15 @@ class ChatbotEngine:
             if not patterns:
                 continue
             
+            # حساب عدد التطابقات
             matches = sum(1 for pattern in patterns if pattern.lower() in message_lower)
             
             if matches > 0:
-                score = matches / len(patterns)
+                # حساب النتيجة بناءً على عدد التطابقات ونسبة الأنماط المطابقة
+                score = matches / max(len(patterns), 1)
+                # زيادة النتيجة إذا كان هناك تطابق كامل
+                if any(pattern.lower() == message_lower.strip() for pattern in patterns):
+                    score = min(score + 0.3, 1.0)
                 if score > best_score:
                     best_score = score
                     best_intent = intent_name
@@ -227,8 +232,11 @@ class ChatbotEngine:
         # اختيار الرد المناسب
         kb = self.knowledge_base.get(language, {})
         
-        if intent and confidence > 0.3:
-            responses = kb[intent]["responses"]
+        if intent and confidence > 0.2:
+            intent_data = kb.get(intent, {})
+            responses = intent_data.get("responses", [])
+            if not responses:
+                responses = kb.get("unknown", {}).get("responses", ["I cannot answer this question."])
         else:
             responses = kb.get("unknown", {}).get("responses", ["I cannot answer this question."])
         

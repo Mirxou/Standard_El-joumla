@@ -19,12 +19,12 @@ from pathlib import Path
 class PoolConfig:
     """تكوين Connection Pool"""
     
-    # حجم Pool
-    pool_size: int = 10  # عدد الاتصالات الافتراضي
-    max_overflow: int = 20  # أقصى عدد اتصالات إضافية
+    # حجم Pool (موسّع للتعامل مع 200K+ منتج)
+    pool_size: int = 15  # عدد الاتصالات الافتراضي (زيادة من 10)
+    max_overflow: int = 30  # أقصى عدد اتصالات إضافية (زيادة من 20)
     
     # المهلات الزمنية
-    timeout: float = 30.0  # مهلة انتظار اتصال (ثانية)
+    timeout: float = 60.0  # مهلة انتظار اتصال (زيادة من 30 إلى 60 ثانية)
     recycle: int = 3600  # إعادة تدوير الاتصال بعد ساعة
     
     # إعدادات SQLite

@@ -183,10 +183,15 @@ class DataUpdateWorker(QThread):
 class PaymentDashboard(QMainWindow):
     """لوحة تحكم المدفوعات الرئيسية"""
     
-    def __init__(self, db_manager, parent=None):
+    # Window Manager attributes (للتسجيل التلقائي)
+    window_key = "payment_dashboard"
+    window_singleton = True
+    window_title = "لوحة تحكم المدفوعات"
+    
+    def __init__(self, db_manager, parent=None, payment_service: PaymentService = None):
         super().__init__(parent)
         self.db_manager = db_manager
-        self.payment_service = PaymentService(db_manager)
+        self.payment_service = payment_service or PaymentService(db_manager)
         
         # إعداد النافذة
         self.setWindowTitle("لوحة تحكم المدفوعات - Payment Dashboard")

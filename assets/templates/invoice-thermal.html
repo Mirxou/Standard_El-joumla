@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>فاتورة حرارية - {{ invoice_id }}</title>
+    <style>
+        @page {
+            size: 80mm auto;
+            margin: 0;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Tahoma', 'Arial', sans-serif; /* خط أوضح من Courier */
+            width: 78mm; /* هامش أمان */
+            margin: 0 auto;
+            padding: 5px;
+            background: #ffffff;
+            color: #000000;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        
+        /* --- الهيدر واللوغو --- */
+        .header {
+            text-align: center;
+            margin-bottom: 10px;
+            border-bottom: 2px solid #000;
+            padding-bottom: 10px;
+        }
+        
+        .logo-container {
+            margin-bottom: 5px;
+        }
+        
+        .logo-img {
+            max-width: 60mm;
+            height: auto;
+            filter: grayscale(100%) contrast(150%); /* تحسين للطباعة الحرارية */
+        }
+        
+        .company-name {
+            font-size: 16px;
+            font-weight: bold;
+            margin: 5px 0;
+        }
+        
+        .company-details {
+            font-size: 10px;
+        }
+
+        /* --- معلومات الفاتورة --- */
+        .invoice-meta {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        
+        .customer-info {
+            text-align: right;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px dashed #000;
+        }
+
+        /* --- جدول المنتجات --- */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+        }
+        
+        th {
+            text-align: right;
+            border-bottom: 1px solid #000;
+            padding: 3px 0;
+            font-size: 11px;
+        }
+        
+        td {
+            padding: 3px 0;
+            vertical-align: top;
+        }
+        
+        .col-qty { width: 10%; text-align: center; }
+        .col-item { width: 65%; }
+        .col-price { width: 25%; text-align: left; }
+        
+        /* --- الحسابات --- */
+        .totals {
+            border-top: 1px solid #000;
+            padding-top: 5px;
+            margin-bottom: 15px;
+        }
+        
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 3px;
+        }
+        
+        .grand-total {
+            font-size: 16px;
+            font-weight: bold;
+            border-top: 2px solid #000;
+            border-bottom: 2px solid #000;
+            padding: 5px 0;
+            margin-top: 5px;
+        }
+
+        /* --- الفوتر والباركود --- */
+        .footer {
+            text-align: center;
+            font-size: 10px;
+            margin-top: 20px;
+        }
+        
+        .barcode-container {
+            margin-top: 10px;
+            text-align: center;
+        }
+        
+        .barcode-img {
+            max-width: 100%;
+            height: 40px;
+        }
+        
+        .qr-code {
+            width: 80px;
+            height: 80px;
+            margin: 10px auto;
+        }
+        
+        .thank-you {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        {% if company_logo %}
+        <div class="logo-container">
+            <img src="{{ company_logo }}" class="logo-img" alt="Logo">
+        </div>
+        {% endif %}
+        
+        <div class="company-name">{{ company_name or "الإصدار المنطقي" }}</div>
+        <div class="company-details">
+            {{ company_address or "الجزائر العاصمة" }}<br>
+            هاتف: {{ company_phone or "0123456789" }}
+        </div>
+    </div>
+
+    <div class="invoice-meta">
+        <span>رقم: #{{ invoice_id }}</span>
+        <span>{{ date }}</span>
+    </div>
+    
+    <div class="customer-info">
+        <strong>العميل:</strong> {{ customer_name or "عميل نقدي" }}
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th class="col-qty">ع</th>
+                <th class="col-item">الصنف</th>
+                <th class="col-price">الإجمالي</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td class="col-qty">{{ item.qty }}</td>
+                <td class="col-item">
+                    {{ item.name }}
+                    {% if item.discount and item.discount > 0 %}
+                    <br><small>(خصم: {{ "{:,.0f}".format(item.discount) }})</small>
+                    {% endif %}
+                </td>
+                <td class="col-price">{{ "{:,.0f}".format(item.total) }} د.ج</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="totals">
+        <div class="total-row">
+            <span>المجموع:</span>
+            <span>{{ "{:,.0f}".format(subtotal) }} د.ج</span>
+        </div>
+        
+        {% if discount and discount > 0 %}
+        <div class="total-row">
+            <span>الخصم:</span>
+            <span>- {{ "{:,.0f}".format(discount) }} د.ج</span>
+        </div>
+        {% endif %}
+        
+        <div class="total-row grand-total">
+            <span>الإجمالي:</span>
+            <span>{{ "{:,.0f}".format(grand_total) }} د.ج</span>
+        </div>
+        
+        {% if payment_method %}
+        <div class="total-row" style="margin-top: 5px; font-size: 10px;">
+            <span>الدفع: {{ payment_method }}</span>
+        </div>
+        {% endif %}
+        
+        {% if paid > 0 or remaining > 0 %}
+        <div class="total-row" style="margin-top: 5px; font-size: 10px;">
+            <span>المدفوع: {{ "{:,.0f}".format(paid) }} د.ج</span>
+            <span>المتبقي: {{ "{:,.0f}".format(remaining) }} د.ج</span>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="footer">
+        {% if qr_code_url %}
+        <img src="{{ qr_code_url }}" class="qr-code" alt="QR Code">
+        {% endif %}
+        
+        {% if barcode_url %}
+        <div class="barcode-container">
+            <img src="{{ barcode_url }}" class="barcode-img" alt="Barcode">
+            <div>{{ invoice_id }}</div>
+        </div>
+        {% endif %}
+        
+        <div class="thank-you">شكراً لزيارتكم!</div>
+        <div style="font-size: 8px; margin-top: 5px;">{{ print_date }}</div>
+    </div>
+
+</body>
+</html>

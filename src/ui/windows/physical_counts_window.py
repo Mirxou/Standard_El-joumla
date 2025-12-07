@@ -5,37 +5,85 @@ Physical Counts Window
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTableWidget,
     QTableWidgetItem, QPushButton, QLabel, QComboBox, QDateEdit,
-    QLineEdit, QGroupBox, QMessageBox, QHeaderView, QMenu, QDialog
+    QLineEdit, QGroupBox, QMessageBox, QHeaderView, QMenu, QDialog,
+    QToolBar
 )
 from PySide6.QtCore import Qt, QDate, Signal
-from PySide6.QtGui import QColor, QBrush, QIcon
+from PySide6.QtGui import QColor, QBrush, QIcon, QAction
 from datetime import datetime, date
 from typing import Optional, List
 
-from core.database_manager import DatabaseManager
-from services.inventory_count_service import InventoryCountService
-from models.physical_count import PhysicalCount, CountStatus
+from ...core.database_manager import DatabaseManager
+from ...services.inventory_count_service import InventoryCountService
+from ...models.physical_count import PhysicalCount, CountStatus
 
 
 class PhysicalCountsWindow(QMainWindow):
     """نافذة إدارة الجرد الدوري"""
     
+    # Window Manager attributes (للتسجيل التلقائي)
+    window_key = "physical_counts"
+    window_singleton = True
+    window_title = "العد الفعلي"
+    
     count_updated = Signal()  # إشارة عند تحديث جرد
     
     def __init__(self, db_manager: DatabaseManager, parent=None):
+        """
+        نافذة إدارة الجرد الدوري - Refactored for Enterprise WindowManager
+        
+        Args:
+            db_manager: مدير قاعدة البيانات
+            parent: النافذة الأم (اختياري)
+        """
         super().__init__(parent)
-        self.db = db_manager
+        
+        # حماية فورية: التأكد من أن النافذة لا تُحذف تلقائياً
+        # هذا يجب أن يكون أول شيء بعد super().__init__()
+        self.setAttribute(Qt.WA_DeleteOnClose, False)
+        
+        # 1. التبعيات (Dependencies) - واضحة ومنظمة
+        self.db_manager = db_manager
+        self.db = db_manager  # للتوافق مع الكود القديم
         self.service = InventoryCountService(db_manager)
         self.current_user_id = 1  # TODO: من نظام المستخدمين
         self.current_user_name = "Admin"
         
-        self.setup_ui()
-        self.load_data()
+        # التأكد مرة أخرى من عدم الحذف التلقائي
+        if self.testAttribute(Qt.WA_DeleteOnClose):
+            self.setAttribute(Qt.WA_DeleteOnClose, False)
+        
+        # 2. إعداد الواجهة
+        try:
+            self.setup_ui()
+        except Exception as e:
+            # لا نرفع الخطأ هنا، فقط نعرض رسالة ولا نغلق النافذة
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"خطأ في setup_ui: {error_trace}")
+            # لا نعرض QMessageBox هنا لأن النافذة قد لا تكون جاهزة بعد
+            # سنعرض الخطأ في console فقط
+        
+        # 3. تحميل البيانات (بعد إعداد الواجهة)
+        try:
+            self.load_data()
+        except Exception as e:
+            # لا نرفع الخطأ هنا، فقط نعرض رسالة
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"خطأ في load_data: {error_trace}")
+            # لا نعرض QMessageBox هنا لأن النافذة قد لا تكون جاهزة بعد
+        
+        # ملاحظة: لا نكتب closeEvent هنا
+        # WindowManager سيتولى حفظ Geometry و State تلقائياً
     
     def setup_ui(self):
         """إعداد واجهة المستخدم"""
         self.setWindowTitle("إدارة الجرد الدوري")
         self.setMinimumSize(1200, 700)
+        
+        # إعداد Toolbar (ليتم حفظ حالته بـ saveState)
+        self._setup_toolbar()
         
         # الويدجت المركزي
         central_widget = QWidget()
@@ -64,6 +112,69 @@ class PhysicalCountsWindow(QMainWindow):
         # الأزرار
         buttons_layout = self.create_buttons_section()
         layout.addLayout(buttons_layout)
+    
+    def _setup_toolbar(self):
+        """إعداد شريط الأدوات (ليتم حفظ حالته بـ saveState)"""
+        # تعريف toolbar باسم محدد (مهم جداً لعمل saveState)
+        self.toolbar = QToolBar("PhysicalCountsToolbar", self)
+        self.toolbar.setObjectName("PhysicalCountsToolbar")  # ObjectName ضروري لـ Qt لحفظ الحالة
+        self.addToolBar(Qt.TopToolBarArea, self.toolbar)
+        
+        # إضافة أزرار
+        refresh_action = QAction("🔄 تحديث", self)
+        refresh_action.setShortcut("F5")
+        refresh_action.triggered.connect(self.load_data)
+        self.toolbar.addAction(refresh_action)
+        
+        self.toolbar.addSeparator()
+        
+        new_count_action = QAction("➕ جرد جديد", self)
+        new_count_action.triggered.connect(self.create_new_count)
+        self.toolbar.addAction(new_count_action)
+        
+        self.toolbar.addSeparator()
+        
+        export_action = QAction("📥 تصدير", self)
+        export_action.triggered.connect(self.export_data)
+        self.toolbar.addAction(export_action)
+    
+    def export_data(self):
+        """تصدير البيانات إلى Excel"""
+        try:
+            from PySide6.QtWidgets import QFileDialog
+            from pathlib import Path
+            import csv
+            
+            # اختيار الملف
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "حفظ ملف Excel",
+                str(Path.home() / "Desktop" / "الجرود.csv"),
+                "CSV Files (*.csv);;All Files (*)"
+            )
+            
+            if not file_path:
+                return
+            
+            # تصدير البيانات
+            with open(file_path, 'w', newline='', encoding='utf-8-sig') as f:
+                writer = csv.writer(f)
+                
+                # رأس الجدول
+                headers = ["رقم الجرد", "التاريخ", "الحالة", "الوصف", "المستخدم", "عدد العناصر"]
+                writer.writerow(headers)
+                
+                # البيانات
+                for row in range(self.table.rowCount()):
+                    row_data = []
+                    for col in range(self.table.columnCount()):
+                        item = self.table.item(row, col)
+                        row_data.append(item.text() if item else "")
+                    writer.writerow(row_data)
+            
+            QMessageBox.information(self, "نجاح", f"تم تصدير البيانات إلى:\n{file_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "خطأ", f"فشل تصدير البيانات:\n{str(e)}")
     
     def create_summary_cards(self) -> QHBoxLayout:
         """إنشاء بطاقات الملخص"""
@@ -441,7 +552,7 @@ class PhysicalCountsWindow(QMainWindow):
     def create_new_count(self):
         """إنشاء جرد جديد"""
         try:
-            from ui.dialogs.count_details_dialog import CountDetailsDialog
+            from src.ui.dialogs.count_details_dialog import CountDetailsDialog
             
             dialog = CountDetailsDialog(self.db, None, self)
             if dialog.exec() == QDialog.Accepted:
@@ -458,7 +569,7 @@ class PhysicalCountsWindow(QMainWindow):
             return
         
         try:
-            from ui.dialogs.count_details_dialog import CountDetailsDialog
+            from src.ui.dialogs.count_details_dialog import CountDetailsDialog
             
             dialog = CountDetailsDialog(self.db, count_id, self)
             if dialog.exec() == QDialog.Accepted:

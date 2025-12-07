@@ -11,7 +11,7 @@ Advanced Reports Models
 
 from dataclasses import dataclass, field
 from datetime import datetime, date
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from enum import Enum
 
 
@@ -25,22 +25,32 @@ class ReportType(Enum):
     SALES_BY_EMPLOYEE = "sales_by_employee"              # المبيعات حسب الموظف
     
     INVENTORY_MOVEMENT = "inventory_movement"            # حركة المخزون
+    INVENTORY_STATUS = "inventory_status"                # حالة المخزون
     INVENTORY_VALUATION = "inventory_valuation"          # تقييم المخزون
     INVENTORY_AGING = "inventory_aging"                  # أعمار المخزون
     INVENTORY_TURNOVER = "inventory_turnover"            # دوران المخزون
     INVENTORY_REORDER = "inventory_reorder"              # احتياجات الطلب
     INVENTORY_COUNT = "inventory_count"                  # تقارير الجرد
+    STOCK_MOVEMENT = "stock_movement"                    # حركة المخزون (مرادف)
     
+    FINANCIAL_SUMMARY = "financial_summary"              # الملخص المالي
     FINANCIAL_INCOME = "financial_income"                # قائمة الدخل
     FINANCIAL_BALANCE = "financial_balance"              # الميزانية العمومية
     FINANCIAL_CASHFLOW = "financial_cashflow"            # التدفقات النقدية
     FINANCIAL_TRIAL_BALANCE = "financial_trial_balance"  # ميزان المراجعة
     FINANCIAL_LEDGER = "financial_ledger"                # دفتر الأستاذ
     FINANCIAL_PROFIT_LOSS = "financial_profit_loss"      # الأرباح والخسائر
+    PROFIT_LOSS = "profit_loss"                          # الأرباح والخسائر (مرادف)
     
     CUSTOMER_ANALYSIS = "customer_analysis"              # تحليل العملاء
     SUPPLIER_ANALYSIS = "supplier_analysis"              # تحليل الموردين
+    PRODUCT_PERFORMANCE = "product_performance"          # أداء المنتجات
     PAYMENT_ANALYSIS = "payment_analysis"                # تحليل المدفوعات
+    PAYMENT_SUMMARY = "payment_summary"                  # ملخص المدفوعات
+    PAYMENT_METHODS_ANALYSIS = "payment_methods_analysis" # تحليل طرق الدفع
+    RECEIVABLES_AGING = "receivables_aging"              # أعمار الذمم المدينة
+    PAYABLES_AGING = "payables_aging"                    # أعمار الذمم الدائنة
+    CASH_FLOW = "cash_flow"                              # التدفق النقدي
     DEBT_ANALYSIS = "debt_analysis"                      # تحليل الديون
 
 
@@ -63,6 +73,14 @@ class ReportFormat(Enum):
     JSON = "json"        # JSON
 
 
+class ExportFormat(Enum):
+    """صيغ التصدير (مرادف لـ ReportFormat)"""
+    PDF = "pdf"
+    EXCEL = "excel"
+    CSV = "csv"
+    JSON = "json"
+
+
 class ChartType(Enum):
     """أنواع الرسوم البيانية"""
     LINE = "line"                # خطي
@@ -76,26 +94,47 @@ class ChartType(Enum):
 @dataclass
 class ReportFilter:
     """فلاتر التقارير"""
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
+    start_date: Optional[Union[date, datetime]] = None
+    end_date: Optional[Union[date, datetime]] = None
     period: ReportPeriod = ReportPeriod.MONTHLY
     
+    # قوائم IDs (للتقارير المتقدمة)
     customer_ids: List[int] = field(default_factory=list)
     supplier_ids: List[int] = field(default_factory=list)
     product_ids: List[int] = field(default_factory=list)
     category_ids: List[int] = field(default_factory=list)
     employee_ids: List[int] = field(default_factory=list)
     
+    # IDs مفردة (للتقارير البسيطة)
+    customer_id: Optional[int] = None
+    supplier_id: Optional[int] = None
+    product_id: Optional[int] = None
+    category_id: Optional[int] = None
+    user_id: Optional[int] = None
+    entity_id: Optional[int] = None
+    
     min_amount: Optional[float] = None
     max_amount: Optional[float] = None
     
+    # فلاتر المدفوعات
+    payment_method: Optional[str] = None
+    payment_type: Optional[str] = None
+    payment_status: Optional[str] = None
+    account_type: Optional[str] = None
+    
+    # فلاتر إضافية
     include_returns: bool = True
     include_quotes: bool = False
     only_approved: bool = True
+    include_zero_balances: bool = True
     
+    # التجميع والترتيب
     group_by: Optional[str] = None
     sort_by: Optional[str] = None
     sort_order: str = "DESC"
+    
+    # أعمار الذمم
+    aging_periods: Optional[List[int]] = None
     
     limit: Optional[int] = None
 
@@ -351,6 +390,18 @@ class Report:
             return self.filters.period.value
         
         return "الكل"
+
+
+@dataclass
+class ReportData:
+    """بيانات التقرير البسيطة (لـ report_exporter)"""
+    title: str
+    subtitle: str
+    generated_at: datetime
+    filters: ReportFilter
+    data: List[Dict[str, Any]]
+    summary: Dict[str, Any]
+    charts_data: Optional[Dict[str, Any]] = None
 
 
 @dataclass

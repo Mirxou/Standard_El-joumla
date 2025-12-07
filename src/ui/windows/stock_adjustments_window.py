@@ -12,13 +12,18 @@ from PySide6.QtGui import QColor, QBrush
 from datetime import date
 from typing import Optional, List
 
-from core.database_manager import DatabaseManager
-from services.inventory_count_service import InventoryCountService
-from models.physical_count import StockAdjustment, AdjustmentStatus, AdjustmentType
+from ...core.database_manager import DatabaseManager
+from ...services.inventory_count_service import InventoryCountService
+from ...models.physical_count import StockAdjustment, AdjustmentStatus, AdjustmentType
 
 
 class StockAdjustmentsWindow(QMainWindow):
     """نافذة إدارة تسويات المخزون"""
+    
+    # Window Manager attributes (للتسجيل التلقائي)
+    window_key = "stock_adjustments"
+    window_singleton = True
+    window_title = "تعديلات المخزون"
     
     adjustment_updated = Signal()
     

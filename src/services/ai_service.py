@@ -19,55 +19,127 @@ class AIService:
         self.db = db_manager
         self.logger = logger
 
-    def demand_forecast_linear_regression(self, product_id: int, days: int = 30, forecast_days: int = 7) -> List[Dict[str, Any]]:
-        """تنبؤ الطلب باستخدام الانحراف الخطي البسيط (Linear Regression)"""
+    def demand_forecast_linear_regression(self, product_id: int, days: int = 30, forecast_days: int = 7, seasonal_period: int = 7) -> List[Dict[str, Any]]:
+        """
+        تنبؤ الطلب باستخدام الانحدار الخطي مع تحليل الموسمية الأسبوعية.
+        De-seasonalizes data, performs linear regression, and re-seasonalizes the forecast.
+        """
         try:
             end = datetime.now()
             start = end - timedelta(days=days)
             q = 'SELECT DATE(created_at), SUM(quantity) FROM stock_movements WHERE product_id = ? AND movement_type = ? AND created_at >= ? GROUP BY DATE(created_at) ORDER BY DATE(created_at)'
             rows = self.db.fetch_all(q, (product_id, 'بيع', start))
-            
-            if not rows or len(rows) < 2:
-                return []
 
-            # تحويل التواريخ إلى أرقام (أيام من البداية)
+            if not rows or len(rows) < seasonal_period:
+                # لا يمكن حساب الموسمية ببيانات قليلة، العودة إلى التنبؤ البسيط
+                return self._simple_linear_regression_forecast(rows, forecast_days)
+
             dates = [datetime.strptime(r[0], "%Y-%m-%d") for r in rows]
-            start_date = dates[0]
-            x = [(d - start_date).days for d in dates]
             y = [float(r[1] or 0) for r in rows]
 
-            # حساب الانحدار الخطي: y = mx + c
+            # 1. حساب المؤشرات الموسمية (للأسبوع)
+            seasonal_indices = self._calculate_seasonal_indices(dates, y, seasonal_period)
+            if not seasonal_indices:
+                return self._simple_linear_regression_forecast(rows, forecast_days)
+
+            # 2. إزالة تأثير الموسمية من البيانات
+            deseasonalized_y = []
+            for i, val in enumerate(y):
+                day_of_week = dates[i].weekday()
+                seasonal_index = seasonal_indices.get(day_of_week, 1.0)
+                deseasonalized_y.append(val / seasonal_index if seasonal_index != 0 else 0)
+
+            # 3. تطبيق الانحدار الخطي على البيانات منزوعة الموسمية
+            start_date = dates[0]
+            x = [(d - start_date).days for d in dates]
+            
             n = len(x)
             sum_x = sum(x)
-            sum_y = sum(y)
-            sum_xy = sum(xi * yi for xi, yi in zip(x, y))
+            sum_y_deseasonalized = sum(deseasonalized_y)
+            sum_xy = sum(xi * yi for xi, yi in zip(x, deseasonalized_y))
             sum_xx = sum(xi * xi for xi in x)
 
             denominator = (n * sum_xx - sum_x * sum_x)
             if denominator == 0:
-                return []
+                return self._simple_linear_regression_forecast(rows, forecast_days)
 
-            m = (n * sum_xy - sum_x * sum_y) / denominator
-            c = (sum_y - m * sum_x) / n
+            m = (n * sum_xy - sum_x * sum_y_deseasonalized) / denominator
+            c = (sum_y_deseasonalized - m * sum_x) / n
 
-            # التنبؤ للمستقبل
+            # 4. التنبؤ بالاتجاه المستقبلي وإعادة إضافة الموسمية
             forecast = []
             last_day_idx = x[-1]
             for i in range(1, forecast_days + 1):
                 future_day_idx = last_day_idx + i
-                predicted_qty = m * future_day_idx + c
+                trend_forecast = m * future_day_idx + c
+                
                 future_date = start_date + timedelta(days=future_day_idx)
+                day_of_week = future_date.weekday()
+                seasonal_index = seasonal_indices.get(day_of_week, 1.0)
+                
+                final_forecast = trend_forecast * seasonal_index
+                
                 forecast.append({
                     'date': future_date.strftime("%Y-%m-%d"),
-                    'predicted_quantity': max(0, round(predicted_qty, 2))
+                    'predicted_quantity': max(0, round(final_forecast, 2))
                 })
             
             return forecast
 
         except Exception as e:
             if self.logger:
-                self.logger.error(f'خطأ في التنبؤ الخطي للمنتج {product_id}: {e}')
+                self.logger.error(f'خطأ في التنبؤ الخطي المعزز بالموسمية للمنتج {product_id}: {e}')
             return []
+
+    def _calculate_seasonal_indices(self, dates: List[datetime], y: List[float], period: int) -> Dict[int, float]:
+        """حساب المؤشرات الموسمية لأيام الأسبوع"""
+        day_sales = {i: [] for i in range(period)}
+        for date, val in zip(dates, y):
+            day_sales[date.weekday()].append(val)
+        
+        avg_day_sales = {day: statistics.mean(sales) if sales else 0 for day, sales in day_sales.items()}
+        
+        overall_avg = statistics.mean(y)
+        if overall_avg == 0:
+            return {}
+
+        seasonal_indices = {day: avg / overall_avg for day, avg in avg_day_sales.items()}
+        return seasonal_indices
+
+    def _simple_linear_regression_forecast(self, rows: List[Any], forecast_days: int) -> List[Dict[str, Any]]:
+        """تنبؤ خطي بسيط كخيار احتياطي"""
+        if not rows or len(rows) < 2:
+            return []
+        
+        dates = [datetime.strptime(r[0], "%Y-%m-%d") for r in rows]
+        start_date = dates[0]
+        x = [(d - start_date).days for d in dates]
+        y = [float(r[1] or 0) for r in rows]
+
+        n = len(x)
+        sum_x, sum_y = sum(x), sum(y)
+        sum_xy = sum(xi * yi for xi, yi in zip(x, y))
+        sum_xx = sum(xi * xi for xi in x)
+
+        denominator = (n * sum_xx - sum_x * sum_x)
+        if denominator == 0:
+            return []
+
+        m = (n * sum_xy - sum_x * sum_y) / denominator
+        c = (sum_y - m * sum_x) / n
+
+        forecast = []
+        last_day_idx = x[-1]
+        for i in range(1, forecast_days + 1):
+            future_day_idx = last_day_idx + i
+            predicted_qty = m * future_day_idx + c
+            future_date = start_date + timedelta(days=future_day_idx)
+            forecast.append({
+                'date': future_date.strftime("%Y-%m-%d"),
+                'predicted_quantity': max(0, round(predicted_qty, 2))
+            })
+        return forecast
+
 
     def demand_forecast_moving_average(self, product_id: int, days: int = 30, window: int = 7) -> float:
         """تنبؤ الطلب باستخدام متوسط متحرك على مبيعات الأيام الماضية"""
@@ -135,56 +207,138 @@ class AIService:
                 self.logger.error(f'خطأ في توليد الملخص: {e}')
             return {}
 
-    def detect_fraud_patterns(self, days: int = 60, min_refund_rate: float = 0.3, min_large_sales: int = 3) -> Dict[str, Any]:
-        """تحليل أنماط المبيعات والمرتجعات لكشف العمليات المشبوهة (مؤشرات أولية)"""
+    def detect_fraud_patterns(self, days: int = 60, min_refund_rate: float = 0.3, high_sales_count: int = 5) -> Dict[str, Any]:
+        """
+        تحليل أنماط المبيعات والمرتجعات، ووضع علامات على المبيعات المشبوهة للمراجعة.
+        """
+        flagged_sales = set()
+        actions_taken = []
         try:
             end = datetime.now()
             start = end - timedelta(days=days)
-            # المنتجات ذات معدل مرتجعات مرتفع
-            q = '''
-                SELECT p.id, p.name, 
-                    COALESCE(SUM(CASE WHEN s.type = 'sale' THEN si.quantity ELSE 0 END),0) as sold_qty,
-                    COALESCE(SUM(CASE WHEN s.type = 'refund' THEN si.quantity ELSE 0 END),0) as refund_qty
-                FROM products p
-                LEFT JOIN sale_items si ON si.product_id = p.id
-                LEFT JOIN sales s ON si.sale_id = s.id AND s.created_at >= ?
-                GROUP BY p.id
-                HAVING sold_qty > 0 AND (refund_qty * 1.0 / sold_qty) >= ?
-                ORDER BY refund_qty DESC
+            
+            # 1. المنتجات ذات معدل المرتجعات المرتفع
+            # نحدد المبيعات المرتجعة مباشرة
+            q_refunds = '''
+                SELECT s.id, p.name, si.quantity, s.total_amount
+                FROM sales s
+                JOIN sale_items si ON si.sale_id = s.id
+                JOIN products p ON si.product_id = p.id
+                WHERE s.type = 'refund' AND s.created_at >= ?
             '''
-            suspicious_products = self.db.fetch_all(q, (start, min_refund_rate))
-            suspicious = []
-            for row in suspicious_products:
-                suspicious.append({
-                    'product_id': row[0],
-                    'product_name': row[1],
-                    'sold_qty': row[2],
-                    'refund_qty': row[3],
-                    'refund_rate': round(row[3]/row[2], 2) if row[2] else 0
-                })
-            # العملاء الذين قاموا بمبيعات كبيرة متكررة ثم مرتجعات
-            q2 = '''
-                SELECT c.id, c.name, COUNT(s.id) as sales_count, SUM(s.total_amount) as total_sales
-                FROM customers c
-                JOIN sales s ON s.customer_id = c.id AND s.created_at >= ?
-                GROUP BY c.id
-                HAVING sales_count >= ? AND total_sales > 0
-                ORDER BY total_sales DESC
+            high_refund_sales = self.db.fetch_all(q_refunds, (start,))
+            for sale_id, product_name, _, _ in high_refund_sales:
+                if sale_id not in flagged_sales:
+                    self._flag_sale_for_review(sale_id)
+                    flagged_sales.add(sale_id)
+                    actions_taken.append(f"Flagged sale {sale_id} (high-refund product: {product_name})")
+
+            # 2. العملاء ذوو نشاط مرتجع متكرر أو مبالغ فيه
+            q_customers = '''
+                SELECT s.customer_id, c.name, COUNT(s.id) as refund_count
+                FROM sales s
+                JOIN customers c ON s.customer_id = c.id
+                WHERE s.type = 'refund' AND s.created_at >= ?
+                GROUP BY s.customer_id
+                HAVING refund_count >= ?
             '''
-            suspicious_customers = self.db.fetch_all(q2, (start, min_large_sales))
-            customers = []
-            for row in suspicious_customers:
-                customers.append({
-                    'customer_id': row[0],
-                    'customer_name': row[1],
-                    'sales_count': row[2],
-                    'total_sales': row[3]
-                })
+            suspicious_customers = self.db.fetch_all(q_customers, (start, high_sales_count))
+            for customer_id, customer_name, refund_count in suspicious_customers:
+                # ضع علامة على آخر معاملة مرتجعة لهذا العميل
+                q_last_refund = "SELECT id FROM sales WHERE customer_id = ? AND type = 'refund' ORDER BY created_at DESC LIMIT 1"
+                last_sale = self.db.fetch_one(q_last_refund, (customer_id,))
+                if last_sale and last_sale[0] not in flagged_sales:
+                    sale_id = last_sale[0]
+                    self._flag_sale_for_review(sale_id)
+                    flagged_sales.add(sale_id)
+                    actions_taken.append(f"Flagged sale {sale_id} for suspicious customer '{customer_name}' (total refunds: {refund_count})")
+
             return {
-                'suspicious_products': suspicious,
-                'suspicious_customers': customers
+                'status': 'success',
+                'flagged_sales_count': len(flagged_sales),
+                'actions': actions_taken
             }
         except Exception as e:
             if self.logger:
-                self.logger.error(f'خطأ في كشف الاحتيال: {e}')
-            return {'suspicious_products': [], 'suspicious_customers': []}
+                self.logger.error(f'خطأ في كشف الاحتيال ووضع العلامات: {e}')
+            return {'status': 'error', 'message': str(e)}
+
+    def _flag_sale_for_review(self, sale_id: int):
+        """تحديث حالة البيع إلى 'under_review'."""
+        try:
+            # التحقق من أن الحالة الحالية ليست نهائية (مثل ملغاة)
+            current_status = self.db.fetch_one("SELECT status FROM sales WHERE id = ?", (sale_id,))
+            if current_status and current_status[0] not in ['canceled', 'under_review']:
+                self.db.execute("UPDATE sales SET status = 'under_review' WHERE id = ?", (sale_id,))
+                if self.logger:
+                    self.logger.info(f"Sale {sale_id} flagged for fraud review.")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Failed to flag sale {sale_id}: {e}")
+
+
+    def smart_assistant_query(self, query: str) -> Dict[str, Any]:
+        """
+        تحليل استعلامات اللغة الطبيعية البسيطة باستخدام الكلمات المفتاحية.
+        """
+        query = query.lower()
+        response = {"query": query, "intent": "unknown", "data": None, "message": ""}
+        
+        try:
+            # نية: الحصول على ملخص المبيعات
+            if 'مبيعات' in query or 'إيرادات' in query:
+                response['intent'] = 'get_revenue_summary'
+                summary = self.generate_insight_summary()
+                total_revenue = summary.get('total_revenue', 0)
+                response['data'] = {'total_revenue': total_revenue}
+                response['message'] = f"إجمالي الإيرادات هو: {total_revenue:,.2f} د.ج."
+                return response
+
+            # نية: الحصول على عدد الطلبات
+            if 'طلبات' in query or 'فواتير' in query:
+                response['intent'] = 'get_orders_count'
+                summary = self.generate_insight_summary()
+                orders_count = summary.get('orders_count', 0)
+                response['data'] = {'orders_count': orders_count}
+                response['message'] = f"لدينا {orders_count} طلب مؤكد."
+                return response
+
+            # نية: الحصول على المنتجات ذات المخزون المنخفض
+            if 'مخزون منخفض' in query or 'نواقص' in query:
+                response['intent'] = 'get_low_stock_products'
+                # افتراض وجود حقل reorder_level في جدول products
+                q = "SELECT name, stock_quantity, reorder_level FROM products WHERE stock_quantity < reorder_level ORDER BY stock_quantity ASC LIMIT 5"
+                low_stock_products = self.db.fetch_all(q)
+                response['data'] = [{'name': r[0], 'quantity': r[1], 'reorder_level': r[2]} for r in low_stock_products]
+                if not low_stock_products:
+                    response['message'] = "لا توجد منتجات حالياً تحت مستوى إعادة الطلب."
+                else:
+                    response['message'] = "المنتجات التالية لديها مخزون منخفض:"
+                return response
+
+            # نية: الحصول على المنتجات الأكثر مبيعاً
+            if 'أفضل مبيعات' in query or 'أكثر منتج' in query:
+                response['intent'] = 'get_top_selling_products'
+                q = """
+                    SELECT p.name, SUM(si.quantity) as total_sold
+                    FROM sale_items si
+                    JOIN products p ON si.product_id = p.id
+                    GROUP BY p.name
+                    ORDER BY total_sold DESC
+                    LIMIT 5
+                """
+                top_products = self.db.fetch_all(q)
+                response['data'] = [{'name': r[0], 'total_sold': r[1]} for r in top_products]
+                response['message'] = "المنتجات الأكثر مبيعاً هي:"
+                return response
+
+            # في حال عدم العثور على نية واضحة
+            response['message'] = "عفواً، لم أفهم طلبك. يمكنك أن تسألني عن: 'المبيعات'، 'الطلبات'، 'المخزون المنخفض'، أو 'أفضل المبيعات'."
+            return response
+
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f'خطأ في المساعد الذكي للاستعلام "{query}": {e}')
+            response['message'] = "عفواً، حدث خطأ أثناء معالجة طلبك."
+            return response
+

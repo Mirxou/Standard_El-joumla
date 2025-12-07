@@ -1,0 +1,329 @@
+/* ============================================
+   Invoice Template Stylesheet
+   أنماط قالب الفاتورة
+   ============================================ */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', 'Arial', 'Tahoma', sans-serif;
+    padding: 20px;
+    background: #f3f4f6;
+    color: #1e293b;
+}
+
+.invoice-box {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 40px;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    background: #ffffff;
+    border-radius: 8px;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 40px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid #3b82f6;
+}
+
+.company-info {
+    flex: 1;
+}
+
+.company-logo {
+    max-width: 150px;
+    max-height: 80px;
+    margin-bottom: 15px;
+    object-fit: contain;
+}
+
+.company-info h1 {
+    margin: 0 0 10px 0;
+    color: #3b82f6;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.company-info p {
+    color: #64748b;
+    font-size: 14px;
+    line-height: 1.6;
+    margin: 5px 0;
+}
+
+.invoice-details {
+    text-align: left;
+    background: #f8fafc;
+    padding: 20px;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    min-width: 250px;
+}
+
+.invoice-details h3 {
+    margin: 0 0 15px 0;
+    color: #1e293b;
+    font-size: 20px;
+}
+
+.invoice-details p {
+    margin: 8px 0;
+    color: #475569;
+    font-size: 14px;
+}
+
+.invoice-details strong {
+    color: #1e293b;
+}
+
+.invoice-codes {
+    display: flex;
+    gap: 15px;
+    margin-top: 15px;
+    align-items: center;
+}
+
+.qr-code, .barcode {
+    display: inline-block;
+    padding: 8px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+}
+
+.qr-code img, .barcode img {
+    display: block;
+    max-width: 100px;
+    max-height: 100px;
+}
+
+.barcode img {
+    max-height: 50px;
+}
+
+table {
+    width: 100%;
+    line-height: inherit;
+    text-align: right;
+    border-collapse: collapse;
+    margin: 30px 0;
+}
+
+table thead {
+    background: #1e293b;
+    color: white;
+}
+
+table th {
+    padding: 15px 12px;
+    font-weight: 600;
+    font-size: 14px;
+    text-align: right;
+}
+
+table th:first-child {
+    text-align: right;
+}
+
+table th:last-child {
+    text-align: left;
+}
+
+table td {
+    padding: 12px;
+    border-bottom: 1px solid #e5e7eb;
+    font-size: 14px;
+    color: #475569;
+}
+
+table tbody tr:hover {
+    background: #f8fafc;
+}
+
+table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.product-image {
+    width: 50px;
+    height: 50px;
+    object-fit: cover;
+    border-radius: 4px;
+    border: 1px solid #e2e8f0;
+}
+
+.total-section {
+    margin-top: 30px;
+    text-align: left;
+    background: #f8fafc;
+    padding: 25px;
+    border-radius: 6px;
+    border: 2px solid #3b82f6;
+}
+
+.total-row {
+    display: flex;
+    justify-content: space-between;
+    margin: 10px 0;
+    padding: 8px 0;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.total-row:last-child {
+    border-bottom: none;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 2px solid #3b82f6;
+}
+
+.total-row label {
+    font-weight: 600;
+    color: #475569;
+    font-size: 14px;
+}
+
+.total-row .value {
+    font-weight: bold;
+    color: #1e293b;
+    font-size: 16px;
+}
+
+.total-row:last-child label {
+    font-size: 18px;
+    color: #1e293b;
+}
+
+.total-row:last-child .value {
+    font-size: 24px;
+    color: #3b82f6;
+}
+
+.footer {
+    margin-top: 50px;
+    text-align: center;
+    color: #64748b;
+    font-size: 12px;
+    border-top: 1px solid #e5e7eb;
+    padding-top: 20px;
+}
+
+.footer p {
+    margin: 5px 0;
+}
+
+.notes {
+    margin-top: 30px;
+    padding: 15px;
+    background: #fef3c7;
+    border-right: 4px solid #f59e0b;
+    border-radius: 4px;
+}
+
+.notes h4 {
+    color: #92400e;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.notes p {
+    color: #78350f;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.signatures {
+    margin-top: 40px;
+    display: flex;
+    justify-content: space-around;
+    padding-top: 30px;
+    border-top: 2px solid #e5e7eb;
+}
+
+.signature-box {
+    text-align: center;
+    min-width: 200px;
+}
+
+.signature-box .signature-line {
+    border-top: 2px solid #1e293b;
+    margin-top: 60px;
+    padding-top: 10px;
+}
+
+.signature-box .signature-label {
+    font-weight: 600;
+    color: #475569;
+    font-size: 14px;
+}
+
+.signature-box .signature-image {
+    max-width: 150px;
+    max-height: 80px;
+    margin-bottom: 10px;
+}
+
+@media print {
+    body {
+        background: white;
+        padding: 0;
+    }
+    
+    .invoice-box {
+        box-shadow: none;
+        border: none;
+        padding: 20px;
+    }
+    
+    .header {
+        page-break-inside: avoid;
+    }
+    
+    table {
+        page-break-inside: avoid;
+    }
+    
+    .total-section {
+        page-break-inside: avoid;
+    }
+    
+    .signatures {
+        page-break-inside: avoid;
+    }
+}
+
+/* Dark Theme Support */
+@media (prefers-color-scheme: dark) {
+    body {
+        background: #1e293b;
+        color: #f1f5f9;
+    }
+    
+    .invoice-box {
+        background: #0f172a;
+        border-color: #334155;
+    }
+    
+    .invoice-details {
+        background: #1e293b;
+        border-color: #334155;
+    }
+    
+    table thead {
+        background: #334155;
+    }
+    
+    .total-section {
+        background: #1e293b;
+        border-color: #3b82f6;
+    }
+}
+

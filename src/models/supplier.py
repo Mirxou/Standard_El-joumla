@@ -227,10 +227,11 @@ class SupplierManager:
             params = []
             
             if search_term:
-                query += """ AND (s.name LIKE ? OR s.name_en LIKE ? OR s.contact_person LIKE ? 
+                # التحقق من وجود الأعمدة قبل استخدامها
+                query += """ AND (s.name LIKE ? OR s.contact_person LIKE ? 
                             OR s.phone LIKE ? OR s.phone2 LIKE ? OR s.email LIKE ?)"""
                 search_pattern = f"%{search_term}%"
-                params.extend([search_pattern] * 6)
+                params.extend([search_pattern] * 5)  # 5 بدلاً من 6 لأن name_en غير موجود
             
             if active_only:
                 query += " AND s.is_active = 1"
@@ -238,11 +239,34 @@ class SupplierManager:
             query += " ORDER BY s.name"
             
             results = self.db_manager.fetch_all(query, params)
-            return [self._row_to_supplier(row) for row in results]
+            if self.logger:
+                self.logger.debug(f"استعلام البحث في الموردين: {query[:100]}...")
+                self.logger.debug(f"عدد الصفوف المُعادة: {len(results)}")
+            
+            suppliers = []
+            for idx, row in enumerate(results):
+                try:
+                    supplier = self._row_to_supplier(row)
+                    if supplier:  # تجاهل الصفوف التي فشل تحويلها
+                        suppliers.append(supplier)
+                    elif self.logger:
+                        self.logger.warning(f"فشل تحويل الصف {idx} إلى Supplier (رجع None)")
+                except Exception as e:
+                    if self.logger:
+                        self.logger.error(f"خطأ في تحويل الصف {idx} إلى Supplier: {e}")
+                        import traceback
+                        self.logger.error(traceback.format_exc())
+            
+            if self.logger:
+                self.logger.info(f"تم تحميل {len(suppliers)} مورد من {len(results)} صف")
+            
+            return suppliers
             
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في البحث في الموردين: {str(e)}")
+                import traceback
+                self.logger.error(traceback.format_exc())
             return []
     
     def get_all_suppliers(self, active_only: bool = True) -> List[Supplier]:
@@ -519,28 +543,71 @@ class SupplierManager:
     
     def _row_to_supplier(self, row) -> Supplier:
         """تحويل صف قاعدة البيانات إلى كائن مورد"""
-        return Supplier(
-            id=row[0],
-            name=row[1],
-            name_en=row[2],
-            contact_person=row[3],
-            phone=row[4],
-            phone2=row[5],
-            email=row[6],
-            website=row[7],
-            address=row[8],
-            city=row[9],
-            country=row[10],
-            tax_number=row[11],
-            commercial_register=row[12],
-            payment_terms=row[13],
-            credit_limit=Decimal(str(row[14])),
-            current_balance=Decimal(str(row[15])),
-            notes=row[16],
-            is_active=bool(row[17]),
-            created_at=datetime.fromisoformat(row[18]) if row[18] else None,
-            updated_at=datetime.fromisoformat(row[19]) if row[19] else None,
-            last_purchase_date=date.fromisoformat(row[20]) if row[20] else None,
-            total_purchases=Decimal(str(row[21] or 0)),
-            purchases_count=row[22] or 0
-        )
+        # جدول suppliers يحتوي على 13 عموداً: id, name, contact_person, phone, email, address, tax_number, is_active, created_at, updated_at, phone2, credit_limit, current_balance
+        # الاستعلام يعيد s.* (13 عمود) + last_purchase_date + total_purchases + purchases_count = 16 عموداً
+        
+        # التحقق من طول الصف
+        if len(row) < 13:
+            if self.logger:
+                self.logger.error(f"صف غير صحيح: عدد الأعمدة {len(row)} أقل من المتوقع (13)")
+            return None
+        
+        try:
+            # الأعمدة الأساسية من جدول suppliers (13 عمود)
+            supplier_id = row[0]
+            name = row[1] or ""
+            contact_person = row[2] if len(row) > 2 else None
+            phone = row[3] if len(row) > 3 else None
+            email = row[4] if len(row) > 4 else None
+            address = row[5] if len(row) > 5 else None
+            tax_number = row[6] if len(row) > 6 else None
+            is_active = bool(row[7]) if len(row) > 7 else True
+            created_at = datetime.fromisoformat(row[8]) if len(row) > 8 and row[8] else None
+            updated_at = datetime.fromisoformat(row[9]) if len(row) > 9 and row[9] else None
+            phone2 = row[10] if len(row) > 10 else None
+            credit_limit = Decimal(str(row[11] or 0)) if len(row) > 11 else Decimal('0')
+            current_balance = Decimal(str(row[12] or 0)) if len(row) > 12 else Decimal('0')
+            
+            # الأعمدة المحسوبة من الاستعلام (3 أعمدة إضافية)
+            last_purchase_date = None
+            total_purchases = Decimal('0')
+            purchases_count = 0
+            
+            if len(row) > 13:
+                last_purchase_date = date.fromisoformat(row[13]) if row[13] else None
+            if len(row) > 14:
+                total_purchases = Decimal(str(row[14] or 0))
+            if len(row) > 15:
+                purchases_count = int(row[15] or 0)
+            
+            return Supplier(
+                id=supplier_id,
+                name=name,
+                name_en=None,  # غير موجود في قاعدة البيانات
+                contact_person=contact_person,
+                phone=phone,
+                phone2=phone2,
+                email=email,
+                website=None,  # غير موجود في قاعدة البيانات
+                address=address,
+                city=None,  # غير موجود في قاعدة البيانات
+                country=None,  # غير موجود في قاعدة البيانات
+                tax_number=tax_number,
+                commercial_register=None,  # غير موجود في قاعدة البيانات
+                payment_terms=None,  # غير موجود في قاعدة البيانات
+                credit_limit=credit_limit,
+                current_balance=current_balance,
+                notes=None,  # غير موجود في قاعدة البيانات
+                is_active=is_active,
+                created_at=created_at,
+                updated_at=updated_at,
+                last_purchase_date=last_purchase_date,
+                total_purchases=total_purchases,
+                purchases_count=purchases_count
+            )
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في تحويل الصف إلى Supplier: {e}")
+                import traceback
+                self.logger.error(traceback.format_exc())
+            return None

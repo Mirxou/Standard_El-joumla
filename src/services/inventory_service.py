@@ -30,6 +30,7 @@ class StockMovement:
     notes: Optional[str] = None
     created_by: Optional[int] = None
     created_at: Optional[datetime] = None
+    product_name: Optional[str] = None  # اسم المنتج (من JOIN)
 
 @dataclass
 class StockAlert:
@@ -293,8 +294,19 @@ class InventoryService:
                            limit: int = 100) -> List[StockMovement]:
         """الحصول على حركات المخزون"""
         try:
+            # تحديد الأعمدة بشكل صريح لتجنب مشاكل الترتيب
             query = """
-            SELECT sm.*, p.name as product_name
+            SELECT 
+                sm.id,
+                sm.product_id,
+                sm.movement_type,
+                sm.quantity,
+                sm.reference_id,
+                sm.reference_type,
+                sm.notes,
+                sm.user_id as created_by,
+                sm.created_at,
+                p.name as product_name
             FROM stock_movements sm
             LEFT JOIN products p ON sm.product_id = p.id
             WHERE 1=1
@@ -320,17 +332,36 @@ class InventoryService:
             movements = []
             
             for row in results:
+                # الأعمدة: id, product_id, movement_type, quantity, reference_id, 
+                # reference_type, notes, created_by, created_at, product_name
+                # معالجة created_at بشكل صحيح
+                created_at_value = None
+                if row[8]:
+                    if isinstance(row[8], str):
+                        try:
+                            created_at_value = datetime.fromisoformat(row[8].replace('Z', '+00:00'))
+                        except (ValueError, AttributeError):
+                            try:
+                                created_at_value = datetime.strptime(row[8], "%Y-%m-%d %H:%M:%S")
+                            except (ValueError, AttributeError):
+                                created_at_value = None
+                    elif isinstance(row[8], datetime):
+                        created_at_value = row[8]
+                
                 movement = StockMovement(
-                    id=row[0],
-                    product_id=row[1],
-                    movement_type=row[2],
-                    quantity=row[3],
-                    reference_id=row[4],
-                    reference_type=row[5],
-                    notes=row[6],
-                    created_by=row[7],
-                    created_at=datetime.fromisoformat(row[8]) if row[8] else None
+                    id=row[0] if row[0] else None,
+                    product_id=row[1] if row[1] else 0,
+                    movement_type=row[2] if row[2] else "",
+                    quantity=float(row[3]) if row[3] else 0.0,
+                    reference_id=row[4] if row[4] else None,
+                    reference_type=row[5] if row[5] else None,
+                    notes=row[6] if row[6] else None,
+                    created_by=row[7] if row[7] else None,
+                    created_at=created_at_value
                 )
+                # إضافة اسم المنتج كخاصية إضافية
+                if len(row) > 9 and row[9]:
+                    movement.product_name = row[9]
                 movements.append(movement)
             
             return movements
@@ -343,27 +374,36 @@ class InventoryService:
     # ===== التنبيهات والتقارير =====
     
     def get_stock_alerts(self) -> List[StockAlert]:
-        """الحصول على تنبيهات المخزون"""
+        """الحصول على تنبيهات المخزون (محسّن للأداء)"""
         try:
             alerts = []
             
-            # منتجات منخفضة المخزون
-            low_stock_products = self.product_manager.get_low_stock_products()
-            for product in low_stock_products:
-                severity = "critical" if product.current_stock == 0 else "high"
-                alert_type = "out_of_stock" if product.current_stock == 0 else "low_stock"
+            # استخدام استعلام مباشر بدلاً من تحميل كل المنتجات
+            query = """
+            SELECT id, name, current_stock, min_stock
+            FROM products
+            WHERE is_active = 1 AND current_stock <= min_stock
+            ORDER BY current_stock ASC, name
+            LIMIT 100
+            """
+            
+            results = self.db_manager.fetch_all(query)
+            for row in results:
+                product_id, name, current_stock, min_stock = row
+                severity = "critical" if current_stock == 0 else "high"
+                alert_type = "out_of_stock" if current_stock == 0 else "low_stock"
                 
-                message = f"المنتج {product.name} "
-                if product.current_stock == 0:
+                message = f"المنتج {name} "
+                if current_stock == 0:
                     message += "نفد من المخزون"
                 else:
-                    message += f"مخزون منخفض ({product.current_stock} متبقي)"
+                    message += f"مخزون منخفض ({current_stock} متبقي)"
                 
                 alert = StockAlert(
-                    product_id=product.id,
-                    product_name=product.name,
-                    current_stock=product.current_stock,
-                    minimum_stock=product.minimum_stock,
+                    product_id=product_id,
+                    product_name=name,
+                    current_stock=current_stock,
+                    minimum_stock=min_stock,
                     alert_type=alert_type,
                     severity=severity,
                     message=message
@@ -392,29 +432,36 @@ class InventoryService:
             return []
     
     def generate_inventory_report(self, include_movements: bool = True) -> InventoryReport:
-        """إنشاء تقرير شامل للمخزون"""
+        """إنشاء تقرير شامل للمخزون (محسّن للأداء)"""
         try:
-            # إحصائيات عامة
-            total_products = len(self.product_manager.get_all_products())
-            total_categories = len(self.category_manager.get_all_categories())
-            
-            # قيمة المخزون الإجمالية
+            # استخدام استعلام واحد للحصول على معظم البيانات
             stock_report = self.product_manager.get_stock_report()
-            total_stock_value = stock_report.get('total_value', 0)
+            total_products = stock_report.get('total_products', 0)
+            total_stock_value = stock_report.get('total_stock_value', 0)
+            low_stock_count = stock_report.get('low_stock_products', 0)
             
-            # المنتجات منخفضة المخزون
-            low_stock_products = self.product_manager.get_low_stock_products()
-            low_stock_count = len(low_stock_products)
-            out_of_stock_count = len([p for p in low_stock_products if p.current_stock == 0])
+            # عدد الفئات (استعلام بسيط)
+            total_categories_query = "SELECT COUNT(*) FROM categories"
+            total_categories_result = self.db_manager.fetch_one(total_categories_query)
+            total_categories = total_categories_result[0] if total_categories_result else 0
+            
+            # حساب المنتجات النافدة (استعلام محسّن)
+            out_of_stock_query = """
+            SELECT COUNT(*) 
+            FROM products 
+            WHERE is_active = 1 AND current_stock = 0
+            """
+            out_of_stock_result = self.db_manager.fetch_one(out_of_stock_query)
+            out_of_stock_count = out_of_stock_result[0] if out_of_stock_result else 0
             
             # المنتجات منتهية الصلاحية
             expired_products = self._get_expired_products()
             expired_count = len(expired_products)
             
-            # أفضل المنتجات (حسب القيمة)
-            top_products = self._get_top_products_by_value()
+            # أفضل المنتجات (حسب القيمة) - محمّل مسبقاً
+            top_products = self._get_top_products_by_value(limit=10)
             
-            # حركات المخزون الأخيرة
+            # حركات المخزون الأخيرة (فقط إذا طُلب)
             stock_movements = []
             if include_movements:
                 movements = self.get_stock_movements(limit=50)
@@ -430,7 +477,7 @@ class InventoryService:
                     for m in movements
                 ]
             
-            # التنبيهات
+            # التنبيهات (محسّنة - لا تحتاج تحميل كل المنتجات)
             alerts = self.get_stock_alerts()
             
             report = InventoryReport(

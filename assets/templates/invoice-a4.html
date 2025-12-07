@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>فاتورة A4 - {{ invoice_id }}</title>
+    <link rel="stylesheet" href="invoice.css">
+    {% if theme == 'dark' %}
+    <link rel="stylesheet" href="invoice-dark.css">
+    {% endif %}
+    <style>
+        @page {
+            size: A4;
+            margin: 20mm;
+        }
+        
+        body {
+            max-width: 210mm;
+            margin: 0 auto;
+        }
+        
+        .invoice-box {
+            max-width: 100%;
+            padding: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="invoice-box">
+        <!-- Header -->
+        <div class="header">
+            <div class="company-info">
+                {% if company_logo %}
+                <img src="{{ company_logo }}" alt="شعار الشركة" class="company-logo">
+                {% endif %}
+                <h1>{{ company_name or "الإصدار المنطقي" }}</h1>
+                <p>
+                    {{ company_address or "شارع التقنية، الجزائر العاصمة" }}<br>
+                    هاتف: {{ company_phone or "0123456789" }}<br>
+                    {% if company_email %}
+                    البريد: {{ company_email }}<br>
+                    {% endif %}
+                    {% if company_tax_id %}
+                    الرقم الضريبي: {{ company_tax_id }}
+                    {% endif %}
+                </p>
+            </div>
+            
+            <div class="invoice-details">
+                <h3>فاتورة رقم: #{{ invoice_id }}</h3>
+                <p><strong>التاريخ:</strong> {{ date }}</p>
+                <p><strong>العميل:</strong> {{ customer_name }}</p>
+                {% if customer_phone %}
+                <p><strong>الهاتف:</strong> {{ customer_phone }}</p>
+                {% endif %}
+                {% if customer_address %}
+                <p><strong>العنوان:</strong> {{ customer_address }}</p>
+                {% endif %}
+                
+                <!-- QR Code & Barcode -->
+                {% if qr_code_url or barcode_url %}
+                <div class="invoice-codes">
+                    {% if qr_code_url %}
+                    <div class="qr-code">
+                        <img src="{{ qr_code_url }}" alt="QR Code">
+                    </div>
+                    {% endif %}
+                    {% if barcode_url %}
+                    <div class="barcode">
+                        <img src="{{ barcode_url }}" alt="Barcode">
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Items Table -->
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 5%;">#</th>
+                    <th style="width: 40%;">المنتج</th>
+                    <th style="width: 15%; text-align: center;">الكمية</th>
+                    <th style="width: 20%; text-align: left;">السعر</th>
+                    <th style="width: 20%; text-align: left;">الإجمالي</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td style="text-align: center; color: #94a3b8;">{{ loop.index }}</td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            {% if item.image %}
+                            <img src="{{ item.image }}" alt="{{ item.name }}" class="product-image">
+                            {% endif %}
+                            <div>
+                                <strong>{{ item.name }}</strong>
+                                {% if item.barcode %}
+                                <br><small style="color: #94a3b8;">باركود: {{ item.barcode }}</small>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                    <td style="text-align: center;">{{ item.qty }}</td>
+                    <td style="text-align: left;">{{ "{:,.2f}".format(item.price) }} د.ج</td>
+                    <td style="text-align: left; font-weight: 600;">{{ "{:,.2f}".format(item.total) }} د.ج</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        <!-- Totals -->
+        <div class="total-section">
+            {% if subtotal %}
+            <div class="total-row">
+                <label>المجموع الفرعي:</label>
+                <span class="value">{{ "{:,.2f}".format(subtotal) }} د.ج</span>
+            </div>
+            {% endif %}
+            
+            {% if discount and discount > 0 %}
+            <div class="total-row">
+                <label>الخصم:</label>
+                <span class="value" style="color: #ef4444;">- {{ "{:,.2f}".format(discount) }} د.ج</span>
+            </div>
+            {% endif %}
+            
+            {% if tax and tax > 0 %}
+            <div class="total-row">
+                <label>الضريبة:</label>
+                <span class="value">{{ "{:,.2f}".format(tax) }} د.ج</span>
+            </div>
+            {% endif %}
+            
+            <div class="total-row">
+                <label>الإجمالي النهائي:</label>
+                <span class="value">{{ "{:,.2f}".format(grand_total) }} د.ج</span>
+            </div>
+            
+            {% if paid and paid > 0 %}
+            <div class="total-row">
+                <label>المدفوع:</label>
+                <span class="value" style="color: #10b981;">{{ "{:,.2f}".format(paid) }} د.ج</span>
+            </div>
+            {% endif %}
+            
+            {% if remaining and remaining > 0 %}
+            <div class="total-row">
+                <label>المتبقي:</label>
+                <span class="value" style="color: #f59e0b;">{{ "{:,.2f}".format(remaining) }} د.ج</span>
+            </div>
+            {% endif %}
+            
+            {% if payment_method %}
+            <div class="total-row" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e2e8f0;">
+                <label>طريقة الدفع:</label>
+                <span class="value">{{ payment_method }}</span>
+            </div>
+            {% endif %}
+        </div>
+        
+        <!-- Notes -->
+        {% if notes %}
+        <div class="notes">
+            <h4>ملاحظات:</h4>
+            <p>{{ notes }}</p>
+        </div>
+        {% endif %}
+        
+        <!-- Signatures -->
+        {% if signatures %}
+        <div class="signatures">
+            {% for signature in signatures %}
+            <div class="signature-box">
+                {% if signature.image %}
+                <img src="{{ signature.image }}" alt="{{ signature.label }}" class="signature-image">
+                {% endif %}
+                <div class="signature-line"></div>
+                <div class="signature-label">{{ signature.label }}</div>
+                {% if signature.name %}
+                <div style="margin-top: 5px; font-size: 12px; color: #64748b;">{{ signature.name }}</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        
+        <!-- Footer -->
+        <div class="footer">
+            <p><strong>شكراً لتعاملكم معنا!</strong></p>
+            <p>تم إصدار هذه الفاتورة إلكترونياً - {{ print_date }}</p>
+            <p style="margin-top: 10px; color: #94a3b8;">هذه الفاتورة صالحة قانونياً ويمكن استخدامها للأغراض الضريبية</p>
+        </div>
+    </div>
+</body>
+</html>

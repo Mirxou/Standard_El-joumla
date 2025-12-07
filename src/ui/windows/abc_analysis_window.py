@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
     QTabWidget
 )
 from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QFont, QColor
+from PySide6.QtGui import QFont, QColor, QPainter
 from PySide6.QtCharts import QChart, QChartView, QPieSeries, QBarSeries, QBarSet, QBarCategoryAxis, QValueAxis
 from typing import List, Dict
 from decimal import Decimal
@@ -48,6 +48,11 @@ class ABCAnalysisWorker(QThread):
 
 class ABCAnalysisWindow(QWidget):
     """نافذة تحليل ABC"""
+    
+    # Window Manager attributes (للتسجيل التلقائي)
+    window_key = "abc_analysis"
+    window_singleton = True
+    window_title = "تحليل ABC"
     
     def __init__(self, db_manager: DatabaseManager, parent=None):
         super().__init__(parent)
@@ -209,12 +214,12 @@ class ABCAnalysisWindow(QWidget):
         
         # رسم دائري للتوزيع
         self.pie_chart_view = QChartView()
-        self.pie_chart_view.setRenderHint(QChartView.Antialiasing)
+        self.pie_chart_view.setRenderHint(QPainter.Antialiasing)
         charts_layout.addWidget(self.pie_chart_view)
         
         # رسم أعمدة للقيمة
         self.bar_chart_view = QChartView()
-        self.bar_chart_view.setRenderHint(QChartView.Antialiasing)
+        self.bar_chart_view.setRenderHint(QPainter.Antialiasing)
         charts_layout.addWidget(self.bar_chart_view)
         
         layout.addLayout(charts_layout)

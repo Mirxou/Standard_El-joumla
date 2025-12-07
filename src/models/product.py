@@ -126,22 +126,18 @@ class ProductManager:
                 now
             )
             
-            print(f"تنفيذ الاستعلام: {query}")
-            print(f"المعاملات: {params}")
+            # 🔥 CRITICAL FIX: استخدام execute_insert بدلاً من execute_non_query + execute_scalar
+            # هذا يحل مشكلة lastrowid التي تعيد 0
+            product_id = self.db_manager.execute_insert(query, params)
             
-            # استخدام execute_non_query بدلاً من execute_query
-            rowcount = self.db_manager.execute_non_query(query, params)
-            print(f"عدد الصفوف المتأثرة: {rowcount}")
-            
-            if rowcount > 0:
-                # الحصول على آخر ID مُدرج
-                product_id = self.db_manager.execute_scalar("SELECT last_insert_rowid()")
-                print(f"آخر ID مُدرج: {product_id}")
+            if product_id and product_id > 0:
                 if self.logger:
                     self.logger.info(f"تم إنشاء منتج جديد: {product.name} (ID: {product_id})")
                 return product_id
             else:
-                print("لم يتم إدراج أي صفوف")
+                if self.logger:
+                    self.logger.error(f"فشل في إنشاء المنتج: {product.name} - لم يتم إرجاع ID")
+                return None
             
         except Exception as e:
             print(f"خطأ في إنشاء المنتج: {str(e)}")
@@ -171,17 +167,21 @@ class ProductManager:
         
         return None
     
-    def get_product_by_barcode(self, barcode: str) -> Optional[Product]:
+    def get_product_by_barcode(self, barcode: str, active_only: bool = True) -> Optional[Product]:
         """الحصول على منتج بالباركود"""
         try:
             query = """
             SELECT p.*, c.name as category_name
             FROM products p
             LEFT JOIN categories c ON p.category_id = c.id
-            WHERE p.barcode = ? AND p.is_active = 1
+            WHERE p.barcode = ?
             """
+            params = [barcode]
             
-            result = self.db_manager.fetch_one(query, (barcode,))
+            if active_only:
+                query += " AND p.is_active = 1"
+            
+            result = self.db_manager.fetch_one(query, tuple(params))
             if result:
                 return self._row_to_product(result)
             
@@ -192,7 +192,8 @@ class ProductManager:
         return None
     
     def search_products(self, search_term: str = "", category_id: Optional[int] = None, 
-                       active_only: bool = True) -> List[Product]:
+                       active_only: bool = True, limit: Optional[int] = None, 
+                       offset: Optional[int] = None) -> List[Product]:
         """البحث في المنتجات"""
         try:
             query = """
@@ -216,6 +217,12 @@ class ProductManager:
                 query += " AND p.is_active = 1"
             
             query += " ORDER BY p.name"
+            
+            # إضافة LIMIT و OFFSET للتحكم في عدد النتائج
+            if limit is not None:
+                query += f" LIMIT {limit}"
+                if offset is not None:
+                    query += f" OFFSET {offset}"
             
             results = self.db_manager.fetch_all(query, params)
             return [self._row_to_product(row) for row in results]

@@ -69,19 +69,19 @@ class PredictiveEngine:
         if product_id:
             # محاولة الحصول على المنتج من قاعدة البيانات
             try:
-                product = self.db.execute_query(
+                products = self.db.execute_query(
                     "SELECT * FROM products WHERE id = ?", 
                     (product_id,)
                 )
-                products = [dict(zip([col[0] for col in product.description], row)) for row in product] if product else []
-            except:
+                products = products if products else []
+            except Exception:
                 products = []
         else:
             # الحصول على جميع المنتجات
             try:
-                result = self.db.execute_query("SELECT * FROM products")
-                products = [dict(zip([col[0] for col in result.description], row)) for row in result] if result else []
-            except:
+                products = self.db.execute_query("SELECT * FROM products")
+                products = products if products else []
+            except Exception:
                 products = []
         
         for product in products:
@@ -149,18 +149,18 @@ class PredictiveEngine:
         # الحصول على العملاء
         if customer_id:
             try:
-                result = self.db.execute_query(
+                customers = self.db.execute_query(
                     "SELECT * FROM customers WHERE id = ?",
                     (customer_id,)
                 )
-                customers = [dict(zip([col[0] for col in result.description], row)) for row in result] if result else []
-            except:
+                customers = customers if customers else []
+            except Exception:
                 customers = []
         else:
             try:
-                result = self.db.execute_query("SELECT * FROM customers")
-                customers = [dict(zip([col[0] for col in result.description], row)) for row in result] if result else []
-            except:
+                customers = self.db.execute_query("SELECT * FROM customers")
+                customers = customers if customers else []
+            except Exception:
                 customers = []
         
         for customer in customers:
@@ -258,9 +258,9 @@ class PredictiveEngine:
         
         # الحصول على جميع المنتجات
         try:
-            result = self.db.execute_query("SELECT * FROM products")
-            all_products = [dict(zip([col[0] for col in result.description], row)) for row in result] if result else []
-        except:
+            all_products = self.db.execute_query("SELECT * FROM products")
+            all_products = all_products if all_products else []
+        except Exception:
             all_products = []
         
         # تصفية المنتجات التي لم يشتريها
@@ -298,9 +298,9 @@ class PredictiveEngine:
         
         # الحصول على جميع المنتجات
         try:
-            result = self.db.execute_query("SELECT * FROM products")
-            products = [dict(zip([col[0] for col in result.description], row)) for row in result] if result else []
-        except:
+            products = self.db.execute_query("SELECT * FROM products")
+            products = products if products else []
+        except Exception:
             products = []
         
         for product in products:
@@ -341,10 +341,38 @@ class PredictiveEngine:
     # ========== Helper Methods ==========
     
     def _get_sales_history(self, product_id: int, days: int) -> List[Dict]:
-        """الحصول على تاريخ المبيعات"""
-        # TODO: تنفيذ استعلام قاعدة البيانات الفعلي
-        # هذا مثال تجريبي
-        return []
+        """
+        الحصول على تاريخ المبيعات للمنتج
+        
+        Args:
+            product_id: معرف المنتج
+            days: عدد الأيام للرجوع
+            
+        Returns:
+            قائمة ببيانات المبيعات
+        """
+        try:
+            if not self.db:
+                return []
+            
+            # استعلام للحصول على المبيعات التاريخية
+            query = """
+                SELECT 
+                    si.quantity,
+                    s.sale_date as date,
+                    si.unit_price,
+                    si.total_amount
+                FROM sale_items si
+                JOIN sales s ON si.sale_id = s.id
+                WHERE si.product_id = ?
+                AND s.sale_date >= date('now', '-' || ? || ' days')
+                ORDER BY s.sale_date DESC
+            """
+            
+            results = self.db.execute_query(query, (product_id, days))
+            return results if results else []
+        except Exception:
+            return []
     
     def _calculate_daily_sales(self, sales_history: List[Dict]) -> List[float]:
         """حساب المبيعات اليومية"""
@@ -361,9 +389,38 @@ class PredictiveEngine:
         return list(daily_sales.values())
     
     def _get_customer_purchases(self, customer_id: int) -> List[Dict]:
-        """الحصول على مشتريات العميل"""
-        # TODO: تنفيذ استعلام قاعدة البيانات الفعلي
-        return []
+        """
+        الحصول على مشتريات العميل
+        
+        Args:
+            customer_id: معرف العميل
+            
+        Returns:
+            قائمة ببيانات المشتريات
+        """
+        try:
+            if not self.db:
+                return []
+            
+            # استعلام للحصول على مشتريات العميل
+            query = """
+                SELECT 
+                    s.id as sale_id,
+                    s.sale_date as date,
+                    s.total_amount,
+                    s.payment_method,
+                    COUNT(si.id) as item_count
+                FROM sales s
+                LEFT JOIN sale_items si ON s.id = si.sale_id
+                WHERE s.customer_id = ?
+                GROUP BY s.id, s.sale_date, s.total_amount, s.payment_method
+                ORDER BY s.sale_date DESC
+            """
+            
+            results = self.db.execute_query(query, (customer_id,))
+            return results if results else []
+        except Exception:
+            return []
     
     def _segment_customer(
         self, 
@@ -382,9 +439,30 @@ class PredictiveEngine:
             return "عميل جديد"
     
     def _get_product_sales_count(self, product_id: int) -> int:
-        """عدد مرات بيع المنتج"""
-        # TODO: تنفيذ استعلام قاعدة البيانات الفعلي
-        return 0
+        """
+        عدد مرات بيع المنتج
+        
+        Args:
+            product_id: معرف المنتج
+            
+        Returns:
+            عدد مرات البيع
+        """
+        try:
+            if not self.db:
+                return 0
+            
+            # استعلام للحصول على عدد مرات البيع
+            query = """
+                SELECT COUNT(DISTINCT sale_id) as sale_count
+                FROM sale_items
+                WHERE product_id = ?
+            """
+            
+            result = self.db.execute_scalar(query, (product_id,))
+            return int(result) if result else 0
+        except Exception:
+            return 0
 
 
 if __name__ == "__main__":

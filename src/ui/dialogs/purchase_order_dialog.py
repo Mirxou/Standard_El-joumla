@@ -24,19 +24,25 @@ from models.purchase_order import (
     PurchaseOrder, PurchaseOrderItem, POStatus,
     POPriority, DeliveryTerms, PaymentTerms
 )
+from ...utils.i18n_api import I18n
 
 
 class PurchaseOrderDialog(QDialog):
     """نافذة إنشاء/تحرير أمر شراء"""
     
-    def __init__(self, db_manager, po=None, parent=None):
+    def __init__(self, db_manager, po=None, parent=None, prefill_products=None):
         super().__init__(parent)
         self.db = db_manager
         self.po = po
         self.is_edit_mode = po is not None
         self.items = []
+        self.prefill_products = prefill_products or []  # قائمة المنتجات المسبقة
         
-        self.setWindowTitle("تحرير أمر الشراء" if self.is_edit_mode else "أمر شراء جديد")
+        # تهيئة نظام الترجمة
+        self.i18n = I18n(locales_dir=str(Path(__file__).parent.parent.parent.parent / "locales"))
+        
+        title = self.i18n.get_message("po_edit_title") if self.is_edit_mode else self.i18n.get_message("po_new_title")
+        self.setWindowTitle(title)
         self.setMinimumSize(1200, 700)
         
         self._load_data()
@@ -45,6 +51,9 @@ class PurchaseOrderDialog(QDialog):
         
         if self.is_edit_mode:
             self._load_po_data()
+        elif self.prefill_products:
+            # إضافة المنتجات المسبقة
+            self._add_prefill_products()
     
     def _load_data(self):
         """تحميل البيانات المطلوبة"""
@@ -89,20 +98,20 @@ class PurchaseOrderDialog(QDialog):
     
     def _create_basic_info_group(self):
         """مجموعة المعلومات الأساسية"""
-        group = QGroupBox("المعلومات الأساسية")
+        group = QGroupBox(self.i18n.get_message("tab_basic_info"))
         layout = QFormLayout(group)
         
         # المورد
         self.supplier_combo = QComboBox()
-        self.supplier_combo.addItem("-- اختر المورد --", None)
+        self.supplier_combo.addItem(self.i18n.get_message("select_supplier"), None)
         for supplier_id, name in self.suppliers:
             self.supplier_combo.addItem(name, supplier_id)
         self.supplier_combo.currentIndexChanged.connect(self._on_supplier_changed)
-        layout.addRow("<b>المورد:</b>", self.supplier_combo)
+        layout.addRow(f"<b>{self.i18n.get_message('suppliers')}:</b>", self.supplier_combo)
         
         # جهة الاتصال
         self.contact_edit = QLineEdit()
-        layout.addRow("جهة الاتصال:", self.contact_edit)
+        layout.addRow(self.i18n.get_message("contact_label") + ":", self.contact_edit)
         
         # التواريخ
         date_layout = QHBoxLayout()
@@ -110,7 +119,7 @@ class PurchaseOrderDialog(QDialog):
         self.order_date = QDateEdit()
         self.order_date.setDate(QDate.currentDate())
         self.order_date.setCalendarPopup(True)
-        date_layout.addWidget(QLabel("تاريخ الأمر:"))
+        date_layout.addWidget(QLabel(self.i18n.get_message("order_date") + ":"))
         date_layout.addWidget(self.order_date)
         
         date_layout.addSpacing(20)
@@ -118,7 +127,7 @@ class PurchaseOrderDialog(QDialog):
         self.required_date = QDateEdit()
         self.required_date.setDate(QDate.currentDate().addDays(30))
         self.required_date.setCalendarPopup(True)
-        date_layout.addWidget(QLabel("التاريخ المطلوب:"))
+        date_layout.addWidget(QLabel(self.i18n.get_message("required_date") + ":"))
         date_layout.addWidget(self.required_date)
         
         layout.addRow("", date_layout)
@@ -130,14 +139,14 @@ class PurchaseOrderDialog(QDialog):
         for priority in POPriority:
             self.priority_combo.addItem(priority.value, priority)
         self.priority_combo.setCurrentIndex(1)  # NORMAL
-        priority_layout.addWidget(QLabel("الأولوية:"))
+        priority_layout.addWidget(QLabel(self.i18n.get_message("priority") + ":"))
         priority_layout.addWidget(self.priority_combo)
         
         priority_layout.addSpacing(20)
         
         self.currency_combo = QComboBox()
         self.currency_combo.addItems(["DZD", "USD", "EUR", "SAR"])
-        priority_layout.addWidget(QLabel("العملة:"))
+        priority_layout.addWidget(QLabel(self.i18n.get_message("currency") + ":"))
         priority_layout.addWidget(self.currency_combo)
         
         layout.addRow("", priority_layout)
@@ -148,7 +157,7 @@ class PurchaseOrderDialog(QDialog):
         self.delivery_terms_combo = QComboBox()
         for term in DeliveryTerms:
             self.delivery_terms_combo.addItem(term.value, term)
-        terms_layout.addWidget(QLabel("شروط التسليم:"))
+        terms_layout.addWidget(QLabel(self.i18n.get_message("delivery_terms") + ":"))
         terms_layout.addWidget(self.delivery_terms_combo)
         
         terms_layout.addSpacing(20)
@@ -156,7 +165,7 @@ class PurchaseOrderDialog(QDialog):
         self.payment_terms_combo = QComboBox()
         for term in PaymentTerms:
             self.payment_terms_combo.addItem(term.value, term)
-        terms_layout.addWidget(QLabel("شروط الدفع:"))
+        terms_layout.addWidget(QLabel(self.i18n.get_message("payment_terms") + ":"))
         terms_layout.addWidget(self.payment_terms_combo)
         
         layout.addRow("", terms_layout)
@@ -165,18 +174,18 @@ class PurchaseOrderDialog(QDialog):
     
     def _create_items_group(self):
         """مجموعة البنود"""
-        group = QGroupBox("البنود")
+        group = QGroupBox(self.i18n.get_message("items"))
         layout = QVBoxLayout(group)
         
         # أزرار إدارة البنود
         buttons_layout = QHBoxLayout()
         
-        add_item_btn = QPushButton("➕ إضافة منتج")
+        add_item_btn = QPushButton(self.i18n.get_message("add_product"))
         add_item_btn.setStyleSheet("background-color: #4CAF50; color: white; padding: 8px 16px; font-weight: bold;")
         add_item_btn.clicked.connect(self._add_item)
         buttons_layout.addWidget(add_item_btn)
         
-        remove_item_btn = QPushButton("➖ حذف البند")
+        remove_item_btn = QPushButton(self.i18n.get_message("remove_item"))
         remove_item_btn.setStyleSheet("background-color: #F44336; color: white; padding: 8px 16px; font-weight: bold;")
         remove_item_btn.clicked.connect(self._remove_item)
         buttons_layout.addWidget(remove_item_btn)
@@ -203,12 +212,12 @@ class PurchaseOrderDialog(QDialog):
     
     def _create_notes_group(self):
         """مجموعة الملاحظات"""
-        group = QGroupBox("الملاحظات والشروط")
+        group = QGroupBox(self.i18n.get_message("notes_terms"))
         layout = QHBoxLayout(group)
         
         # الملاحظات
         notes_layout = QVBoxLayout()
-        notes_layout.addWidget(QLabel("ملاحظات:"))
+        notes_layout.addWidget(QLabel(self.i18n.get_message("notes_label") + ":"))
         self.notes_edit = QTextEdit()
         self.notes_edit.setMaximumHeight(80)
         notes_layout.addWidget(self.notes_edit)
@@ -216,7 +225,7 @@ class PurchaseOrderDialog(QDialog):
         
         # الشروط والأحكام
         terms_layout = QVBoxLayout()
-        terms_layout.addWidget(QLabel("الشروط والأحكام:"))
+        terms_layout.addWidget(QLabel(self.i18n.get_message("terms_conditions") + ":"))
         self.terms_edit = QTextEdit()
         self.terms_edit.setMaximumHeight(80)
         terms_layout.addWidget(self.terms_edit)
@@ -226,48 +235,49 @@ class PurchaseOrderDialog(QDialog):
     
     def _create_summary_group(self):
         """مجموعة الملخص المالي"""
-        group = QGroupBox("الملخص المالي")
+        group = QGroupBox(self.i18n.get_message("financial_summary"))
         layout = QFormLayout(group)
         
         # المجموع الفرعي
         self.subtotal_label = QLabel("0.00")
         self.subtotal_label.setStyleSheet("font-size: 14px; font-weight: bold;")
-        layout.addRow("المجموع الفرعي:", self.subtotal_label)
+        layout.addRow(self.i18n.get_message("subtotal_label") + ":", self.subtotal_label)
         
         # الخصم
         discount_layout = QHBoxLayout()
         self.discount_spin = QDoubleSpinBox()
         self.discount_spin.setMaximum(999999.99)
         self.discount_spin.setPrefix("- ")
-        self.discount_spin.setSuffix(" دج")
+        currency_symbol = self.i18n.get_message("currency_symbol")
+        self.discount_spin.setSuffix(f" {currency_symbol}")
         self.discount_spin.valueChanged.connect(self._calculate_totals)
         discount_layout.addWidget(self.discount_spin)
-        layout.addRow("الخصم:", discount_layout)
+        layout.addRow(self.i18n.get_message("table_discount") + ":", discount_layout)
         
         # الضريبة
         tax_layout = QHBoxLayout()
         self.tax_spin = QDoubleSpinBox()
         self.tax_spin.setMaximum(999999.99)
         self.tax_spin.setPrefix("+ ")
-        self.tax_spin.setSuffix(" دج")
+        self.tax_spin.setSuffix(f" {currency_symbol}")
         self.tax_spin.valueChanged.connect(self._calculate_totals)
         tax_layout.addWidget(self.tax_spin)
-        layout.addRow("الضريبة:", tax_layout)
+        layout.addRow(self.i18n.get_message("tax_amount") + ":", tax_layout)
         
         # الشحن
         shipping_layout = QHBoxLayout()
         self.shipping_spin = QDoubleSpinBox()
         self.shipping_spin.setMaximum(999999.99)
         self.shipping_spin.setPrefix("+ ")
-        self.shipping_spin.setSuffix(" دج")
+        self.shipping_spin.setSuffix(f" {currency_symbol}")
         self.shipping_spin.valueChanged.connect(self._calculate_totals)
         shipping_layout.addWidget(self.shipping_spin)
-        layout.addRow("الشحن:", shipping_layout)
+        layout.addRow(self.i18n.get_message("shipping") + ":", shipping_layout)
         
         # الإجمالي
         self.total_label = QLabel("0.00")
         self.total_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #1976D2;")
-        layout.addRow("<b>الإجمالي:</b>", self.total_label)
+        layout.addRow(f"<b>{self.i18n.get_message('grand_total')}:</b>", self.total_label)
         
         return group
     
@@ -276,12 +286,12 @@ class PurchaseOrderDialog(QDialog):
         layout = QHBoxLayout()
         layout.addStretch()
         
-        save_btn = QPushButton("💾 حفظ")
+        save_btn = QPushButton(self.i18n.get_message("save"))
         save_btn.setStyleSheet("background-color: #2196F3; color: white; padding: 10px 30px; font-weight: bold; font-size: 14px;")
         save_btn.clicked.connect(self._save)
         layout.addWidget(save_btn)
         
-        cancel_btn = QPushButton("✖️ إلغاء")
+        cancel_btn = QPushButton(self.i18n.get_message("cancel"))
         cancel_btn.setStyleSheet("background-color: #757575; color: white; padding: 10px 30px; font-weight: bold; font-size: 14px;")
         cancel_btn.clicked.connect(self.reject)
         layout.addWidget(cancel_btn)
@@ -536,23 +546,23 @@ class PurchaseOrderDialog(QDialog):
             self.accept()
             
         except Exception as e:
-            QMessageBox.critical(self, "خطأ", f"فشل الحفظ: {str(e)}")
+            QMessageBox.critical(self, self.i18n.get_message("error"), f"{self.i18n.get_message('save_failed')}: {str(e)}")
     
     def _validate(self):
         """التحقق من صحة البيانات"""
         if not self.supplier_combo.currentData():
-            QMessageBox.warning(self, "تحذير", "يرجى اختيار المورد")
+            QMessageBox.warning(self, self.i18n.get_message("warning"), self.i18n.get_message("select_supplier_warning"))
             return False
         
         if self.items_table.rowCount() == 0:
-            QMessageBox.warning(self, "تحذير", "يرجى إضافة منتج واحد على الأقل")
+            QMessageBox.warning(self, self.i18n.get_message("warning"), self.i18n.get_message("add_at_least_one_product"))
             return False
         
         # التحقق من صحة البنود
         for row in range(self.items_table.rowCount()):
             product_combo = self.items_table.cellWidget(row, 0)
             if not product_combo.currentData():
-                QMessageBox.warning(self, "تحذير", f"يرجى اختيار منتج للبند رقم {row + 1}")
+                QMessageBox.warning(self, self.i18n.get_message("warning"), self.i18n.get_message("select_product_for_item", item_number=row + 1))
                 return False
         
         return True
@@ -606,3 +616,94 @@ class PurchaseOrderDialog(QDialog):
     def get_purchase_order(self):
         """الحصول على أمر الشراء"""
         return self.po
+    
+    def _add_prefill_products(self):
+        """إضافة المنتجات المسبقة (من نافذة النواقص)"""
+        for product_data in self.prefill_products:
+            # البحث عن المنتج في القائمة
+            product_id = product_data.get('id')
+            product_found = False
+            
+            for product in self.products:
+                if product[0] == product_id:
+                    product_found = True
+                    # إضافة صف جديد
+                    row = self.items_table.rowCount()
+                    self.items_table.insertRow(row)
+                    
+                    # المنتج
+                    product_combo = QComboBox()
+                    product_combo.addItem("-- اختر المنتج --", None)
+                    for p in self.products:
+                        product_combo.addItem(f"{p[1]} ({p[2]})", p)
+                    
+                    # تحديد المنتج الحالي
+                    for i in range(product_combo.count()):
+                        data = product_combo.itemData(i)
+                        if data and data[0] == product_id:
+                            product_combo.setCurrentIndex(i)
+                            break
+                    
+                    self.items_table.setCellWidget(row, 0, product_combo)
+                    
+                    # الكود
+                    self.items_table.setItem(row, 1, QTableWidgetItem(product_data.get('barcode', '')))
+                    
+                    # الكمية (الفرق بين الحد الأدنى والمخزون الحالي)
+                    min_stock = float(product_data.get('min_stock', 0))
+                    current_stock = float(product_data.get('current_stock', 0))
+                    suggested_qty = max(0, min_stock - current_stock + 10)  # إضافة 10 وحدات إضافية
+                    
+                    qty_spin = QDoubleSpinBox()
+                    qty_spin.setMinimum(0.001)
+                    qty_spin.setMaximum(999999.999)
+                    qty_spin.setDecimals(3)
+                    qty_spin.setValue(suggested_qty)
+                    qty_spin.valueChanged.connect(lambda: self._update_item_row(row))
+                    self.items_table.setCellWidget(row, 2, qty_spin)
+                    
+                    # السعر (سعر التكلفة)
+                    cost_price = float(product_data.get('cost_price', 0))
+                    price_spin = QDoubleSpinBox()
+                    price_spin.setMinimum(0.00)
+                    price_spin.setMaximum(999999.99)
+                    price_spin.setDecimals(2)
+                    price_spin.setValue(cost_price)
+                    price_spin.valueChanged.connect(lambda: self._update_item_row(row))
+                    self.items_table.setCellWidget(row, 3, price_spin)
+                    
+                    # الخصم%
+                    discount_spin = QDoubleSpinBox()
+                    discount_spin.setMinimum(0.00)
+                    discount_spin.setMaximum(100.00)
+                    discount_spin.setDecimals(2)
+                    discount_spin.setSuffix("%")
+                    discount_spin.valueChanged.connect(lambda: self._update_item_row(row))
+                    self.items_table.setCellWidget(row, 4, discount_spin)
+                    
+                    # الضريبة%
+                    tax_spin = QDoubleSpinBox()
+                    tax_spin.setMinimum(0.00)
+                    tax_spin.setMaximum(100.00)
+                    tax_spin.setDecimals(2)
+                    tax_spin.setValue(15.00)
+                    tax_spin.setSuffix("%")
+                    tax_spin.valueChanged.connect(lambda: self._update_item_row(row))
+                    self.items_table.setCellWidget(row, 5, tax_spin)
+                    
+                    # المجموع الفرعي
+                    self.items_table.setItem(row, 6, QTableWidgetItem("0.00"))
+                    
+                    # الصافي
+                    self.items_table.setItem(row, 7, QTableWidgetItem("0.00"))
+                    
+                    # ربط تغيير المنتج
+                    product_combo.currentIndexChanged.connect(lambda: self._on_product_changed(row))
+                    
+                    # تحديث الحسابات
+                    self._update_item_row(row)
+                    break
+            
+            if not product_found:
+                # إذا لم يُوجد المنتج، يمكن إضافة رسالة تحذير
+                pass

@@ -21,7 +21,7 @@ from datetime import datetime
 from typing import Optional
 
 from ...core.database_manager import DatabaseManager
-from ...services.report_service import ReportService
+from ...services.report_generator import ReportGenerator
 from ...models.report import (
     Report, ReportType, ReportPeriod, ReportFilter, ChartType
 )
@@ -30,10 +30,15 @@ from ...models.report import (
 class AdvancedReportsWindow(QMainWindow):
     """نافذة التقارير المتقدمة الجديدة"""
     
+    # Window Manager attributes (للتسجيل التلقائي)
+    window_key = "advanced_reports"
+    window_singleton = True
+    window_title = "التقارير المتقدمة"
+    
     def __init__(self, db_manager: DatabaseManager, parent=None):
         super().__init__(parent)
         self.db = db_manager
-        self.service = ReportService(db_manager)
+        self.service = ReportGenerator(db_manager)
         self.current_report: Optional[Report] = None
         
         self.setWindowTitle("📊 التقارير المتقدمة - نظام متكامل")

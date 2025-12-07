@@ -1,0 +1,97 @@
+/* ============================================
+   Dialog & Message Styles
+   أنماط الحوارات والرسائل
+   ============================================ */
+
+QDialog, QMessageBox {
+    background-color: #ffffff;
+}
+
+QMessageBox QPushButton {
+    min-width: 80px;
+}
+
+QGroupBox {
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    margin-top: 12px;
+    padding-top: 12px;
+    font-weight: 600;
+    font-size: 14px;
+    color: #1e293b;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0px 8px;
+    background-color: #ffffff;
+}
+
+QFrame {
+    border: none;
+    background-color: transparent;
+}
+
+QLabel {
+    color: #1e293b;
+    font-size: 13px;
+}
+
+QLabel[class="heading"] {
+    font-weight: 600;
+    font-size: 16px;
+    color: #0f172a;
+}
+
+QLabel[class="subheading"] {
+    font-weight: 500;
+    font-size: 14px;
+    color: #334155;
+}
+
+QMenu {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 4px;
+}
+
+QMenu::item {
+    padding: 8px 24px;
+    border-radius: 4px;
+    color: #1e293b;
+    font-size: 13px;
+}
+
+QMenu::item:selected {
+    background-color: #3b82f6;
+    color: #ffffff;
+}
+
+QMenu::separator {
+    height: 1px;
+    background-color: #e2e8f0;
+    margin: 4px 8px;
+}
+
+QListWidget {
+    background-color: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+}
+
+QListWidget::item {
+    padding: 8px 12px;
+    border-bottom: 1px solid #f1f3f5;
+}
+
+QListWidget::item:selected {
+    background-color: #3b82f6;
+    color: #ffffff;
+}
+
+QListWidget::item:hover {
+    background-color: #f8fafc;
+}
+

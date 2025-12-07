@@ -1,0 +1,43 @@
+/* ============================================
+   Tab Widget Styles - QTabWidget, QTabBar
+   أنماط التبويبات
+   ============================================ */
+
+QTabWidget::pane {
+    border: 1px solid #e5e7eb;
+    background: #ffffff;
+    border-radius: 8px;
+    top: -1px;
+}
+
+QTabBar::tab {
+    background: #f3f4f6;
+    color: #4b5563;
+    padding: 10px 25px;
+    margin-right: 4px;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    border: 1px solid transparent;
+    font-weight: bold;
+    font-size: 14px;
+    min-width: 100px;
+}
+
+QTabBar::tab:selected {
+    background: #3b82f6;
+    color: #ffffff;
+    border-bottom: 2px solid #1d4ed8;
+    border-top: 1px solid transparent;
+    border-left: 1px solid transparent;
+    border-right: 1px solid transparent;
+}
+
+QTabBar::tab:hover:!selected {
+    background: #e5e7eb;
+    color: #1f2937;
+}
+
+QTabBar::tab:pressed {
+    background: #d1d5db;
+}
+

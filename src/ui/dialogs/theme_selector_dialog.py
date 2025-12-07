@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QIcon
 
-from .theme_manager import get_theme_manager
+from src.ui.theme_manager import get_theme_manager
 
 
 class ThemePreview(QFrame):

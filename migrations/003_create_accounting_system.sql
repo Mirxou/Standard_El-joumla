@@ -2,6 +2,7 @@
 -- الهجرة: إنشاء جداول نظام المحاسبة
 -- Migration: Create Accounting System Tables
 -- ========================================
+PRAGMA foreign_keys = ON;
 
 -- ========================================
 -- 1. جدول دليل الحسابات (Chart of Accounts)

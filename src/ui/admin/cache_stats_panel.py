@@ -10,10 +10,10 @@ from ...services.cache_service import get_cache_service
 class CacheStatsPanel(QWidget):
     """لوحة عرض إحصائيات الذاكرة المؤقتة المتقدمة"""
 
-    def __init__(self, parent=None):
+    def __init__(self, cache_service=None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("إحصائيات الذاكرة المؤقتة")
-        self.cache = get_cache_service()
+        self.cache = cache_service or get_cache_service()
         self._build_ui()
         self.refresh()
         self._setup_auto_refresh()

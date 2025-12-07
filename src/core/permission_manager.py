@@ -209,38 +209,72 @@ class PermissionManager:
         """إنشاء جداول الصلاحيات"""
         
         # جدول الأدوار
-        self.db.execute("""
-            CREATE TABLE IF NOT EXISTS roles (
-                role_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
-                description TEXT,
-                permissions TEXT NOT NULL,  -- JSON array
-                is_active BOOLEAN DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+        try:
+            self.db.execute("""
+                CREATE TABLE IF NOT EXISTS roles (
+                    role_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE,
+                    description TEXT,
+                    permissions TEXT NOT NULL,  -- JSON array
+                    is_active BOOLEAN DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+        except Exception as e:
+            logger.warning(f"Failed to create roles table: {e}")
         
-        # جدول المستخدمين
-        self.db.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                user_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT NOT NULL UNIQUE,
-                password_hash TEXT NOT NULL,
-                email TEXT UNIQUE,
-                full_name TEXT NOT NULL,
-                role_id INTEGER,
-                is_active BOOLEAN DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_login TIMESTAMP,
-                FOREIGN KEY (role_id) REFERENCES roles(role_id)
-            )
-        """)
+        # جدول المستخدمين - التحقق من وجود role_id أولاً
+        try:
+            # التحقق من وجود عمود role_id في جدول users
+            cursor = self.db.execute("PRAGMA table_info(users)")
+            columns = [row[1] for row in cursor.fetchall()]
+            
+            if 'role_id' not in columns:
+                # إضافة عمود role_id إذا لم يكن موجوداً
+                try:
+                    self.db.execute("ALTER TABLE users ADD COLUMN role_id INTEGER")
+                except Exception:
+                    # قد يكون موجوداً بالفعل أو فشل لأسباب أخرى
+                    pass
+            
+            # إنشاء جدول users إذا لم يكن موجوداً
+            self.db.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT NOT NULL UNIQUE,
+                    password_hash TEXT NOT NULL,
+                    email TEXT UNIQUE,
+                    full_name TEXT NOT NULL,
+                    role_id INTEGER,
+                    is_active BOOLEAN DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_login TIMESTAMP,
+                    FOREIGN KEY (role_id) REFERENCES roles(role_id)
+                )
+            """)
+        except Exception as e:
+            logger.warning(f"Failed to create/update users table: {e}")
         
         # فهارس
-        self.db.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
-        self.db.execute("CREATE INDEX IF NOT EXISTS idx_users_role ON users(role_id)")
-        self.db.execute("CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active)")
+        try:
+            self.db.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
+        except Exception:
+            pass
+        
+        try:
+            # التحقق من وجود عمود role_id قبل إنشاء الفهرس
+            cursor = self.db.execute("PRAGMA table_info(users)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if 'role_id' in columns:
+                self.db.execute("CREATE INDEX IF NOT EXISTS idx_users_role ON users(role_id)")
+        except Exception:
+            pass
+        
+        try:
+            self.db.execute("CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active)")
+        except Exception:
+            pass
         
     def _initialize_default_roles(self):
         """تهيئة الأدوار الافتراضية"""
@@ -344,10 +378,19 @@ class PermissionManager:
         for role_data in default_roles:
             try:
                 # التحقق من وجود الدور
-                existing = self.db.fetch_one(
-                    "SELECT role_id FROM roles WHERE name = ?",
-                    (role_data['name'],)
-                )
+                # استخدام execute_query بدلاً من fetch_one لأن fetch_one قد لا يعمل مع execute
+                try:
+                    existing = self.db.fetch_one(
+                        "SELECT role_id FROM roles WHERE name = ?",
+                        (role_data['name'],)
+                    )
+                except Exception:
+                    # إذا فشل fetch_one، استخدم execute_query
+                    result = self.db.execute_query(
+                        "SELECT role_id FROM roles WHERE name = ?",
+                        (role_data['name'],)
+                    )
+                    existing = result[0] if result else None
                 
                 if not existing:
                     self.create_role(

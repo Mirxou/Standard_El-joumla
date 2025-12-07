@@ -58,10 +58,15 @@ class AccountsRefreshWorker(QThread):
 class AccountsWindow(QMainWindow):
     """نافذة إدارة الحسابات المدينة والدائنة"""
     
-    def __init__(self, db_manager: DatabaseManager, parent=None):
+    # Window Manager attributes (للتسجيل التلقائي)
+    window_key = "accounts"
+    window_singleton = True
+    window_title = "إدارة الحسابات"
+    
+    def __init__(self, db_manager: DatabaseManager, parent=None, payment_service: PaymentService = None):
         super().__init__(parent)
         self.db_manager = db_manager
-        self.payment_service = PaymentService(db_manager)
+        self.payment_service = payment_service or PaymentService(db_manager)
         self.logger = setup_logger(__name__)
         
         self.setWindowTitle("إدارة الحسابات المدينة والدائنة")
@@ -126,9 +131,13 @@ class AccountsWindow(QMainWindow):
         toolbar.addAction(refresh_action)
         
         # زر تصدير التقارير
-        export_action = QAction("تصدير", self)
-        export_action.triggered.connect(self.export_reports)
-        toolbar.addAction(export_action)
+        receivables_report_action = QAction("تقرير الذمم المدينة", self)
+        receivables_report_action.triggered.connect(lambda: self.export_reports(AccountType.RECEIVABLE))
+        toolbar.addAction(receivables_report_action)
+        
+        payables_report_action = QAction("تقرير الذمم الدائنة", self)
+        payables_report_action.triggered.connect(lambda: self.export_reports(AccountType.PAYABLE))
+        toolbar.addAction(payables_report_action)
     
     def setup_receivables_tab(self):
         """إعداد تبويب الحسابات المدينة"""
@@ -473,6 +482,10 @@ class AccountsWindow(QMainWindow):
         self.status_bar.showMessage("جاري تحديث البيانات...")
         
         # تشغيل عامل التحديث
+        if hasattr(self, 'refresh_worker') and self.refresh_worker.isRunning():
+            self.refresh_worker.requestInterruption()
+            self.refresh_worker.quit()
+            self.refresh_worker.wait(1000)
         self.refresh_worker = AccountsRefreshWorker(self.payment_service)
         self.refresh_worker.data_loaded.connect(self.on_data_loaded)
         self.refresh_worker.error_occurred.connect(self.on_error)
@@ -918,28 +931,39 @@ class AccountsWindow(QMainWindow):
             self.logger.error(f"خطأ في توليد تقرير التدفق النقدي: {e}")
             QMessageBox.critical(self, "خطأ", f"حدث خطأ أثناء توليد التقرير: {str(e)}")
     
-    def export_reports(self):
-        """تصدير التقارير"""
-        if not self.reports_text.toPlainText().strip():
-            QMessageBox.warning(self, "تحذير", "لا يوجد تقرير لتصديره. يرجى توليد تقرير أولاً.")
-            return
+    def export_reports(self, account_type: AccountType):
+        """توليد وحفظ تقرير الذمم"""
+        try:
+            if account_type == AccountType.RECEIVABLE:
+                data = self.payment_service.get_accounts_receivable()
+                default_name = f"تقرير_الذمم_المدينة_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            else:
+                data = self.payment_service.get_accounts_payable()
+                default_name = f"تقرير_الذمم_الدائنة_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            
+            if not data:
+                QMessageBox.information(self, "معلومات", "لا توجد بيانات لتصديرها في الفترة الحالية.")
+                return
+            
+            file_path, _ = QFileDialog.getSaveFileName(
+                self, "تصدير التقرير", default_name, "CSV Files (*.csv);;All Files (*)"
+            )
+            if not file_path:
+                return
+            
+            import csv
+            with open(file_path, 'w', newline='', encoding='utf-8-sig') as csvfile:
+                fieldnames = data[0].keys()
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writeheader()
+                for row in data:
+                    writer.writerow(row)
+            
+            QMessageBox.information(self, "نجاح", f"تم تصدير التقرير إلى:\n{file_path}")
         
-        file_path, _ = QFileDialog.getSaveFileName(
-            self, "تصدير التقرير", 
-            f"تقرير_الحسابات_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-            "Text Files (*.txt);;All Files (*)"
-        )
-        
-        if file_path:
-            try:
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(self.reports_text.toPlainText())
-                
-                QMessageBox.information(self, "نجح التصدير", f"تم تصدير التقرير بنجاح إلى:\n{file_path}")
-                
-            except Exception as e:
-                self.logger.error(f"خطأ في تصدير التقرير: {e}")
-                QMessageBox.critical(self, "خطأ", f"حدث خطأ أثناء تصدير التقرير: {str(e)}")
+        except Exception as e:
+            self.logger.error(f"خطأ في تصدير تقرير الذمم: {e}")
+            QMessageBox.critical(self, "خطأ", f"فشل في تصدير التقرير: {e}")
     
     def on_tab_changed(self, index):
         """معالجة تغيير التبويب"""
@@ -958,8 +982,9 @@ class AccountsWindow(QMainWindow):
         """معالجة إغلاق النافذة"""
         # إيقاف أي عمليات جارية
         if hasattr(self, 'refresh_worker') and self.refresh_worker.isRunning():
-            self.refresh_worker.terminate()
-            self.refresh_worker.wait()
+            self.refresh_worker.requestInterruption()
+            self.refresh_worker.quit()
+            self.refresh_worker.wait(1000)
         
         event.accept()
 

@@ -26,7 +26,9 @@
   "security": {
     "session_timeout": 480,
     "password_min_length": 6,
-    "enable_audit_log": true
+    "enable_audit_log": true,
+    "encrypt_sensitive_config": true,
+    "encryption_key_env": "APP_ENCRYPTION_KEY"
   },
   "reports": {
     "default_format": "pdf",
@@ -43,5 +45,96 @@
     "auto_print": false,
     "receipt_copies": 1,
     "default_payment_method": "نقدي"
+  },
+  "email": {
+    "enabled": false,
+    "smtp_server": "",
+    "smtp_port": 587,
+    "smtp_username": "",
+    "smtp_password": "",
+    "smtp_use_tls": true,
+    "from_email": "",
+    "from_name": ""
+  },
+  "printing": {
+    "default_printer": "",
+    "paper_size": "A4",
+    "orientation": "portrait",
+    "margin_top": 10,
+    "margin_bottom": 10,
+    "margin_left": 10,
+    "margin_right": 10,
+    "auto_print_invoices": false,
+    "print_logo": true,
+    "print_qr_code": true,
+    "print_barcode": true
+  },
+  "api": {
+    "enabled": false,
+    "base_url": "",
+    "api_key": "",
+    "timeout": 30,
+    "retry_attempts": 3,
+    "verify_ssl": true
+  },
+  "notifications": {
+    "enabled": true,
+    "email_notifications": false,
+    "low_stock_alert": true,
+    "low_stock_threshold": 10,
+    "expiry_alert": true,
+    "expiry_days_before": 30,
+    "sales_alert": false,
+    "backup_alert": true
+  },
+  "templates": {
+    "default_invoice_template": "invoice.html",
+    "default_receipt_template": "receipt.html",
+    "default_quote_template": "quote.html",
+    "qr_code": {
+      "enabled": true,
+      "size": 100,
+      "error_correction": "M",
+      "include_data": true
+    },
+    "barcode": {
+      "enabled": true,
+      "format": "code128",
+      "height": 50,
+      "width": 2
+    },
+    "images": {
+      "max_size_mb": 5,
+      "allowed_formats": [
+        "jpg",
+        "jpeg",
+        "png",
+        "gif"
+      ],
+      "auto_resize": true,
+      "thumbnail_size": 150,
+      "preview_size": 800
+    },
+    "signatures": {
+      "enabled": false,
+      "require_signature": false,
+      "signature_position": "bottom"
+    }
+  },
+  "company": {
+    "name": "",
+    "name_ar": "",
+    "name_en": "",
+    "address": "",
+    "address_ar": "",
+    "address_en": "",
+    "phone": "",
+    "mobile": "",
+    "email": "",
+    "website": "",
+    "tax_number": "",
+    "commercial_registration": "",
+    "logo_path": "",
+    "signature_path": ""
   }
 }

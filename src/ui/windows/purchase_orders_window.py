@@ -21,17 +21,22 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from services.purchase_order_service import PurchaseOrderService
-from models.purchase_order import (
+from ...services.purchase_order_service import PurchaseOrderService
+from ...models.purchase_order import (
     PurchaseOrder, PurchaseOrderItem, POStatus, 
     POPriority, DeliveryTerms, PaymentTerms
 )
-from ui.dialogs.purchase_order_dialog import PurchaseOrderDialog
-from ui.dialogs.receiving_dialog import ReceivingDialog
+from ...ui.dialogs.purchase_order_dialog import PurchaseOrderDialog
+from ...ui.dialogs.receiving_dialog import ReceivingDialog
 
 
 class PurchaseOrdersWindow(QMainWindow):
     """نافذة إدارة أوامر الشراء"""
+    
+    # Window Manager attributes (للتسجيل التلقائي)
+    window_key = "purchase_orders"
+    window_singleton = True
+    window_title = "أوامر الشراء"
     
     def __init__(self, db_manager, parent=None):
         super().__init__(parent)

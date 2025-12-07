@@ -556,7 +556,11 @@ class PurchaseOrderService:
         if not row:
             return {}
         
-        cursor = self.db.conn.cursor()
-        columns = [desc[0] for desc in cursor.description] if cursor.description else []
+        # execute_query يعيد dict بالفعل، لذا إذا كانت row هي dict، نعيدها مباشرة
+        if isinstance(row, dict):
+            return row
         
-        return dict(zip(columns, row))
+        # إذا كانت row هي tuple/list، نحتاج إلى columns
+        # لكن execute_query يعيد dict، لذا هذا fallback فقط
+        # في حالة استخدام fetch_all أو fetch_one مباشرة
+        return row if isinstance(row, dict) else {}

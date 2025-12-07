@@ -1,0 +1,16 @@
+/* ============================================
+   Modern UI Stylesheet - Enterprise Grade
+   نظام التصميم الحديث للواجهة
+   
+   هذا الملف يجمع جميع ملفات الأنماط المنفصلة
+   ============================================ */
+
+/* Import component stylesheets */
+@import url(tables.qss);
+@import url(buttons.qss);
+@import url(inputs.qss);
+@import url(scrollbars.qss);
+@import url(tabs.qss);
+@import url(dialogs.qss);
+@import url(progress.qss);
+@import url(general.qss);

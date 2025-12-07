@@ -3,6 +3,7 @@
 -- Created: 2025-11-17
 -- Description: Tables for quotes and return invoices management
 -- ====================================
+PRAGMA foreign_keys = ON;
 
 -- ====================================
 -- جدول عروض الأسعار (Quotes)

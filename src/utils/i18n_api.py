@@ -2,17 +2,17 @@
 Lightweight Internationalization (i18n) for API
 """
 import json
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 from pathlib import Path
 
 
 class I18n:
     """Simple i18n service for API responses"""
     
-    def __init__(self, locales_dir: str = "locales"):
+    def __init__(self, locales_dir: str = "locales", default_locale: str = "ar"):
         self.locales_dir = Path(locales_dir)
         self._messages: Dict[str, Dict[str, str]] = {}
-        self._default_locale = "ar"
+        self._default_locale = default_locale
         self._load_locales()
     
     def _load_locales(self):
@@ -60,3 +60,50 @@ class I18n:
                     return lang
         
         return self._default_locale
+    
+    def get_available_locales(self) -> List[str]:
+        """Get list of available locales"""
+        return list(self._messages.keys())
+    
+    def has_locale(self, locale: str) -> bool:
+        """Check if locale is available"""
+        return locale in self._messages
+    
+    def get_all_messages(self, locale: Optional[str] = None) -> Dict[str, str]:
+        """Get all messages for a locale"""
+        locale = locale or self._default_locale
+        return self._messages.get(locale, {})
+    
+    def format_message(self, key: str, locale: Optional[str] = None, **kwargs) -> str:
+        """
+        Get and format a message with variables
+        
+        This is a convenience method that combines get_message with formatting.
+        Useful for dynamic messages with multiple variables.
+        
+        Args:
+            key: Translation key
+            locale: Locale code (defaults to default locale)
+            **kwargs: Variables to format into the message
+            
+        Returns:
+            Formatted translated message
+        """
+        return self.get_message(key, locale=locale, **kwargs)
+    
+    def get_plural(self, key_singular: str, key_plural: str, count: int, locale: Optional[str] = None) -> str:
+        """
+        Get plural form of a message based on count
+        
+        Args:
+            key_singular: Key for singular form
+            key_plural: Key for plural form
+            count: Number to determine plural form
+            locale: Locale code
+            
+        Returns:
+            Appropriate form based on count
+        """
+        if count == 1:
+            return self.get_message(key_singular, locale=locale)
+        return self.get_message(key_plural, locale=locale)

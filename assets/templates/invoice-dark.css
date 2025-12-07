@@ -1,0 +1,103 @@
+/* ============================================
+   Invoice Dark Theme Stylesheet
+   أنماط قالب الفاتورة - السمة الداكنة
+   ============================================ */
+
+body {
+    background: #1e293b;
+    color: #f1f5f9;
+}
+
+.invoice-box {
+    background: #0f172a;
+    border-color: #334155;
+}
+
+.company-info h1 {
+    color: #60a5fa;
+}
+
+.company-info p {
+    color: #94a3b8;
+}
+
+.invoice-details {
+    background: #1e293b;
+    border-color: #334155;
+}
+
+.invoice-details h3 {
+    color: #f1f5f9;
+}
+
+.invoice-details p {
+    color: #cbd5e1;
+}
+
+table thead {
+    background: #334155;
+}
+
+table td {
+    color: #cbd5e1;
+    border-bottom-color: #334155;
+}
+
+table tbody tr:hover {
+    background: #1e293b;
+}
+
+.total-section {
+    background: #1e293b;
+    border-color: #3b82f6;
+}
+
+.total-row label {
+    color: #cbd5e1;
+}
+
+.total-row .value {
+    color: #f1f5f9;
+}
+
+.total-row:last-child .value {
+    color: #60a5fa;
+}
+
+.footer {
+    color: #94a3b8;
+    border-top-color: #334155;
+}
+
+.notes {
+    background: #78350f;
+    border-right-color: #f59e0b;
+}
+
+.notes h4 {
+    color: #fef3c7;
+}
+
+.notes p {
+    color: #fde68a;
+}
+
+.signature-box .signature-line {
+    border-top-color: #f1f5f9;
+}
+
+.signature-box .signature-label {
+    color: #cbd5e1;
+}
+
+@media print {
+    body {
+        background: white;
+        color: black;
+    }
+    
+    .invoice-box {
+        background: white;
+    }
+}
+

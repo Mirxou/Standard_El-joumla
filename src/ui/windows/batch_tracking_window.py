@@ -22,6 +22,11 @@ from ..dialogs.batch_dialog import BatchDialog
 class BatchTrackingWindow(QWidget):
     """نافذة تتبع الدفعات"""
     
+    # Window Manager attributes (للتسجيل التلقائي)
+    window_key = "batch_tracking"
+    window_singleton = True
+    window_title = "تتبع الدفعات"
+    
     def __init__(self, db_manager: DatabaseManager, parent=None):
         super().__init__(parent)
         self.db_manager = db_manager

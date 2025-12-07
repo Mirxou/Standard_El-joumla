@@ -111,9 +111,26 @@ class PaymentService:
             """
             
             # تنفيذ إنشاء الجداول
-            self.db_manager.execute_query(payments_table)
-            self.db_manager.execute_query(payment_schedules_table)
-            self.db_manager.execute_query(payment_attachments_table)
+            # استخدام execute_query إذا كان متاحاً، وإلا استخدام connection مباشرة
+            if hasattr(self.db_manager, 'execute_query'):
+                self.db_manager.execute_query(payments_table)
+                self.db_manager.execute_query(payment_schedules_table)
+                self.db_manager.execute_query(payment_attachments_table)
+            elif hasattr(self.db_manager, 'connection') and self.db_manager.connection:
+                cursor = self.db_manager.connection.cursor()
+                cursor.execute(payments_table)
+                cursor.execute(payment_schedules_table)
+                cursor.execute(payment_attachments_table)
+                self.db_manager.connection.commit()
+            elif hasattr(self.db_manager, 'get_connection'):
+                conn = self.db_manager.get_connection()
+                cursor = conn.cursor()
+                cursor.execute(payments_table)
+                cursor.execute(payment_schedules_table)
+                cursor.execute(payment_attachments_table)
+                conn.commit()
+            else:
+                raise Exception("لا يمكن الوصول إلى قاعدة البيانات: DatabaseManager غير مهيأ")
             
             # إنشاء الفهارس
             self._create_indexes()
@@ -141,8 +158,21 @@ class PaymentService:
                 "CREATE INDEX IF NOT EXISTS idx_payment_schedules_status ON payment_schedules(status)"
             ]
             
-            for index in indexes:
-                self.db_manager.execute_query(index)
+            # إنشاء الفهارس
+            if hasattr(self.db_manager, 'execute_query'):
+                for index in indexes:
+                    self.db_manager.execute_query(index)
+            elif hasattr(self.db_manager, 'connection') and self.db_manager.connection:
+                cursor = self.db_manager.connection.cursor()
+                for index in indexes:
+                    cursor.execute(index)
+                self.db_manager.connection.commit()
+            elif hasattr(self.db_manager, 'get_connection'):
+                conn = self.db_manager.get_connection()
+                cursor = conn.cursor()
+                for index in indexes:
+                    cursor.execute(index)
+                conn.commit()
                 
         except Exception as e:
             if self.logger:
@@ -380,6 +410,58 @@ class PaymentService:
                 self.logger.error(f"خطأ في الحصول على الذمم الدائنة المتأخرة: {str(e)}")
             return []
     
+    # ===== جدولة المدفوعات (الأقساط) =====
+    def get_payment_schedules(self, limit: int = 200, include_completed: bool = False) -> List[Dict[str, Any]]:
+        """إرجاع قائمة الأقساط (الدفعات المجدولة)
+        يتم استخدامها في واجهة الحسابات لعرض المستحقات القادمة والمتأخرة.
+        """
+        try:
+            # تأكد من وجود جدول الأقساط
+            if not self.db_manager.table_exists('payment_schedules'):
+                return []
+
+            status_filter = "" if include_completed else "AND status != ?"
+            params: List[Any] = []
+            if not include_completed:
+                params.append(PaymentStatus.COMPLETED.value)
+
+            query = f"""
+                SELECT id, payment_id, installment_number, due_date, amount,
+                       paid_amount, remaining_amount, status, notes
+                FROM payment_schedules
+                WHERE 1=1 {status_filter}
+                ORDER BY due_date ASC
+                LIMIT ?
+            """
+            params.append(limit)
+            rows = self.db_manager.fetch_all(query, tuple(params))
+
+            schedules: List[Dict[str, Any]] = []
+            today = date.today()
+            for r in rows:
+                due = date.fromisoformat(r[3]) if r[3] else None
+                remaining = Decimal(str(r[6])) if r[6] is not None else Decimal('0.00')
+                days_to_due = (due - today).days if due else None
+                schedules.append({
+                    'schedule_id': r[0],
+                    'payment_id': r[1],
+                    'installment_number': r[2],
+                    'due_date': due,
+                    'amount': Decimal(str(r[4])),
+                    'paid_amount': Decimal(str(r[5])),
+                    'remaining_amount': remaining,
+                    'status': r[7],
+                    'notes': r[8],
+                    'days_to_due': days_to_due,
+                    'is_overdue': (due is not None and today > due and remaining > 0)
+                })
+
+            return schedules
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في الحصول على جدولة المدفوعات: {str(e)}")
+            return []
+
     # ===== التقارير المالية =====
     
     def get_payment_summary(self, start_date: date, end_date: date) -> Dict[str, Any]:

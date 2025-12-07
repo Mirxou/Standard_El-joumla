@@ -1,7 +1,15 @@
 """
 نماذج التكاملات الخارجية (Webhooks & Integrations)
 """
-from pydantic import BaseModel
+try:
+    from pydantic import BaseModel
+except ImportError:
+    # Fallback إذا لم يكن pydantic متاحاً
+    class BaseModel:
+        def __init__(self, **kwargs):
+            for key, value in kwargs.items():
+                setattr(self, key, value)
+
 from typing import Optional
 
 class AccountingWebhookPayload(BaseModel):

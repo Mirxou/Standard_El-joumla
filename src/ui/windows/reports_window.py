@@ -26,7 +26,7 @@ from PySide6.QtGui import QFont, QPixmap, QIcon, QPalette, QColor, QValidator, Q
 from PySide6.QtCharts import QChart, QChartView, QPieSeries, QBarSeries, QBarSet, QLineSeries, QValueAxis, QBarCategoryAxis, QDateTimeAxis
 
 from ...core.database_manager import DatabaseManager
-from ...services.reports_service import ReportsService, ReportType, ExportFormat, ReportFilter
+from ...services.report_exporter import ReportExporter, ReportType, ExportFormat, ReportFilter
 from ...services.sales_service import SalesService
 from ...services.inventory_service import InventoryService
 from ...utils.logger import setup_logger
@@ -38,7 +38,7 @@ class ReportGenerationWorker(QThread):
     progress_updated = Signal(int)
     error_occurred = Signal(str)
     
-    def __init__(self, reports_service: ReportsService, report_type: ReportType, filters: ReportFilter):
+    def __init__(self, reports_service: ReportExporter, report_type: ReportType, filters: ReportFilter):
         super().__init__()
         self.reports_service = reports_service
         self.report_type = report_type
@@ -64,7 +64,7 @@ class ReportExportWorker(QThread):
     progress_updated = Signal(int)
     error_occurred = Signal(str)
     
-    def __init__(self, reports_service: ReportsService, report_data, export_format: ExportFormat, file_path: str):
+    def __init__(self, reports_service: ReportExporter, report_data, export_format: ExportFormat, file_path: str):
         super().__init__()
         self.reports_service = reports_service
         self.report_data = report_data
@@ -96,32 +96,74 @@ class ReportExportWorker(QThread):
 class ReportsWindow(QMainWindow):
     """نافذة التقارير الرئيسية"""
     
+    # Window Manager attributes (للتسجيل التلقائي)
+    window_key = "reports"
+    window_singleton = True
+    window_title = "نظام التقارير - إدارة المخزون والمبيعات"
+    
     def __init__(self, db_manager: DatabaseManager, parent=None):
         super().__init__(parent)
-        self.db_manager = db_manager
-        self.reports_service = ReportsService(db_manager)
-        self.sales_service = SalesService(db_manager)
-        self.inventory_service = InventoryService(db_manager)
-        self.logger = setup_logger(__name__)
-        
-        # العمال
-        self.generation_worker: Optional[ReportGenerationWorker] = None
-        self.export_worker: Optional[ReportExportWorker] = None
-        
-        # البيانات الحالية
-        self.current_report_data = None
-        self.current_report_type = None
-        
-        self.setup_ui()
-        self.setup_connections()
-        self.setup_styles()
-        self.setup_shortcuts()
-        self.load_initial_data()
+        try:
+            self.db_manager = db_manager
+            self.logger = setup_logger(__name__)
+            
+            # إنشاء الخدمات مع معالجة أخطاء محسّنة
+            try:
+                self.reports_service = ReportExporter(db_manager)
+            except Exception as e:
+                self.logger.error(f"خطأ في إنشاء ReportExporter: {e}")
+                import traceback
+                self.logger.error(traceback.format_exc())
+                raise
+            
+            try:
+                self.sales_service = SalesService(db_manager)
+            except Exception as e:
+                self.logger.error(f"خطأ في إنشاء SalesService: {e}")
+                import traceback
+                self.logger.error(traceback.format_exc())
+                raise
+            
+            try:
+                self.inventory_service = InventoryService(db_manager)
+            except Exception as e:
+                self.logger.error(f"خطأ في إنشاء InventoryService: {e}")
+                import traceback
+                self.logger.error(traceback.format_exc())
+                raise
+            
+            # العمال
+            self.generation_worker: Optional[ReportGenerationWorker] = None
+            self.export_worker: Optional[ReportExportWorker] = None
+            
+            # البيانات الحالية
+            self.current_report_data = None
+            self.current_report_type = None
+            
+            self.setup_ui()
+            self.setup_connections()
+            self.setup_styles()
+            self.setup_shortcuts()
+            self.load_initial_data()
+            
+            # تسجيل widgets للحالة المتقدمة (WindowStateManager)
+            # WindowManager سيتولى حفظ/استعادة الحالة تلقائياً
+            self._register_state_widgets()
+        except Exception as e:
+            # إعادة رفع الخطأ مع معلومات إضافية
+            error_msg = f"خطأ في تهيئة ReportsWindow: {str(e)}"
+            if self.logger:
+                self.logger.error(error_msg)
+                import traceback
+                self.logger.error(traceback.format_exc())
+            raise RuntimeError(error_msg) from e
     
     def setup_ui(self):
         """إعداد واجهة المستخدم"""
         self.setWindowTitle("نظام التقارير - إدارة المخزون والمبيعات")
-        self.setMinimumSize(1400, 900)
+        # تحسين حجم النافذة الافتراضي
+        self.setMinimumSize(1600, 950)
+        self.resize(1800, 1000)  # حجم افتراضي احترافي
         
         # إعداد القوائم
         self.setup_menus()
@@ -133,18 +175,64 @@ class ReportsWindow(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
-        # التخطيط الرئيسي
-        main_layout = QHBoxLayout(central_widget)
-        main_layout.setSpacing(10)
-        main_layout.setContentsMargins(10, 10, 10, 10)
+        # التخطيط الرئيسي مع Splitter للتحكم في الحجم
+        main_splitter = QSplitter(Qt.Horizontal)
+        main_splitter.setChildrenCollapsible(False)
+        main_splitter.setHandleWidth(8)
+        main_splitter.setStyleSheet("""
+            QSplitter::handle {
+                background-color: #bdc3c7;
+                border: 1px solid #95a5a6;
+            }
+            QSplitter::handle:hover {
+                background-color: #95a5a6;
+            }
+        """)
         
-        # الجانب الأيسر - فلاتر التقارير
+        # الجانب الأيسر - فلاتر التقارير مع ScrollArea
+        left_scroll = QScrollArea()
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        left_scroll.setFrameShape(QFrame.NoFrame)
+        left_scroll.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: #f8f9fa;
+            }
+            QScrollBar:vertical {
+                background-color: #ecf0f1;
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #95a5a6;
+                border-radius: 6px;
+                min-height: 30px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #7f8c8d;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+        """)
+        
         left_panel = self.create_filters_panel()
-        main_layout.addWidget(left_panel, 1)
+        left_scroll.setWidget(left_panel)
+        main_splitter.addWidget(left_scroll)
+        main_splitter.setStretchFactor(0, 1)  # نسبة 1 للفلاتر
         
         # الجانب الأيمن - عرض التقارير
         right_panel = self.create_reports_panel()
-        main_layout.addWidget(right_panel, 3)
+        main_splitter.addWidget(right_panel)
+        main_splitter.setStretchFactor(1, 3)  # نسبة 3 للتقارير
+        
+        # إضافة Splitter إلى التخطيط الرئيسي
+        main_layout = QHBoxLayout(central_widget)
+        main_layout.setSpacing(0)
+        main_layout.setContentsMargins(8, 8, 8, 8)
+        main_layout.addWidget(main_splitter)
         
         # شريط الحالة
         self.setup_status_bar()
@@ -204,8 +292,9 @@ class ReportsWindow(QMainWindow):
         help_menu.addAction(about_action)
     
     def setup_toolbar(self):
-        """إعداد شريط الأدوات"""
+        """إعداد شريط الأدوات (ليتم حفظ حالته بـ saveState)"""
         toolbar = self.addToolBar("الأدوات الرئيسية")
+        toolbar.setObjectName("ReportsToolbar")  # ObjectName ضروري لـ Qt لحفظ الحالة
         toolbar.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         
         # توليد التقرير
@@ -236,9 +325,16 @@ class ReportsWindow(QMainWindow):
     def create_filters_panel(self) -> QWidget:
         """إنشاء لوحة الفلاتر"""
         widget = QWidget()
-        widget.setMaximumWidth(350)
+        widget.setMinimumWidth(320)
+        widget.setMaximumWidth(400)
+        widget.setStyleSheet("""
+            QWidget {
+                background-color: #ffffff;
+            }
+        """)
         layout = QVBoxLayout(widget)
-        layout.setSpacing(10)
+        layout.setSpacing(12)
+        layout.setContentsMargins(12, 12, 12, 12)
         
         # عنوان اللوحة
         title_label = QLabel("فلاتر التقارير")
@@ -425,8 +521,14 @@ class ReportsWindow(QMainWindow):
     def create_reports_panel(self) -> QWidget:
         """إنشاء لوحة عرض التقارير"""
         widget = QWidget()
+        widget.setStyleSheet("""
+            QWidget {
+                background-color: #ffffff;
+            }
+        """)
         layout = QVBoxLayout(widget)
-        layout.setSpacing(10)
+        layout.setSpacing(12)
+        layout.setContentsMargins(12, 12, 12, 12)
         
         # شريط العنوان
         header_layout = QHBoxLayout()
@@ -561,17 +663,141 @@ class ReportsWindow(QMainWindow):
         widget = QWidget()
         layout = QVBoxLayout(widget)
         
-        # تبويبات التقرير
+        # تبويبات التقرير مع تصميم محسّن
         self.report_tabs = QTabWidget()
+        self.report_tabs.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid #dee2e6;
+                border-radius: 8px;
+                background-color: white;
+                top: -1px;
+            }
+            QTabBar::tab {
+                background-color: #f8f9fa;
+                color: #495057;
+                border: 1px solid #dee2e6;
+                border-bottom: none;
+                padding: 10px 20px;
+                margin-right: 2px;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                font-size: 13px;
+                font-weight: bold;
+            }
+            QTabBar::tab:selected {
+                background-color: white;
+                color: #007bff;
+                border-bottom: 2px solid #007bff;
+            }
+            QTabBar::tab:hover:!selected {
+                background-color: #e9ecef;
+            }
+        """)
         
-        # تبويب الجدول
+        # تبويب الجدول مع ScrollArea محسّن
         table_tab = QWidget()
         table_layout = QVBoxLayout(table_tab)
+        table_layout.setSpacing(8)
+        table_layout.setContentsMargins(8, 8, 8, 8)
         
+        # ScrollArea للجدول
+        table_scroll = QScrollArea()
+        table_scroll.setWidgetResizable(True)
+        table_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        table_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        table_scroll.setFrameShape(QFrame.NoFrame)
+        table_scroll.setStyleSheet("""
+            QScrollArea {
+                border: 1px solid #dee2e6;
+                border-radius: 8px;
+                background-color: white;
+            }
+            QScrollBar:vertical {
+                background-color: #f8f9fa;
+                width: 14px;
+                border-radius: 7px;
+                border: none;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #adb5bd;
+                border-radius: 7px;
+                min-height: 40px;
+                margin: 2px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #868e96;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+            QScrollBar:horizontal {
+                background-color: #f8f9fa;
+                height: 14px;
+                border-radius: 7px;
+                border: none;
+            }
+            QScrollBar::handle:horizontal {
+                background-color: #adb5bd;
+                border-radius: 7px;
+                min-width: 40px;
+                margin: 2px;
+            }
+            QScrollBar::handle:horizontal:hover {
+                background-color: #868e96;
+            }
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+                width: 0px;
+            }
+        """)
+        
+        # الجدول
         self.report_table = QTableWidget()
         self.report_table.setAlternatingRowColors(True)
         self.report_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        table_layout.addWidget(self.report_table)
+        self.report_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.report_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.report_table.setSortingEnabled(True)
+        self.report_table.setShowGrid(True)
+        self.report_table.verticalHeader().setVisible(True)
+        self.report_table.horizontalHeader().setStretchLastSection(True)
+        self.report_table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        self.report_table.setStyleSheet("""
+            QTableWidget {
+                border: none;
+                background-color: white;
+                gridline-color: #e9ecef;
+                font-size: 13px;
+            }
+            QTableWidget::item {
+                padding: 10px 8px;
+                border-bottom: 1px solid #e9ecef;
+            }
+            QTableWidget::item:selected {
+                background-color: #e3f2fd;
+                color: #1976d2;
+            }
+            QTableWidget::item:alternate {
+                background-color: #f8f9fa;
+            }
+            QHeaderView::section {
+                background-color: #007bff;
+                color: white;
+                padding: 12px 8px;
+                border: none;
+                font-weight: bold;
+                font-size: 13px;
+            }
+            QHeaderView::section:hover {
+                background-color: #0056b3;
+            }
+            QTableCornerButton::section {
+                background-color: #007bff;
+                border: none;
+            }
+        """)
+        
+        table_scroll.setWidget(self.report_table)
+        table_layout.addWidget(table_scroll)
         
         self.report_tabs.addTab(table_tab, "📋 الجدول")
         
@@ -691,29 +917,29 @@ class ReportsWindow(QMainWindow):
                 border-color: #007bff;
             }
             
-            QTableWidget {
+            QTextEdit {
                 border: 1px solid #dee2e6;
-                border-radius: 5px;
+                border-radius: 8px;
                 background-color: white;
-                gridline-color: #e9ecef;
-            }
-            
-            QTableWidget::item {
-                padding: 8px;
-                border-bottom: 1px solid #e9ecef;
-            }
-            
-            QTableWidget::item:selected {
-                background-color: #e3f2fd;
-                color: #1976d2;
-            }
-            
-            QHeaderView::section {
-                background-color: #f8f9fa;
                 padding: 10px;
-                border: 1px solid #dee2e6;
+                font-size: 13px;
+            }
+            
+            QTextEdit:focus {
+                border-color: #007bff;
+            }
+            
+            QProgressBar {
+                border: 2px solid #dee2e6;
+                border-radius: 8px;
+                text-align: center;
                 font-weight: bold;
-                color: #495057;
+                height: 25px;
+            }
+            
+            QProgressBar::chunk {
+                background-color: #007bff;
+                border-radius: 6px;
             }
             
             QPushButton {
@@ -1026,7 +1252,13 @@ class ReportsWindow(QMainWindow):
         """عرض جدول التقرير"""
         try:
             data = report_data.data
-            headers = report_data.headers
+            if not data:
+                self.report_table.setRowCount(0)
+                self.report_table.setColumnCount(0)
+                return
+            
+            # استخراج العناوين من البيانات
+            headers = list(data[0].keys()) if data else []
             
             # إعداد الجدول
             self.report_table.setRowCount(len(data))
@@ -1038,16 +1270,45 @@ class ReportsWindow(QMainWindow):
                 for col, header in enumerate(headers):
                     value = item.get(header, "")
                     if isinstance(value, (int, float, Decimal)):
-                        value = f"{value:.2f}" if isinstance(value, (float, Decimal)) else str(value)
+                        value = f"{value:,.2f}" if isinstance(value, (float, Decimal)) else f"{value:,}"
+                    elif value is None:
+                        value = ""
                     
                     table_item = QTableWidgetItem(str(value))
+                    table_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                    
+                    # محاذاة الأرقام إلى اليمين
+                    if isinstance(item.get(header), (int, float, Decimal)):
+                        table_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                    
                     self.report_table.setItem(row, col, table_item)
             
             # تحسين عرض الأعمدة
             self.report_table.resizeColumnsToContents()
             
+            # ضبط الحد الأدنى والأقصى لعرض الأعمدة
+            for col in range(self.report_table.columnCount()):
+                current_width = self.report_table.columnWidth(col)
+                if current_width < 100:
+                    self.report_table.setColumnWidth(col, 100)
+                elif current_width > 500:
+                    self.report_table.setColumnWidth(col, 500)
+            
+            # تحسين ارتفاع الصفوف
+            self.report_table.verticalHeader().setDefaultSectionSize(45)
+            self.report_table.verticalHeader().setVisible(True)
+            
+            # تفعيل التمرير السلس
+            self.report_table.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+            self.report_table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
+            
+            # تحسين عرض الجدول
+            self.report_table.setWordWrap(False)
+            
         except Exception as e:
             self.logger.error(f"خطأ في عرض الجدول: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
     
     def display_charts(self, report_data):
         """عرض الرسوم البيانية"""
@@ -1337,9 +1598,68 @@ class ReportsWindow(QMainWindow):
         except Exception as e:
             self.logger.error(f"خطأ في تعيين فلاتر التقرير: {str(e)}")
     
+    def _register_state_widgets(self):
+        """
+        تسجيل widgets للحالة المتقدمة (WindowStateManager)
+        WindowManager سيتولى حفظ/استعادة الحالة تلقائياً
+        """
+        try:
+            # تسجيل التبويبات (إن وجدت)
+            if hasattr(self, 'report_tabs'):
+                self.tab_widgets = {
+                    "main_tabs": self.report_tabs
+                }
+            
+            # تسجيل الفلاتر
+            filter_widgets = {}
+            if hasattr(self, 'report_type_combo'):
+                filter_widgets["report_type"] = self.report_type_combo
+            if hasattr(self, 'start_date_edit'):
+                filter_widgets["start_date"] = self.start_date_edit
+            if hasattr(self, 'end_date_edit'):
+                filter_widgets["end_date"] = self.end_date_edit
+            if hasattr(self, 'product_combo'):
+                filter_widgets["product"] = self.product_combo
+            if hasattr(self, 'category_combo'):
+                filter_widgets["category"] = self.category_combo
+            if hasattr(self, 'customer_combo'):
+                filter_widgets["customer"] = self.customer_combo
+            if hasattr(self, 'payment_method_combo'):
+                filter_widgets["payment_method"] = self.payment_method_combo
+            if hasattr(self, 'show_charts_checkbox'):
+                filter_widgets["show_charts"] = self.show_charts_checkbox
+            if hasattr(self, 'show_details_checkbox'):
+                filter_widgets["show_details"] = self.show_details_checkbox
+            if hasattr(self, 'group_by_combo'):
+                filter_widgets["group_by"] = self.group_by_combo
+            
+            if filter_widgets:
+                self.filter_widgets = {
+                    "main_filters": filter_widgets
+                }
+            
+            # تسجيل الجداول (إن وجدت)
+            table_widgets = {}
+            if hasattr(self, 'reports_table'):
+                table_widgets["reports_table"] = self.reports_table
+            if hasattr(self, 'data_table'):
+                table_widgets["data_table"] = self.data_table
+            
+            if table_widgets:
+                self.table_widgets = table_widgets
+                
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"Failed to register state widgets: {e}")
+    
     def closeEvent(self, event):
-        """معالجة إغلاق النافذة"""
-        # إيقاف العمال
+        """
+        معالجة إغلاق النافذة
+        
+        ملاحظة: WindowManager سيتولى حفظ Geometry و State تلقائياً.
+        نحن هنا نتعامل فقط مع تنظيف الموارد (Workers, Timers).
+        """
+        # إيقاف العمال (Workers) - مهم جداً لمنع Memory Leaks
         if self.generation_worker and self.generation_worker.isRunning():
             self.generation_worker.terminate()
             self.generation_worker.wait()
@@ -1352,6 +1672,7 @@ class ReportsWindow(QMainWindow):
         if hasattr(self, 'time_timer'):
             self.time_timer.stop()
         
+        # استدعاء closeEvent الأصلي (WindowManager سيتولى حفظ الحالة المتقدمة تلقائياً)
         super().closeEvent(event)
 
 

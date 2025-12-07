@@ -1,0 +1,33 @@
+/* ============================================
+   Progress Bar Styles - QProgressBar
+   أنماط شريط التقدم
+   ============================================ */
+
+QProgressBar {
+    background-color: #f1f5f9;
+    border: 2px solid #e2e8f0;
+    border-radius: 6px;
+    text-align: center;
+    font-weight: 500;
+    font-size: 12px;
+    height: 24px;
+    color: #1e293b;
+}
+
+QProgressBar::chunk {
+    background-color: #3b82f6;
+    border-radius: 4px;
+}
+
+QProgressBar[class="success"]::chunk {
+    background-color: #10b981;
+}
+
+QProgressBar[class="warning"]::chunk {
+    background-color: #f59e0b;
+}
+
+QProgressBar[class="danger"]::chunk {
+    background-color: #ef4444;
+}
+

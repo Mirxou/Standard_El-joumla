@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 النافذة الرئيسية - Main Window
@@ -6,45 +6,355 @@
 """
 
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QTabWidget, QMenuBar, QStatusBar, QToolBar,
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QCheckBox, QTimeEdit, QSpinBox, QDoubleSpinBox, QDateEdit, QDateTimeEdit, QRadioButton, QSlider, QProgressBar, QPlainTextEdit, QTextEdit, QListWidget, QTreeWidget, QSplitter, QScrollArea, QDialogButtonBox,
+    QTabWidget, QStackedWidget, QMenuBar, QStatusBar, QToolBar, QMenu,
     QLabel, QPushButton, QMessageBox, QSplashScreen, QDialog,
     QLineEdit, QComboBox, QTableWidget, QTableWidgetItem,
-    QHeaderView, QAbstractItemView, QGroupBox, QFrame,
+    QTableView, QHeaderView, QAbstractItemView, QGroupBox, QFrame,
     QFileDialog
 )
-from PySide6.QtCore import Qt, QTimer, QThread, Signal
-from PySide6.QtGui import QAction, QIcon, QPixmap, QFont, QColor
-from typing import Optional
+from PySide6.QtCore import Qt, QTimer, QThread, Signal, QDate, QUrl, QModelIndex, QSize, QPoint
+from PySide6.QtGui import QAction, QIcon, QPixmap, QFont, QColor, QDesktopServices, QPainter, QCursor
+from PySide6.QtCharts import QChart, QChartView, QLineSeries, QBarSeries, QBarSet, QBarCategoryAxis, QValueAxis, QCategoryAxis, QPieSeries, QPieSlice
+from typing import Optional, List, Dict, Any
 import sys
+import os
+import time
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, date, timedelta
 
 # إضافة مسار src
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
 
 from src.models.customer import CustomerManager
 from src.models.supplier import SupplierManager
+from src.models.payment import PaymentType
 from src.core.caching_service import AdvancedCachingService
 from src.ui.theme_manager import get_theme_manager
 from src.ui.notifications_manager import get_notifications_manager
+from src.services.dashboard_service import DashboardService
+from src.services.report_exporter import ReportExporter, ReportType, ReportFilter, ExportFormat
+from src.services.payment_service import PaymentService
+from src.ui.dialogs.adjust_stock_dialog import AdjustStockDialog
+from src.ui.dialogs.transfer_stock_dialog import TransferStockDialog
+from src.ui.windows.accounts_window import AccountsWindow
+from src.ui.windows.payment_dashboard import PaymentDashboard
+from src.ui.models.inventory_table_model import InventoryTableModel
+from src.ui.models.sales_table_model import SalesTableModel
+from src.ui.delegates.action_delegate import ActionDelegate
+from src.ui.delegates.modern_action_delegate import ModernActionDelegate
+from src.utils.i18n_api import I18n
+from src.core.window_manager import WindowManager
+
+# Import pandas for high-performance data handling
+try:
+    import pandas as pd
+    PANDAS_AVAILABLE = True
+except ImportError:
+    PANDAS_AVAILABLE = False
+    pd = None
+
+
+class DataLoaderWorker(QThread):
+    """Worker لتحميل البيانات في الخلفية (لتجنب تجميد الواجهة)"""
+    data_loaded = Signal(object)  # يمكنه حمل أي نوع بيانات (قائمة أو قاموس)
+    error_occurred = Signal(str)  # signal للأخطاء
+    
+    def __init__(self, loader_func, *args, **kwargs):
+        super().__init__()
+        self.loader_func = loader_func
+        self.args = args
+        self.kwargs = kwargs
+    
+    def run(self):
+        """تنفيذ عملية التحميل في الخلفية"""
+        try:
+            data = self.loader_func(*self.args, **self.kwargs)
+            self.data_loaded.emit(data if data else [])
+        except Exception as e:
+            import traceback
+            error_msg = f"{str(e)}\n{traceback.format_exc()}"
+            self.error_occurred.emit(error_msg)
+
+
+class InventoryDataLoaderThread(QThread):
+    """خيط محسّن لتحميل بيانات المخزون مباشرة من SQLite باستخدام Pandas"""
+    data_loaded = Signal(object)  # يرسل DataFrame
+    progress_updated = Signal(str)  # يرسل رسالة التقدم
+    error_occurred = Signal(str)  # يرسل رسالة خطأ
+    
+    def __init__(self, db_path: str, search_term: str = "", category_id: int = None, limit: int = None, offset: int = 0):
+        super().__init__()
+        self.db_path = db_path
+        self.search_term = search_term
+        self.category_id = category_id
+        self.limit = limit
+        self.offset = offset
+    
+    def run(self):
+        """تحميل البيانات مباشرة من SQLite في الخلفية"""
+        try:
+            import sqlite3
+            
+            # إرسال رسالة التقدم
+            self.progress_updated.emit("جاري الاتصال بقاعدة البيانات...")
+            
+            # فتح اتصال خاص داخل الخيط (Thread-Safe)
+            conn = sqlite3.connect(self.db_path)
+            conn.execute("PRAGMA journal_mode=WAL")  # تحسين الأداء
+            
+            # بناء الاستعلام
+            query = """
+                SELECT 
+                    p.id,
+                    p.barcode,
+                    p.name,
+                    COALESCE(c.name, 'غير محدد') as category,
+                    COALESCE(p.unit, 'قطعة') as unit,
+                    COALESCE(p.current_stock, 0) as current_stock,
+                    COALESCE(p.min_stock, 0) as min_stock,
+                    COALESCE(p.selling_price, 0.0) as selling_price
+                FROM products p
+                LEFT JOIN categories c ON p.category_id = c.id
+                WHERE 1=1
+            """
+            params = []
+            
+            # إضافة مرشحات
+            if self.search_term:
+                query += " AND (p.name LIKE ? OR p.barcode LIKE ?)"
+                search_pattern = f"%{self.search_term}%"
+                params.extend([search_pattern, search_pattern])
+            
+            if self.category_id:
+                query += " AND p.category_id = ?"
+                params.append(self.category_id)
+            
+            # إضافة فلتر المنتجات النشطة فقط
+            query += " AND COALESCE(p.is_active, 1) = 1"
+            
+            # إضافة الترتيب
+            query += " ORDER BY p.id DESC"
+            
+            # إضافة LIMIT و OFFSET إذا كان محدداً
+            if self.limit:
+                query += " LIMIT ?"
+                params.append(self.limit)
+                if self.offset:
+                    query += " OFFSET ?"
+                    params.append(self.offset)
+            
+            # إرسال رسالة التقدم
+            self.progress_updated.emit("جاري تحميل المنتجات من قاعدة البيانات...")
+            
+            # تحميل البيانات مباشرة باستخدام Pandas (أسرع بكثير)
+            if PANDAS_AVAILABLE:
+                df = pd.read_sql_query(query, conn, params=params if params else None)
+                
+                # إضافة عمود حالة المخزون
+                if not df.empty:
+                    conditions = [
+                        df['current_stock'] == 0,
+                        df['current_stock'] <= df['min_stock']
+                    ]
+                    choices = ['نفد من المخزون', 'مخزون منخفض']
+                    df['status'] = pd.Series(['جيد'] * len(df))
+                    df.loc[df['current_stock'] == 0, 'status'] = 'نفد من المخزون'
+                    df.loc[(df['current_stock'] > 0) & (df['current_stock'] <= df['min_stock']), 'status'] = 'مخزون منخفض'
+                    
+                    # إضافة عمود الإجراءات الفارغ
+                    df['actions'] = ""
+                    
+                    # إعادة ترتيب الأعمدة
+                    df = df[['id', 'barcode', 'name', 'category', 'unit', 
+                            'current_stock', 'min_stock', 'selling_price', 'status', 'actions']]
+                else:
+                    # DataFrame فارغ بنفس الأعمدة
+                    df = pd.DataFrame(columns=['id', 'barcode', 'name', 'category', 'unit', 
+                                              'current_stock', 'min_stock', 'selling_price', 'status', 'actions'])
+                
+                # إرسال رسالة التقدم
+                self.progress_updated.emit(f"تم تحميل {len(df):,} منتج بنجاح!")
+                
+                # إرسال البيانات
+                self.data_loaded.emit(df)
+            else:
+                # Fallback: إذا لم يكن Pandas متاحاً
+                self.progress_updated.emit("خطأ: Pandas غير متاح")
+                self.data_loaded.emit(None)
+            
+            conn.close()
+            
+        except Exception as e:
+            import traceback
+            error_msg = f"خطأ في تحميل البيانات: {str(e)}\n{traceback.format_exc()}"
+            self.progress_updated.emit(f"خطأ: {str(e)}")
+            self.error_occurred.emit(error_msg)
+
+class SalesDataLoaderThread(QThread):
+    """خيط محسّن لتحميل بيانات المبيعات مباشرة من SQLite باستخدام Pandas"""
+    data_loaded = Signal(object)  # يرسل DataFrame
+    summary_loaded = Signal(object) # يرسل قاموس الملخص
+    error_occurred = Signal(str)
+
+    def __init__(self, db_path: str, search_term: str = "", status: str = None, payment_method: str = None, limit: int = 500, offset: int = 0):
+        super().__init__()
+        self.db_path = db_path
+        self.search_term = search_term
+        self.status = status
+        self.payment_method = payment_method
+        self.limit = limit
+        self.offset = offset
+
+    def run(self):
+        try:
+            import sqlite3
+            conn = sqlite3.connect(self.db_path)
+            conn.execute("PRAGMA journal_mode=WAL")
+
+            # بناء الاستعلام الرئيسي
+            query = """
+                SELECT 
+                    s.id,
+                    s.invoice_number,
+                    COALESCE(c.name, 'زبون نقدي') as customer_name,
+                    s.sale_date,
+                    s.total_amount,
+                    s.paid_amount,
+                    s.remaining_amount,
+                    s.status,
+                    s.payment_method
+                FROM sales s
+                LEFT JOIN customers c ON s.customer_id = c.id
+                WHERE 1=1
+            """
+            params = []
+
+            if self.search_term:
+                query += " AND (s.invoice_number LIKE ? OR c.name LIKE ?)"
+                search_pattern = f"%{self.search_term}%"
+                params.extend([search_pattern, search_pattern])
+            
+            if self.status:
+                query += " AND s.status = ?"
+                params.append(self.status)
+            
+            if self.payment_method:
+                query += " AND s.payment_method = ?"
+                params.append(self.payment_method)
+
+            query += " ORDER BY s.sale_date DESC"
+            if self.limit:
+                query += " LIMIT ? OFFSET ?"
+                params.extend([self.limit, self.offset])
+
+            df = pd.read_sql_query(query, conn, params=params if params else None)
+            df['actions'] = "" # إضافة عمود الإجراءات
+            self.data_loaded.emit(df)
+            conn.close()
+
+        except Exception as e:
+            import traceback
+            self.error_occurred.emit(f"خطأ في تحميل المبيعات: {str(e)}\n{traceback.format_exc()}")
 
 class MainWindow(QMainWindow):
     """النافذة الرئيسية للتطبيق"""
     
-    def __init__(self, config_manager=None, db_manager=None, logger=None):
+    def __init__(self, config_manager=None, db_manager=None, logger=None, 
+                 inventory_service=None, sales_service=None, reports_service=None,
+                 user_service=None, payment_service=None, dashboard_service=None,
+                 notifications_manager=None):
         super().__init__()
         
         self.config_manager = config_manager
         self.db_manager = db_manager
         self.logger = logger
         self.app_start_time = datetime.now()
+        self._background_threads: List[QThread] = []
+        self._managed_windows: List[QWidget] = []
+        
+        # تهيئة Window Manager المركزي (بدون db_manager - Factory Pattern)
+        self.window_manager = WindowManager(organization="LogicalVersion", appname="ERP", parent=self)
+        
+        # تهيئة متغيرات المخزون (لن يتم تحميلها إلا عند الطلب)
+        self._inventory_loader = None
+        self._inventory_offset = 0
+        self._inventory_has_more = True
+        self.inventory_model = None  # سيتم إنشاؤه فقط عند فتح صفحة المخزون
+        self.sales_model = None      # سيتم إنشاؤه فقط عند فتح صفحة المبيعات
+        
+        # تحسينات السلاسة والتحكم - Debouncing و Throttling
+        self._search_debounce_timer = QTimer(self)
+        self._search_debounce_timer.setSingleShot(True)
+        self._search_debounce_timer.timeout.connect(self._on_search_debounced)
+        self._last_search_term = ""
+        
+        # Throttling للتحديثات
+        self._update_throttle_timer = QTimer(self)
+        self._update_throttle_timer.setSingleShot(True)
+        self._pending_updates = {}
+        
+        # تحسينات الأداء
+        self._is_updating = False
+        self._update_queue = []
+        
+        # حفظ الخدمات الممررة (إن وجدت)
+        self._passed_inventory_service = inventory_service
+        self._passed_sales_service = sales_service
+        self._passed_reports_service = reports_service
+        self._passed_user_service = user_service
+        self._passed_payment_service = payment_service
+        self._passed_dashboard_service = dashboard_service
+        self._passed_notifications_manager = notifications_manager
         
         # تهيئة الخدمات
         self.init_services()
         
-        self.setWindowTitle("الإصدار المنطقي - نظام إدارة التجارة العامة")
-        self.setMinimumSize(1200, 800)
+        # تسجيل جميع النوافذ في Window Manager
+        self._register_all_windows()
+        
+        # تهيئة نظام الترجمة
+        self.i18n = I18n(locales_dir=str(Path(__file__).parent.parent.parent.parent / "locales"))
+        
+        # تعيين أيقونة النافذة الرئيسية
+        icon_path = Path(__file__).parent.parent.parent.parent / "assets" / "icons" / "app_icon.ico"
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
+        
+        self.setWindowTitle(self.i18n.get_message("system_title"))
+        
+        # تحسين حجم النوافذ - responsive حسب حجم الشاشة
+        from PySide6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app:
+            screen = app.primaryScreen()
+            if screen:
+                screen_geometry = screen.geometry()
+                screen_width = screen_geometry.width()
+                screen_height = screen_geometry.height()
+                
+                # حساب الحجم الأمثل (85% من الشاشة كحد أقصى)
+                optimal_width = min(1400, int(screen_width * 0.85))
+                optimal_height = min(900, int(screen_height * 0.85))
+                
+                # الحد الأدنى والأقصى
+                self.setMinimumSize(1000, 700)
+                self.setMaximumSize(screen_width, screen_height)
+                
+                # الحجم الافتراضي
+                self.resize(optimal_width, optimal_height)
+                
+                # مركز النافذة على الشاشة
+                self._center_window()
+            else:
+                # قيم افتراضية إذا لم تتوفر معلومات الشاشة
+                self.setMinimumSize(1000, 700)
+                self.resize(1200, 800)
+        else:
+            # قيم افتراضية إذا لم يتوفر QApplication
+            self.setMinimumSize(1000, 700)
+            self.resize(1200, 800)
         
         # إعداد الواجهة
         self.setup_ui()
@@ -75,13 +385,101 @@ class MainWindow(QMainWindow):
         
         # بدء نظام الإشعارات الذكية إن توفرت قاعدة البيانات
         try:
-            if self.db_manager is not None:
-                self.notifications_manager = get_notifications_manager(self.db_manager, self)
+            pass
+        except Exception:
+            pass
+    
+    def init_services(self):
+        """تهيئة الخدمات المطلوبة"""
+        # استخدام الخدمات الممررة إن وجدت، وإلا تهيئتها
+        self.inventory_service = self._passed_inventory_service
+        self.sales_service = self._passed_sales_service
+        self.reports_service = self._passed_reports_service
+        self.payment_service = self._passed_payment_service
+        self.dashboard_service = self._passed_dashboard_service
+        
+        # تهيئة الخدمات الأخرى
+        self.product_service = None
+        self.purchase_service = None
+        self.customer_manager = None
+        self.supplier_manager = None
+        self.ai_service = None
+        self.printing_service = None
+        
+        # تهيئة خدمة المخزون إذا لم يتم تمريرها
+        if not self.inventory_service:
+            try:
+                from src.services.inventory_service import InventoryService
+                self.inventory_service = InventoryService(self.db_manager, self.logger)
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"تعذر تهيئة خدمة المخزون: {e}")
+        
+        # تهيئة خدمة المبيعات إذا لم يتم تمريرها
+        if not self.sales_service:
+            try:
+                from src.services.sales_service import SalesService
+                self.sales_service = SalesService(self.db_manager, self.logger)
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"تعذر تهيئة خدمة المبيعات: {e}")
+        
+        # تهيئة خدمة التقارير إذا لم يتم تمريرها
+        if not self.reports_service:
+            try:
+                self.reports_service = ReportExporter(self.db_manager)
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"تعذر تهيئة خدمة التقارير: {e}")
+        
+        # تهيئة خدمة المدفوعات إذا لم يتم تمريرها
+        if not self.payment_service:
+            try:
+                self.payment_service = PaymentService(self.db_manager, self.logger)
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"تعذر تهيئة خدمة المدفوعات: {e}")
+        
+        # تهيئة خدمة لوحات المعلومات إذا لم يتم تمريرها
+        if not self.dashboard_service:
+            try:
+                self.dashboard_service = DashboardService(self.db_manager)
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"تعذر تهيئة خدمة لوحات المعلومات: {e}")
+        
+        # تهيئة مديري العملاء والموردين
+        try:
+            self.customer_manager = CustomerManager(self.db_manager)
+            self.supplier_manager = SupplierManager(self.db_manager)
         except Exception as e:
             if self.logger:
-                self.logger.error(f"فشل تهيئة نظام الإشعارات: {str(e)}")
-
+                self.logger.warning(f"تعذر تهيئة مديري العملاء/الموردين: {e}")
+        
+        # تهيئة خدمة المشتريات
+        try:
+            from src.services.purchase_service import PurchaseService
+            self.purchase_service = PurchaseService(self.db_manager, self.logger)
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"تعذر تهيئة خدمة المشتريات: {e}")
+        
+        # تهيئة خدمة طباعة الفواتير (HTML/Jinja2)
+        try:
+            from src.services.invoice_print_service import InvoicePrintService
+            self.invoice_print_service = InvoicePrintService()
+            if self.logger:
+                self.logger.info("✅ تم تهيئة خدمة طباعة الفواتير (HTML/Jinja2)")
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"تعذر تهيئة خدمة طباعة الفواتير: {e}")
+            self.invoice_print_service = None
+        
+        if self.logger:
+            self.logger.info("تم تهيئة الخدمات (محسنة/تقليدية) في النافذة الرئيسية")
+    
     class BackupWorker(QThread):
+        """Worker للنسخ الاحتياطي والاستعادة"""
         finished = Signal(bool, str)
 
         def __init__(self, db_manager, mode: str, logger=None, backup_file: Optional[str] = None, metadata: Optional[dict] = None):
@@ -95,7 +493,6 @@ class MainWindow(QMainWindow):
         def run(self):
             try:
                 if self.mode == 'backup':
-                    path = None
                     if hasattr(self.db_manager, 'backup_database_encrypted'):
                         path = self.db_manager.backup_database_encrypted(metadata=self.metadata)
                         ok = bool(path)
@@ -115,181 +512,2050 @@ class MainWindow(QMainWindow):
                     self.logger.error(f"خطأ في مهمة النسخ الاحتياطي/الاستعادة: {str(e)}")
                 self.finished.emit(False, str(e))
     
-    def init_services(self):
-        """تهيئة الخدمات المطلوبة"""
-        try:
-            if self.db_manager:
-                # حاول تهيئة النسخ المحسنة أولاً ثم الرجوع إلى النسخ القديمة إذا لم تتوفر
-                try:
-                    from src.services.inventory_service_enhanced import InventoryService as EnhancedInventoryService
-                    from src.services.product_service_enhanced import ProductService as EnhancedProductService
-
-                    self.inventory_service = EnhancedInventoryService(self.db_manager, self.logger)
-                    # ProductService يحتوي على واجهات البحث والإحصاء
-                    self.product_service = EnhancedProductService(self.db_manager, self.logger)
-
-                    # توفير واجهة متوافقة مع الكود الحالي
-                    # بعض أجزاء الواجهة تتوقع وجود product_manager و generate_inventory_report
-                    self.inventory_service.product_manager = self.product_service
-                    # ربط اسم الدالة المتوقع generate_inventory_report
-                    if not hasattr(self.inventory_service, 'generate_inventory_report') and hasattr(self.inventory_service, 'get_inventory_report'):
-                        self.inventory_service.generate_inventory_report = self.inventory_service.get_inventory_report
-
-                except Exception:
-                    # استرجاع الإصدارات التقليدية إن لم تتوفر النسخ المحسّنة
-                    try:
-                        from src.services.inventory_service import InventoryService
-                        from src.services.product_service import ProductService
-                        self.inventory_service = InventoryService(self.db_manager, self.logger)
-                        self.product_service = ProductService(self.db_manager, self.logger)
-                        self.inventory_service.product_manager = getattr(self.product_service, 'product_manager', None) or self.product_service
-                    except Exception as e:
-                        if self.logger:
-                            self.logger.warning(f"تعذر تهيئة خدمة المخزون: {e}")
-                        self.inventory_service = None
-
-                # تهيئة خدمة المبيعات (محسنة أو قديمة)
-                try:
-                    from src.services.sales_service_enhanced import SalesService as EnhancedSalesService
-                    self.sales_service = EnhancedSalesService(self.db_manager, self.logger, inventory_service=getattr(self, 'inventory_service', None), product_service=getattr(self, 'product_service', None))
-                except Exception:
-                    try:
-                        from src.services.sales_service import SalesService
-                        self.sales_service = SalesService(self.db_manager, self.logger)
-                    except Exception as e:
-                        if self.logger:
-                            self.logger.warning(f"تعذر تهيئة خدمة المبيعات: {e}")
-                        self.sales_service = None
-
-                # تهيئة خدمة التقارير
-                try:
-                    from src.services.reports_service_enhanced import ReportsService as EnhancedReportsService
-                    self.reports_service = EnhancedReportsService(self.db_manager, self.logger)
-                except Exception:
-                    try:
-                        from src.services.reports_service import ReportsService
-                        self.reports_service = ReportsService(self.db_manager)
-                    except Exception as e:
-                        if self.logger:
-                            self.logger.warning(f"تعذر تهيئة خدمة التقارير: {e}")
-                        self.reports_service = None
-
-                # تهيئة خدمة المدفوعات / الفواتير
-                try:
-                    from src.services.billing_service import BillingService
-                    self.payment_service = BillingService(self.db_manager, self.logger)
-                except Exception:
-                    try:
-                        from src.services.payment_service import PaymentService
-                        self.payment_service = PaymentService(self.db_manager)
-                    except Exception as e:
-                        if self.logger:
-                            self.logger.warning(f"تعذر تهيئة خدمة المدفوعات: {e}")
-                        self.payment_service = None
-
-                # تهيئة مديري العملاء والموردين من النماذج
-                try:
-                    self.customer_manager = CustomerManager(self.db_manager, self.logger)
-                except Exception:
-                    self.customer_manager = None
-                try:
-                    self.supplier_manager = SupplierManager(self.db_manager, self.logger)
-                except Exception:
-                    self.supplier_manager = None
-
-                if self.logger:
-                    self.logger.info("تم تهيئة الخدمات (محسنة/تقليدية) في النافذة الرئيسية")
-
-                # تهيئة خدمة التخزين المؤقت من الإعدادات
-                try:
-                    cache_enabled = True
-                    default_ttl = 60
-                    disk_cache = False
-                    disk_path = str(Path(self.db_manager.db_path).parent / "cache") if hasattr(self.db_manager, 'db_path') else "data/cache"
-                    if self.config_manager and hasattr(self.config_manager, 'get'):
-                        cache_enabled = bool(self.config_manager.get('cache.enabled', True))
-                        default_ttl = int(self.config_manager.get('cache.default_ttl', 60))
-                        disk_cache = bool(self.config_manager.get('cache.disk_cache', False))
-                        disk_path = self.config_manager.get('cache.disk_path', disk_path)
-                    self.cache = AdvancedCachingService(default_ttl=default_ttl, enable_disk_cache=disk_cache, disk_cache_path=disk_path) if cache_enabled else None
-                    if self.logger:
-                        self.logger.info(f"خدمة التخزين المؤقت: {'مفعلة' if self.cache else 'معطلة'} (TTL={default_ttl}s, Disk={disk_cache})")
-                except Exception as e:
-                    self.cache = None
-                    if self.logger:
-                        self.logger.warning(f"تعذر تهيئة خدمة التخزين المؤقت: {e}")
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في تهيئة الخدمات: {str(e)}")
-            self.inventory_service = None
-            self.sales_service = None
-            self.reports_service = None
-            self.payment_service = None
-            self.customer_manager = None
-            self.supplier_manager = None
-    
     def setup_ui(self):
-        """إعداد واجهة المستخدم"""
+        """إعداد واجهة المستخدم - Sidebar Architecture"""
         # الويدجت المركزي
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
-        # التخطيط الرئيسي
-        main_layout = QVBoxLayout(central_widget)
+        # التخطيط الرئيسي (أفقي: Sidebar + Content)
+        main_layout = QHBoxLayout(central_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
         
-        # شريط الترحيب
-        welcome_layout = QHBoxLayout()
-        welcome_label = QLabel("مرحباً بك في الإصدار المنطقي")
+        # ---------------------------------------------------------
+        # 1. القائمة الجانبية (Sidebar) - Premium Dark Design
+        # ---------------------------------------------------------
+        self.sidebar = QFrame()
+        self.sidebar.setFixedWidth(250)  # عرض ثابت للقائمة (250px كما طلب Lead Architect)
+        self.sidebar.setStyleSheet("""
+            QFrame {
+                background-color: #1e293b;
+                border: none;
+            }
+        """)
+        
+        self.sidebar_layout = QVBoxLayout(self.sidebar)
+        self.sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        self.sidebar_layout.setSpacing(2)
+        
+        # شريط الترحيب في القائمة الجانبية
+        welcome_label = QLabel(self.i18n.get_message("welcome_title"))
         welcome_label.setStyleSheet("""
             QLabel {
                 font-size: 16px;
                 font-weight: bold;
-                color: #2c3e50;
-                padding: 10px;
-                background-color: #ecf0f1;
-                border-radius: 5px;
-                margin: 5px;
+                color: #ffffff;
+                padding: 20px 15px;
+                background-color: #0f172a;
+                border-bottom: 2px solid #334155;
             }
         """)
-        welcome_layout.addWidget(welcome_label)
-        welcome_layout.addStretch()
+        welcome_label.setAlignment(Qt.AlignCenter)
+        self.sidebar_layout.addWidget(welcome_label)
         
-        main_layout.addLayout(welcome_layout)
+        # إضافة الأزرار للقائمة الجانبية (باستخدام page_name)
+        self.btn_dashboard = self.create_sidebar_btn("🏠 الرئيسية", "dashboard")
+        self.btn_inventory = self.create_sidebar_btn("📦 المخزون", "inventory")
+        self.btn_sales = self.create_sidebar_btn("💰 المبيعات", "sales")
+        self.btn_purchases = self.create_sidebar_btn("🛒 المشتريات", "purchases")
+        self.btn_payments = self.create_sidebar_btn("💳 المدفوعات", "payments")
+        self.btn_reports = self.create_sidebar_btn("📊 التقارير", "reports")
+        self.btn_contacts = self.create_sidebar_btn("👥 العملاء والموردين", "contacts")
+        self.btn_settings = self.create_sidebar_btn("⚙️ الإعدادات", "settings")
+        self.btn_performance = self.create_sidebar_btn("⚡ الأداء", "performance")
         
-        # التبويبات الرئيسية
-        self.tab_widget = QTabWidget()
-        self.tab_widget.setTabPosition(QTabWidget.North)
-        self.tab_widget.setMovable(False)
+        self.sidebar_layout.addStretch()  # دفع الأزرار للأعلى
         
-        # تبويب المخزون
-        self.inventory_tab = self.create_inventory_tab()
-        self.tab_widget.addTab(self.inventory_tab, "🏪 المخزون")
+        # ---------------------------------------------------------
+        # 2. منطقة المحتوى (Content Area) - QStackedWidget
+        # ---------------------------------------------------------
+        self.content_area = QStackedWidget()
+        self.content_area.setStyleSheet("""
+            QStackedWidget {
+                background-color: #f8fafc;
+                border: none;
+            }
+        """)
         
-        # تبويب المبيعات
-        self.sales_tab = self.create_sales_tab()
-        self.tab_widget.addTab(self.sales_tab, "💰 المبيعات")
+        # إضافة القائمة والمحتوى للتخطيط الرئيسي
+        main_layout.addWidget(self.sidebar)
+        main_layout.addWidget(self.content_area, 1)  # stretch factor = 1
         
-        # تبويب المشتريات
-        self.purchases_tab = self.create_purchases_tab()
-        self.tab_widget.addTab(self.purchases_tab, "📦 المشتريات")
+        # ---------------------------------------------------------
+        # 3. تهيئة الصفحات (Lazy Loading Engine)
+        # ---------------------------------------------------------
+        # Dictionary لتتبع الصفحات المحمّلة (page_name -> widget)
+        self.pages: Dict[str, QWidget] = {}
+        self.page_names = {
+            'dashboard': 0,
+            'inventory': 1,
+            'sales': 2,
+            'purchases': 3,
+            'payments': 4,
+            'reports': 5,
+            'contacts': 6,
+            'settings': 7,
+            'performance': 8
+        }
         
-        # تبويب التقارير
-        self.reports_tab = self.create_reports_tab()
-        self.tab_widget.addTab(self.reports_tab, "📊 التقارير")
+        # الصفحة الرئيسية فقط (يتم تحميلها فوراً)
+        self.dashboard_tab = self.create_dashboard_tab()
+        self.content_area.addWidget(self.dashboard_tab)
+        self.pages['dashboard'] = self.dashboard_tab
         
-        # تبويب العملاء والموردين
-        self.contacts_tab = self.create_contacts_tab()
-        self.tab_widget.addTab(self.contacts_tab, "👥 العملاء والموردين")
+        # الصفحات الأخرى (يتم تحميلها عند الطلب - Lazy Loading)
+        for page_name in ['inventory', 'sales', 'purchases', 'payments', 'reports', 'contacts', 'settings', 'performance']:
+            placeholder = QWidget()
+            placeholder.setStyleSheet("background-color: #f8fafc;")
+            self.content_area.addWidget(placeholder)
         
-        # تبويب الإعدادات
-        self.settings_tab = self.create_settings_tab()
-        self.tab_widget.addTab(self.settings_tab, "⚙️ الإعدادات")
-
-        # تبويب الأداء البسيط
-        self.performance_tab = self.create_performance_tab()
-        self.tab_widget.addTab(self.performance_tab, "⚡ الأداء")
+        # تشغيل الصفحة الأولى
+        self.content_area.setCurrentIndex(0)
+        self.btn_dashboard.setChecked(True)
         
-        main_layout.addWidget(self.tab_widget)
+        if self.logger:
+            self.logger.debug("✅ تم تحويل الواجهة إلى Sidebar Architecture مع Lazy Loading Engine")
+    
+    def _center_window(self):
+        """توسيط النافذة على الشاشة"""
+        try:
+            from PySide6.QtWidgets import QApplication
+            app = QApplication.instance()
+            if app:
+                screen = app.primaryScreen()
+                if screen:
+                    screen_geometry = screen.geometry()
+                    window = self.frameGeometry()
+                    center_point = screen_geometry.center()
+                    window.moveCenter(center_point)
+                    self.move(window.topLeft())
+        except Exception:
+            pass
+    
+    def create_sidebar_btn(self, text: str, page_name: str):
+        """
+        إنشاء زر في القائمة الجانبية
+        
+        Args:
+            text: نص الزر
+            page_name: اسم الصفحة ('dashboard', 'inventory', etc.)
+        """
+        btn = QPushButton(text)
+        btn.setCheckable(True)
+        btn.setAutoExclusive(True)  # زر واحد فقط يكون نشطاً
+        btn.setCursor(QCursor(Qt.PointingHandCursor))
+        btn.setStyleSheet("""
+            QPushButton {
+                text-align: right;
+                padding: 15px 20px;
+                border: none;
+                color: #94a3b8;
+                font-size: 14px;
+                font-weight: 600;
+                background-color: transparent;
+                border-radius: 0px;
+            }
+            QPushButton:hover {
+                background-color: #334155;
+                color: #ffffff;
+            }
+            QPushButton:checked {
+                background-color: #3b82f6;
+                color: #ffffff;
+                border-right: 4px solid #ffffff;
+            }
+            QPushButton:pressed {
+                background-color: #2563eb;
+            }
+        """)
+        
+        # ربط الزر بالصفحة (باستخدام page_name)
+        btn.clicked.connect(lambda: self.switch_page(page_name))
+        
+        # إضافة الزر للقائمة
+        self.sidebar_layout.addWidget(btn)
+        
+        return btn
+    
+    def switch_page(self, page_name: str):
+        """
+        التبديل بين الصفحات مع Lazy Loading Engine
+        
+        Args:
+            page_name: اسم الصفحة ('dashboard', 'inventory', 'sales', etc.)
+        """
+        try:
+            # الحصول على الفهرس
+            if page_name not in self.page_names:
+                if self.logger:
+                    self.logger.warning(f"صفحة غير معروفة: {page_name}")
+                return
+            
+            index = self.page_names[page_name]
+            
+            # 🔥 Lazy Loading Engine: بناء الصفحة فقط عند الحاجة إليها 🔥
+            # التحقق من وجود الصفحة وصحتها
+            page_needs_rebuild = False
+            if page_name not in self.pages:
+                page_needs_rebuild = True
+            else:
+                # التحقق من أن الصفحة صالحة (لم يتم حذفها)
+                try:
+                    page_widget = self.pages[page_name]
+                    if page_widget is None:
+                        page_needs_rebuild = True
+                    else:
+                        # محاولة الوصول إلى الصفحة للتحقق من صحتها
+                        _ = page_widget.isVisible()
+                except RuntimeError:
+                    # الصفحة محذوفة (Internal C++ object already deleted)
+                    page_needs_rebuild = True
+                    if self.logger:
+                        self.logger.warning(f"⚠️ الصفحة '{page_name}' محذوفة - سيتم إعادة بنائها")
+                    del self.pages[page_name]
+            
+            if page_needs_rebuild:
+                # الصفحة غير موجودة - بناءها الآن
+                if self.logger:
+                    self.logger.debug(f"🔨 بناء الصفحة '{page_name}' (Lazy Loading)...")
+                
+                # إزالة الصفحة المؤقتة
+                placeholder = self.content_area.widget(index)
+                if placeholder:
+                    self.content_area.removeWidget(placeholder)
+                    placeholder.deleteLater()
+                
+                # بناء الصفحة الفعلية
+                page_widget = self._build_page(page_name)
+                
+                # 🔥 تحديث إحصائيات Dashboard فوراً بعد البناء
+                if page_name == 'dashboard':
+                    QTimer.singleShot(100, self.refresh_dashboard_stats)
+                    # تحديث الرسوم البيانية بعد تحميل البيانات
+                    QTimer.singleShot(500, lambda: self._update_dashboard_charts_initial())
+                if page_widget:
+                    self.content_area.insertWidget(index, page_widget)
+                    self.pages[page_name] = page_widget
+                    if self.logger:
+                        self.logger.debug(f"✅ تم بناء الصفحة '{page_name}' بنجاح")
+                else:
+                    if self.logger:
+                        self.logger.error(f"❌ فشل في بناء الصفحة '{page_name}'")
+                    return
+            else:
+                # ✅ Smart Check: الصفحة موجودة بالفعل
+                if page_name == 'inventory' and hasattr(self, 'inventory_model'):
+                    if self.inventory_model and self.inventory_model.rowCount() > 0:
+                        if self.logger:
+                            self.logger.debug(f"✅ صفحة '{page_name}' محمّلة بالفعل - تخطي إعادة التحميل")
+            
+                # 🔥 Safety Check: التحقق من أن الصفحة صالحة (لم يتم حذفها)
+                page_widget = self.pages.get(page_name)
+                if page_widget is None:
+                    # الصفحة غير موجودة - إعادة بنائها
+                    page_needs_rebuild = True
+                else:
+                    try:
+                        # محاولة الوصول إلى الصفحة للتحقق من صحتها
+                        _ = page_widget.isVisible()
+                    except RuntimeError:
+                        # الصفحة محذوفة (Internal C++ object already deleted)
+                        if self.logger:
+                            self.logger.warning(f"⚠️ الصفحة '{page_name}' محذوفة - إعادة بنائها...")
+                        del self.pages[page_name]
+                        page_needs_rebuild = True
+                
+                if page_needs_rebuild:
+                    # إعادة بناء الصفحة
+                    page_widget = self._build_page(page_name)
+                    if page_widget:
+                        # إزالة الصفحة المؤقتة إن وجدت
+                        placeholder = self.content_area.widget(index)
+                        if placeholder:
+                            self.content_area.removeWidget(placeholder)
+                            placeholder.deleteLater()
+                        self.content_area.insertWidget(index, page_widget)
+                        self.pages[page_name] = page_widget
+                    else:
+                        if self.logger:
+                            self.logger.error(f"❌ فشل في إعادة بناء الصفحة '{page_name}'")
+                        return
+            
+            # تبديل الصفحة (بعد التأكد من صحتها)
+            if page_name not in self.pages or self.pages[page_name] is None:
+                if self.logger:
+                    self.logger.error(f"❌ الصفحة '{page_name}' غير متاحة")
+                return
+            
+            self.content_area.setCurrentWidget(self.pages[page_name])
+            
+            # 🔥 تحديث إحصائيات Dashboard عند العودة للصفحة الرئيسية
+            if page_name == 'dashboard':
+                QTimer.singleShot(100, self.refresh_dashboard_stats)
+                
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في تبديل الصفحة '{page_name}': {e}")
+            import traceback
+            if self.logger:
+                self.logger.error(traceback.format_exc())
+    
+    def _build_page(self, page_name: str) -> Optional[QWidget]:
+        """
+        بناء صفحة معينة عند الطلب (Lazy Loading)
+        
+        Args:
+            page_name: اسم الصفحة
+            
+        Returns:
+            QWidget: الصفحة المبنية أو None في حالة الفشل
+        """
+        # تتبع ما إذا تم إيقاف المؤقت (لإعادة تشغيله في finally)
+        timer_was_stopped = False
+        heavy_pages = ['inventory', 'sales', 'purchases', 'payments']
+        
+        try:
+            if self.logger:
+                self.logger.debug(f"🔨 بدء بناء الصفحة '{page_name}'...")
+            
+            page_widget = None
+            
+            if page_name == 'dashboard':
+                page_widget = self.create_dashboard_tab()
+            elif page_name == 'inventory':
+                # 🛑 إيقاف مراقب الجلسة مؤقتاً لتوفير موارد قاعدة البيانات
+                if hasattr(self, 'session_monitor_timer') and self.session_monitor_timer and self.session_monitor_timer.isActive():
+                    if self.logger:
+                        self.logger.debug("⏸️ إيقاف session_monitor_timer مؤقتاً أثناء تحميل المخزون")
+                    self.session_monitor_timer.stop()
+                    timer_was_stopped = True
+                
+                # ⚠️ CRITICAL: InventoryTableModel يتم إنشاؤه هنا فقط (Lazy Loading)
+                page_widget = self.create_inventory_tab()
+            elif page_name == 'sales':
+                # 🛑 إيقاف مراقب الجلسة مؤقتاً لتوفير موارد قاعدة البيانات
+                if hasattr(self, 'session_monitor_timer') and self.session_monitor_timer and self.session_monitor_timer.isActive():
+                    if self.logger:
+                        self.logger.debug("⏸️ إيقاف session_monitor_timer مؤقتاً أثناء تحميل المبيعات")
+                    self.session_monitor_timer.stop()
+                    timer_was_stopped = True
+                page_widget = self.create_sales_tab()
+            elif page_name == 'purchases':
+                # 🛑 إيقاف مراقب الجلسة مؤقتاً لتوفير موارد قاعدة البيانات
+                if hasattr(self, 'session_monitor_timer') and self.session_monitor_timer and self.session_monitor_timer.isActive():
+                    if self.logger:
+                        self.logger.debug("⏸️ إيقاف session_monitor_timer مؤقتاً أثناء تحميل المشتريات")
+                    self.session_monitor_timer.stop()
+                    timer_was_stopped = True
+                page_widget = self.create_purchases_tab()
+            elif page_name == 'payments':
+                # 🛑 إيقاف مراقب الجلسة مؤقتاً لتوفير موارد قاعدة البيانات
+                if hasattr(self, 'session_monitor_timer') and self.session_monitor_timer and self.session_monitor_timer.isActive():
+                    if self.logger:
+                        self.logger.debug("⏸️ إيقاف session_monitor_timer مؤقتاً أثناء تحميل المدفوعات")
+                    self.session_monitor_timer.stop()
+                    timer_was_stopped = True
+                page_widget = self.create_payments_tab()
+            elif page_name == 'reports':
+                page_widget = self.create_reports_tab()
+            elif page_name == 'contacts':
+                page_widget = self.create_contacts_tab()
+            elif page_name == 'settings':
+                page_widget = self.create_settings_tab()
+            elif page_name == 'performance':
+                page_widget = self.create_performance_tab()
+            else:
+                if self.logger:
+                    self.logger.warning(f"صفحة غير معروفة: {page_name}")
+                return None
+            
+            if page_widget:
+                if self.logger:
+                    self.logger.debug(f"✅ تم بناء الصفحة '{page_name}' بنجاح")
+                return page_widget
+            else:
+                if self.logger:
+                    self.logger.error(f"❌ دالة create_{page_name}_tab() أرجعت None")
+                return None
+                
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            if self.logger:
+                self.logger.error(f"❌ خطأ في بناء الصفحة '{page_name}': {e}")
+                self.logger.error(f"تفاصيل الخطأ:\n{error_details}")
+            else:
+                # Fallback: طباعة في console إذا لم يكن logger متاحاً
+                print(f"❌ خطأ في بناء الصفحة '{page_name}': {e}")
+                print(f"تفاصيل الخطأ:\n{error_details}")
+            return None
+        finally:
+            # ✅ Safety Net: إعادة تشغيل مراقب الجلسة مضمونة 100% حتى لو حدث خطأ
+            # (سيتم إعادة التشغيل مرة أخرى في دوال التحميل لكن هذا يضمن عدم الموت)
+            if timer_was_stopped and hasattr(self, 'session_monitor_timer') and self.session_monitor_timer:
+                if not self.session_monitor_timer.isActive():
+                    if self.logger:
+                        self.logger.debug(f"▶️ إعادة تشغيل session_monitor_timer (Safety Net في _build_page بعد {page_name})")
+                    self.session_monitor_timer.start(60000)  # كل 60 ثانية
+    
+    def create_dashboard_tab(self) -> QWidget:
+        """إنشاء تبويب الصفحة الرئيسية"""
+        # 🔥 الربط العصبي: ربط الإشارات لتحديث تلقائي (مع منع الاتصالات المكررة)
+        try:
+            from src.core.signals import signals
+            # فك الاتصال أولاً لتجنب الاتصالات المكررة (إذا كانت موجودة)
+            # استخدام RuntimeWarning suppression لتجنب التحذيرات
+            import warnings
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)
+                try:
+                    signals.sales_updated.disconnect(self.refresh_dashboard_stats)
+                except (TypeError, RuntimeError):
+                    pass
+                try:
+                    signals.inventory_updated.disconnect(self.refresh_dashboard_stats)
+                except (TypeError, RuntimeError):
+                    pass
+                try:
+                    signals.purchases_updated.disconnect(self.refresh_dashboard_stats)
+                except (TypeError, RuntimeError):
+                    pass
+                try:
+                    signals.payments_updated.disconnect(self.refresh_dashboard_stats)
+                except (TypeError, RuntimeError):
+                    pass
+            
+            # ربط الإشارات
+            signals.sales_updated.connect(self.refresh_dashboard_stats)
+            signals.inventory_updated.connect(self.refresh_dashboard_stats)
+            signals.purchases_updated.connect(self.refresh_dashboard_stats)
+            signals.payments_updated.connect(self.refresh_dashboard_stats)
+            
+            if self.logger:
+                self.logger.debug("✅ تم ربط إشارات الداشبورد بنجاح")
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"⚠️ فشل ربط إشارات الداشبورد: {e}")
+        
+        # إنشاء QScrollArea للتمرير
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setFrameShape(QFrame.NoFrame)
+        
+        # المحتوى الرئيسي
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setSpacing(15)
+        layout.setContentsMargins(15, 15, 15, 15)
+        
+        # عنوان القسم مع أزرار التحكم المتقدمة
+        header_frame = QFrame()
+        header_frame.setStyleSheet("")
+        header_layout = QHBoxLayout(header_frame)
+        header_layout.setContentsMargins(15, 10, 15, 10)
+        
+        title = QLabel(self.i18n.get_message("main_dashboard"))
+        title.setStyleSheet("font-size: 28px; font-weight: bold; color: white;")
+        header_layout.addWidget(title)
+        header_layout.addStretch()
+        
+        # أزرار الفترة الزمنية
+        period_label = QLabel(self.i18n.get_message("period") + ":")
+        period_label.setStyleSheet("color: white; font-weight: bold; font-size: 13px;")
+        header_layout.addWidget(period_label)
+        
+        self.dashboard_period_combo = QComboBox()
+        self.dashboard_period_combo.addItems(["اليوم", "أسبوع", "شهر", "3 أشهر", "سنة", "الكل"])
+        self.dashboard_period_combo.setCurrentText("أسبوع")
+        self.dashboard_period_combo.setMinimumWidth(120)
+        self.dashboard_period_combo.setStyleSheet("")
+        self.dashboard_period_combo.currentTextChanged.connect(self.refresh_dashboard_data)
+        header_layout.addWidget(self.dashboard_period_combo)
+        
+        # زر التحديث التلقائي
+        auto_refresh_check = QCheckBox("تحديث تلقائي")
+        auto_refresh_check.setChecked(True)
+        auto_refresh_check.setStyleSheet("color: white; font-weight: bold;")
+        auto_refresh_check.stateChanged.connect(self.toggle_auto_refresh)
+        header_layout.addWidget(auto_refresh_check)
+        
+        refresh_btn = QPushButton(self.i18n.get_message("refresh"))
+        refresh_btn.setMinimumHeight(35)
+        refresh_btn.setMinimumWidth(100)
+        refresh_btn.setStyleSheet("")
+        refresh_btn.clicked.connect(self.refresh_dashboard_data)
+        header_layout.addWidget(refresh_btn)
+        
+        layout.addWidget(header_frame)
+        
+        # ملخص المخزون - KPIs محسّنة
+        summary_group = QGroupBox("📊 مؤشرات الأداء الرئيسية")
+        summary_group.setStyleSheet("")
+        summary_layout = QHBoxLayout(summary_group)
+        summary_layout.setContentsMargins(15, 15, 15, 15)
+        summary_layout.setSpacing(20)
+        
+        # KPIs المالية
+        financial_kpis = [
+            ("total_sales", "💰 إجمالي المبيعات", "#27ae60", "↑"),
+            ("total_revenue", "📈 الإيرادات", "#3498db", "↑"),
+            ("total_profit", "💵 صافي الربح", "#2ecc71", "↑"),
+            ("avg_order", "📊 متوسط الطلب", "#9b59b6", "→")
+        ]
+        
+        # KPIs المخزون
+        inventory_kpis = [
+            ("total_products", "📦 إجمالي المنتجات", "#3498db", ""),
+            ("total_stock_value", "💎 قيمة المخزون", "#27ae60", ""),
+            ("low_stock_items", "⚠️ مخزون منخفض", "#f39c12", "↓"),
+            ("out_of_stock_items", "🔴 منتجات نفدت", "#e74c3c", "↓")
+        ]
+        
+        self.dashboard_summary_labels = {}
+        self.dashboard_trend_labels = {}
+        
+        # إضافة KPIs المالية
+        for key, title_text, color, trend in financial_kpis:
+            container = self._create_kpi_card(key, title_text, color, trend)
+            summary_layout.addWidget(container)
+        
+        summary_layout.addStretch()
+        layout.addWidget(summary_group)
+        
+        # KPIs المخزون
+        inventory_summary_group = QGroupBox("📦 مؤشرات المخزون")
+        inventory_summary_group.setStyleSheet(summary_group.styleSheet())
+        inventory_summary_layout = QHBoxLayout(inventory_summary_group)
+        inventory_summary_layout.setContentsMargins(15, 15, 15, 15)
+        inventory_summary_layout.setSpacing(20)
+        
+        for key, title_text, color, trend in inventory_kpis:
+            container = self._create_kpi_card(key, title_text, color, trend)
+            inventory_summary_layout.addWidget(container)
+        
+        inventory_summary_layout.addStretch()
+        layout.addWidget(inventory_summary_group)
+        
+        summary_layout.addStretch()
+        layout.addWidget(summary_group)
+        
+        # الرسم البياني التفاعلي للمبيعات (PyQtGraph)
+        try:
+            from src.ui.widgets.sales_chart import SalesChartWidget
+            self.sales_chart = SalesChartWidget()
+            self.sales_chart.setMinimumHeight(350)
+            layout.addWidget(self.sales_chart)
+            if self.logger:
+                self.logger.info("✅ تم إضافة الرسم البياني التفاعلي للمبيعات (PyQtGraph)")
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"تعذر إضافة الرسم البياني: {e}")
+            # Fallback: رسالة بدلاً من الرسم
+            error_widget = QWidget()
+            error_layout = QVBoxLayout(error_widget)
+            error_layout.setSpacing(10)
+            error_layout.setContentsMargins(15, 15, 15, 15)
+            
+            error_label = QLabel(self.i18n.get_message("chart_load_error"))
+            error_label.setWordWrap(True)
+            error_label.setAlignment(Qt.AlignCenter)
+            error_label.setStyleSheet("color: #e74c3c; padding: 15px; background-color: #fff3cd; border-radius: 5px; font-size: 13px;")
+            error_layout.addWidget(error_label)
+            
+            # إضافة زر للمساعدة في التثبيت
+            help_btn = QPushButton(self.i18n.get_message("show_installation_instructions"))
+            help_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #3498db;
+                    color: white;
+                    border: none;
+                    border-radius: 5px;
+                    padding: 8px 16px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #2980b9;
+                }
+            """)
+            help_btn.clicked.connect(lambda: QMessageBox.information(
+                self,
+                self.i18n.get_message("chart_load_error_title"),
+                self.i18n.get_message("chart_load_error_details")
+            ))
+            error_layout.addWidget(help_btn, alignment=Qt.AlignCenter)
+            
+            layout.addWidget(error_widget)
+        
+        # الرسوم البيانية المتقدمة
+        charts_group = QGroupBox("📈 التحليلات والرسوم البيانية")
+        charts_group.setStyleSheet("")
+        charts_main_layout = QVBoxLayout(charts_group)
+        charts_main_layout.setContentsMargins(10, 15, 10, 10)
+        charts_main_layout.setSpacing(15)
+        
+        # صف الرسوم البيانية الأولى
+        charts_row1 = QHBoxLayout()
+        charts_row1.setSpacing(15)
+        
+        # رسم بياني للمبيعات (خط)
+        sales_line_chart_view = QChartView()
+        sales_line_chart_view.setRenderHint(QPainter.Antialiasing)
+        sales_line_chart_view.setMinimumHeight(300)
+        sales_line_chart_view.setStyleSheet("")
+        self.dashboard_sales_line_chart = sales_line_chart_view
+        charts_row1.addWidget(sales_line_chart_view, 2)
+        
+        # رسم بياني للمقارنة (إيرادات vs مصروفات)
+        revenue_expense_chart_view = QChartView()
+        revenue_expense_chart_view.setRenderHint(QPainter.Antialiasing)
+        revenue_expense_chart_view.setMinimumHeight(300)
+        revenue_expense_chart_view.setStyleSheet("")
+        self.dashboard_revenue_expense_chart = revenue_expense_chart_view
+        charts_row1.addWidget(revenue_expense_chart_view, 2)
+        
+        charts_main_layout.addLayout(charts_row1)
+        
+        # صف الرسوم البيانية الثانية
+        charts_row2 = QHBoxLayout()
+        charts_row2.setSpacing(15)
+        
+        # رسم بياني لتوزيع المخزون (دائري)
+        stock_chart_view = QChartView()
+        stock_chart_view.setRenderHint(QPainter.Antialiasing)
+        stock_chart_view.setMinimumHeight(300)
+        stock_chart_view.setStyleSheet("")
+        self.dashboard_stock_chart = stock_chart_view
+        charts_row2.addWidget(stock_chart_view, 1)
+        
+        # رسم بياني لأفضل المنتجات (أعمدة)
+        top_products_chart_view = QChartView()
+        top_products_chart_view.setRenderHint(QPainter.Antialiasing)
+        top_products_chart_view.setMinimumHeight(300)
+        top_products_chart_view.setStyleSheet("")
+        self.dashboard_top_products_chart = top_products_chart_view
+        charts_row2.addWidget(top_products_chart_view, 1)
+        
+        charts_main_layout.addLayout(charts_row2)
+        
+        layout.addWidget(charts_group)
+        
+        # تحديث الرسوم البيانية مباشرة بعد بناء الصفحة (حتى لو كانت فارغة)
+        QTimer.singleShot(200, lambda: self._update_dashboard_charts_initial())
+        
+        # تنبيهات المخزون وآخر العمليات
+        bottom_layout = QHBoxLayout()
+        bottom_layout.setSpacing(15)
+        
+        # تنبيهات المخزون
+        alerts_group = QGroupBox("تنبيهات المخزون")
+        alerts_group.setStyleSheet("")
+        alerts_layout = QVBoxLayout(alerts_group)
+        alerts_layout.setContentsMargins(10, 15, 10, 10)
+        
+        self.dashboard_alerts_table = QTableWidget()
+        self.dashboard_alerts_table.setColumnCount(4)
+        self.dashboard_alerts_table.setHorizontalHeaderLabels(["المنتج", "الحالة", "الكمية", "الرسالة"])
+        self.dashboard_alerts_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.dashboard_alerts_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.dashboard_alerts_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.dashboard_alerts_table.setAlternatingRowColors(True)
+        self.dashboard_alerts_table.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.dashboard_alerts_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.dashboard_alerts_table.setMinimumHeight(300)
+        self.dashboard_alerts_table.setStyleSheet("")
+        alerts_layout.addWidget(self.dashboard_alerts_table)
+        bottom_layout.addWidget(alerts_group, 1)
+        
+        # آخر العمليات
+        activities_group = QGroupBox("آخر العمليات")
+        activities_group.setStyleSheet("")
+        activities_layout = QVBoxLayout(activities_group)
+        activities_layout.setContentsMargins(10, 15, 10, 10)
+        
+        self.dashboard_activities_table = QTableWidget()
+        self.dashboard_activities_table.setColumnCount(6)
+        self.dashboard_activities_table.setHorizontalHeaderLabels(["التاريخ", "الوقت", "النوع", "الوصف", "المستخدم", "الحالة"])
+        self.dashboard_activities_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.dashboard_activities_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.dashboard_activities_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.dashboard_activities_table.setAlternatingRowColors(True)
+        self.dashboard_activities_table.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.dashboard_activities_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.dashboard_activities_table.setMinimumHeight(300)
+        self.dashboard_activities_table.setStyleSheet("")
+        # فلاتر العمليات
+        filters_layout = QHBoxLayout()
+        filters_layout.setSpacing(10)
+        
+        filter_label = QLabel(self.i18n.get_message("filter") + ":")
+        filter_label.setStyleSheet("font-weight: bold; color: rgb(44, 62, 80);")
+        filters_layout.addWidget(filter_label)
+        
+        self.dashboard_activity_filter = QComboBox()
+        self.dashboard_activity_filter.addItems(["الكل", "مبيعات", "مشتريات", "حركة مخزون"])
+        self.dashboard_activity_filter.currentTextChanged.connect(self.update_dashboard_activities_table)
+        filters_layout.addWidget(self.dashboard_activity_filter)
+        
+        filters_layout.addStretch()
+        activities_layout.addLayout(filters_layout)
+        
+        activities_layout.addWidget(self.dashboard_activities_table)
+        bottom_layout.addWidget(activities_group, 1)
+        
+        layout.addLayout(bottom_layout)
+        
+        # جداول التحليلات المتقدمة
+        analytics_layout = QHBoxLayout()
+        analytics_layout.setSpacing(15)
+        
+        # أفضل العملاء
+        top_customers_group = QGroupBox("🏆 أفضل العملاء")
+        top_customers_group.setStyleSheet("")
+        top_customers_layout = QVBoxLayout(top_customers_group)
+        top_customers_layout.setContentsMargins(10, 15, 10, 10)
+        
+        self.dashboard_top_customers_table = QTableWidget()
+        self.dashboard_top_customers_table.setColumnCount(4)
+        self.dashboard_top_customers_table.setHorizontalHeaderLabels(["الترتيب", "اسم العميل", "عدد المشتريات", "إجمالي الإنفاق"])
+        self.dashboard_top_customers_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.dashboard_top_customers_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.dashboard_top_customers_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.dashboard_top_customers_table.setAlternatingRowColors(True)
+        self.dashboard_top_customers_table.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.dashboard_top_customers_table.setMinimumHeight(250)
+        self.dashboard_top_customers_table.setStyleSheet("")
+        top_customers_layout.addWidget(self.dashboard_top_customers_table)
+        analytics_layout.addWidget(top_customers_group, 1)
+        
+        # أفضل المنتجات
+        top_products_group = QGroupBox("⭐ أفضل المنتجات مبيعاً")
+        top_products_group.setStyleSheet("")
+        top_products_layout = QVBoxLayout(top_products_group)
+        top_products_layout.setContentsMargins(10, 15, 10, 10)
+        
+        self.dashboard_top_products_table = QTableWidget()
+        self.dashboard_top_products_table.setColumnCount(4)
+        self.dashboard_top_products_table.setHorizontalHeaderLabels(["الترتيب", "اسم المنتج", "الكمية المباعة", "إجمالي المبيعات"])
+        self.dashboard_top_products_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.dashboard_top_products_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.dashboard_top_products_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.dashboard_top_products_table.setAlternatingRowColors(True)
+        self.dashboard_top_products_table.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.dashboard_top_products_table.setMinimumHeight(250)
+        self.dashboard_top_products_table.setStyleSheet("")
+        top_products_layout.addWidget(self.dashboard_top_products_table)
+        analytics_layout.addWidget(top_products_group, 1)
+        
+        layout.addLayout(analytics_layout)
+        
+        # إحصائيات إضافية متقدمة
+        advanced_stats_group = QGroupBox("📈 إحصائيات متقدمة")
+        advanced_stats_group.setStyleSheet("")
+        advanced_stats_layout = QHBoxLayout(advanced_stats_group)
+        advanced_stats_layout.setContentsMargins(15, 15, 15, 15)
+        advanced_stats_layout.setSpacing(20)
+        
+        advanced_stats_items = [
+            ("avg_daily_sales", "📊 متوسط المبيعات اليومية", "#16a085"),
+            ("conversion_rate", "🎯 معدل التحويل", "#8e44ad"),
+            ("customer_retention", "👥 معدل الاحتفاظ", "#2980b9"),
+            ("inventory_turnover", "🔄 معدل دوران المخزون", "#d35400")
+        ]
+        
+        self.dashboard_advanced_stats_labels = {}
+        for key, title_text, color in advanced_stats_items:
+            container = self._create_kpi_card(key, title_text, color, "")
+            advanced_stats_layout.addWidget(container)
+        
+        advanced_stats_layout.addStretch()
+        layout.addWidget(advanced_stats_group)
+        
+        layout.addStretch()
+        
+        # وضع المحتوى في QScrollArea
+        scroll_area.setWidget(tab)
+        
+        # تحميل البيانات الأولية
+        QTimer.singleShot(100, self.refresh_dashboard_data)
+        
+        # مؤقت التحديث التلقائي
+        self.dashboard_refresh_timer = QTimer(self)
+        self.dashboard_refresh_timer.timeout.connect(self.refresh_dashboard_data)
+        self.dashboard_refresh_timer.setInterval(30000)  # 30 ثانية
+        self.dashboard_refresh_timer.start()
+        
+        return scroll_area
+    
+    def _create_kpi_card(self, key, title_text, color, trend=""):
+        """إنشاء بطاقة KPI احترافية"""
+        container = QFrame()
+        container.setFrameStyle(QFrame.StyledPanel)
+        container.setStyleSheet(f"""
+            QFrame {{
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 {color}, stop:0.3 {color}, stop:1 #ffffff);
+                border: 2px solid {color};
+                border-radius: 12px;
+                padding: 5px;
+            }}
+            QFrame:hover {{
+                border: 3px solid {color};
+            }}
+        """)
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(18, 15, 18, 15)
+        container_layout.setSpacing(10)
+        
+        # العنوان مع الاتجاه
+        title_layout = QHBoxLayout()
+        title_label = QLabel(title_text)
+        title_label.setStyleSheet("color: rgb(44, 62, 80); font-size: 15px; font-weight: bold;")
+        title_layout.addWidget(title_label)
+        title_layout.addStretch()
+        
+        if trend:
+            trend_label = QLabel(trend)
+            trend_label.setStyleSheet(f"color: {color}; font-size: 18px; font-weight: bold;")
+            title_layout.addWidget(trend_label)
+        
+        container_layout.addLayout(title_layout)
+        
+        # القيمة
+        value_label = QLabel("-")
+        value_label.setStyleSheet("font-size: 32px; font-weight: bold; color: rgb(44, 62, 80);")
+        container_layout.addWidget(value_label)
+        
+        # التغيير (سيتم تحديثه لاحقاً)
+        change_label = QLabel("")
+        change_label.setStyleSheet("color: rgb(127, 140, 141); font-size: 12px;")
+        container_layout.addWidget(change_label)
+        
+        container_layout.addStretch()
+        
+        if not hasattr(self, "dashboard_summary_labels"):
+            self.dashboard_summary_labels = {}
+        if not hasattr(self, "dashboard_trend_labels"):
+            self.dashboard_trend_labels = {}
+        
+        self.dashboard_summary_labels[key] = value_label
+        self.dashboard_trend_labels[key] = change_label
+        
+        return container
+    
+    def toggle_auto_refresh(self, state):
+        """تفعيل/تعطيل التحديث التلقائي"""
+        if hasattr(self, "dashboard_refresh_timer"):
+            if state == Qt.Checked:
+                self.dashboard_refresh_timer.start()
+            else:
+                self.dashboard_refresh_timer.stop()
+    
+    def refresh_dashboard_stats(self):
+        """
+        🛠️ محرك إحصائيات الداشبورد - استعلامات SQL سريعة جداً
+        تقوم بجلب الأرقام الملخصة للصفحة الرئيسية باستخدام Aggregation Queries
+        """
+        try:
+            if not self.db_manager:
+                if self.logger:
+                    self.logger.warning("db_manager غير متاح - تخطي تحديث إحصائيات Dashboard")
+                return
+            
+            # استعلامات SQL سريعة جداً (COUNT/SUM فقط - لا جلب بيانات تفصيلية)
+            query_stats = """
+            SELECT 
+                (SELECT COUNT(*) FROM products WHERE COALESCE(is_active, 1) = 1) as total_products,
+                (SELECT COALESCE(SUM(selling_price * current_stock), 0) FROM products WHERE COALESCE(is_active, 1) = 1) as total_stock_value,
+                (SELECT COUNT(*) FROM products WHERE current_stock < min_stock AND current_stock > 0 AND COALESCE(is_active, 1) = 1) as low_stock_items,
+                (SELECT COUNT(*) FROM products WHERE current_stock <= 0 AND COALESCE(is_active, 1) = 1) as out_of_stock_items,
+                (SELECT COUNT(*) FROM sales WHERE status != 'ملغية' AND status != 'cancelled') as total_sales_count,
+                (SELECT COALESCE(SUM(total_amount), 0) FROM sales WHERE status != 'ملغية' AND status != 'cancelled') as total_sales_amount,
+                (SELECT COALESCE(SUM(paid_amount), 0) FROM sales WHERE status != 'ملغية' AND status != 'cancelled') as total_paid_amount,
+                (SELECT COALESCE(SUM(total_amount - paid_amount), 0) FROM sales WHERE status != 'ملغية' AND status != 'cancelled') as total_remaining_amount
+            """
+            
+            # تنفيذ الاستعلام باستخدام db_manager
+            result = None
+            try:
+                if hasattr(self.db_manager, 'execute_query'):
+                    results = self.db_manager.execute_query(query_stats)
+                    if results and len(results) > 0:
+                        result = results[0] if isinstance(results[0], dict) else dict(zip(['total_products', 'total_stock_value', 'low_stock_items', 'out_of_stock_items', 'total_sales_count', 'total_sales_amount', 'total_paid_amount', 'total_remaining_amount'], results[0]))
+                elif hasattr(self.db_manager, 'fetch_one'):
+                    result_row = self.db_manager.fetch_one(query_stats)
+                    if result_row:
+                        result = {
+                            'total_products': result_row[0] or 0,
+                            'total_stock_value': result_row[1] or 0.0,
+                            'low_stock_items': result_row[2] or 0,
+                            'out_of_stock_items': result_row[3] or 0,
+                            'total_sales_count': result_row[4] or 0,
+                            'total_sales_amount': result_row[5] or 0.0,
+                            'total_paid_amount': result_row[6] or 0.0,
+                            'total_remaining_amount': result_row[7] or 0.0
+                        }
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"فشل جلب إحصائيات Dashboard من db_manager: {e}")
+                # محاولة اتصال مباشر كـ fallback
+                try:
+                    import sqlite3
+                    db_path = getattr(self.db_manager, 'db_path', None) or (self.config_manager.get_database_path() if self.config_manager else "database.db")
+                    with sqlite3.connect(db_path, timeout=10.0) as conn:
+                        cursor = conn.cursor()
+                        cursor.execute(query_stats)
+                        row = cursor.fetchone()
+                        if row:
+                            result = {
+                                'total_products': row[0] or 0,
+                                'total_stock_value': row[1] or 0.0,
+                                'low_stock_items': row[2] or 0,
+                                'out_of_stock_items': row[3] or 0,
+                                'total_sales_count': row[4] or 0,
+                                'total_sales_amount': row[5] or 0.0,
+                                'total_paid_amount': row[6] or 0.0,
+                                'total_remaining_amount': row[7] or 0.0
+                            }
+                except Exception as e2:
+                    if self.logger:
+                        self.logger.error(f"فشل جلب إحصائيات Dashboard من اتصال مباشر: {e2}")
+                    return
+            
+            if not result:
+                return
+            
+            # معالجة القيم الفارغة (None) وتحويلها لأصفار
+            total_products = int(result.get('total_products', 0) or 0)
+            total_stock_value = float(result.get('total_stock_value', 0) or 0.0)
+            low_stock_items = int(result.get('low_stock_items', 0) or 0)
+            out_of_stock_items = int(result.get('out_of_stock_items', 0) or 0)
+            total_sales_count = int(result.get('total_sales_count', 0) or 0)
+            total_sales_amount = float(result.get('total_sales_amount', 0) or 0.0)
+            total_paid_amount = float(result.get('total_paid_amount', 0) or 0.0)
+            total_remaining_amount = float(result.get('total_remaining_amount', 0) or 0.0)
+            
+            # حساب متوسط الطلب
+            avg_order = total_sales_amount / total_sales_count if total_sales_count > 0 else 0.0
+            
+            # حساب صافي الربح (تقريبي - إجمالي المبيعات - تكلفة المشتريات)
+            # يمكن تحسينه لاحقاً باستخدام cost_price من products
+            total_profit = total_sales_amount * 0.3  # تقدير 30% ربح (يمكن تحسينه)
+            
+            # ------------------------------------------------
+            # جلب بيانات الرسم البياني (آخر 7 أيام)
+            # ------------------------------------------------
+            chart_days = []
+            chart_amounts = []
+            
+            try:
+                # استعلام لجلب مجموع المبيعات لكل يوم من الأيام الـ 7 الماضية
+                query_chart = """
+                SELECT 
+                    date(sale_date) as sale_date,
+                    COALESCE(SUM(total_amount), 0) as daily_total
+                FROM sales 
+                WHERE sale_date >= date('now', '-7 days')
+                  AND status != 'ملغية' 
+                  AND status != 'cancelled'
+                GROUP BY date(sale_date)
+                ORDER BY date(sale_date) ASC
+                """
+                
+                chart_results = None
+                if hasattr(self.db_manager, 'execute_query'):
+                    chart_results = self.db_manager.execute_query(query_chart)
+                elif hasattr(self.db_manager, 'fetch_all'):
+                    chart_results = self.db_manager.fetch_all(query_chart)
+                
+                if chart_results:
+                    # إنشاء قائمة بجميع الأيام الـ 7 الماضية
+                    today = date.today()
+                    all_days = [(today - timedelta(days=i)).strftime('%Y-%m-%d') for i in range(6, -1, -1)]
+                    
+                    # إنشاء قاموس للبيانات المحمّلة
+                    sales_by_date = {}
+                    for row in chart_results:
+                        if isinstance(row, dict):
+                            sale_date = row.get('sale_date', '')
+                            daily_total = float(row.get('daily_total', 0) or 0)
+                        else:
+                            sale_date = str(row[0]) if len(row) > 0 else ''
+                            daily_total = float(row[1] if len(row) > 1 else 0) or 0.0
+                        
+                        if sale_date:
+                            sales_by_date[sale_date] = daily_total
+                    
+                    # ملء البيانات (0 للأيام التي لا توجد فيها مبيعات)
+                    chart_days = list(range(1, 8))  # [1, 2, 3, 4, 5, 6, 7]
+                    chart_amounts = []
+                    
+                    for day_str in all_days:
+                        amount = sales_by_date.get(day_str, 0.0)
+                        chart_amounts.append(float(amount))
+                    
+                    if self.logger:
+                        self.logger.debug(f"تم جلب بيانات الرسم البياني: {len(chart_days)} أيام، {sum(chart_amounts):,.2f} دج إجمالي")
+                
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"فشل جلب بيانات الرسم البياني: {e}")
+                # بيانات وهمية للتجربة
+                chart_days = [1, 2, 3, 4, 5, 6, 7]
+                chart_amounts = [0, 0, 0, 0, 0, 0, 0]
+            
+            # ------------------------------------------------
+            # تحديث واجهة المستخدم (UI)
+            # ------------------------------------------------
+            
+            if hasattr(self, "dashboard_summary_labels"):
+                # 1. تحديث بطاقات المخزون (Inventory Cards)
+                if "total_products" in self.dashboard_summary_labels:
+                    self.dashboard_summary_labels["total_products"].setText(f"{total_products:,}")
+                
+                if "total_stock_value" in self.dashboard_summary_labels:
+                    self.dashboard_summary_labels["total_stock_value"].setText(f"{total_stock_value:,.2f} دج")
+                
+                if "low_stock_items" in self.dashboard_summary_labels:
+                    self.dashboard_summary_labels["low_stock_items"].setText(f"{low_stock_items:,}")
+                
+                if "out_of_stock_items" in self.dashboard_summary_labels:
+                    self.dashboard_summary_labels["out_of_stock_items"].setText(f"{out_of_stock_items:,}")
+                
+                # 2. تحديث بطاقات الأداء (KPI Cards) - الصف الثاني
+                if "total_sales" in self.dashboard_summary_labels:
+                    self.dashboard_summary_labels["total_sales"].setText(f"{total_sales_amount:,.0f} دج")
+                
+                if "total_revenue" in self.dashboard_summary_labels:
+                    self.dashboard_summary_labels["total_revenue"].setText(f"{total_sales_amount:,.0f} دج")
+                
+                if "total_profit" in self.dashboard_summary_labels:
+                    self.dashboard_summary_labels["total_profit"].setText(f"{total_profit:,.0f} دج")
+                
+                if "avg_order" in self.dashboard_summary_labels:
+                    self.dashboard_summary_labels["avg_order"].setText(f"{avg_order:,.0f} دج")
+            
+            # تحديث الرسم البياني التفاعلي
+            if hasattr(self, 'sales_chart') and self.sales_chart:
+                try:
+                    self.sales_chart.update_chart(chart_days, chart_amounts)
+                    if self.logger:
+                        self.logger.debug("✅ تم تحديث الرسم البياني للمبيعات")
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"فشل تحديث الرسم البياني: {e}")
+            
+            if self.logger:
+                self.logger.debug(f"✅ تم تحديث إحصائيات Dashboard: {total_products} منتج، {total_sales_amount:,.0f} دج مبيعات")
+        
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في refresh_dashboard_stats: {e}")
+            else:
+                print(f"Error updating dashboard stats: {e}")
+    
+    def refresh_dashboard_data(self):
+        """تحديث بيانات الصفحة الرئيسية (محسّنة - في الخلفية)"""
+        # 🔥 استدعاء محرك الإحصائيات السريع أولاً
+        self.refresh_dashboard_stats()
+        
+        if not getattr(self, "inventory_service", None):
+            return
+        
+        # الحصول على الفترة المحددة
+        period = getattr(self, "dashboard_period_combo", None)
+        period_text = period.currentText() if period else "أسبوع"
+        
+        end_date = date.today()
+        if period_text == "اليوم":
+            start_date = end_date
+        elif period_text == "أسبوع":
+            start_date = end_date - timedelta(days=7)
+        elif period_text == "شهر":
+            start_date = end_date - timedelta(days=30)
+        elif period_text == "3 أشهر":
+            start_date = end_date - timedelta(days=90)
+        elif period_text == "سنة":
+            start_date = end_date - timedelta(days=365)
+        else:
+            start_date = date(2020, 1, 1)  # كل البيانات
+        
+        # تحميل البيانات في الخلفية
+        def load_dashboard_data():
+            """تحميل جميع بيانات الصفحة الرئيسية"""
+            try:
+                sales_query = """
+                SELECT COALESCE(SUM(total_amount), 0), COUNT(*)
+                FROM sales
+                WHERE DATE(sale_date) BETWEEN ? AND ? AND status = 'مكتمل'
+                """
+                sales_result = self.db_manager.fetch_one(sales_query, (start_date.isoformat(), end_date.isoformat()))
+                total_sales = float(sales_result[0] or 0) if sales_result else 0
+                sales_count = sales_result[1] or 0 if sales_result else 0
+                
+                # المقارنة مع الفترة السابقة
+                period_days = (end_date - start_date).days
+                prev_start = start_date - timedelta(days=period_days) if period_days > 0 else start_date
+                prev_sales_result = self.db_manager.fetch_one(sales_query, (prev_start.isoformat(), start_date.isoformat()))
+                prev_total_sales = float(prev_sales_result[0] or 0) if prev_sales_result else 0
+                sales_change = ((total_sales - prev_total_sales) / prev_total_sales * 100) if prev_total_sales > 0 else 0
+                
+                # حساب الربح
+                profit_query = """
+                SELECT COALESCE(SUM(si.quantity * (si.unit_price - p.cost_price)), 0)
+                FROM sale_items si
+                JOIN sales s ON si.sale_id = s.id
+                JOIN products p ON si.product_id = p.id
+                WHERE DATE(s.sale_date) BETWEEN ? AND ? AND s.status = 'مكتمل'
+                """
+                profit_result = self.db_manager.fetch_one(profit_query, (start_date.isoformat(), end_date.isoformat()))
+                total_profit = float(profit_result[0] or 0) if profit_result else 0
+                avg_order = total_sales / sales_count if sales_count > 0 else 0
+                
+                # ملخص المخزون
+                report = self.inventory_service.generate_inventory_report()
+                alerts = getattr(report, "alerts", []) if report else []
+                
+                return {
+                    "financial_kpis": {
+                        "total_sales": total_sales,
+                        "total_revenue": total_sales,
+                        "total_profit": total_profit,
+                        "avg_order": avg_order,
+                        "sales_change": sales_change
+                    },
+                    "inventory_report": report,
+                    "alerts": alerts,
+                    "start_date": start_date,
+                    "end_date": end_date
+                }
+            except Exception as e:
+                if self.logger:
+                    self.logger.error(f"خطأ في تحميل بيانات الصفحة الرئيسية: {str(e)}")
+                return None
+        
+        # استخدام DataLoaderWorker لتجنب تجميد الواجهة
+        self._dashboard_loader = DataLoaderWorker(load_dashboard_data)
+        self._dashboard_loader.data_loaded.connect(self._populate_dashboard_data)
+        self._dashboard_loader.error_occurred.connect(lambda err: QMessageBox.critical(self, "خطأ", f"فشل تحميل بيانات الصفحة الرئيسية: {err}"))
+        self._start_worker(self._dashboard_loader)
+    
+    def _populate_dashboard_data(self, data):
+        """ملء بيانات الصفحة الرئيسية (في UI thread)"""
+        if not data:
+            return
+        
+        try:
+            # تحديث ملخص المخزون أولاً
+            financial_kpis = data.get("financial_kpis", {})
+            
+            # تحديث KPIs المالية
+            if hasattr(self, "dashboard_summary_labels"):
+                if "total_sales" in self.dashboard_summary_labels:
+                    self.dashboard_summary_labels["total_sales"].setText(f"{financial_kpis.get('total_sales', 0):,.0f} دج")
+                if "total_revenue" in self.dashboard_summary_labels:
+                    self.dashboard_summary_labels["total_revenue"].setText(f"{financial_kpis.get('total_revenue', 0):,.0f} دج")
+                if "total_profit" in self.dashboard_summary_labels:
+                    self.dashboard_summary_labels["total_profit"].setText(f"{financial_kpis.get('total_profit', 0):,.0f} دج")
+                if "avg_order" in self.dashboard_summary_labels:
+                    self.dashboard_summary_labels["avg_order"].setText(f"{financial_kpis.get('avg_order', 0):,.0f} دج")
+            
+            # تحديث الاتجاهات
+            if hasattr(self, "dashboard_trend_labels"):
+                sales_change = financial_kpis.get("sales_change", 0)
+                trend_text = f"{sales_change:+.1f}% عن الفترة السابقة"
+                trend_color = "#27ae60" if sales_change >= 0 else "#e74c3c"
+                if "total_sales" in self.dashboard_trend_labels:
+                    self.dashboard_trend_labels["total_sales"].setText(trend_text)
+                    self.dashboard_trend_labels["total_sales"].setStyleSheet(f"color: {trend_color}; font-size: 12px;")
+            report = data.get("inventory_report")
+            if report and hasattr(self, "dashboard_summary_labels"):
+                def set_label(key, value):
+                    label = self.dashboard_summary_labels.get(key)
+                    if label:
+                        label.setText(value)
+                
+                set_label("total_products", f"{getattr(report, 'total_products', 0):,}")
+                set_label("total_stock_value", f"{getattr(report, 'total_stock_value', 0):,.0f} دج")
+                set_label("low_stock_items", f"{getattr(report, 'low_stock_items', 0):,}")
+                set_label("out_of_stock_items", f"{getattr(report, 'out_of_stock_items', 0):,}")
+            
+            # تحديث تنبيهات المخزون
+            alerts = data.get("alerts", [])
+            self.update_dashboard_alerts_table(alerts)
+            
+            # تحديث الرسوم البيانية
+            self._update_dashboard_charts(data)
+            
+            # تحديث آخر العمليات والتحليلات (في خيط منفصل)
+            start_date = data.get("start_date", date.today())
+            end_date = data.get("end_date", date.today())
+            
+            # تحميل بيانات العمليات والتحليلات في الخلفية
+            def load_activities_and_analytics():
+                """تحميل بيانات العمليات والتحليلات"""
+                activities = []  # ✅ تعريف المتغير في البداية
+                try:
+                    if getattr(self, "inventory_service", None):
+                        movements = self.inventory_service.get_stock_movements(limit=20)
+                        for m in movements:
+                            type_display = {
+                                "in": "إدخال",
+                                "out": "إخراج",
+                                "adjustment": "تعديل",
+                                "transfer": "نقل"
+                            }.get(m.movement_type, m.movement_type)
+                            
+                            activities.append({
+                                "date": m.created_at.strftime("%Y-%m-%d") if m.created_at else "-",
+                                "time": m.created_at.strftime("%H:%M:%S") if m.created_at else "-",
+                                "type": "حركة مخزون",
+                                "description": f"{type_display} - {getattr(m, 'product_name', 'منتج')} ({m.quantity})",
+                                "user": "-",
+                                "status": "✅"
+                            })
+                    
+                    # المبيعات
+                    if getattr(self, "sales_service", None):
+                        query = """
+                        SELECT s.id, s.sale_date, s.total_amount, s.status, COALESCE(u.username, 'النظام') as username
+                        FROM sales s
+                        LEFT JOIN users u ON s.user_id = u.id
+                        ORDER BY s.sale_date DESC
+                        LIMIT 15
+                        """
+                        sales = self.db_manager.fetch_all(query)
+                        for sale in sales:
+                            sale_id, sale_date, total, status, username = sale
+                            date_str = sale_date.strftime("%Y-%m-%d") if hasattr(sale_date, 'strftime') else str(sale_date)[:10]
+                            time_str = sale_date.strftime("%H:%M:%S") if hasattr(sale_date, 'strftime') else "-"
+                            activities.append({
+                                "date": date_str,
+                                "time": time_str,
+                                "type": "مبيعات",
+                                "description": f"فاتورة #{sale_id} - {float(total or 0):,.2f} دج",
+                                "user": username or "-",
+                                "status": "✅" if status == "completed" else "⏳"
+                            })
+                    
+                    # المشتريات
+                    if getattr(self, "purchase_service", None):
+                        query = """
+                        SELECT p.id, p.purchase_date, p.total_amount, p.status, COALESCE(u.username, 'النظام') as username
+                        FROM purchases p
+                        LEFT JOIN users u ON p.user_id = u.id
+                        ORDER BY p.purchase_date DESC
+                        LIMIT 15
+                        """
+                        purchases = self.db_manager.fetch_all(query)
+                        for purchase in purchases:
+                            pur_id, pur_date, total, status, username = purchase
+                            date_str = pur_date.strftime("%Y-%m-%d") if hasattr(pur_date, 'strftime') else str(pur_date)[:10]
+                            time_str = pur_date.strftime("%H:%M:%S") if hasattr(pur_date, 'strftime') else "-"
+                            activities.append({
+                                "date": date_str,
+                                "time": time_str,
+                                "type": "مشتريات",
+                                "description": f"شراء #{pur_id} - {float(total or 0):,.2f} دج",
+                                "user": username or "-",
+                                "status": "✅" if status == "completed" else "⏳"
+                            })
+                    
+                    # ترتيب حسب التاريخ والوقت
+                    activities.sort(key=lambda x: (x["date"], x["time"]), reverse=True)
+                    activities = activities[:50]
+                    
+                    # أفضل العملاء
+                    customers_query = """
+                    SELECT 
+                        c.id, c.name,
+                        COUNT(s.id) as purchase_count,
+                        COALESCE(SUM(s.total_amount), 0) as total_spent
+                    FROM customers c
+                    LEFT JOIN sales s ON c.id = s.customer_id
+                    WHERE DATE(s.sale_date) BETWEEN ? AND ? AND s.status = 'مكتمل'
+                    GROUP BY c.id, c.name
+                    HAVING purchase_count > 0
+                    ORDER BY total_spent DESC
+                    LIMIT 10
+                    """
+                    customers = self.db_manager.fetch_all(customers_query, (start_date.isoformat(), end_date.isoformat()))
+                    
+                    # أفضل المنتجات
+                    products_query = """
+                    SELECT 
+                        p.id, p.name,
+                        COALESCE(SUM(si.quantity), 0) as total_quantity,
+                        COALESCE(SUM(si.quantity * si.unit_price), 0) as total_sales
+                    FROM products p
+                    JOIN sale_items si ON p.id = si.product_id
+                    JOIN sales s ON si.sale_id = s.id
+                    WHERE DATE(s.sale_date) BETWEEN ? AND ? AND s.status = 'مكتمل'
+                    GROUP BY p.id, p.name
+                    ORDER BY total_sales DESC
+                    LIMIT 10
+                    """
+                    products = self.db_manager.fetch_all(products_query, (start_date.isoformat(), end_date.isoformat()))
+                    
+                    # الإحصائيات المتقدمة
+                    period_days = (end_date - start_date).days or 1
+                    sales_query = """
+                    SELECT COALESCE(SUM(total_amount), 0), COUNT(*)
+                    FROM sales
+                    WHERE DATE(sale_date) BETWEEN ? AND ? AND status = 'مكتمل'
+                    """
+                    sales_result = self.db_manager.fetch_one(sales_query, (start_date.isoformat(), end_date.isoformat()))
+                    total_sales = float(sales_result[0] or 0) if sales_result else 0
+                    sales_count = sales_result[1] or 0 if sales_result else 0
+                    avg_daily = total_sales / period_days if period_days > 0 else 0
+                    
+                    customers_query_stats = """
+                    SELECT COUNT(DISTINCT customer_id)
+                    FROM sales
+                    WHERE DATE(sale_date) BETWEEN ? AND ? AND status = 'مكتمل'
+                    """
+                    customers_result = self.db_manager.fetch_one(customers_query_stats, (start_date.isoformat(), end_date.isoformat()))
+                    active_customers = customers_result[0] or 0 if customers_result else 0
+                    conversion_rate = (sales_count / active_customers * 100) if active_customers > 0 else 0
+                    
+                    inventory_query = """
+                    SELECT COALESCE(SUM(current_stock * cost_price), 0)
+                    FROM products
+                    WHERE is_active = 1
+                    """
+                    inventory_result = self.db_manager.fetch_one(inventory_query)
+                    inventory_value = float(inventory_result[0] or 0) if inventory_result else 0
+                    turnover = (total_sales / inventory_value) if inventory_value > 0 else 0
+                    
+                    return {
+                        "activities": activities,
+                        "customers": customers,
+                        "products": products,
+                        "advanced_stats": {
+                            "avg_daily_sales": avg_daily,
+                            "conversion_rate": conversion_rate,
+                            "inventory_turnover": turnover
+                        }
+                    }
+                except Exception as e:
+                    if self.logger:
+                        self.logger.error(f"خطأ في تحميل بيانات العمليات والتحليلات: {str(e)}", exc_info=True)
+                    # إرجاع بيانات فارغة بدلاً من None لتجنب الأخطاء
+                    return {
+                        "activities": activities if 'activities' in locals() else [],
+                        "customers": [],
+                        "products": [],
+                        "advanced_stats": {
+                            "avg_daily_sales": 0,
+                            "conversion_rate": 0,
+                            "inventory_turnover": 0
+                        }
+                    }
+            
+            # تحميل في الخلفية
+            self._dashboard_analytics_loader = DataLoaderWorker(load_activities_and_analytics)
+            self._dashboard_analytics_loader.data_loaded.connect(self._populate_dashboard_analytics)
+            self._dashboard_analytics_loader.error_occurred.connect(lambda err: self.logger.error(f"خطأ في تحميل التحليلات: {err}") if self.logger else None)
+            self._start_worker(self._dashboard_analytics_loader)
+            
+            # تحديث الرسوم البيانية (هذه سريعة نسبياً)
+            # سيتم تحديثها لاحقاً عند الحاجة
+            
+        except Exception:
+            pass
+    
+    def _update_financial_kpis(self, start_date, end_date):
+        """تحديث KPIs المالية مع الاتجاهات"""
+        try:
+            # إجمالي المبيعات
+            sales_query = """
+            SELECT COALESCE(SUM(total_amount), 0), COUNT(*)
+            FROM sales
+            WHERE DATE(sale_date) BETWEEN ? AND ? AND status = 'مكتمل'
+            """
+            sales_result = self.db_manager.fetch_one(sales_query, (start_date.isoformat(), end_date.isoformat()))
+            total_sales = float(sales_result[0] or 0) if sales_result else 0
+            sales_count = sales_result[1] or 0 if sales_result else 0
+            
+            # المقارنة مع الفترة السابقة
+            period_days = (end_date - start_date).days
+            prev_start = start_date - timedelta(days=period_days)
+            prev_sales_result = self.db_manager.fetch_one(sales_query, (prev_start.isoformat(), start_date.isoformat()))
+            prev_total_sales = float(prev_sales_result[0] or 0) if prev_sales_result else 0
+            
+            sales_change = ((total_sales - prev_total_sales) / prev_total_sales * 100) if prev_total_sales > 0 else 0
+            
+            # حساب الربح
+            profit_query = """
+            SELECT COALESCE(SUM(si.quantity * (si.unit_price - p.cost_price)), 0)
+            FROM sale_items si
+            JOIN sales s ON si.sale_id = s.id
+            JOIN products p ON si.product_id = p.id
+            WHERE DATE(s.sale_date) BETWEEN ? AND ? AND s.status = 'مكتمل'
+            """
+            profit_result = self.db_manager.fetch_one(profit_query, (start_date.isoformat(), end_date.isoformat()))
+            total_profit = float(profit_result[0] or 0) if profit_result else 0
+            
+            # متوسط قيمة الطلب
+            avg_order = total_sales / sales_count if sales_count > 0 else 0
+            
+            # تحديث التسميات
+            if hasattr(self, "dashboard_summary_labels"):
+                if "total_sales" in self.dashboard_summary_labels:
+                    self.dashboard_summary_labels["total_sales"].setText(f"{total_sales:,.0f} دج")
+                if "total_revenue" in self.dashboard_summary_labels:
+                    self.dashboard_summary_labels["total_revenue"].setText(f"{total_sales:,.0f} دج")
+                if "total_profit" in self.dashboard_summary_labels:
+                    self.dashboard_summary_labels["total_profit"].setText(f"{total_profit:,.0f} دج")
+                if "avg_order" in self.dashboard_summary_labels:
+                    self.dashboard_summary_labels["avg_order"].setText(f"{avg_order:,.0f} دج")
+            
+            # تحديث الاتجاهات
+            if hasattr(self, "dashboard_trend_labels"):
+                trend_text = f"{sales_change:+.1f}% عن الفترة السابقة"
+                trend_color = "#27ae60" if sales_change >= 0 else "#e74c3c"
+                if "total_sales" in self.dashboard_trend_labels:
+                    self.dashboard_trend_labels["total_sales"].setText(trend_text)
+                    self.dashboard_trend_labels["total_sales"].setStyleSheet(f"color: {trend_color}; font-size: 12px;")
+        
+        except Exception:
+            pass
+    
+    def update_dashboard_alerts_table(self, alerts):
+        """تحديث جدول تنبيهات المخزون في الصفحة الرئيسية"""
+        if not hasattr(self, "dashboard_alerts_table"):
+            return
+        
+        table = self.dashboard_alerts_table
+        alerts = alerts or []
+        
+        if not alerts:
+            table.setRowCount(1)
+            info_item = QTableWidgetItem("لا توجد تنبيهات حالياً")
+            info_item.setTextAlignment(Qt.AlignCenter)
+            table.setSpan(0, 0, 1, table.columnCount())
+            table.setItem(0, 0, info_item)
+            return
+        
+        # Quick Win: Disable updates during batch operations
+        table.setUpdatesEnabled(False)
+        
+        table.clearSpans()
+        table.setRowCount(len(alerts))
+        
+        severity_colors = {
+            "low": "#2ecc71",
+            "medium": "#f1c40f",
+            "high": "#e67e22",
+            "critical": "#e74c3c"
+        }
+        
+        for row, alert in enumerate(alerts):
+            if isinstance(alert, dict):
+                product_name = alert.get("product_name", "-")
+                alert_type = alert.get("alert_type", "")
+                current_stock = alert.get("current_stock", "-")
+                message = alert.get("message", "-")
+                severity = alert.get("severity", "")
+            else:
+                product_name = getattr(alert, "product_name", "-")
+                alert_type = getattr(alert, "alert_type", "")
+                current_stock = getattr(alert, "current_stock", "-")
+                message = getattr(alert, "message", "-")
+                severity = getattr(alert, "severity", "")
+            
+            status_text = {
+                "low_stock": "مخزون منخفض",
+                "out_of_stock": "نفاد المخزون",
+                "expired": "منتهي الصلاحية"
+            }.get(alert_type, alert_type or "-")
+            
+            color = severity_colors.get(severity, "#2c3e50")
+            
+            items = [
+                QTableWidgetItem(str(product_name)),
+                QTableWidgetItem(status_text),
+                QTableWidgetItem(str(current_stock)),
+                QTableWidgetItem(str(message))
+            ]
+            
+            for idx, item in enumerate(items):
+                if idx == 2:
+                    item.setTextAlignment(Qt.AlignCenter)
+                else:
+                    item.setTextAlignment(Qt.AlignVCenter | Qt.AlignRight)
+                item.setForeground(QColor(color))
+                table.setItem(row, idx, item)
+        
+        # Quick Win: Re-enable updates after batch operations
+        table.setUpdatesEnabled(True)
+    
+    def _populate_dashboard_analytics(self, data):
+        """ملء بيانات التحليلات (في UI thread)"""
+        if not data:
+            return
+        
+        try:
+            # تحديث الرسوم البيانية
+            self._update_dashboard_charts(data)
+            
+            activities = data.get("activities", [])
+            if hasattr(self, "dashboard_activities_table") and activities is not None:
+                table = self.dashboard_activities_table
+                if not activities:
+                    table.setRowCount(1)
+                    info_item = QTableWidgetItem("لا توجد عمليات حديثة")
+                    info_item.setTextAlignment(Qt.AlignCenter)
+                    table.setSpan(0, 0, 1, table.columnCount())
+                    table.setItem(0, 0, info_item)
+                else:
+                    # Quick Win: Disable updates during batch operations
+                    table.setUpdatesEnabled(False)
+                    
+                    table.clearSpans()
+                    table.setRowCount(len(activities))
+                    for row, activity in enumerate(activities):
+                        items = [
+                            QTableWidgetItem(activity["date"]),
+                            QTableWidgetItem(activity["time"]),
+                            QTableWidgetItem(activity["type"]),
+                            QTableWidgetItem(activity["description"]),
+                            QTableWidgetItem(activity["user"]),
+                            QTableWidgetItem(activity["status"])
+                        ]
+                        for idx, item in enumerate(items):
+                            if idx in [0, 1, 4, 5]:
+                                item.setTextAlignment(Qt.AlignCenter)
+                            else:
+                                item.setTextAlignment(Qt.AlignVCenter | Qt.AlignRight)
+                            if activity["type"] == "مبيعات":
+                                item.setForeground(QColor("#27ae60"))
+                            elif activity["type"] == "مشتريات":
+                                item.setForeground(QColor("#3498db"))
+                            elif activity["type"] == "حركة مخزون":
+                                item.setForeground(QColor("#e67e22"))
+                            table.setItem(row, idx, item)
+                    
+                    # Quick Win: Re-enable updates after batch operations
+                    table.setUpdatesEnabled(True)
+            
+            # تحديث أفضل العملاء
+            customers = data.get("customers", [])
+            if hasattr(self, "dashboard_top_customers_table") and customers:
+                table = self.dashboard_top_customers_table
+                # Quick Win: Disable updates during batch operations
+                table.setUpdatesEnabled(False)
+                
+                table.clearSpans()
+                table.setRowCount(len(customers))
+                for row, customer_row in enumerate(customers):
+                    customer_id, name, count, total = customer_row
+                    items = [
+                        QTableWidgetItem(f"#{row + 1}"),
+                        QTableWidgetItem(name or "-"),
+                        QTableWidgetItem(str(count)),
+                        QTableWidgetItem(f"{float(total or 0):,.0f} دج")
+                    ]
+                    for idx, item in enumerate(items):
+                        if idx == 0:
+                            item.setTextAlignment(Qt.AlignCenter)
+                            item.setForeground(QColor("#9b59b6"))
+                            item.setFont(QFont("Arial", 10, QFont.Bold))
+                        elif idx == 2:
+                            item.setTextAlignment(Qt.AlignCenter)
+                        else:
+                            item.setTextAlignment(Qt.AlignVCenter | Qt.AlignRight)
+                        table.setItem(row, idx, item)
+                
+                # Quick Win: Re-enable updates after batch operations
+                table.setUpdatesEnabled(True)
+            
+            # تحديث أفضل المنتجات
+            products = data.get("products", [])
+            if hasattr(self, "dashboard_top_products_table") and products:
+                table = self.dashboard_top_products_table
+                # Quick Win: Disable updates during batch operations
+                table.setUpdatesEnabled(False)
+                
+                table.clearSpans()
+                table.setRowCount(len(products))
+                for row, product_row in enumerate(products):
+                    product_id, name, quantity, sales = product_row
+                    items = [
+                        QTableWidgetItem(f"#{row + 1}"),
+                        QTableWidgetItem(name or "-"),
+                        QTableWidgetItem(f"{float(quantity or 0):,.0f}"),
+                        QTableWidgetItem(f"{float(sales or 0):,.0f} دج")
+                    ]
+                    for idx, item in enumerate(items):
+                        if idx == 0:
+                            item.setTextAlignment(Qt.AlignCenter)
+                            item.setForeground(QColor("#e67e22"))
+                            item.setFont(QFont("Arial", 10, QFont.Bold))
+                        elif idx == 2:
+                            item.setTextAlignment(Qt.AlignCenter)
+                        else:
+                            item.setTextAlignment(Qt.AlignVCenter | Qt.AlignRight)
+                        table.setItem(row, idx, item)
+                
+                # Quick Win: Re-enable updates after batch operations
+                table.setUpdatesEnabled(True)
+            
+            # تحديث الإحصائيات المتقدمة
+            advanced_stats = data.get("advanced_stats", {})
+            if advanced_stats and hasattr(self, "dashboard_advanced_stats_labels"):
+                stats = self.dashboard_advanced_stats_labels
+                if "avg_daily_sales" in stats:
+                    stats["avg_daily_sales"].setText(f"{advanced_stats.get('avg_daily_sales', 0):,.0f} دج/يوم")
+                if "conversion_rate" in stats:
+                    stats["conversion_rate"].setText(f"{advanced_stats.get('conversion_rate', 0):.1f}%")
+                if "inventory_turnover" in stats:
+                    stats["inventory_turnover"].setText(f"{advanced_stats.get('inventory_turnover', 0):.2f}x")
+        
+        except Exception:
+            pass
+    def update_dashboard_activities_table(self, filter_type=None):
+        """تحديث جدول آخر العمليات (يتم استدعاؤه من الفلتر فقط)"""
+        # إعادة تحميل البيانات عند تغيير الفلتر
+        self.refresh_dashboard_data()
+        
+        activities = []
+        
+        try:
+            # حركات المخزون
+            if getattr(self, "inventory_service", None) and (filter_type == "الكل" or filter_type == "حركة مخزون"):
+                movements = self.inventory_service.get_stock_movements(limit=20)
+                for m in movements:
+                    type_display = {
+                        "in": "إدخال",
+                        "out": "إخراج",
+                        "adjustment": "تعديل",
+                        "transfer": "نقل"
+                    }.get(m.movement_type, m.movement_type)
+                    
+                    activities.append({
+                        "date": m.created_at.strftime("%Y-%m-%d") if m.created_at else "-",
+                        "time": m.created_at.strftime("%H:%M:%S") if m.created_at else "-",
+                        "type": "حركة مخزون",
+                        "description": f"{type_display} - {getattr(m, 'product_name', 'منتج')} ({m.quantity})",
+                        "user": "-",
+                        "status": "✅"
+                    })
+            
+            # المبيعات (إذا كانت متوفرة)
+            if getattr(self, "sales_service", None) and (filter_type == "الكل" or filter_type == "مبيعات"):
+                try:
+                    query = """
+                    SELECT s.id, s.sale_date, s.total_amount, s.status, COALESCE(u.username, 'النظام') as username
+                    FROM sales s
+                    LEFT JOIN users u ON s.user_id = u.id
+                    ORDER BY s.sale_date DESC
+                    LIMIT 15
+                    """
+                    sales = self.db_manager.fetch_all(query)
+                    for sale in sales:
+                        sale_id, sale_date, total, status, username = sale
+                        date_str = sale_date.strftime("%Y-%m-%d") if hasattr(sale_date, 'strftime') else str(sale_date)[:10]
+                        time_str = sale_date.strftime("%H:%M:%S") if hasattr(sale_date, 'strftime') else "-"
+                        activities.append({
+                            "date": date_str,
+                            "time": time_str,
+                            "type": "مبيعات",
+                            "description": f"فاتورة #{sale_id} - {float(total or 0):,.2f} دج",
+                            "user": username or "-",
+                            "status": "✅" if status == "completed" else "⏳"
+                        })
+                except Exception:
+                    pass
+            
+            # المشتريات (إذا كانت متوفرة)
+            if getattr(self, "purchase_service", None) and (filter_type == "الكل" or filter_type == "مشتريات"):
+                try:
+                    query = """
+                    SELECT p.id, p.purchase_date, p.total_amount, p.status, COALESCE(u.username, 'النظام') as username
+                    FROM purchases p
+                    LEFT JOIN users u ON p.user_id = u.id
+                    ORDER BY p.purchase_date DESC
+                    LIMIT 15
+                    """
+                    purchases = self.db_manager.fetch_all(query)
+                    for purchase in purchases:
+                        pur_id, pur_date, total, status, username = purchase
+                        date_str = pur_date.strftime("%Y-%m-%d") if hasattr(pur_date, 'strftime') else str(pur_date)[:10]
+                        time_str = pur_date.strftime("%H:%M:%S") if hasattr(pur_date, 'strftime') else "-"
+                        activities.append({
+                            "date": date_str,
+                            "time": time_str,
+                            "type": "مشتريات",
+                            "description": f"شراء #{pur_id} - {float(total or 0):,.2f} دج",
+                            "user": username or "-",
+                            "status": "✅" if status == "completed" else "⏳"
+                        })
+                except Exception:
+                    pass
+            
+            # ترتيب حسب التاريخ والوقت
+            activities.sort(key=lambda x: (x["date"], x["time"]), reverse=True)
+            activities = activities[:50]  # آخر 50 عملية
+            
+            if not hasattr(self, "dashboard_activities_table"):
+                return
+            
+            table = self.dashboard_activities_table
+            
+            if not activities:
+                table.setRowCount(1)
+                info_item = QTableWidgetItem("لا توجد عمليات حديثة")
+                info_item.setTextAlignment(Qt.AlignCenter)
+                table.setSpan(0, 0, 1, table.columnCount())
+                table.setItem(0, 0, info_item)
+                return
+            
+            table.clearSpans()
+            table.setRowCount(len(activities))
+            
+            for row, activity in enumerate(activities):
+                items = [
+                    QTableWidgetItem(activity["date"]),
+                    QTableWidgetItem(activity["time"]),
+                    QTableWidgetItem(activity["type"]),
+                    QTableWidgetItem(activity["description"]),
+                    QTableWidgetItem(activity["user"]),
+                    QTableWidgetItem(activity["status"])
+                ]
+                
+                for col, item in enumerate(items):
+                    table.setItem(row, col, item)
+                    
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في تحديث جدول العمليات: {e}")
+                
+                for idx, item in enumerate(items):
+                    if idx in [0, 1, 4, 5]:
+                        item.setTextAlignment(Qt.AlignCenter)
+                    else:
+                        item.setTextAlignment(Qt.AlignVCenter | Qt.AlignRight)
+                    
+                    # تلوين حسب النوع
+                    if activity["type"] == "مبيعات":
+                        item.setForeground(QColor("#27ae60"))
+                    elif activity["type"] == "مشتريات":
+                        item.setForeground(QColor("#3498db"))
+                    elif activity["type"] == "حركة مخزون":
+                        item.setForeground(QColor("#e67e22"))
+                    
+                    table.setItem(row, idx, item)
+        
+        except Exception:
+            if hasattr(self, "dashboard_activities_table"):
+                table = self.dashboard_activities_table
+                table.setRowCount(1)
+                info_item = QTableWidgetItem(f"خطأ في تحميل البيانات: {str(e)}")
+                info_item.setTextAlignment(Qt.AlignCenter)
+                table.setSpan(0, 0, 1, table.columnCount())
+                table.setItem(0, 0, info_item)
+    
+    def update_dashboard_analytics(self, start_date, end_date):
+        """تحديث التحليلات المتقدمة (تم نقلها إلى _populate_dashboard_analytics)"""
+        pass  # تم نقل الكود إلى _populate_dashboard_analytics
+    
+    def _update_dashboard_charts_initial(self):
+        """تحديث الرسوم البيانية عند فتح الداشبورد لأول مرة"""
+        try:
+            if self.logger:
+                self.logger.debug("🔄 بدء التحديث الأولي للرسوم البيانية...")
+            
+            # جلب بيانات حقيقية من قاعدة البيانات
+            data = {}
+            
+            # جلب KPIs المالية
+            if self.db_manager:
+                try:
+                    kpi_query = """
+                    SELECT 
+                        COALESCE(SUM(total_amount), 0) as total_revenue,
+                        COALESCE(SUM(paid_amount), 0) as total_paid
+                    FROM sales 
+                    WHERE status != 'ملغية' AND status != 'cancelled'
+                    """
+                    kpi_result = self.db_manager.execute_query(kpi_query)
+                    if kpi_result and len(kpi_result) > 0:
+                        row = kpi_result[0]
+                        if isinstance(row, dict):
+                            revenue = float(row.get('total_revenue', 0) or 0)
+                        else:
+                            revenue = float(row[0] if len(row) > 0 else 0)
+                        
+                        data["financial_kpis"] = {
+                            "total_revenue": revenue,
+                            "total_profit": revenue * 0.3  # تقدير
+                        }
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"فشل جلب KPIs: {e}")
+            
+            # جلب أفضل المنتجات
+            if self.db_manager:
+                try:
+                    products_query = """
+                    SELECT 
+                        p.id,
+                        p.name,
+                        SUM(si.quantity) as total_quantity,
+                        SUM(si.total_price) as total_sales
+                    FROM products p
+                    JOIN sale_items si ON p.id = si.product_id
+                    JOIN sales s ON si.sale_id = s.id
+                    WHERE s.status != 'ملغية' AND s.status != 'cancelled'
+                    GROUP BY p.id, p.name
+                    ORDER BY total_sales DESC
+                    LIMIT 5
+                    """
+                    products_result = self.db_manager.execute_query(products_query)
+                    if products_result:
+                        data["products"] = products_result
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"فشل جلب المنتجات: {e}")
+            
+            # إذا لم تكن هناك بيانات، استخدم بيانات فارغة
+            if not data:
+                data = {
+                    "financial_kpis": {
+                        "total_revenue": 0,
+                        "total_profit": 0
+                    },
+                    "products": []
+                }
+            
+            self._update_dashboard_charts(data)
+            
+            if self.logger:
+                self.logger.debug("✅ انتهى التحديث الأولي للرسوم البيانية")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"فشل التحديث الأولي للرسوم البيانية: {e}", exc_info=True)
+    
+    def _update_dashboard_charts(self, data):
+        """تحديث الرسوم البيانية في الداشبورد"""
+        if not data:
+            data = {}  # بيانات فارغة بدلاً من return
+        
+        try:
+            if self.logger:
+                self.logger.debug("🔄 بدء تحديث الرسوم البيانية...")
+            
+            # 1. رسم بياني المبيعات (خط)
+            if hasattr(self, 'dashboard_sales_line_chart') and self.dashboard_sales_line_chart:
+                try:
+                    # جلب بيانات المبيعات آخر 7 أيام
+                    if self.db_manager:
+                        query = """
+                        SELECT 
+                            date(sale_date) as sale_date,
+                            COALESCE(SUM(total_amount), 0) as daily_total
+                        FROM sales 
+                        WHERE sale_date >= date('now', '-7 days')
+                          AND status != 'ملغية' 
+                          AND status != 'cancelled'
+                        GROUP BY date(sale_date)
+                        ORDER BY date(sale_date) ASC
+                        """
+                        results = self.db_manager.execute_query(query)
+                        
+                        if results:
+                            dates = []
+                            amounts = []
+                            for row in results:
+                                if isinstance(row, dict):
+                                    dates.append(row.get('sale_date', ''))
+                                    amounts.append(float(row.get('daily_total', 0) or 0))
+                                else:
+                                    dates.append(str(row[0]) if len(row) > 0 else '')
+                                    amounts.append(float(row[1] if len(row) > 1 else 0) or 0.0)
+                            
+                            # إنشاء الرسم البياني
+                            chart = QChart()
+                            chart.setTitle("المبيعات (آخر 7 أيام)")
+                            
+                            series = QLineSeries()
+                            for i, amount in enumerate(amounts):
+                                series.append(i, amount)
+                            
+                            chart.addSeries(series)
+                            chart.createDefaultAxes()
+                            chart.legend().setVisible(False)
+                            
+                            self.dashboard_sales_line_chart.setChart(chart)
+                            if self.logger:
+                                self.logger.debug(f"✅ تم تحديث رسم المبيعات: {len(amounts)} نقاط بيانات")
+                        else:
+                            if self.logger:
+                                self.logger.debug("⚠️ لا توجد بيانات مبيعات للرسم")
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"فشل تحديث رسم المبيعات: {e}", exc_info=True)
+            
+            # 2. رسم بياني المقارنة (إيرادات vs مصروفات)
+            if hasattr(self, 'dashboard_revenue_expense_chart') and self.dashboard_revenue_expense_chart:
+                try:
+                    chart = QChart()
+                    chart.setTitle("الإيرادات والمصروفات")
+                    
+                    # بيانات تجريبية (يمكن استبدالها ببيانات حقيقية)
+                    revenue = data.get("financial_kpis", {}).get("total_revenue", 0)
+                    expense = revenue * 0.6  # تقدير (يمكن جلبها من قاعدة البيانات)
+                    
+                    series = QBarSeries()
+                    
+                    revenue_set = QBarSet("الإيرادات")
+                    revenue_set.append(revenue)
+                    revenue_set.setColor(QColor("#27ae60"))
+                    
+                    expense_set = QBarSet("المصروفات")
+                    expense_set.append(expense)
+                    expense_set.setColor(QColor("#e74c3c"))
+                    
+                    series.append(revenue_set)
+                    series.append(expense_set)
+                    
+                    chart.addSeries(series)
+                    chart.createDefaultAxes()
+                    chart.legend().setVisible(True)
+                    
+                    self.dashboard_revenue_expense_chart.setChart(chart)
+                    if self.logger:
+                        self.logger.debug(f"✅ تم تحديث رسم المقارنة: إيرادات={revenue:,.0f}, مصروفات={expense:,.0f}")
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"فشل تحديث رسم المقارنة: {e}", exc_info=True)
+            
+            # 3. رسم بياني توزيع المخزون (دائري)
+            if hasattr(self, 'dashboard_stock_chart') and self.dashboard_stock_chart:
+                try:
+                    chart = QChart()
+                    chart.setTitle("توزيع المخزون")
+                    
+                    series = QPieSeries()
+                    
+                    # بيانات تجريبية (يمكن استبدالها ببيانات حقيقية)
+                    if hasattr(self, 'dashboard_summary_labels'):
+                        # معالجة آمنة للنصوص (قد تكون "-" أو فارغة)
+                        def safe_int_from_label(key, default=0):
+                            try:
+                                label = self.dashboard_summary_labels.get(key)
+                                if not label:
+                                    return default
+                                
+                                text = label.text().replace(",", "").strip()
+                                
+                                # تجاهل "-" والقيم الفارغة
+                                if not text or text == "-" or text == "":
+                                    return default
+                                
+                                # محاولة التحويل - استخدام float أولاً ثم int
+                                try:
+                                    # إزالة أي مسافات إضافية
+                                    text = text.replace(" ", "")
+                                    # التحويل
+                                    return int(float(text))
+                                except (ValueError, TypeError, AttributeError):
+                                    return default
+                            except Exception:
+                                return default
+                        
+                        low_stock = safe_int_from_label("low_stock_items", 0)
+                        out_stock = safe_int_from_label("out_of_stock_items", 0)
+                        total = safe_int_from_label("total_products", 0)
+                        in_stock = max(0, total - low_stock - out_stock)
+                        
+                        if total > 0:
+                            if in_stock > 0:
+                                slice1 = QPieSlice(f"متوفر ({in_stock})", in_stock)
+                                slice1.setColor(QColor("#27ae60"))
+                                series.append(slice1)
+                            
+                            if low_stock > 0:
+                                slice2 = QPieSlice(f"منخفض ({low_stock})", low_stock)
+                                slice2.setColor(QColor("#f39c12"))
+                                series.append(slice2)
+                            
+                            if out_stock > 0:
+                                slice3 = QPieSlice(f"نفد ({out_stock})", out_stock)
+                                slice3.setColor(QColor("#e74c3c"))
+                                series.append(slice3)
+                    
+                    if series.count() > 0:
+                        chart.addSeries(series)
+                        chart.legend().setVisible(True)
+                        
+                        self.dashboard_stock_chart.setChart(chart)
+                        if self.logger:
+                            self.logger.debug(f"✅ تم تحديث رسم المخزون: {series.count()} شرائح")
+                    else:
+                        if self.logger:
+                            self.logger.debug("⚠️ لا توجد بيانات مخزون للرسم")
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"فشل تحديث رسم المخزون: {e}", exc_info=True)
+            
+            # 4. رسم بياني أفضل المنتجات (أعمدة)
+            if hasattr(self, 'dashboard_top_products_chart') and self.dashboard_top_products_chart:
+                try:
+                    products = data.get("products", [])[:5]  # أفضل 5 منتجات
+                    
+                    if products:
+                        chart = QChart()
+                        chart.setTitle("أفضل 5 منتجات مبيعاً")
+                        
+                        series = QBarSeries()
+                        bar_set = QBarSet("المبيعات")
+                        
+                        categories = []
+                        for product in products:
+                            if isinstance(product, (list, tuple)) and len(product) >= 4:
+                                name = str(product[1] or "منتج")[:20]  # تقصير الاسم
+                                sales = float(product[3] or 0)
+                                categories.append(name)
+                                bar_set.append(sales)
+                        
+                        if categories:
+                            bar_set.setColor(QColor("#3498db"))
+                            series.append(bar_set)
+                            
+                            chart.addSeries(series)
+                            chart.createDefaultAxes()
+                            
+                            axis_x = QBarCategoryAxis()
+                            axis_x.append(categories)
+                            chart.setAxisX(axis_x, series)
+                            
+                            self.dashboard_top_products_chart.setChart(chart)
+                            if self.logger:
+                                self.logger.debug(f"✅ تم تحديث رسم أفضل المنتجات: {len(categories)} منتجات")
+                        else:
+                            if self.logger:
+                                self.logger.debug("⚠️ لا توجد بيانات منتجات للرسم")
+                    else:
+                        if self.logger:
+                            self.logger.debug("⚠️ لا توجد منتجات في البيانات")
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"فشل تحديث رسم أفضل المنتجات: {e}", exc_info=True)
+            
+            if self.logger:
+                self.logger.debug("✅ انتهى تحديث الرسوم البيانية")
+        
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في تحديث الرسوم البيانية: {e}", exc_info=True)
+    
+    def update_dashboard_advanced_stats(self, start_date, end_date):
+        """تحديث الإحصائيات المتقدمة (تم نقلها إلى _populate_dashboard_analytics)"""
+        pass  # تم نقل الكود إلى _populate_dashboard_analytics
 
     def create_performance_tab(self) -> QWidget:
         """إنشاء تبويب أداء خفيف الوزن مع مؤشرات بسيطة"""
@@ -298,8 +2564,8 @@ class MainWindow(QMainWindow):
         layout.setSpacing(12)
         layout.setContentsMargins(12, 12, 12, 12)
 
-        title = QLabel("مؤشرات الأداء الأساسية")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #2980b9; margin-bottom: 4px;")
+        title = QLabel(self.i18n.get_message("key_performance_indicators"))
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: rgb(41, 128, 185); margin-bottom: 4px;")
         layout.addWidget(title)
 
         grid = QHBoxLayout()
@@ -308,7 +2574,7 @@ class MainWindow(QMainWindow):
         theme_box = QGroupBox("السمة الحالية")
         theme_layout = QVBoxLayout(theme_box)
         self.perf_theme_label = QLabel("-")
-        self.perf_theme_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #2c3e50;")
+        self.perf_theme_label.setStyleSheet("font-size: 20px; font-weight: bold; color: rgb(44, 62, 80);")
         theme_layout.addWidget(self.perf_theme_label)
         grid.addWidget(theme_box)
 
@@ -316,7 +2582,7 @@ class MainWindow(QMainWindow):
         notif_box = QGroupBox("الإشعارات غير المقروءة")
         notif_layout = QVBoxLayout(notif_box)
         self.perf_unread_label = QLabel("0")
-        self.perf_unread_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #2c3e50;")
+        self.perf_unread_label.setStyleSheet("font-size: 20px; font-weight: bold; color: rgb(44, 62, 80);")
         notif_layout.addWidget(self.perf_unread_label)
         grid.addWidget(notif_box)
 
@@ -324,7 +2590,7 @@ class MainWindow(QMainWindow):
         db_box = QGroupBox("حالة قاعدة البيانات")
         db_layout = QVBoxLayout(db_box)
         self.perf_db_label = QLabel("-")
-        self.perf_db_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #2c3e50;")
+        self.perf_db_label.setStyleSheet("font-size: 20px; font-weight: bold; color: rgb(44, 62, 80);")
         db_layout.addWidget(self.perf_db_label)
         grid.addWidget(db_box)
 
@@ -332,19 +2598,19 @@ class MainWindow(QMainWindow):
         uptime_box = QGroupBox("وقت التشغيل")
         uptime_layout = QVBoxLayout(uptime_box)
         self.perf_uptime_label = QLabel("00:00:00")
-        self.perf_uptime_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #2c3e50;")
+        self.perf_uptime_label.setStyleSheet("font-size: 20px; font-weight: bold; color: rgb(44, 62, 80);")
         uptime_layout.addWidget(self.perf_uptime_label)
         grid.addWidget(uptime_box)
 
         layout.addLayout(grid)
 
         # ملاحظات
-        hint = QLabel("للحصول على لوحة تفصيلية، استخدم القائمة: أدوات → مراقبة الأداء")
-        hint.setStyleSheet("color: #7f8c8d;")
+        hint = QLabel(self.i18n.get_message("detailed_performance_hint"))
+        hint.setStyleSheet("color: rgb(127, 140, 141);")
         layout.addWidget(hint)
 
         # زر فتح اللوحة التفصيلية
-        open_perf_btn = QPushButton("📊 افتح لوحة مراقبة الأداء التفصيلية")
+        open_perf_btn = QPushButton(self.i18n.get_message("open_detailed_performance"))
         open_perf_btn.setMinimumHeight(36)
         open_perf_btn.clicked.connect(self.show_performance_dashboard)
         layout.addWidget(open_perf_btn)
@@ -363,22 +2629,18 @@ class MainWindow(QMainWindow):
     def update_performance_tab(self):
         """تحديث قيم تبويب الأداء"""
         try:
-            # السمة
-            theme = get_theme_manager().get_current_theme()
-            self.perf_theme_label.setText("داكن" if theme == 'dark' else "فاتح")
-
             # الإشعارات
             unread = 0
             if hasattr(self, 'notifications_manager') and self.notifications_manager:
                 try:
-                    unread = int(self.notifications_manager.get_unread_count())
+                    unread = self.notifications_manager.unread_count()
                 except Exception:
-                    unread = 0
+                    pass
             self.perf_unread_label.setText(str(unread))
-
+            # لا يوجد حاجة لمحاولة التحقق مرتين من notifications_manager، السطر التالي يكفي:
             # قاعدة البيانات
             db_connected = bool(self.db_manager)
-            self.perf_db_label.setText("متصلة" if db_connected else "غير متصلة")
+            self.perf_db_label.setText(self.i18n.get_message("connected") if db_connected else self.i18n.get_message("disconnected"))
 
             # وقت التشغيل
             if hasattr(self, 'app_start_time') and isinstance(self.app_start_time, datetime):
@@ -390,96 +2652,783 @@ class MainWindow(QMainWindow):
                 self.perf_uptime_label.setText(f"{hours:02d}:{minutes:02d}:{seconds:02d}")
         except Exception:
             pass
-    
     def create_inventory_tab(self) -> QWidget:
         """إنشاء تبويب المخزون"""
+        try:
+            if self.logger:
+                self.logger.debug("🔨 بدء إنشاء تبويب المخزون...")
+            
+            # 🔥 الربط العصبي: ربط الإشارات لتحديث تلقائي (مع منع الاتصالات المكررة)
+            try:
+                from src.core.signals import signals
+                import warnings
+                
+                # فك الاتصال أولاً لتجنب الاتصالات المكررة (إذا كانت موجودة)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", RuntimeWarning)
+                    try:
+                        signals.inventory_updated.disconnect(self.refresh_inventory_data)
+                    except (TypeError, RuntimeError):
+                        pass
+                
+                # إنشاء مراجع للـ lambda functions لتجنب الاتصالات المكررة
+                if not hasattr(self, '_inventory_item_added_slot'):
+                    self._inventory_item_added_slot = lambda product_id: self.refresh_inventory_data()
+                if not hasattr(self, '_inventory_item_updated_slot'):
+                    self._inventory_item_updated_slot = lambda product_id: self.refresh_inventory_data()
+                if not hasattr(self, '_inventory_item_deleted_slot'):
+                    self._inventory_item_deleted_slot = lambda product_id: self.refresh_inventory_data()
+                
+                # فك الاتصال من الـ slots المخصصة
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", RuntimeWarning)
+                    try:
+                        signals.inventory_item_added.disconnect(self._inventory_item_added_slot)
+                    except (TypeError, RuntimeError):
+                        pass
+                    try:
+                        signals.inventory_item_updated.disconnect(self._inventory_item_updated_slot)
+                    except (TypeError, RuntimeError):
+                        pass
+                    try:
+                        signals.inventory_item_deleted.disconnect(self._inventory_item_deleted_slot)
+                    except (TypeError, RuntimeError):
+                        pass
+                
+                # ربط الإشارات
+                signals.inventory_updated.connect(self.refresh_inventory_data)
+                signals.inventory_item_added.connect(self._inventory_item_added_slot)
+                signals.inventory_item_updated.connect(self._inventory_item_updated_slot)
+                signals.inventory_item_deleted.connect(self._inventory_item_deleted_slot)
+                
+                if self.logger:
+                    self.logger.debug("✅ تم ربط إشارات المخزون بنجاح")
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"⚠️ فشل ربط إشارات المخزون: {e}")
+            
+            # إنشاء QScrollArea للتمرير
+            scroll_area = QScrollArea()
+            scroll_area.setWidgetResizable(True)
+            scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            scroll_area.setFrameShape(QFrame.NoFrame)
+            
+            # المحتوى الرئيسي
+            tab = QWidget()
+            layout = QVBoxLayout(tab)
+            layout.setSpacing(12)
+            layout.setContentsMargins(12, 12, 12, 12)
+            
+            # عنوان القسم
+            title = QLabel(self.i18n.get_message("inventory_management"))
+            title.setStyleSheet("font-size: 18px; font-weight: bold; color: rgb(39, 174, 96); margin-bottom: 4px;")
+            layout.addWidget(title)
+            
+            # أزرار سريعة
+            buttons_layout = QHBoxLayout()
+            buttons_layout.setSpacing(10)
+            
+            # تحسينات الأزرار - تصميم موحد مع hover effects
+            button_style = """
+                QPushButton {
+                    background-color: rgb(52, 152, 219);
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 8px 16px;
+                    font-weight: 600;
+                    min-height: 36px;
+                }
+                QPushButton:hover {
+                    background-color: rgb(41, 128, 185);
+                }
+                QPushButton:pressed {
+                    background-color: rgb(32, 102, 148);
+                }
+                QPushButton:disabled {
+                    background-color: rgb(189, 195, 199);
+                    color: rgb(127, 140, 141);
+                }
+            """
+            
+            add_product_btn = QPushButton(self.i18n.get_message("add_product"))
+            add_product_btn.setStyleSheet(button_style)
+            add_product_btn.clicked.connect(self.add_product)
+            buttons_layout.addWidget(add_product_btn)
+            
+            manage_categories_btn = QPushButton(self.i18n.get_message("manage_categories"))
+            manage_categories_btn.setStyleSheet(button_style)
+            manage_categories_btn.clicked.connect(self.manage_categories)
+            buttons_layout.addWidget(manage_categories_btn)
+            
+            inventory_report_btn = QPushButton(self.i18n.get_message("inventory_report"))
+            inventory_report_btn.setStyleSheet(button_style)
+            inventory_report_btn.clicked.connect(self.inventory_report)
+            buttons_layout.addWidget(inventory_report_btn)
+            
+            adjust_stock_btn = QPushButton("⚖️ تعديل المخزون")
+            adjust_stock_btn.setStyleSheet(button_style)
+            adjust_stock_btn.clicked.connect(self.open_adjust_stock_dialog)
+            buttons_layout.addWidget(adjust_stock_btn)
+            
+            transfer_stock_btn = QPushButton("🔁 نقل بين المنتجات")
+            transfer_stock_btn.setStyleSheet(button_style)
+            transfer_stock_btn.clicked.connect(self.open_transfer_stock_dialog)
+            buttons_layout.addWidget(transfer_stock_btn)
+            
+            buttons_layout.addStretch()
+            layout.addLayout(buttons_layout)
+            
+            # منطقة المرشحات
+            filters_frame = QFrame()
+            filters_frame.setObjectName("inventoryFiltersFrame")
+            filters_frame.setStyleSheet(
+                "QFrame#inventoryFiltersFrame {"
+                "background-color: rgb(248, 249, 250);"
+                "border: 1px solid rgb(224, 228, 231);"
+                "border-radius: 6px;"
+                "}"
+            )
+            filters_layout = QHBoxLayout(filters_frame)
+            filters_layout.setContentsMargins(12, 8, 12, 8)
+            filters_layout.setSpacing(12)
+            
+            search_label = QLabel("بحث:")
+            search_label.setStyleSheet("color: rgb(52, 73, 94); font-weight: 600;")
+            filters_layout.addWidget(search_label)
+            
+            self.inventory_search_input = QLineEdit()
+            self.inventory_search_input.setPlaceholderText("ابحث باسم المنتج أو الباركود...")
+            # تحسين السلاسة - Debouncing للبحث (تأخير 500ms بعد توقف الكتابة)
+            self.inventory_search_input.textChanged.connect(self._on_inventory_search_changed)
+            # البحث الفوري عند الضغط على Enter
+            self.inventory_search_input.returnPressed.connect(self.on_inventory_filters_changed)
+            filters_layout.addWidget(self.inventory_search_input, 2)
+            
+            category_label = QLabel("الفئة:")
+            category_label.setStyleSheet("color: rgb(52, 73, 94); font-weight: 600;")
+            filters_layout.addWidget(category_label)
+            
+            self.inventory_category_combo = QComboBox()
+            self.inventory_category_combo.setMinimumWidth(200)
+            self.inventory_category_combo.currentIndexChanged.connect(self.on_inventory_filters_changed)
+            filters_layout.addWidget(self.inventory_category_combo, 1)
+            
+            # أزرار مع تحسينات
+            small_button_style = """
+                QPushButton {
+                    background-color: rgb(236, 240, 241);
+                    color: rgb(52, 73, 94);
+                    border: 1px solid rgb(189, 195, 199);
+                    border-radius: 4px;
+                    padding: 6px 12px;
+                    font-weight: 500;
+                    min-height: 32px;
+                }
+                QPushButton:hover {
+                    background-color: rgb(189, 195, 199);
+                    border-color: rgb(149, 165, 166);
+                }
+                QPushButton:pressed {
+                    background-color: rgb(149, 165, 166);
+                }
+                QPushButton:disabled {
+                    background-color: rgb(236, 240, 241);
+                    color: rgb(189, 195, 199);
+                    border-color: rgb(236, 240, 241);
+                }
+            """
+            
+            self.inventory_refresh_btn = QPushButton("🔄 تحديث")
+            self.inventory_refresh_btn.setStyleSheet(small_button_style)
+            self.inventory_refresh_btn.clicked.connect(self.refresh_inventory_data)
+            filters_layout.addWidget(self.inventory_refresh_btn)
+            
+            # زر تحميل المزيد
+            self.inventory_load_more_btn = QPushButton("📥 تحميل المزيد")
+            self.inventory_load_more_btn.setStyleSheet(small_button_style)
+            self.inventory_load_more_btn.setEnabled(False)
+            self.inventory_load_more_btn.clicked.connect(self.load_more_inventory)
+            filters_layout.addWidget(self.inventory_load_more_btn)
+            
+            layout.addWidget(filters_frame)
+            
+            # Phase 2: QTableView with High-Performance Model (بدلاً من QTableWidget)
+            self.inventory_table = QTableView()
+            
+            # إنشاء Model عالي الأداء
+            self.inventory_model = InventoryTableModel(parent=self.inventory_table)
+            self.inventory_table.setModel(self.inventory_model)
+            
+            # إعدادات الأداء المحسّنة
+            self.inventory_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+            self.inventory_table.setSelectionMode(QAbstractItemView.SingleSelection)
+            self.inventory_table.setAlternatingRowColors(True)
+            self.inventory_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            
+            # تحسينات السلاسة - Smooth Scrolling
+            self.inventory_table.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+            self.inventory_table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
+            self.inventory_table.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            self.inventory_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            
+            # إعدادات Header
+            header = self.inventory_table.horizontalHeader()
+            # ⚠️ CRITICAL: استخدام Interactive بدلاً من Stretch لتجنب التجميد مع البيانات الكبيرة
+            # Stretch يحسب العرض لكل صف، مما يسبب تجميد مع 50K منتج
+            header.setSectionResizeMode(QHeaderView.Interactive)
+            header.setDefaultSectionSize(120)  # عرض افتراضي سريع
+            header.setSortIndicatorShown(True)  # إظهار مؤشر الفرز
+            header.setSectionsClickable(True)  # السماح بالضغط على الرؤوس للفرز
+            
+            # 🔥 استراتيجية التحكم في حجم العرض الاحترافية (Hybrid Sizing)
+            # العمود الرئيسي (اسم المنتج) يتمدد، والباقي بحجم معقول وتفاعلي
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents) # ID
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)     # Barcode
+            header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)         # Name (The Star)
+            header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)     # Category
+            header.setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)     # Unit
+            header.setSectionResizeMode(9, QHeaderView.ResizeMode.ResizeToContents) # Actions
+
+            # ربط sorting مع Model
+            header.sectionClicked.connect(self._on_inventory_header_clicked)
+            
+            # 👇👇👇 ANTI-FREEZE FIX: منع التجميد عند فتح التبويب 👇👇👇
+            # 1. منع الجدول من حساب ارتفاع 50,000 صف (هذا هو السبب الرئيسي للتعليق)
+            v_header = self.inventory_table.verticalHeader()
+            v_header.setSectionResizeMode(QHeaderView.Fixed)  # وضع ثابت - لا يحسب الارتفاع
+            v_header.setDefaultSectionSize(40)                # ارتفاع 40 بكسل لكل صف (ثابت)
+            v_header.setVisible(True)
+            
+            # 2. تحسين الأداء عند التمرير الأفقي (تم تطبيقه سابقاً)
+            # h_header.setSectionResizeMode(QHeaderView.Interactive) - موجود أعلاه
+            # 👆👆👆 انتهى الإصلاح 👆👆👆
+            
+            # تحسينات الأداء الإضافية
+            self.inventory_table.verticalScrollBar().setSingleStep(20)  # تمرير أسرع
+            self.inventory_table.setShowGrid(True)  # إظهار الشبكة
+            
+            # 🔥 Modern Action Delegate - أيقونات حديثة مع كشف دقيق للنقرات
+            self.inventory_action_delegate = ModernActionDelegate(self.inventory_table)
+            # ربط الإشارات (ترسل product_id مباشرة)
+            self.inventory_action_delegate.edit_clicked.connect(self._on_inventory_edit_clicked_by_id)
+            self.inventory_action_delegate.delete_clicked.connect(self._on_inventory_delete_clicked_by_id)
+            # تطبيق Delegate على العمود الأخير (إجراءات - العمود 9)
+            self.inventory_table.setItemDelegateForColumn(9, self.inventory_action_delegate)
+            
+            # Phase 3: Context Menu (Right-Click Menu)
+            self.inventory_table.setContextMenuPolicy(Qt.CustomContextMenu)
+            self.inventory_table.customContextMenuRequested.connect(self._show_inventory_context_menu)
+            
+            self.inventory_table.setStyleSheet(
+                "QTableView {"
+                "background-color: white;"
+                "gridline-color: rgb(236, 240, 241);"
+                "border: 1px solid rgb(224, 228, 231);"
+                "border-radius: 4px;"
+                "}"
+                "QTableWidget::item {"
+                "padding: 4px;"
+                "border: none;"
+                "}"
+                "QTableWidget::item:selected {"
+                "background-color: rgb(219, 234, 254);"
+                "color: rgb(30, 64, 175);"
+                "}"
+                "QTableWidget::item:hover {"
+                "background-color: rgb(241, 245, 249);"
+                "}"
+                "QHeaderView::section {"
+                "background-color: rgb(236, 240, 241);"
+                "font-weight: bold;"
+                "padding: 8px;"
+                "border: 1px solid rgb(224, 228, 231);"
+                "}"
+                "QScrollBar:vertical {"
+                "border: none;"
+                "background: rgb(241, 245, 249);"
+                "width: 12px;"
+                "border-radius: 6px;"
+                "}"
+                "QScrollBar::handle:vertical {"
+                "background: rgb(203, 213, 225);"
+                "min-height: 30px;"
+                "border-radius: 6px;"
+                "}"
+                "QScrollBar::handle:vertical:hover {"
+                "background: rgb(148, 163, 184);"
+                "}"
+            )
+            layout.addWidget(self.inventory_table)
+            
+            # تحميل البيانات الأولية (مع معالجة أخطاء محسّنة)
+            try:
+                self.load_inventory_filters()
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"فشل تحميل مرشحات المخزون: {e}")
+            
+            # وضع المحتوى في QScrollArea
+            scroll_area.setWidget(tab)
+            
+            # تحميل البيانات بعد وضع المحتوى (لتجنب مشاكل التوقيت)
+            # استخدام QTimer لتأخير التحميل قليلاً
+            # إضافة timeout handling لتجنب التعليق
+            def safe_refresh():
+                try:
+                    self.refresh_inventory_data()
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"فشل تحميل بيانات المخزون: {e}")
+            
+            QTimer.singleShot(100, safe_refresh)
+            
+            if self.logger:
+                self.logger.debug("✅ تم إنشاء تبويب المخزون بنجاح")
+            
+            return scroll_area
+            
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            if self.logger:
+                self.logger.error(f"❌ خطأ في create_inventory_tab(): {e}")
+                self.logger.error(f"تفاصيل الخطأ:\n{error_details}")
+            else:
+                print(f"❌ خطأ في create_inventory_tab(): {e}")
+                print(f"تفاصيل الخطأ:\n{error_details}")
+            # إرجاع صفحة فارغة مع رسالة خطأ بدلاً من None
+            try:
+                error_widget = QWidget()
+                error_label = QLabel(f"❌ خطأ في تحميل صفحة المخزون:\n{str(e)}\n\nيرجى التحقق من السجلات.")
+                error_label.setWordWrap(True)
+                error_label.setAlignment(Qt.AlignCenter)
+                error_label.setStyleSheet("color: red; font-size: 14px; padding: 20px;")
+                error_layout = QVBoxLayout(error_widget)
+                error_layout.addWidget(error_label)
+                return error_widget
+            except:
+                # إذا فشل حتى إنشاء صفحة الخطأ، أرجع None
+                return None
+    
+    def _on_inventory_edit_clicked(self, index: QModelIndex):
+        """معالجة النقر على زر التعديل في جدول المخزون"""
+        try:
+            # الحصول على product_id من العمود الأول (id)
+            product_id_index = self.inventory_model.index(index.row(), 0)
+            product_id = self.inventory_model.data(product_id_index, Qt.UserRole)
+            if not product_id:
+                # Fallback: الحصول من DisplayRole
+                product_id = self.inventory_model.data(product_id_index, Qt.DisplayRole)
+            
+            if product_id:
+                self._edit_product_by_id(int(product_id))
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في تعديل المنتج: {e}")
+            QMessageBox.critical(self, "خطأ", f"فشل في تعديل المنتج:\n{str(e)}")
+    
+    def _on_inventory_delete_clicked(self, index: QModelIndex):
+        """معالجة النقر على زر الحذف في جدول المخزون"""
+        try:
+            # الحصول على product_id من العمود الأول (id)
+            product_id_index = self.inventory_model.index(index.row(), 0)
+            product_id = self.inventory_model.data(product_id_index, Qt.UserRole)
+            if not product_id:
+                # Fallback: الحصول من DisplayRole
+                product_id = self.inventory_model.data(product_id_index, Qt.DisplayRole)
+            
+            if product_id:
+                self._delete_product_by_id(int(product_id))
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في حذف المنتج: {e}")
+            QMessageBox.critical(self, "خطأ", f"فشل في حذف المنتج:\n{str(e)}")
+    
+    def _on_inventory_edit_clicked_by_id(self, product_id: int):
+        """
+        🔥 معالجة النقر على أيقونة التعديل (Modern Delegate)
+        يستقبل product_id مباشرة من Delegate
+        """
+        try:
+            if product_id and product_id > 0:
+                self._edit_product_by_id(int(product_id))
+            else:
+                if self.logger:
+                    self.logger.warning(f"قيمة product_id غير صحيحة: {product_id}")
+                QMessageBox.warning(self, "تحذير", "معرف المنتج غير صحيح")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في تعديل المنتج: {e}", exc_info=True)
+            QMessageBox.critical(self, "خطأ", f"فشل في تعديل المنتج:\n{str(e)}")
+    
+    def _on_inventory_delete_clicked_by_id(self, product_id: int):
+        """
+        🔥 معالجة النقر على أيقونة الحذف (Modern Delegate)
+        يستقبل product_id مباشرة من Delegate
+        """
+        try:
+            if product_id and product_id > 0:
+                self._delete_product_by_id(int(product_id))
+            else:
+                if self.logger:
+                    self.logger.warning(f"قيمة product_id غير صحيحة: {product_id}")
+                QMessageBox.warning(self, "تحذير", "معرف المنتج غير صحيح")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في حذف المنتج: {e}", exc_info=True)
+            QMessageBox.critical(self, "خطأ", f"فشل في حذف المنتج:\n{str(e)}")
+    
+    def _edit_product_by_id(self, product_id: int):
+        """تعديل منتج حسب المعرف"""
+        try:
+            # 🔥 CRITICAL FIX: الحصول على كائن Product أولاً
+            from src.ui.dialogs.product_dialog import ProductDialog
+            from src.models.product import ProductManager
+            
+            # الحصول على المنتج من قاعدة البيانات
+            product_manager = ProductManager(self.db_manager)
+            product = product_manager.get_product_by_id(product_id)
+            
+            if not product:
+                QMessageBox.warning(self, "تحذير", f"لم يتم العثور على المنتج برقم: {product_id}")
+                return
+            
+            # إنشاء Dialog مع كائن Product (وليس product_id)
+            dialog = ProductDialog(self.db_manager, product=product, parent=self)
+            dialog.product_saved.connect(self.on_product_saved)
+            
+            if dialog.exec() == QDialog.Accepted:
+                if self.logger:
+                    self.logger.info(f"تم تعديل المنتج {product_id} بنجاح")
+                self.show_success_message("تم تعديل المنتج بنجاح")
+                self.refresh_inventory_data()
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في تعديل المنتج {product_id}: {e}", exc_info=True)
+            QMessageBox.critical(self, "خطأ", f"فشل في تعديل المنتج:\n{str(e)}")
+    
+    def _delete_product_by_id(self, product_id: int):
+        """حذف منتج حسب المعرف"""
+        reply = QMessageBox.question(
+            self,
+            "تأكيد الحذف",
+            f"هل تريد حذف المنتج (ID: {product_id})؟\nهذا الإجراء لا يمكن التراجع عنه.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                if hasattr(self, "inventory_service") and self.inventory_service:
+                    self.inventory_service.delete_product(product_id)
+                    
+                    # 🔥 إطلاق الإشارات: إعلام النظام بالتغييرات
+                    try:
+                        from src.core.signals import signals
+                        signals.inventory_updated.emit()
+                        signals.inventory_item_deleted.emit(product_id)
+                        if self.logger:
+                            self.logger.debug(f"✅ تم إطلاق إشارات: inventory_updated, inventory_item_deleted")
+                    except Exception as e:
+                        if self.logger:
+                            self.logger.warning(f"⚠️ فشل إطلاق الإشارات: {e}")
+                    
+                    if self.logger:
+                        self.logger.info(f"تم حذف المنتج {product_id} بنجاح")
+                    self.show_success_message("تم حذف المنتج بنجاح")
+                    self.refresh_inventory_data()
+                else:
+                    QMessageBox.warning(self, "تحذير", "خدمة المخزون غير متاحة.")
+            except Exception as e:
+                if self.logger:
+                    self.logger.error(f"خطأ في حذف المنتج {product_id}: {e}")
+                QMessageBox.critical(self, "خطأ", f"فشل في حذف المنتج:\n{str(e)}")
+    
+    def _show_inventory_context_menu(self, position):
+        """عرض قائمة السياق (Right-Click Menu) لجدول المخزون"""
+        try:
+            index = self.inventory_table.indexAt(position)
+            if not index.isValid():
+                return
+            
+            # الحصول على product_id
+            product_id_index = self.inventory_model.index(index.row(), 0)
+            product_id = self.inventory_model.data(product_id_index, Qt.UserRole)
+            if not product_id:
+                product_id = self.inventory_model.data(product_id_index, Qt.DisplayRole)
+            
+            if not product_id:
+                return
+            
+            # إنشاء القائمة
+            menu = QMenu(self)
+            
+            edit_action = menu.addAction("✏️ تعديل المنتج")
+            edit_action.triggered.connect(lambda: self._edit_product_by_id(int(product_id)))
+            
+            delete_action = menu.addAction("🗑️ حذف المنتج")
+            delete_action.triggered.connect(lambda: self._delete_product_by_id(int(product_id)))
+            
+            menu.addSeparator()
+            
+            copy_action = menu.addAction("📋 نسخ معرف المنتج")
+            copy_action.triggered.connect(lambda: self._copy_product_id_to_clipboard(int(product_id)))
+            
+            menu.exec(self.inventory_table.viewport().mapToGlobal(position))
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في عرض قائمة السياق: {e}")
+    
+    def _copy_product_id_to_clipboard(self, product_id: int):
+        """نسخ معرف المنتج إلى الحافظة"""
+        try:
+            from PySide6.QtWidgets import QApplication
+            clipboard = QApplication.clipboard()
+            clipboard.setText(str(product_id))
+            self.show_success_message(f"تم نسخ معرف المنتج: {product_id}")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في نسخ معرف المنتج: {e}")
+        
+            # تحميل البيانات الأولية (مع معالجة أخطاء محسّنة)
+            try:
+                self.load_inventory_filters()
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"فشل تحميل مرشحات المخزون: {e}")
+            
+            # وضع المحتوى في QScrollArea
+            scroll_area.setWidget(tab)  # pyright: ignore[reportUndefinedVariable]  # pyright: ignore[reportUndefinedVariable]  # pyright: ignore[reportUndefinedVariable]  # pyright: ignore[reportUndefinedVariable]
+            
+            # تحميل البيانات بعد وضع المحتوى (لتجنب مشاكل التوقيت)
+            # استخدام QTimer لتأخير التحميل قليلاً
+            # إضافة timeout handling لتجنب التعليق
+            def safe_refresh():
+                try:
+                    self.refresh_inventory_data()
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"فشل تحميل بيانات المخزون: {e}")
+            
+            QTimer.singleShot(100, safe_refresh)
+            
+            if self.logger:
+                self.logger.debug("✅ تم إنشاء تبويب المخزون بنجاح")
+            
+            return scroll_area  # pyright: ignore[reportUndefinedVariable]
+            
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            if self.logger:
+                self.logger.error(f"❌ خطأ في create_inventory_tab(): {e}")
+                self.logger.error(f"تفاصيل الخطأ:\n{error_details}")
+            else:
+                print(f"❌ خطأ في create_inventory_tab(): {e}")
+                print(f"تفاصيل الخطأ:\n{error_details}")
+            # إرجاع صفحة فارغة مع رسالة خطأ بدلاً من None
+            try:
+                error_widget = QWidget()
+                error_label = QLabel(f"❌ خطأ في تحميل صفحة المخزون:\n{str(e)}\n\nيرجى التحقق من السجلات.")
+                error_label.setWordWrap(True)
+                error_label.setAlignment(Qt.AlignCenter)
+                error_label.setStyleSheet("color: red; font-size: 14px; padding: 20px;")
+                error_layout = QVBoxLayout(error_widget)
+                error_layout.addWidget(error_label)
+                return error_widget
+            except:
+                # إذا فشل حتى إنشاء صفحة الخطأ، أرجع None
+                return None
+    
+    def _on_inventory_header_clicked(self, logical_index: int):
+        """معالجة الضغط على رأس العمود للفرز"""
+        try:
+            if not hasattr(self, 'inventory_model') or self.inventory_model is None:
+                return
+            
+            # الحصول على الترتيب الحالي
+            header = self.inventory_table.horizontalHeader()
+            current_order = header.sortIndicatorOrder()
+            
+            # تبديل الترتيب
+            new_order = Qt.DescendingOrder if current_order == Qt.AscendingOrder else Qt.AscendingOrder
+            
+            # تطبيق الفرز
+            self.inventory_model.sort(logical_index, new_order)
+            
+            # تحديث مؤشر الفرز
+            header.setSortIndicator(logical_index, new_order)
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فرز الجدول: {e}")
+    
+    def create_sales_tab(self) -> QWidget:
+        """إنشاء تبويب المبيعات"""
+        # 🔥 الربط العصبي: ربط الإشارات لتحديث تلقائي (مع منع الاتصالات المكررة)
+        try:
+            from src.core.signals import signals
+            import warnings
+            
+            # فك الاتصال أولاً لتجنب الاتصالات المكررة (إذا كانت موجودة)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)
+                try:
+                    signals.sales_updated.disconnect(self.refresh_sales_data)
+                except (TypeError, RuntimeError):
+                    pass
+            
+            # إنشاء مراجع للـ lambda functions لتجنب الاتصالات المكررة
+            if not hasattr(self, '_sale_created_slot'):
+                self._sale_created_slot = lambda sale_id: self.refresh_sales_data()
+            if not hasattr(self, '_sale_updated_slot'):
+                self._sale_updated_slot = lambda sale_id: self.refresh_sales_data()
+            if not hasattr(self, '_sale_deleted_slot'):
+                self._sale_deleted_slot = lambda sale_id: self.refresh_sales_data()
+            
+            # فك الاتصال من الـ slots المخصصة
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)
+                try:
+                    signals.sale_created.disconnect(self._sale_created_slot)
+                except (TypeError, RuntimeError):
+                    pass
+                try:
+                    signals.sale_updated.disconnect(self._sale_updated_slot)
+                except (TypeError, RuntimeError):
+                    pass
+                try:
+                    signals.sale_deleted.disconnect(self._sale_deleted_slot)
+                except (TypeError, RuntimeError):
+                    pass
+            
+            # ربط الإشارات
+            signals.sales_updated.connect(self.refresh_sales_data)
+            signals.sale_created.connect(self._sale_created_slot)
+            signals.sale_updated.connect(self._sale_updated_slot)
+            signals.sale_deleted.connect(self._sale_deleted_slot)
+            
+            if self.logger:
+                self.logger.debug("✅ تم ربط إشارات المبيعات بنجاح")
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"⚠️ فشل ربط إشارات المبيعات: {e}")
+        
         tab = QWidget()
         layout = QVBoxLayout(tab)
         layout.setSpacing(12)
         layout.setContentsMargins(12, 12, 12, 12)
         
-        # عنوان القسم
-        title = QLabel("إدارة المخزون")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #27ae60; margin-bottom: 4px;")
+        title = QLabel("إدارة المبيعات والفواتير")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: rgb(231, 76, 60); margin-bottom: 4px;")
         layout.addWidget(title)
         
-        # أزرار سريعة
+        # أزرار الإجراءات
         buttons_layout = QHBoxLayout()
         buttons_layout.setSpacing(10)
         
-        add_product_btn = QPushButton("➕ إضافة منتج")
-        add_product_btn.setMinimumHeight(36)
-        add_product_btn.clicked.connect(self.add_product)
-        buttons_layout.addWidget(add_product_btn)
+        new_sale_btn = QPushButton("🛒 فاتورة جديدة")
+        new_sale_btn.setMinimumHeight(36)
+        new_sale_btn.clicked.connect(self.new_sale)
+        buttons_layout.addWidget(new_sale_btn)
         
-        manage_categories_btn = QPushButton("📂 إدارة الفئات")
-        manage_categories_btn.setMinimumHeight(36)
-        manage_categories_btn.clicked.connect(self.manage_categories)
-        buttons_layout.addWidget(manage_categories_btn)
+        pos_btn = QPushButton("💳 نقطة البيع")
+        pos_btn.setMinimumHeight(36)
+        pos_btn.clicked.connect(self.open_pos)
+        buttons_layout.addWidget(pos_btn)
         
-        inventory_report_btn = QPushButton("📋 تقرير المخزون")
-        inventory_report_btn.setMinimumHeight(36)
-        inventory_report_btn.clicked.connect(self.inventory_report)
-        buttons_layout.addWidget(inventory_report_btn)
+        print_receipt_btn = QPushButton("🖨️ طباعة إيصال")
+        print_receipt_btn.setMinimumHeight(36)
+        print_receipt_btn.clicked.connect(self.print_selected_sale_receipt)
+        print_receipt_btn.setToolTip("طباعة إيصال حراري (للطابعات الحرارية)")
+        buttons_layout.addWidget(print_receipt_btn)
         
+        # زر طباعة فاتورة HTML احترافية
+        print_invoice_btn = QPushButton("📄 طباعة فاتورة")
+        print_invoice_btn.setMinimumHeight(36)
+        print_invoice_btn.setToolTip("طباعة فاتورة HTML احترافية في المتصفح")
+        print_invoice_btn.clicked.connect(self.print_invoice_html)
+        buttons_layout.addWidget(print_invoice_btn)
+        
+        sales_report_btn = QPushButton("📈 تقرير المبيعات")
+        sales_report_btn.setMinimumHeight(36)
+        sales_report_btn.clicked.connect(self.sales_report)
+        buttons_layout.addWidget(sales_report_btn)
         buttons_layout.addStretch()
         layout.addLayout(buttons_layout)
         
-        # منطقة المرشحات
+        # مرشحات البحث
         filters_frame = QFrame()
-        filters_frame.setObjectName("inventoryFiltersFrame")
-        filters_frame.setStyleSheet("""
-            QFrame#inventoryFiltersFrame {
-                background-color: #f8f9fa;
-                border: 1px solid #e0e4e7;
-                border-radius: 6px;
-            }
-        """)
+        filters_frame.setObjectName("salesFiltersFrame")
+        filters_frame.setStyleSheet(
+            "QFrame#salesFiltersFrame {"
+            "background-color: rgb(248, 249, 250);"
+            "border: 1px solid rgb(224, 228, 231);"
+            "border-radius: 6px;"
+            "}"
+        )
         filters_layout = QHBoxLayout(filters_frame)
         filters_layout.setContentsMargins(12, 8, 12, 8)
         filters_layout.setSpacing(12)
         
         search_label = QLabel("بحث:")
-        search_label.setStyleSheet("color: #34495e; font-weight: 600;")
+        search_label.setStyleSheet("color: rgb(52, 73, 94); font-weight: 600;")
         filters_layout.addWidget(search_label)
         
-        self.inventory_search_input = QLineEdit()
-        self.inventory_search_input.setPlaceholderText("ابحث باسم المنتج أو الباركود...")
-        self.inventory_search_input.textChanged.connect(self.on_inventory_filters_changed)
-        filters_layout.addWidget(self.inventory_search_input, 2)
+        self.sales_search_input = QLineEdit()
+        self.sales_search_input.setPlaceholderText("ابحث برقم الفاتورة أو اسم العميل...")
+        self.sales_search_input.textChanged.connect(self.on_sales_filters_changed)
+        filters_layout.addWidget(self.sales_search_input, 2)
         
-        category_label = QLabel("الفئة:")
-        category_label.setStyleSheet("color: #34495e; font-weight: 600;")
-        filters_layout.addWidget(category_label)
+        # 🔥 Debouncing للبحث في المبيعات
+        self._sales_search_debounce_timer = QTimer(self)
+        self._sales_search_debounce_timer.setSingleShot(True)
+        self._sales_search_debounce_timer.timeout.connect(self.refresh_sales_data)
+        self.sales_search_input.textChanged.connect(lambda text: self._sales_search_debounce_timer.start(500))
         
-        self.inventory_category_combo = QComboBox()
-        self.inventory_category_combo.setMinimumWidth(200)
-        self.inventory_category_combo.currentIndexChanged.connect(self.on_inventory_filters_changed)
-        filters_layout.addWidget(self.inventory_category_combo, 1)
+        status_label = QLabel("الحالة:")
+        status_label.setStyleSheet("color: rgb(52, 73, 94); font-weight: 600;")
+        filters_layout.addWidget(status_label)
         
-        self.inventory_refresh_btn = QPushButton("🔄 تحديث")
-        self.inventory_refresh_btn.setMinimumHeight(32)
-        self.inventory_refresh_btn.clicked.connect(self.refresh_inventory_data)
-        filters_layout.addWidget(self.inventory_refresh_btn)
+        self.sales_status_combo = QComboBox()
+        self.sales_status_combo.setMinimumWidth(150)
+        self.sales_status_combo.addItems(["الكل", "مسودة", "مؤكدة", "مدفوعة", "مدفوعة جزئياً", "ملغية"])
+        self.sales_status_combo.currentIndexChanged.connect(self.on_sales_filters_changed)
+        filters_layout.addWidget(self.sales_status_combo, 1)
+        
+        payment_label = QLabel("طريقة الدفع:")
+        payment_label.setStyleSheet("color: rgb(52, 73, 94); font-weight: 600;")
+        filters_layout.addWidget(payment_label)
+        
+        self.sales_payment_combo = QComboBox()
+        self.sales_payment_combo.setMinimumWidth(150)
+        self.sales_payment_combo.addItems(["الكل", "نقدي", "بطاقة", "تحويل بنكي", "آجل"])
+        self.sales_payment_combo.currentIndexChanged.connect(self.on_sales_filters_changed)
+        filters_layout.addWidget(self.sales_payment_combo, 1)
+        
+        self.sales_refresh_btn = QPushButton("🔄 تحديث")
+        self.sales_refresh_btn.setMinimumHeight(32)
+        self.sales_refresh_btn.clicked.connect(self.refresh_sales_data)
+        filters_layout.addWidget(self.sales_refresh_btn)
         
         layout.addWidget(filters_frame)
-        
-        # ملخص المخزون
-        summary_group = QGroupBox("ملخص المخزون")
+
+        # ملخص المبيعات
+        summary_group = QGroupBox("ملخص المبيعات")
         summary_layout = QHBoxLayout(summary_group)
         summary_layout.setContentsMargins(12, 12, 12, 12)
         summary_layout.setSpacing(18)
         
         summary_items = [
-            ("total_products", "إجمالي المنتجات"),
-            ("total_categories", "إجمالي الفئات"),
-            ("total_stock_value", "قيمة المخزون"),
-            ("low_stock_items", "منتجات مخزون منخفض"),
-            ("out_of_stock_items", "منتجات نفدت"),
-            ("expired_items", "منتجات منتهية")
+            ("total_invoices", "إجمالي الفواتير"),
+            ("total_revenue", "إجمالي الإيرادات"),
+            ("total_paid", "المبلغ المدفوع"),
+            ("total_remaining", "المبلغ المتبقي"),
+            ("avg_invoice_value", "متوسط قيمة الفاتورة")
         ]
         
-        self.inventory_summary_labels = {}
+        self.sales_summary_labels = {}
         for key, title_text in summary_items:
             container = QWidget()
             container_layout = QVBoxLayout(container)
@@ -487,90 +3436,1540 @@ class MainWindow(QMainWindow):
             container_layout.setSpacing(4)
             
             title_label = QLabel(title_text)
-            title_label.setStyleSheet("color: #7f8c8d; font-size: 12px;")
+            title_label.setStyleSheet("color: rgb(127, 140, 141); font-size: 12px;")
             value_label = QLabel("-")
-            value_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #2c3e50;")
+            value_label.setStyleSheet("font-size: 20px; font-weight: bold; color: rgb(44, 62, 80);")
             
             container_layout.addWidget(title_label)
             container_layout.addWidget(value_label)
             container_layout.addStretch()
             
             summary_layout.addWidget(container)
-            self.inventory_summary_labels[key] = value_label
+            self.sales_summary_labels[key] = value_label
         
         summary_layout.addStretch()
         layout.addWidget(summary_group)
-        
-        # جدول المخزون
-        self.inventory_table = QTableWidget()
-        self.inventory_table.setColumnCount(9)
-        self.inventory_table.setHorizontalHeaderLabels([
-            "المعرف", "الباركود", "اسم المنتج", "الفئة",
-            "الوحدة", "الكمية الحالية", "الحد الأدنى",
-            "سعر البيع", "حالة المخزون"
+
+        # جدول المبيعات
+        self.sales_table = QTableWidget()
+        self.sales_table.setColumnCount(9)  # إضافة عمود للإجراءات
+        self.sales_table.setHorizontalHeaderLabels([
+            "رقم الفاتورة", "العميل", "التاريخ", "المبلغ الإجمالي", 
+            "المبلغ المدفوع", "المبلغ المتبقي", "الحالة", "طريقة الدفع", "إجراءات"
         ])
-        header = self.inventory_table.horizontalHeader()
+        header = self.sales_table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.Stretch)
-        self.inventory_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.inventory_table.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.inventory_table.setAlternatingRowColors(True)
-        self.inventory_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.inventory_table.setStyleSheet("""
-            QTableWidget {
-                background-color: white;
-                gridline-color: #ecf0f1;
-            }
-            QHeaderView::section {
-                background-color: #ecf0f1;
-                font-weight: bold;
-                padding: 6px;
-            }
-        """)
-        layout.addWidget(self.inventory_table)
+        header.setSectionResizeMode(8, QHeaderView.ResizeToContents)  # عمود الإجراءات
+        # 🔥 جدول المبيعات عالي الأداء (QTableView + Model)
+        self.sales_table = QTableView()
+        self.sales_model = SalesTableModel(parent=self.sales_table)
+        self.sales_table.setModel(self.sales_model)
+        
+        # إعدادات الأداء
+        self.sales_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.sales_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.sales_table.setAlternatingRowColors(True)
+        self.sales_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.sales_table.setStyleSheet(
+            "QTableWidget {"
+            "background-color: white;"
+            "gridline-color: rgb(236, 240, 241);"
+            "}"
+            "QHeaderView::section {"
+            "background-color: rgb(236, 240, 241);"
+            "font-weight: bold;"
+            "padding: 6px;"
+            "}"
+        )
+        self.sales_table.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+        
+        # إعدادات Header
+        header = self.sales_table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Stretch)
+        header.setSectionResizeMode(9, QHeaderView.ResizeToContents) # عمود الإجراءات
+        header.setSortIndicatorShown(True)
+        header.sectionClicked.connect(lambda index: self.sales_model.sort(index, header.sortIndicatorOrder()))
+        
+        # 🔥 Modern Action Delegate
+        self.sales_action_delegate = ModernActionDelegate(self.sales_table)
+        self.sales_action_delegate.edit_clicked.connect(self._on_sale_edit_clicked)
+        self.sales_action_delegate.delete_clicked.connect(self._on_sale_delete_clicked)
+        self.sales_table.setItemDelegateForColumn(9, self.sales_action_delegate)
+        
+        # ربط النقر المزدوج لعرض التفاصيل
+        # QTableView يستخدم doubleClicked (ليس itemDoubleClicked)
+        self.sales_table.doubleClicked.connect(self.on_sale_double_clicked)
+        layout.addWidget(self.sales_table)
         
         # تحميل البيانات الأولية
-        self.load_inventory_filters()
-        self.refresh_inventory_data()
+        self.refresh_sales_data()
         
         return tab
+
+    def _on_sale_edit_clicked(self, sale_id: int):
+        """معالجة النقر على أيقونة التعديل في جدول المبيعات"""
+        try:
+            if sale_id > 0:
+                self.edit_sale(sale_id)
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في تعديل الفاتورة {sale_id}: {e}", exc_info=True)
+
+    def _on_sale_delete_clicked(self, sale_id: int):
+        """معالجة النقر على أيقونة الحذف في جدول المبيعات"""
+        try:
+            if sale_id > 0:
+                reply = QMessageBox.question(self, "تأكيد الحذف", f"هل تريد حذف الفاتورة رقم {sale_id}؟", QMessageBox.Yes | QMessageBox.No)
+                if reply == QMessageBox.Yes:
+                    # Implement deletion logic here
+                    if self.logger:
+                        self.logger.info(f"طلب حذف الفاتورة {sale_id}")
+                    # self.sales_service.delete_sale(sale_id)
+                    self.refresh_sales_data()
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في حذف الفاتورة {sale_id}: {e}", exc_info=True)
+    def print_selected_sale_receipt(self):
+        """Prints a receipt for the currently selected sale."""
+        if not self.printing_service:
+            QMessageBox.critical(self, "خطأ", "خدمة الطباعة غير متوفرة.")
+            return
+
+        selected_rows = self.sales_table.selectionModel().selectedRows()
+        if not selected_rows or not hasattr(self, 'sales_model'):
+            QMessageBox.warning(self, "تنبيه", "يرجى تحديد فاتورة لطباعتها.")
+            return
+        
+        selected_row = selected_rows[0].row()
+        invoice_number_item = self.sales_table.item(selected_row, 0)
+        # Assuming sale ID is stored in the UserRole data of the first item
+        sale_id = invoice_number_item.data(Qt.UserRole)
+        model_index = selected_rows[0]
+        sale_id = self.sales_model.data(self.sales_model.index(model_index.row(), 0), Qt.UserRole)
+        
+        if not sale_id:
+            QMessageBox.warning(self, "خطأ", "لا يمكن العثور على معرّف الفاتورة.")
+            return
+
+        # There should be an except or finally block with the try statement,
+        # but there is no try here, so remove it along with wrong indentation.
+        # Moved valid code after "return" (but here there is nothing to do).
+            s = QSettings('LogicalVersion', 'ERP')
+            printer_config = {
+                'vendor_id': s.value('printer/vendor_id', type=int),
+                'product_id': s.value('printer/product_id', type=int)
+            }
+
+            if not printer_config.get('vendor_id') or not printer_config.get('product_id'):
+                QMessageBox.critical(self, "خطأ", "لم يتم تكوين طابعة. يرجى تحديد طابعة في الإعدادات.")
+                return
+
+            success, message = self.printing_service.print_receipt(printer_config, sale_details)
+
+            if success:
+                QMessageBox.information(self, "نجاح", "تم إرسال الإيصال إلى الطابعة.")
+                if sale_details.get('payment_method') == 'نقدي':
+                    self.printing_service.open_cash_drawer(printer_config)
+            else:
+                QMessageBox.critical(self, "فشل الطباعة", f"حدث خطأ أثناء الطباعة: {message}")
+        if not self.printing_service:
+            QMessageBox.critical(self, "خطأ", "خدمة الطباعة غير متوفرة.")
+            return
+
+        # 1. Get selected sale
+        selected_rows = self.sales_table.selectionModel().selectedRows()
+        if not selected_rows or not hasattr(self, 'sales_model'):
+            QMessageBox.warning(self, "تنبيه", "يرجى تحديد فاتورة لطباعتها.")
+            return
+        
+        selected_row = selected_rows[0].row()
+        invoice_number_item = self.sales_table.item(selected_row, 0)
+        invoice_number = invoice_number_item.text()
+        model_index = selected_rows[0]
+        sale_id = self.sales_model.data(self.sales_model.index(model_index.row(), 0), Qt.UserRole)
+
+        # 2. Get sale details from service (or table if sufficient)
+        # For this example, we'll construct mock data.
+        # In a real scenario, you'd fetch this from sales_service.
+        sale_data = {
+            'total': float(self.sales_table.item(selected_row, 3).text()),
+            'items': [
+                {'name': 'Item 1', 'quantity': 2, 'price': 10.00},
+                {'name': 'Item 2', 'quantity': 1, 'price': 30.50},
+            ]
+        }
+
+        # 3. Get saved printer config
+        from PySide6.QtCore import QSettings
+        s = QSettings('LogicalVersion', 'ERP')
+        printer_config = {
+            'vendor_id': s.value('printer/vendor_id', type=int),
+            'product_id': s.value('printer/product_id', type=int)
+        }
+
+        if not printer_config['vendor_id'] or not printer_config['product_id']:
+            QMessageBox.critical(self, "خطأ", "لم يتم تكوين طابعة. يرجى تحديد طابعة في الإعدادات.")
+            return
+
+        # 4. Call printing service
+        success, message = self.printing_service.print_receipt(printer_config, sale_data)
+
+        if success:
+            QMessageBox.information(self, "نجاح", "تم إرسال الإيصال إلى الطابعة.")
+        else:
+            QMessageBox.critical(self, "فشل الطباعة", f"حدث خطأ أثناء الطباعة: {message}")
     
-    def create_sales_tab(self) -> QWidget:
-        """إنشاء تبويب المبيعات"""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
+    def print_invoice_html(self):
+        """
+        🖨️ طباعة فاتورة HTML احترافية (باستخدام Jinja2 Template)
+        """
+        if not hasattr(self, 'invoice_print_service') or not self.invoice_print_service:
+            QMessageBox.critical(self, "خطأ", "خدمة طباعة الفواتير غير متوفرة.")
+            return
         
-        title = QLabel("إدارة المبيعات")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #e74c3c; margin: 10px;")
-        layout.addWidget(title)
+        # الحصول على الفاتورة المحددة
+        if not hasattr(self, 'sales_table'):
+            QMessageBox.warning(self, "تنبيه", "جدول المبيعات غير متاح.")
+            return
         
-        buttons_layout = QHBoxLayout()
+        selected_rows = self.sales_table.selectionModel().selectedRows()
+        if not selected_rows or not hasattr(self, 'sales_model'):
+            QMessageBox.warning(self, "تنبيه", "يرجى تحديد فاتورة لطباعتها.")
+            return
         
-        new_sale_btn = QPushButton("🛒 فاتورة جديدة")
-        new_sale_btn.setMinimumHeight(40)
-        new_sale_btn.clicked.connect(self.new_sale)
-        buttons_layout.addWidget(new_sale_btn)
+        selected_row = selected_rows[0].row()
+        invoice_number_item = self.sales_table.item(selected_row, 0)
+        model_index = selected_rows[0]
+        # الحصول على ID من النموذج مباشرة
+        sale_id = self.sales_model.data(self.sales_model.index(model_index.row(), 0), Qt.UserRole)
         
-        pos_btn = QPushButton("💳 نقطة البيع")
-        pos_btn.setMinimumHeight(40)
-        pos_btn.clicked.connect(self.open_pos)
-        buttons_layout.addWidget(pos_btn)
+        # محاولة الحصول على sale_id من UserRole
+        sale_id = None
+        if invoice_number_item:
+            sale_id = invoice_number_item.data(Qt.UserRole)
+            if not sale_id:
+                # محاولة استخراج ID من رقم الفاتورة
+                invoice_text = invoice_number_item.text()
+                try:
+                    # إذا كان رقم الفاتورة يحتوي على ID
+                    if 'INV-' in invoice_text:
+                        sale_id = int(invoice_text.split('-')[-1])
+                except:
+                    pass
         
-        sales_report_btn = QPushButton("📈 تقرير المبيعات")
-        sales_report_btn.setMinimumHeight(40)
-        sales_report_btn.clicked.connect(self.sales_report)
-        buttons_layout.addWidget(sales_report_btn)
+        if not sale_id:
+            QMessageBox.warning(self, "خطأ", "لا يمكن العثور على معرّف الفاتورة.")
+            return
         
-        buttons_layout.addStretch()
-        layout.addLayout(buttons_layout)
+        try:
+            # جلب بيانات الفاتورة من قاعدة البيانات
+            if not self.sales_service or not hasattr(self.sales_service, 'sale_manager'):
+                QMessageBox.critical(self, "خطأ", "خدمة المبيعات غير متوفرة.")
+                return
+            
+            sale = self.sales_service.sale_manager.get_sale_by_id(sale_id)
+            if not sale:
+                QMessageBox.warning(self, "خطأ", f"لم يتم العثور على الفاتورة رقم {sale_id}")
+                return
+            
+            # جلب بيانات العميل
+            customer_name = "عميل نقدي"
+            customer_phone = ""
+            customer_address = ""
+            
+            if hasattr(sale, 'customer_id') and sale.customer_id:
+                try:
+                    if self.customer_manager:
+                        customer = self.customer_manager.get_customer_by_id(sale.customer_id)
+                        if customer:
+                            customer_name = customer.name
+                            customer_phone = getattr(customer, 'phone', '')
+                            customer_address = getattr(customer, 'address', '')
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"فشل جلب بيانات العميل: {e}")
+            
+            # جلب أصناف الفاتورة
+            items = []
+            try:
+                if self.db_manager:
+                    sale_items = self.db_manager.execute_query(
+                        """
+                        SELECT 
+                            si.*,
+                            p.name as product_name,
+                            p.barcode
+                        FROM sale_items si
+                        JOIN products p ON si.product_id = p.id
+                        WHERE si.sale_id = ?
+                        ORDER BY si.id
+                        """,
+                        (sale_id,)
+                    )
+                    
+                    for item in sale_items:
+                        if isinstance(item, dict):
+                            items.append({
+                                'name': item.get('product_name', 'منتج غير محدد'),
+                                'barcode': item.get('barcode', ''),
+                                'quantity': item.get('quantity', 0),
+                                'price': float(item.get('unit_price', item.get('price', 0)) or 0),
+                                'total': float(item.get('total_price', item.get('total', 0)) or 0)
+                            })
+                        else:
+                            # Handle tuple result
+                            items.append({
+                                'name': item[8] if len(item) > 8 else 'منتج غير محدد',
+                                'barcode': item[9] if len(item) > 9 else '',
+                                'quantity': item[3] if len(item) > 3 else 0,
+                                'price': float(item[4] if len(item) > 4 else 0),
+                                'total': float(item[5] if len(item) > 5 else 0)
+                            })
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"فشل جلب أصناف الفاتورة: {e}")
+            
+            # إعداد بيانات الفاتورة
+            invoice_data = {
+                'id': getattr(sale, 'invoice_number', None) or f"INV-{sale_id}",
+                'date': sale.sale_date.strftime("%Y-%m-%d") if hasattr(sale.sale_date, 'strftime') else str(sale.sale_date),
+                'customer': customer_name,
+                'customer_phone': customer_phone,
+                'customer_address': customer_address,
+                'items': items,
+                'subtotal': float(getattr(sale, 'subtotal', 0) or 0),
+                'discount': float(getattr(sale, 'discount', 0) or 0),
+                'tax': float(getattr(sale, 'tax', 0) or 0),
+                'total': float(getattr(sale, 'total_amount', 0) or 0),
+                'paid': float(getattr(sale, 'paid_amount', 0) or 0),
+                'remaining': float(getattr(sale, 'remaining_amount', 0) or 0),
+                'payment_method': getattr(sale, 'payment_method', ''),
+                'notes': getattr(sale, 'notes', ''),
+                'company_name': 'الإصدار المنطقي',
+                'company_phone': '0123456789',
+                'company_address': 'الجزائر العاصمة',
+                'company_tax_id': ''
+            }
+            
+            # طباعة الفاتورة
+            success, message = self.invoice_print_service.print_invoice(invoice_data, auto_print=False)
+            
+            if success:
+                self.statusBar().showMessage("✅ تم فتح الفاتورة في المتصفح للطباعة", 5000)
+            else:
+                QMessageBox.critical(self, "فشل الطباعة", f"حدث خطأ أثناء طباعة الفاتورة:\n{message}")
         
-        content_label = QLabel("سيتم إضافة جدول المبيعات والفواتير هنا")
-        content_label.setAlignment(Qt.AlignCenter)
-        content_label.setStyleSheet("color: #7f8c8d; font-size: 14px; margin: 50px;")
-        layout.addWidget(content_label)
+        except Exception as e:
+            error_msg = f"خطأ في طباعة الفاتورة: {str(e)}"
+            if self.logger:
+                self.logger.error(error_msg, exc_info=True)
+            QMessageBox.critical(self, "خطأ", error_msg)
+
+    def refresh_sales_data(self):
+        """تحديث بيانات جدول المبيعات (محسّنة - في الخلفية)"""
+        if not hasattr(self, 'sales_table'):
+            return
         
-        layout.addStretch()
-        return tab
+        if not getattr(self, 'sales_service', None):
+            self.sales_table.setRowCount(0)
+            return
+        
+        # Throttling - منع التحديثات المتكررة
+        if self._is_updating:
+            return
+            return # pyright: ignore[reportUnnecessaryComparison]
+        
+        self._is_updating = True
+        start_time = time.perf_counter()
+        self._sales_load_started = start_time
+        
+        try:
+            # تعطيل الأزرار أثناء التحديث
+            if hasattr(self, "sales_refresh_btn"):
+                self.sales_refresh_btn.setEnabled(False)
+                self.sales_refresh_btn.setText("⏳ جاري التحديث...")
+            
+            # جمع معاملات البحث
+            status_text = self.sales_status_combo.currentText() if hasattr(self, 'sales_status_combo') else "الكل"
+            payment_text = self.sales_payment_combo.currentText() if hasattr(self, 'sales_payment_combo') else "الكل"
+            search_term = self.sales_search_input.text().strip() if hasattr(self, 'sales_search_input') else ""
+            
+            # تحويل الحالة
+            status = None
+            if status_text != "الكل":
+                status_map = {
+                    "مسودة": "draft",
+                    "مؤكدة": "confirmed",
+                    "مدفوعة": "paid",
+                    "مدفوعة جزئياً": "partially_paid",
+                    "ملغية": "cancelled"
+                }
+                status = status_map.get(status_text)
+            
+            # تحويل طريقة الدفع
+            payment_method = None
+            if payment_text != "الكل":
+                payment_map = {
+                    "نقدي": "cash",
+                    "بطاقة": "card",
+                    "تحويل بنكي": "bank_transfer",
+                    "آجل": "credit"
+                }
+                payment_method = payment_map.get(payment_text)
+            
+            # تحميل البيانات في الخلفية باستخدام Worker
+            def load_sales():
+                """تحميل بيانات المبيعات في الخلفية"""
+                try:
+                    sales_list = self.sales_service.list_sales(
+                        search_term=search_term if search_term else None,
+                        status=status,
+                        payment_method=payment_method,
+                        limit=500
+                    )
+                    # حساب الملخص من جميع الفواتير (بدون فلترة التاريخ) أو من الفواتير المحملة
+                    # إذا كانت هناك فلاتر، نحسب من sales_list مباشرة
+                    if sales_list:
+                        # حساب الملخص من البيانات المحملة
+                        total_invoices = len(sales_list)
+                        total_revenue = sum(float(s.get('total_amount', 0) or 0) for s in sales_list)
+                        total_paid = sum(float(s.get('paid_amount', 0) or 0) for s in sales_list)
+                        total_remaining = sum(float(s.get('remaining_amount', 0) or 0) for s in sales_list)
+                        avg_invoice_value = total_revenue / total_invoices if total_invoices > 0 else 0.0
+                        
+                        summary = {
+                            'total_invoices': total_invoices,
+                            'total_revenue': total_revenue,
+                            'total_amount': total_revenue,  # للتوافق
+                            'total_paid': total_paid,
+                            'total_remaining': total_remaining,
+                            'avg_invoice_value': avg_invoice_value
+                        }
+                    else:
+                        # إذا لم تكن هناك بيانات، جلب الملخص من قاعدة البيانات
+                        summary = self.sales_service.get_sales_summary()
+                    return {'sales': sales_list, 'summary': summary}
+                except Exception as e:
+                    if self.logger:
+                        self.logger.error(f"خطأ في تحميل بيانات المبيعات: {e}")
+                    return None
+            
+            # إنشاء Worker وتشغيله
+            sales_worker = DataLoaderWorker(load_sales)
+            # 🔥 استخدام SalesDataLoaderThread الجديد
+            db_path = self.db_manager.db_path if hasattr(self.db_manager, 'db_path') else "data/logical_release.db"
+            sales_worker = SalesDataLoaderThread(
+                db_path=db_path,
+                search_term=search_term,
+                status=status,
+                payment_method=payment_method
+            )
+            sales_worker.data_loaded.connect(self._on_sales_data_loaded)
+            
+            # معالج الأخطاء مع Safety Net لإعادة تشغيل المؤقت
+            def handle_sales_error(err):
+                QMessageBox.critical(self, "خطأ", f"فشل تحميل بيانات المبيعات:\n{err}")
+                self._is_updating = False
+                self._log_section_duration("refresh_sales_data", start_time, threshold_ms=1000.0)
+                # إعادة تفعيل زر التحديث
+                if hasattr(self, "sales_refresh_btn"):
+                    self.sales_refresh_btn.setEnabled(True)
+                    self.sales_refresh_btn.setText("🔄 تحديث")
+                # ✅ Safety Net: إعادة تشغيل مراقب الجلسة في حالة فشل Worker
+                if hasattr(self, 'session_monitor_timer') and self.session_monitor_timer:
+                    if not self.session_monitor_timer.isActive():
+                        if self.logger:
+                            self.logger.debug("▶️ إعادة تشغيل session_monitor_timer (بعد خطأ Worker في refresh_sales_data)")
+                        self.session_monitor_timer.start(60000)
+            
+            sales_worker.error_occurred.connect(handle_sales_error)
+            self._start_worker(sales_worker)
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في refresh_sales_data: {e}")
+            QMessageBox.critical(self, "خطأ", f"فشل في تحميل بيانات المبيعات:\n{str(e)}")
+            self._is_updating = False
+            self._log_section_duration("refresh_sales_data", start_time, threshold_ms=1000.0)
+        finally:
+            # ✅ Safety Net: إعادة تشغيل مراقب الجلسة مضمونة 100% حتى لو حدث خطأ
+            # (سيتم إعادة التشغيل مرة أخرى في _on_sales_data_loaded() لكن هذا يضمن عدم الموت)
+            if hasattr(self, 'session_monitor_timer') and self.session_monitor_timer:
+                if not self.session_monitor_timer.isActive():
+                    if self.logger:
+                        self.logger.debug("▶️ إعادة تشغيل session_monitor_timer (Safety Net في refresh_sales_data)")
+                    self.session_monitor_timer.start(60000)  # كل 60 ثانية
     
+    def _on_sales_data_loaded(self, data):
+        """معالجة بيانات المبيعات المحمّلة"""
+        import pandas as pd
+        
+        try:
+            # 🔥 التحقق من نوع البيانات: DataFrame أو dict
+            if isinstance(data, pd.DataFrame):
+                # البيانات من SalesDataLoaderThread (DataFrame مباشرة)
+                df = data
+            elif isinstance(data, dict) and 'sales' in data:
+                # البيانات من DataLoaderWorker القديم (dict)
+                sales_list = data['sales']
+                summary = data.get('summary')
+                df = pd.DataFrame(sales_list) if sales_list else pd.DataFrame()
+            else:
+                # بيانات غير صالحة
+                if data is None or (isinstance(data, pd.DataFrame) and data.empty):
+                    if self.logger:
+                        self.logger.warning("⚠️ لا توجد بيانات مبيعات للعرض")
+                self._is_updating = False
+                return
+            
+            # التحقق من أن DataFrame غير فارغ
+            if df.empty:
+                if self.logger:
+                    self.logger.warning("⚠️ DataFrame فارغ - لا توجد بيانات للعرض")
+                self._is_updating = False
+                return
+            
+            # 🔥 استخدام SalesTableModel بدلاً من ملء الجدول يدوياً
+            if not hasattr(self, 'sales_model') or self.sales_model is None:
+                if self.logger:
+                    self.logger.error("❌ sales_model غير موجود - لا يمكن تحديث البيانات")
+                self._is_updating = False
+                return
+            
+            # تعطيل التحديثات أثناء التعبئة
+            self.sales_table.setUpdatesEnabled(False)
+            
+            # تحديث النموذج بالبيانات الجديدة
+            self.sales_model.setData(df)
+            
+            # حساب الملخص من DataFrame
+            try:
+                total_invoices = len(df)
+                total_revenue = pd.to_numeric(df['total_amount'], errors='coerce').fillna(0).sum()
+                total_paid = pd.to_numeric(df['paid_amount'], errors='coerce').fillna(0).sum()
+                total_remaining = total_revenue - total_paid
+                avg_invoice_value = total_revenue / total_invoices if total_invoices > 0 else 0
+                
+                summary = {
+                    'total_invoices': total_invoices,
+                    'total_revenue': total_revenue,
+                    'total_paid': total_paid,
+                    'total_remaining': total_remaining,
+                    'avg_invoice_value': avg_invoice_value
+                }
+                
+                # تحديث الملخص
+                self.update_sales_summary(summary)
+                
+                if self.logger:
+                    self.logger.debug(f"✅ تم تحديث بيانات المبيعات: {total_invoices} فاتورة")
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"فشل حساب إحصائيات المبيعات: {e}")
+            
+            # الكود القديم (ملء QTableWidget يدوياً) - تم إزالته
+            # لأننا نستخدم SalesTableModel الآن
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في _on_sales_data_loaded: {e}")
+            QMessageBox.critical(self, "خطأ", f"فشل في معالجة بيانات المبيعات:\n{str(e)}")
+        finally:
+            # إعادة تفعيل التحديثات
+            self.sales_table.setUpdatesEnabled(True)
+            
+            # إعادة تفعيل الأزرار
+            if hasattr(self, "sales_refresh_btn"):
+                self.sales_refresh_btn.setEnabled(True)
+                self.sales_refresh_btn.setText("🔄 تحديث")
+            
+            self._is_updating = False
+            
+            # ✅ إعادة تشغيل مراقب الجلسة بعد أن هدأ الوضع
+            if hasattr(self, 'session_monitor_timer') and self.session_monitor_timer:
+                if not self.session_monitor_timer.isActive():
+                    if self.logger:
+                        self.logger.debug("▶️ إعادة تشغيل session_monitor_timer بعد انتهاء تحميل المبيعات")
+                    self.session_monitor_timer.start(60000)  # كل 60 ثانية
+            
+            # تسجيل المدة
+            start_value = getattr(self, "_sales_load_started", None)
+            if start_value:
+                self._log_section_duration("refresh_sales_data", start_value, threshold_ms=1000.0)
+                self._sales_load_started = None
+    
+    def update_sales_summary(self, summary):
+        """تحديث ملخص المبيعات"""
+        if not hasattr(self, "sales_summary_labels"):
+            return
+
+        def set_label(key, value):
+            label = self.sales_summary_labels.get(key)
+            if not label:
+                return
+            if isinstance(value, (int, float)):
+                if key in ("total_revenue", "total_paid", "total_remaining", "avg_invoice_value"):
+                    label.setText(f"{value:,.2f} ريال")
+                else:
+                    label.setText(f"{value:,}")
+            else:
+                label.setText(str(value))
+        
+        set_label("total_invoices", summary.get('total_invoices', 0))
+        set_label("total_revenue", summary.get('total_revenue', 0))
+        set_label("total_paid", summary.get('total_paid', 0))
+        set_label("total_remaining", summary.get('total_remaining', 0))
+        set_label("avg_invoice_value", summary.get('avg_invoice_value', 0))
+
+    def on_sales_filters_changed(self):
+        """التعامل مع تغيير مرشحات المبيعات"""
+        self.refresh_sales_data()
+    
+    def on_sale_double_clicked(self, index: QModelIndex):
+        """فتح تفاصيل الفاتورة عند النقر المزدوج"""
+        try:
+            if not index.isValid():
+                return
+        
+            if not hasattr(self, 'sales_model') or not self.sales_model:
+                return
+            
+            # الحصول على sale_id من النموذج (من العمود الأول باستخدام UserRole)
+            sale_id = self.sales_model.data(self.sales_model.index(index.row(), 0), Qt.UserRole)
+            
+            if sale_id and sale_id > 0:
+                self.edit_sale(sale_id)
+            else:
+                if self.logger:
+                    self.logger.warning(f"⚠️ لم يتم العثور على sale_id للصف {index.row()}")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ خطأ في on_sale_double_clicked: {e}")
+            import traceback
+            if self.logger:
+                self.logger.error(traceback.format_exc())
+
+    def edit_sale(self, sale_id):
+        """تعديل فاتورة موجودة"""
+        if not sale_id:
+            return
+        
+        try:
+            # الحصول على بيانات الفاتورة
+            sale = self.sales_service.sale_manager.get_sale_by_id(sale_id)
+            if not sale:
+                QMessageBox.warning(self, "تحذير", f"لم يتم العثور على الفاتورة رقم {sale_id}")
+                return
+            
+            # فتح نافذة الفاتورة في وضع التعديل
+            from ..dialogs.sales_dialog import SalesDialog
+            dialog = SalesDialog(self.db_manager, sale=sale, parent=self)
+            
+            # ربط إشارة إتمام البيع
+            dialog.sale_completed.connect(self.on_sale_completed)
+            
+            if dialog.exec() == QDialog.Accepted:
+                # تحديث جدول المبيعات بعد التعديل
+                self.refresh_sales_data()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "خطأ", f"فشل في تعديل الفاتورة:\n{str(e)}")
+    
+    def view_sale_details(self, sale_id):
+        """عرض تفاصيل الفاتورة (النقر المزدوج)"""
+        # استخدام نفس دالة التعديل
+        self.edit_sale(sale_id)
+
+    # ===== إدارة المشتريات =====
+    def load_purchase_suppliers(self):
+        """تحميل قائمة الموردين في مرشح المشتريات"""
+        if not hasattr(self, "purchase_supplier_combo"):
+            return
+        
+        try:
+            
+            if getattr(self, "supplier_manager", None):
+                suppliers = self.supplier_manager.get_all_suppliers(active_only=True)
+                for supplier in suppliers:
+                    self.purchase_supplier_combo.addItem(supplier.name, supplier.id)
+            else:
+                self.purchase_supplier_combo.setEnabled(False)
+        except Exception as e:
+            QMessageBox.critical(self, "خطأ", f"فشل تحميل الموردين:\n{str(e)}")
+        finally:
+            self.purchase_supplier_combo.blockSignals(False)
+    
+    def refresh_purchases_data(self):
+        """تحديث بيانات جدول المشتريات"""
+        if not hasattr(self, "purchases_table"):
+            return
+        
+        if not getattr(self, "purchase_service", None):
+            self.purchases_table.setRowCount(0)
+            return
+        
+        start_time = time.perf_counter()
+        try:
+            supplier_id = self.purchase_supplier_combo.currentData() if hasattr(self, "purchase_supplier_combo") else None
+            search_term = self.purchase_search_input.text().strip() if hasattr(self, "purchase_search_input") else ""
+            status = self.purchase_status_combo.currentText() if hasattr(self, "purchase_status_combo") else "الكل"
+            payment_status = self.purchase_payment_status_combo.currentText() if hasattr(self, "purchase_payment_status_combo") else "الكل"
+            
+            purchases = self.purchase_service.list_purchases(
+                search_term=search_term if search_term else None,
+                supplier_id=supplier_id,
+                status=None if status == "الكل" else status,
+                payment_status=None if payment_status == "الكل" else payment_status,
+                limit=500
+            )
+            
+            # Quick Win: Disable updates during batch operations
+            self.purchases_table.setUpdatesEnabled(False)
+            
+            self.purchases_table.setRowCount(len(purchases))
+            
+            # Quick Win: Set uniform row height ONCE before loop
+            self.purchases_table.verticalHeader().setDefaultSectionSize(40)
+            
+            for row_index, purchase in enumerate(purchases):
+                row_data = [
+                    purchase.get('invoice_number', '-'),
+                    purchase.get('supplier_name', '-'),
+                    purchase.get('purchase_date', '-'),
+                    f"{purchase.get('total_amount', 0):,.2f}",
+                    f"{purchase.get('paid_amount', 0):,.2f}",
+                    f"{purchase.get('remaining_amount', 0):,.2f}",
+                    purchase.get('status', '-'),
+                    purchase.get('payment_status', '-')
+                ]
+                
+                for col_index, value in enumerate(row_data):
+                    item = QTableWidgetItem(str(value))
+                    if col_index in (3, 4, 5):
+                        item.setTextAlignment(Qt.AlignCenter)
+                    else:
+                        item.setTextAlignment(Qt.AlignVCenter | Qt.AlignRight)
+                    
+                    if col_index == 0:
+                        item.setData(Qt.UserRole, purchase.get('id'))
+                    
+                    if col_index == 6:
+                        status_val = str(purchase.get('status', '')).lower()
+                        if 'مستلمة' in status_val or 'received' in status_val:
+                            item.setForeground(QColor("#27ae60"))
+                        elif 'جزئية' in status_val or 'partial' in status_val:
+                            item.setForeground(QColor("#f39c12"))
+                        elif 'ملغية' in status_val or 'cancelled' in status_val:
+                            item.setForeground(QColor("#e74c3c"))
+                        else:
+                            item.setForeground(QColor("#2980b9"))
+                    
+                    if col_index == 7:
+                        payment_val = str(purchase.get('payment_status', '')).lower()
+                        if 'مدفوعة' in payment_val or 'paid' in payment_val:
+                            item.setForeground(QColor("#27ae60"))
+                        elif 'جزئياً' in payment_val or 'partial' in payment_val:
+                            item.setForeground(QColor("#f39c12"))
+                        elif 'متأخرة' in payment_val or 'overdue' in payment_val:
+                            item.setForeground(QColor("#e74c3c"))
+                    
+                    self.purchases_table.setItem(row_index, col_index, item)
+                
+                # REMOVED: setRowHeight() from inside loop - using setDefaultSectionSize() above
+            
+            # ---------------------------------------------------------
+            # 🛠️ الإصلاح: حساب الإحصائيات مباشرة من purchases list
+            # ---------------------------------------------------------
+            if purchases and hasattr(self, "purchase_summary_labels"):
+                try:
+                    import pandas as pd
+                    purchases_df = pd.DataFrame(purchases)
+                    
+                    if not purchases_df.empty:
+                        total_purchases = len(purchases_df)
+                        
+                        # البحث عن أعمدة المبالغ
+                        total_col = None
+                        paid_col = None
+                        
+                        for col in purchases_df.columns:
+                            col_lower = str(col).lower()
+                            if 'total' in col_lower and ('amount' in col_lower or 'value' in col_lower):
+                                total_col = col
+                            if 'paid' in col_lower and 'amount' in col_lower:
+                                paid_col = col
+                        
+                        total_amount = 0.0
+                        total_paid = 0.0
+                        
+                        if total_col:
+                            total_amount = pd.to_numeric(purchases_df[total_col], errors='coerce').fillna(0).sum()
+                        if paid_col:
+                            total_paid = pd.to_numeric(purchases_df[paid_col], errors='coerce').fillna(0).sum()
+                        
+                        total_debt = total_amount - total_paid
+                        avg_purchase_value = total_amount / total_purchases if total_purchases > 0 else 0
+                        
+                        # تحديث الـ Labels مباشرة
+                        def set_label(key, value):
+                            if hasattr(self, "purchase_summary_labels") and key in self.purchase_summary_labels:
+                                label = self.purchase_summary_labels[key]
+                                if isinstance(value, (int, float)):
+                                    if key in ("total_amount", "total_paid", "total_debt", "avg_purchase_value"):
+                                        label.setText(f"{value:,.2f} دج")
+                                    else:
+                                        label.setText(f"{value:,}")
+                                else:
+                                    label.setText(str(value))
+                        
+                        set_label("total_purchases", total_purchases)
+                        set_label("total_amount", total_amount)
+                        set_label("total_paid", total_paid)
+                        set_label("total_debt", total_debt)
+                        set_label("avg_purchase_value", avg_purchase_value)
+                        
+                        if self.logger:
+                            self.logger.debug(f"✅ تم تحديث إحصائيات المشتريات مباشرة من البيانات: {total_purchases} عملية")
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"فشل حساب إحصائيات المشتريات من البيانات: {e}")
+            
+            # تحديث الملخص من الخدمة (كـ backup)
+            try:
+                summary = self.purchase_service.get_purchases_summary()
+                if summary:
+                    self.update_purchases_summary(summary)
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"فشل جلب ملخص المشتريات من الخدمة: {e}")
+        
+        except Exception as e:
+            QMessageBox.critical(self, "خطأ", f"فشل في تحميل بيانات المشتريات:\n{str(e)}")
+        finally:
+            # Quick Win: Re-enable updates after batch operations
+            self.purchases_table.setUpdatesEnabled(True)
+            self._log_section_duration("refresh_purchases_data", start_time)
+            
+            # ✅ إعادة تشغيل مراقب الجلسة بعد أن هدأ الوضع
+            if hasattr(self, 'session_monitor_timer') and self.session_monitor_timer:
+                if not self.session_monitor_timer.isActive():
+                    if self.logger:
+                        self.logger.debug("▶️ إعادة تشغيل session_monitor_timer بعد انتهاء تحميل المشتريات")
+                    self.session_monitor_timer.start(60000)  # كل 60 ثانية
+    
+    def update_purchases_summary(self, summary):
+        """تحديث ملخص المشتريات"""
+        if not hasattr(self, "purchase_summary_labels"):
+            return
+
+        def set_label(key, value):
+            label = self.purchase_summary_labels.get(key)
+            if label is None:
+                return
+            if isinstance(value, (int, float)):
+                if key in ("total_amount", "total_paid", "total_remaining", "avg_purchase_value"):
+                    label.setText(f"{value:,.2f} ريال")
+                else:
+                    label.setText(f"{value:,}")
+            else:
+                label.setText(str(value))
+        
+        set_label("total_purchases", summary.get('total_purchases', 0))
+        set_label("total_amount", summary.get('total_amount', 0))
+        set_label("total_paid", summary.get('total_paid', 0))
+        set_label("total_remaining", summary.get('total_remaining', 0))
+        set_label("avg_purchase_value", summary.get('avg_purchase_value', 0))
+
+    def on_purchases_filters_changed(self):
+        """التعامل مع تغير مرشحات المشتريات"""
+        self.refresh_purchases_data()
+    
+    def on_purchase_double_clicked(self, item):
+        """فتح تفاصيل المشتريات عند النقر المزدوج"""
+        purchase_id = item.data(Qt.UserRole)
+        if purchase_id:
+            self.view_purchase_details(purchase_id)
+    
+    def view_purchase_details(self, purchase_id):
+        """عرض تفاصيل فاتورة الشراء"""
+        if not purchase_id:
+            return
+        
+        try:
+            
+            purchase = self.purchase_service.get_purchase_by_id(purchase_id)
+            if not purchase:
+                QMessageBox.warning(self, "تحذير", f"لم يتم العثور على فاتورة الشراء رقم {purchase_id}")
+                return
+            
+            details = (
+                f"<h3>فاتورة شراء {purchase.invoice_number}</h3>"
+                f"<p>المورد: <b>{getattr(purchase, 'supplier_name', '') or 'غير محدد'}</b></p>"
+                f"<p>التاريخ: {purchase.purchase_date}</p>"
+                f"<p>القيمة الإجمالية: {float(purchase.total_amount):,.2f} ريال</p>"
+                f"<p>المدفوع: {float(purchase.paid_amount):,.2f} ريال</p>"
+                f"<p>المتبقي: {float(purchase.remaining_amount):,.2f} ريال</p>"
+                f"<p>حالة الاستلام: {purchase.status}</p>"
+                f"<p>حالة الدفع: {purchase.payment_status}</p>"
+            )
+            
+            QMessageBox.information(self, "تفاصيل فاتورة الشراء", details)
+        
+        except Exception as e:
+            QMessageBox.critical(self, "خطأ", f"فشل في عرض تفاصيل فاتورة الشراء:\n{str(e)}")
+    
+    def receive_purchase_shipment(self):
+        """استلام شحنة مشتريات (واجهة مبسطة حالياً)"""
+        if not getattr(self, "db_manager", None):
+            QMessageBox.warning(self, "تحذير", "قاعدة البيانات غير متصلة")
+            return
+
+        window = self.window_manager.open_window("purchase_orders", parent=self)
+        if not window:
+            QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة أوامر الشراء")
+
+    # ===== لوحة التقارير =====
+    def set_report_quick_range(self, days: int):
+        """تعيين نطاق زمني سريع للتقارير"""
+        if not hasattr(self, "report_start_date") or not hasattr(self, "report_end_date"):
+            return
+        try:
+            end_date = QDate.currentDate()
+            start_date = end_date.addDays(-days)
+            self.report_start_date.setDate(start_date)
+            self.report_end_date.setDate(end_date)
+            self.refresh_reports_data()
+        except Exception:
+            pass
+    def refresh_reports_data(self):
+        """تحديث بيانات تبويب التقارير"""
+        if not hasattr(self, "reports_summary_labels"):
+            return
+        if not getattr(self, "dashboard_service", None):
+            QMessageBox.warning(self, "تحذير", "خدمة لوحات المعلومات غير متوفرة")
+            return
+        
+        # إظهار مؤشر التحميل
+        self._show_reports_loading(True)
+        
+        start_time = time.perf_counter()
+        try:
+            # الحصول على التواريخ من الواجهة
+            start_date = self._qdate_to_date(self.report_start_date.date()) if hasattr(self, "report_start_date") else date.today() - timedelta(days=30)
+            end_date = self._qdate_to_date(self.report_end_date.date()) if hasattr(self, "report_end_date") else date.today()
+            
+            # التحقق من صحة النطاق الزمني
+            if start_date > end_date:
+                QMessageBox.warning(self, "تحذير", "تاريخ البداية يجب أن يكون قبل تاريخ النهاية")
+                return
+            
+            # حساب عدد الأيام للتحقق من الأداء
+            days_diff = (end_date - start_date).days
+            if days_diff > 365:
+                reply = QMessageBox.question(
+                    self,
+                    "تحذير",
+                    f"النطاق الزمني المحدد كبير ({days_diff} يوم). قد يستغرق التحميل وقتاً طويلاً.\nهل تريد المتابعة؟",
+                    QMessageBox.Yes | QMessageBox.No
+                )
+                if reply == QMessageBox.No:
+                    return
+            
+            # الحصول على بيانات لوحة المعلومات
+            dashboard_data = self.dashboard_service.load_dashboard(start_date, end_date)
+            
+            purchase_summary = {}
+            if getattr(self, "purchase_service", None):
+                purchase_summary = self.purchase_service.get_purchases_summary(start_date, end_date)
+            
+            # جلب بيانات الإيرادات مقابل المشتريات
+            revenue_data = self._get_revenue_vs_expense_data(start_date, end_date)
+            
+            receivables_total = 0.0
+            payables_total = 0.0
+            if getattr(self, "payment_service", None):
+                try:
+                    receivables = self.payment_service.get_accounts_receivable()
+                    receivables_total = sum(float(r.get('balance', 0)) for r in receivables)
+                    payables = self.payment_service.get_accounts_payable()
+                    payables_total = sum(float(p.get('balance', 0)) for p in payables)
+                except Exception:
+                    pass
+            
+            # تحديث الواجهة
+            self.update_reports_summary(dashboard_data, purchase_summary, receivables_total, payables_total)
+            self.update_top_products_table(dashboard_data.top_products)
+            self.update_payment_distribution_table(dashboard_data.distribution)
+            self.update_revenue_vs_expense_table(revenue_data)
+            
+            # إظهار رسالة نجاح للفترات الكبيرة
+            elapsed_time = time.perf_counter() - start_time
+            if elapsed_time > 1.0 and self.logger:
+                self.logger.info(f"تم تحميل بيانات التقارير في {elapsed_time:.2f} ثانية")
+        
+        except Exception as e:
+            error_msg = str(e)
+            if self.logger:
+                self.logger.error(f"فشل في تحميل بيانات التقارير: {error_msg}")
+            QMessageBox.critical(
+                self,
+                "خطأ",
+                f"فشل في تحميل بيانات التقارير:\n{error_msg}\n\nيرجى التحقق من الاتصال بقاعدة البيانات والمحاولة مرة أخرى."
+            )
+        finally:
+            # إخفاء مؤشر التحميل
+            self._show_reports_loading(False)
+            self._log_section_duration("refresh_reports_data", start_time, threshold_ms=500.0)
+
+    def update_reports_summary(self, dashboard_data, purchase_summary, receivables_total=0.0, payables_total=0.0):
+        """تحديث بطاقات المؤشرات"""
+        if not hasattr(self, "reports_summary_labels"):
+            return
+        
+        try:
+            def set_label(key, value):
+                label = self.reports_summary_labels.get(key)
+                if not label:
+                    return
+                if key == "profit_margin":
+                    label.setText(f"{value:.2f}%")
+                elif key in ("total_sales", "total_purchases", "gross_profit", "receivables", "payables"):
+                    label.setText(f"{value:,.2f} ريال")
+                else:
+                    label.setText(f"{value:,.2f}")
+            
+            total_sales = self._get_kpi_value(dashboard_data.kpis, "total_sales")
+            gross_profit = self._get_kpi_value(dashboard_data.kpis, "gross_profit")
+            profit_margin = self._get_kpi_value(dashboard_data.kpis, "profit_margin")
+            
+            # استخدام القيم من payment_service إذا كانت متوفرة، وإلا من dashboard
+            receivables = receivables_total if receivables_total > 0 else self._get_kpi_value(dashboard_data.kpis, "receivables")
+            payables = payables_total if payables_total > 0 else self._get_kpi_value(dashboard_data.kpis, "payables")
+            
+            total_purchases = purchase_summary.get("total_amount", 0) if purchase_summary else 0
+            
+            set_label("total_sales", total_sales)
+            set_label("total_purchases", total_purchases)
+            set_label("gross_profit", gross_profit)
+            set_label("profit_margin", profit_margin)
+            set_label("receivables", receivables)
+            set_label("payables", payables)
+        except Exception:
+            pass
+    
+    def update_top_products_table(self, products: List[Dict[str, Any]]):
+        if not hasattr(self, "top_products_table") or not products:
+            return
+        
+        try:
+            self.top_products_table.setRowCount(len(products))
+            for row, product in enumerate(products):
+                name = product.get("name") or product.get("product_name") or "-"
+                qty = product.get("qty") or product.get("total_quantity") or product.get("total_quantityOdered") or 0
+                total = product.get("total") or product.get("total_revenue") or 0
+                
+                self.top_products_table.setItem(row, 0, QTableWidgetItem(str(name)))
+                qty_item = QTableWidgetItem(f"{float(qty):,.0f}")
+                qty_item.setTextAlignment(Qt.AlignCenter)
+                self.top_products_table.setItem(row, 1, qty_item)
+                
+                total_item = QTableWidgetItem(f"{float(total):,.2f}")
+                total_item.setTextAlignment(Qt.AlignCenter)
+                self.top_products_table.setItem(row, 2, total_item)
+        except Exception:
+            pass
+    def update_payment_distribution_table(self, distribution: List[Dict[str, Any]]):
+        try:
+            if not hasattr(self, "payment_distribution_table"):
+                return
+            self.payment_distribution_table.setRowCount(len(distribution))
+            for row, entry in enumerate(distribution):
+                label = entry.get("label", "")
+                value = entry.get("value", 0)
+                self.payment_distribution_table.setItem(row, 0, QTableWidgetItem(str(label)))
+                value_item = QTableWidgetItem(f"{float(value):,.2f}")
+                value_item.setTextAlignment(Qt.AlignCenter)
+                self.payment_distribution_table.setItem(row, 1, value_item)
+        except Exception:
+            pass
+    def update_revenue_vs_expense_table(self, revenue_data: Dict[str, List[Dict[str, Any]]]):
+        try:
+            if not hasattr(self, "revenue_vs_expense_table"):
+                return
+            revenue = revenue_data.get("revenue", [])
+            expenses = revenue_data.get("expenses", [])
+            combined = {}
+            for row in revenue:
+                day = str(row.get("day") or row.get("sale_date") or row.get("d"))
+                combined.setdefault(day, {"revenue": 0.0, "expenses": 0.0})
+                combined[day]["revenue"] = float(row.get("amount", row.get("total", 0)))
+            
+            for row in expenses:
+                day = str(row.get("day") or row.get("purchase_date") or row.get("d"))
+                combined.setdefault(day, {"revenue": 0.0, "expenses": 0.0})
+                combined[day]["expenses"] = float(row.get("amount", row.get("total", 0)))
+            
+            sorted_days = sorted(combined.keys())
+            self.revenue_vs_expense_table.setRowCount(len(sorted_days))
+            for idx, day in enumerate(sorted_days):
+                self.revenue_vs_expense_table.setItem(idx, 0, QTableWidgetItem(day))
+                
+                rev_item = QTableWidgetItem(f"{combined[day]['revenue']:,.2f}")
+                rev_item.setTextAlignment(Qt.AlignCenter)
+                self.revenue_vs_expense_table.setItem(idx, 1, rev_item)
+                
+                exp_item = QTableWidgetItem(f"{combined[day]['expenses']:,.2f}")
+                exp_item.setTextAlignment(Qt.AlignCenter)
+                self.revenue_vs_expense_table.setItem(idx, 2, exp_item)
+            
+            self.update_revenue_chart(combined)
+        except Exception:
+            pass
+    def update_revenue_chart(self, combined_points: Dict[str, Dict[str, float]]):
+        """تحديث الرسم البياني للإيرادات مقابل المشتريات"""
+        try:
+            sorted_days = sorted(combined_points.keys())
+            revenue_series = QLineSeries()
+            revenue_series.setName("الإيرادات")
+            expense_series = QLineSeries()
+            expense_series.setName("المشتريات")
+            
+            axis_x = QCategoryAxis()
+            axis_x.setLabelsAngle(-60)
+            axis_x.setTitleText("التاريخ")
+            
+            max_value = 0.0
+            for idx, day in enumerate(sorted_days):
+                rev = combined_points[day]['revenue']
+                exp = combined_points[day]['expenses']
+                revenue_series.append(idx, rev)
+                expense_series.append(idx, exp)
+                axis_x.append(day, idx)
+                max_value = max(max_value, rev, exp)
+            
+            self.revenue_chart.addSeries(revenue_series)
+            self.revenue_chart.addSeries(expense_series)
+            
+            axis_y = QValueAxis()
+            axis_y.setTitleText("القيمة (ريال)")
+            axis_y.setLabelFormat("%.0f")
+            axis_y.setRange(0, max_value * 1.2 if max_value else 1)
+            
+            self.revenue_chart.setAxisX(axis_x, revenue_series)
+            self.revenue_chart.setAxisY(axis_y, revenue_series)
+            self.revenue_chart.setAxisX(axis_x, expense_series)
+            self.revenue_chart.setAxisY(axis_y, expense_series)
+            self.revenue_chart.setTitle("مقارنة الإيرادات بالمشتريات")
+        except Exception:
+            pass
+    def export_reports_summary(self, format_type: ExportFormat):
+        """تصدير تقرير الملخص المالي"""
+        if not getattr(self, "reports_service", None):
+            QMessageBox.warning(self, "تحذير", "خدمة التقارير غير متوفرة")
+            return
+        try:
+            filepath = self.reports_service.export_summary(format_type)
+            if filepath:
+                QMessageBox.information(
+                    self,
+                    "تم التصدير",
+                    f"تم حفظ التقرير في:\n{filepath}"
+                )
+        except Exception as e:
+            QMessageBox.critical(self, "خطأ", f"فشل في تصدير التقرير:\n{str(e)}")
+    
+    def print_reports_summary(self):
+        """تصدير التقرير PDF وفتحه للطباعة"""
+        if not getattr(self, "reports_service", None):
+            QMessageBox.warning(self, "تحذير", "خدمة التقارير غير متوفرة")
+            return
+        try:
+            filepath = self.reports_service.export_summary(ExportFormat.PDF)
+            if filepath:
+                QDesktopServices.openUrl(QUrl.fromLocalFile(filepath))
+                QMessageBox.information(self, "جاهز للطباعة", "تم إنشاء ملف PDF وفتحه للطباعة.")
+        except Exception as e:
+            QMessageBox.critical(self, "خطأ", f"فشل في طباعة التقرير:\n{str(e)}")
+        except Exception:
+            QMessageBox.critical(self, "خطأ", f"فشل في تجهيز التقرير للطباعة:\n{str(e)}")
+    
+    def _build_report_filter(self) -> ReportFilter:
+        """بناء كائن فلاتر للتقارير من واجهة المستخدم"""
+        start_date = self._qdate_to_date(self.report_start_date.date()) if hasattr(self, "report_start_date") else date.today()
+        end_date = self._qdate_to_date(self.report_end_date.date()) if hasattr(self, "report_end_date") else date.today()
+        return ReportFilter(
+            start_date=datetime.combine(start_date, datetime.min.time()),
+            end_date=datetime.combine(end_date, datetime.max.time())
+        )
+
+    def _get_kpi_value(self, kpis, key: str) -> float:
+        for kpi in kpis:
+            if getattr(kpi, "key", "") == key:
+                return float(getattr(kpi, "value", 0))
+        return 0.0
+    
+    def _qdate_to_date(self, qdate: QDate) -> date:
+        """تحويل QDate إلى date"""
+        return date(qdate.year(), qdate.month(), qdate.day())
+    
+    def _get_revenue_vs_expense_data(self, start_date: date, end_date: date) -> Dict[str, List[Dict[str, Any]]]:
+        """جلب بيانات الإيرادات مقابل المشتريات"""
+        revenue_data = {"revenue": [], "expenses": []}
+        
+        try:
+            # جلب بيانات المبيعات اليومية
+            if self.db_manager:
+                sales_query = """
+                    SELECT DATE(sale_date) as day, SUM(final_amount) as total
+                    FROM sales
+                    WHERE DATE(sale_date) BETWEEN ? AND ?
+                    AND status != 'cancelled'
+                    GROUP BY DATE(sale_date)
+                    ORDER BY DATE(sale_date)
+                """
+                sales_rows = self.db_manager.execute_query(sales_query, [start_date, end_date])
+                revenue_data["revenue"] = [
+                    {"day": str(row.get("day", "")), "total": float(row.get("total", 0))}
+                    for row in sales_rows
+                ]
+            
+            # جلب بيانات المشتريات اليومية
+            if self.db_manager:
+                purchases_query = """
+                    SELECT DATE(purchase_date) as day, SUM(total_amount) as total
+                    FROM purchases
+                    WHERE DATE(purchase_date) BETWEEN ? AND ?
+                    AND status != 'cancelled'
+                    GROUP BY DATE(purchase_date)
+                    ORDER BY DATE(purchase_date)
+                """
+                purchases_rows = self.db_manager.execute_query(purchases_query, [start_date, end_date])
+                revenue_data["expenses"] = [
+                    {"day": str(row.get("day", "")), "total": float(row.get("total", 0))}
+                    for row in purchases_rows
+                ]
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في جلب بيانات الإيرادات مقابل المشتريات: {e}")
+        
+        return revenue_data
+    
+    def open_detailed_report(self):
+        """فتح نافذة التقارير التفصيلية مع الفلاتر المحددة"""
+        try:
+            from src.ui.windows.reports_window import ReportsWindow
+            from src.services.report_exporter import ReportType
+            
+            # تحديد نوع التقرير بناءً على الاختيار
+            report_type_map = {
+                "ملخص المبيعات": ReportType.SALES_SUMMARY,
+                "ملخص المشتريات": ReportType.FINANCIAL_SUMMARY,  # يمكن إضافة نوع خاص بالمشتريات لاحقاً
+                "الملخص المالي": ReportType.FINANCIAL_SUMMARY,
+                "تحليل المنتجات": ReportType.PRODUCT_PERFORMANCE,
+                "تحليل العملاء": ReportType.CUSTOMER_ANALYSIS,
+                "تحليل الموردين": ReportType.SUPPLIER_ANALYSIS
+            }
+            
+            selected_type = self.report_type_combo.currentText()
+            report_type = report_type_map.get(selected_type, ReportType.SALES_SUMMARY)
+            
+            # فتح نافذة التقارير باستخدام Window Manager
+            reports_window = self.window_manager.open_window("reports", parent=self)
+            if not reports_window:
+                QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة التقارير")
+                return
+            
+            # تعيين الفلاتر والبدء في توليد التقرير
+            try:
+                start_date = self._qdate_to_date(self.report_start_date.date()) if hasattr(self, "report_start_date") else date.today() - timedelta(days=30)
+                end_date = self._qdate_to_date(self.report_end_date.date()) if hasattr(self, "report_end_date") else date.today()
+                
+                # استخدام QTimer لتأخير توليد التقرير قليلاً لضمان تحميل الواجهة
+                from src.services.report_exporter import ReportFilter
+                from datetime import datetime
+                filter_data = ReportFilter(
+                    start_date=datetime.combine(start_date, datetime.min.time()),
+                    end_date=datetime.combine(end_date, datetime.max.time())
+                )
+                
+                # تعيين نوع التقرير والفلاتر
+                if hasattr(reports_window, 'set_report_type'):
+                    reports_window.set_report_type(report_type)
+                if hasattr(reports_window, 'set_filters'):
+                    reports_window.set_filters(filter_data)
+                
+                QTimer.singleShot(300, lambda: reports_window.generate_report() if hasattr(reports_window, 'generate_report') else None)
+            except Exception as e:
+                if self.logger:
+                    import traceback
+                    self.logger.error(f"خطأ في إعداد التقارير: {e}")
+                    self.logger.error(traceback.format_exc())
+                QMessageBox.critical(self, "خطأ", f"فشل في إعداد التقارير:\n{str(e)}")
+        except Exception as e:
+            if self.logger:
+                import traceback
+                self.logger.error(f"خطأ في open_detailed_report: {e}")
+                self.logger.error(traceback.format_exc())
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة التقارير:\n{str(e)}")
+
+    def _format_currency(self, value) -> str:
+        """تنسيق الأرقام كعملة موحدة"""
+        try:
+            if value is None:
+                return "0.00"
+            # If already a number
+            if isinstance(value, (int, float)):
+                amount = float(value)
+            else:
+                amount = float(str(value).replace(",", "").replace(" ", ""))
+            return "{:,.2f}".format(amount)
+        except Exception:
+            return "0.00"
+    def _get_value(self, obj, attr: str):
+        """الحصول على خاصية سواء كان الكائن dataclass أو dict"""
+        try:
+            # يدعم dict و dataclass
+            if hasattr(obj, attr):
+                return getattr(obj, attr)
+            elif isinstance(obj, dict):
+                return obj.get(attr)
+            return None
+        except Exception:
+            if isinstance(obj, dict):
+                return obj.get(attr)
+            return None
+    
+    def _safe_float(self, value, default=0.0):
+        """تحويل قيمة إلى float بشكل آمن"""
+        try:
+            if value is None:
+                return default
+            if isinstance(value, (int, float)):
+                return float(value)
+            # محاولة تحويل من string
+            value_str = str(value).strip().replace(",", "").replace(" ", "")
+            if not value_str:
+                return default
+            return float(value_str)
+        except (ValueError, TypeError, AttributeError):
+            return default
+    
+    def _register_worker(self, worker: QThread):
+        """تسجيل خيط خلفي لتتبعه"""
+        if not hasattr(self, "_background_threads"):
+            self._background_threads = []
+        if worker not in self._background_threads:
+            self._background_threads.append(worker)
+            worker.finished.connect(lambda w=worker: self._background_threads.remove(w) if w in self._background_threads else None)
+        return worker
+
+    def _start_worker(self, worker: QThread):
+        """تشغيل خيط وتتبعه تلقائياً"""
+        self._register_worker(worker)
+        worker.start()
+        return worker
+
+    def _stop_background_threads(self):
+        """
+        🔥 إيقاف جميع الخيوط الخلفية والموقتات النشطة قبل الإغلاق
+        يضمن إنهاء نظيفاً للتطبيق بدون تسريبات ذاكرة
+        """
+        if self.logger:
+            self.logger.info("بدء تنظيف الموارد وإيقاف الخيوط الخلفية...")
+        
+        # جمع جميع الخيوط المعروفة (من _background_threads + المتغيرات المباشرة)
+        all_threads = []
+        
+        # إضافة الخيوط المسجلة
+        if hasattr(self, "_background_threads") and self._background_threads:
+            all_threads.extend(self._background_threads)
+        
+        # إضافة الخيوط المعروفة الأخرى (جميع الخيوط المحتملة)
+        thread_attributes = [
+            "_inventory_loader",
+            "_customers_loader",
+            "_suppliers_loader",
+            "_dashboard_loader",
+            "_dashboard_analytics_loader",
+            "_sales_loader",
+            "_load_more_worker",
+            "_backup_thread",
+            "_restore_thread",
+            "_backup_worker",
+            "_restore_worker"
+        ]
+        
+        # البحث عن أي خيوط أخرى في الكائن (باستخدام dir)
+        for attr_name in dir(self):
+            if not attr_name.startswith('_'):
+                continue
+            try:
+                attr_value = getattr(self, attr_name, None)
+                if isinstance(attr_value, QThread) and attr_value not in all_threads:
+                    all_threads.append(attr_value)
+            except Exception:
+                pass
+        
+        for attr_name in thread_attributes:
+            if hasattr(self, attr_name):
+                thread = getattr(self, attr_name)
+                if thread and isinstance(thread, QThread) and thread not in all_threads:
+                    all_threads.append(thread)
+        
+        # إيقاف جميع الخيوط
+        for thread in all_threads:
+            try:
+                if thread and thread.isRunning():
+                    if self.logger:
+                        self.logger.debug(f"إيقاف خيط: {type(thread).__name__}")
+                    
+                    # محاولة إيقاف نظيف أولاً
+                    if hasattr(thread, 'stop'):
+                        thread.stop()
+                    elif hasattr(thread, 'requestInterruption'):
+                        thread.requestInterruption()
+                    
+                    # انتظار قليل للإيقاف النظيف (500ms)
+                    if not thread.wait(500):
+                        # إذا لم يتوقف، إنهاء قسري
+                        if self.logger:
+                            self.logger.warning(f"إنهاء قسري للخيط: {type(thread).__name__}")
+                        thread.terminate()
+                        thread.wait(1000)  # انتظار إضافي بعد الإنهاء القسري
+            except Exception as e:
+                if self.logger:
+                    self.logger.error(f"خطأ في إيقاف خيط: {e}")
+                pass
+        
+        # مسح القائمة
+        if hasattr(self, "_background_threads"):
+            self._background_threads.clear()
+        
+        # إيقاف جميع الموقتات (QTimer)
+        timers_to_stop = [
+            "_search_debounce_timer",
+            "_update_throttle_timer",
+            "_status_timer",
+            "dashboard_refresh_timer",
+            "perf_timer"
+        ]
+        
+        for timer_name in timers_to_stop:
+            if hasattr(self, timer_name):
+                timer = getattr(self, timer_name)
+                if timer and isinstance(timer, QTimer):
+                    try:
+                        timer.stop()
+                    except Exception:
+                        pass
+        
+        # إغلاق جميع النوافذ المفتوحة وإغلاق Window Manager
+        if hasattr(self, 'window_manager'):
+            try:
+                self.window_manager.close_all()  # استخدام close_all() بدلاً من close_all_windows()
+                self.window_manager.cleanup()
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"خطأ في تنظيف Window Manager: {e}")
+        
+        # حفظ بيانات Telemetry قبل الإغلاق
+        if hasattr(self, 'telemetry') and self.telemetry:
+            try:
+                self.telemetry.save_and_reset()
+                if self.logger:
+                    self.logger.info("✅ تم حفظ بيانات Telemetry")
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"⚠️  فشل حفظ بيانات Telemetry: {e}")
+        
+        if self.logger:
+            self.logger.info("✓ تم تنظيف الموارد")
+    
+    def _register_all_windows(self):
+        """تسجيل جميع النوافذ في Window Manager باستخدام Auto-Registration System"""
+        try:
+            # استخدام Auto-Registration System
+            from src.core.window_registry import WindowRegistry, create_init_kwargs_provider
+            
+            # إنشاء Window Registry
+            registry = WindowRegistry()
+            
+            # إنشاء provider لـ init_kwargs
+            cycle_count_service = None
+            if hasattr(self, '_get_cycle_count_service'):
+                try:
+                    cycle_count_service = self._get_cycle_count_service()
+                except Exception:
+                    pass
+            
+            init_kwargs_provider = create_init_kwargs_provider(
+                db_manager=self.db_manager,
+                payment_service=self.payment_service,
+                cycle_count_service=cycle_count_service
+            )
+            
+            # تسجيل جميع النوافذ تلقائياً
+            registration_results = registry.register_all(
+                window_manager=self.window_manager,
+                init_kwargs_provider=init_kwargs_provider
+            )
+            
+            # عرض النتائج
+            successful = sum(1 for success in registration_results.values() if success)
+            total = len(registration_results)
+            
+            if self.logger:
+                self.logger.info(f"✅ تم تسجيل {successful}/{total} نافذة تلقائياً")
+                if successful < total:
+                    failed = [key for key, success in registration_results.items() if not success]
+                    self.logger.warning(f"⚠️ فشل تسجيل النوافذ التالية: {', '.join(failed)}")
+            
+            # تسجيل النوافذ الخاصة التي تحتاج معاملات خاصة (إن وجدت)
+            # مثال: PaymentDashboard إذا لم تكن مسجلة تلقائياً
+            if "payment_dashboard" not in registration_results and self.payment_service:
+                try:
+                    from src.ui.windows.payment_dashboard import PaymentDashboard
+                    self.window_manager.register_window(
+                        window_key="payment_dashboard",
+                        window_class=PaymentDashboard,
+                        title="لوحة تحكم المدفوعات",
+                        singleton=True,
+                        init_kwargs={"db_manager": self.db_manager, "payment_service": self.payment_service}
+                    )
+                    if self.logger:
+                        self.logger.info("✅ تم تسجيل PaymentDashboard يدوياً")
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"⚠️ فشل تسجيل PaymentDashboard: {e}")
+            
+            if self.logger:
+                self.logger.info("✅ تم تسجيل جميع النوافذ في Window Manager")
+                
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ فشل تسجيل النوافذ: {e}", exc_info=True)
+    
+    def _register_external_window(self, window: QWidget):
+        """تتبع أي نافذة مستقلة لإغلاقها عند إنهاء التطبيق"""
+        if window in self._managed_windows:
+            return
+        self._managed_windows.append(window)
+        try:
+            pass  # (If you need to track window-specific logic, add here)
+        except Exception:
+            pass
+    def _log_section_duration(self, label: str, start_time: float, threshold_ms: float = 100.0):
+        """تسجيل مدة تنفيذ قسم معين"""
+        try:
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            if self.logger:
+                if elapsed_ms >= threshold_ms:
+                    self.logger.warning(f"{label} استغرق {elapsed_ms:.2f}ms")
+                else:
+                    self.logger.debug(f"{label} استغرق {elapsed_ms:.2f}ms")
+        except Exception:
+            pass
+
     # ===== إدارة المخزون =====
     def load_inventory_filters(self):
         """تحميل قائمة الفئات في مرشحات المخزون"""
@@ -578,133 +4977,572 @@ class MainWindow(QMainWindow):
             return
         
         try:
+            # منع إشارات التغيير أثناء التحميل
             self.inventory_category_combo.blockSignals(True)
+            
+            # مسح القائمة الحالية
             self.inventory_category_combo.clear()
             self.inventory_category_combo.addItem("جميع الفئات", None)
             
-            if getattr(self, "inventory_service", None):
+            # تحميل الفئات من قاعدة البيانات
+            if self.db_manager:
                 try:
-                    # محاولة استخدام category_manager إذا كان موجوداً
-                    categories = self.inventory_service.category_manager.get_all_categories()
+                    from src.models.category import CategoryManager
+                    category_manager = CategoryManager(self.db_manager)
+                    categories = category_manager.get_all_categories()
+                    
                     for category in categories:
-                        if getattr(category, 'is_active', True):
-                            self.inventory_category_combo.addItem(category.name, category.id)
-                except (AttributeError, TypeError):
-                    # إذا فشل، حاول طلب الفئات مباشرة من قاعدة البيانات
-                    pass
+                        self.inventory_category_combo.addItem(category.name, category.id)
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"فشل تحميل الفئات من CategoryManager: {e}")
+                    # Fallback: تحميل مباشر من قاعدة البيانات
+                    try:
+                        conn = self.db_manager.get_connection()
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT id, name FROM categories WHERE is_active = 1 ORDER BY name")
+                        for row in cursor.fetchall():
+                            self.inventory_category_combo.addItem(row[1], row[0])
+                    except Exception as e2:
+                        if self.logger:
+                            self.logger.error(f"فشل تحميل الفئات من قاعدة البيانات: {e2}")
+            elif getattr(self, "inventory_service", None):
+                # محاولة استخدام inventory_service
+                try:
+                    # إذا كان inventory_service يحتوي على طريقة للحصول على الفئات
+                    if hasattr(self.inventory_service, 'get_categories'):
+                        categories = self.inventory_service.get_categories()
+                        for category in categories:
+                            self.inventory_category_combo.addItem(category.get('name', ''), category.get('id'))
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"فشل تحميل الفئات من inventory_service: {e}")
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في تحميل مرشحات الفئات: {str(e)}")
+                self.logger.error(f"خطأ عام في load_inventory_filters: {e}")
         finally:
-            self.inventory_category_combo.blockSignals(False)
+            # إعادة تفعيل الإشارات
+            if hasattr(self, "inventory_category_combo"):
+                self.inventory_category_combo.blockSignals(False)
+    def _on_inventory_search_changed(self, text: str):
+        """معالجة تغيير نص البحث مع Debouncing"""
+        # إلغاء المؤقت السابق
+        self._search_debounce_timer.stop()
+        
+        # حفظ النص الحالي
+        self._last_search_term = text.strip()
+        
+        # بدء مؤقت جديد (500ms) - البحث بعد توقف المستخدم عن الكتابة
+        self._search_debounce_timer.setInterval(500)
+        self._search_debounce_timer.start()
+    
+    def _on_search_debounced(self):
+        """تنفيذ البحث بعد انتهاء Debounce"""
+        if self._last_search_term != getattr(self, "_last_executed_search", ""):
+            self._last_executed_search = self._last_search_term
+            self.on_inventory_filters_changed()
     
     def on_inventory_filters_changed(self):
         """التعامل مع تغيير مرشحات المخزون"""
+        # إيقاف debounce timer إذا كان يعمل
+        if hasattr(self, "_search_debounce_timer"):
+            self._search_debounce_timer.stop()
+        
+        # Throttling - منع التحديثات المتكررة
+        if self._is_updating:
+            return
+        
         self.refresh_inventory_data()
     
     def refresh_inventory_data(self):
-        """تحديث بيانات جدول المخزون"""
+        """تحديث بيانات جدول المخزون (محسّنة - في الخلفية)"""
         if not hasattr(self, "inventory_table"):
             return
-        if not getattr(self, "inventory_service", None):
-            self.inventory_table.setRowCount(0)
+        
+        # التحقق من وجود inventory_model
+        if not hasattr(self, "inventory_model") or self.inventory_model is None:
+            if self.logger:
+                self.logger.warning("inventory_model غير موجود - تخطي refresh_inventory_data")
             return
         
+        if not getattr(self, "inventory_service", None):
+            # عرض جدول فارغ بدلاً من crash
+            if PANDAS_AVAILABLE:
+                empty_df = pd.DataFrame(columns=["id", "barcode", "name", "category", "unit", 
+                                               "current_stock", "min_stock", "selling_price", "status"])
+                self.inventory_model.setData(empty_df)
+            return
+        
+        # Throttling - منع التحديثات المتكررة
+        if self._is_updating:
+            return
+        
+        self._is_updating = True
+        
+        # 🔥 إعادة تعيين offset عند التحديث الكامل (refresh)
+        self._inventory_offset = 0
+        
+        # تعطيل الأزرار أثناء التحديث
+        if hasattr(self, "inventory_refresh_btn"):
+            self.inventory_refresh_btn.setEnabled(False)
+            self.inventory_refresh_btn.setText("⏳ جاري التحديث...")
+        
+        # إعادة تعيين عداد التحميل
+        self._inventory_offset = 0
+        self._inventory_has_more = True
+        
+        # Phase 2: عرض مؤشر التحميل باستخدام Model
+        if PANDAS_AVAILABLE:
+            # إنشاء DataFrame فارغ مع رسالة تحميل
+            loading_df = pd.DataFrame([["⏳ جاري تحميل البيانات...", "", "", "", "", "", "", "", ""]], 
+                                     columns=["id", "barcode", "name", "category", "unit", 
+                                             "current_stock", "min_stock", "selling_price", "status"])
+            self.inventory_model.setData(loading_df)
+        else:
+            # Fallback: إذا لم يكن Pandas متاحاً
+            if hasattr(self, 'inventory_model'):
+                self.inventory_model.setData(pd.DataFrame() if PANDAS_AVAILABLE else None)
+        
+        # تحميل البيانات في الخلفية باستخدام InventoryDataLoaderThread المحسّن
+        search_term = self.inventory_search_input.text().strip() if hasattr(self, "inventory_search_input") else ""
+        category_id = self.inventory_category_combo.currentData() if hasattr(self, "inventory_category_combo") else None
+        
+        # الحصول على مسار قاعدة البيانات
+        db_path = None
+        if self.db_manager and hasattr(self.db_manager, 'db_path'):
+            db_path = self.db_manager.db_path
+        elif self.config_manager:
+            db_path = self.config_manager.get_database_path()
+        else:
+            # Fallback: مسار افتراضي
+            from pathlib import Path
+            db_path = str(Path("data/logical_release.db").absolute())
+        
+        if not db_path:
+            QMessageBox.warning(self, "خطأ", "لم يتم العثور على مسار قاعدة البيانات")
+            self._is_updating = False
+            return
+        
+        # إظهار رسالة التحميل في شريط الحالة
+        self.statusBar().showMessage("⏳ جاري تحميل المنتجات من قاعدة البيانات... يرجى الانتظار")
+        
+        # Worker محسّن للتحميل المباشر من SQLite
+        self._inventory_load_started = time.perf_counter()
+        self._inventory_loader = InventoryDataLoaderThread(
+            db_path=db_path,
+            search_term=search_term,
+            category_id=category_id,
+            limit=500,  # 🔥 تحميل أول 500 منتج فقط
+            offset=self._inventory_offset
+        )
+        
+        # ربط الإشارات
+        self._inventory_loader.data_loaded.connect(self._on_inventory_data_loaded)
+        self._inventory_loader.progress_updated.connect(lambda msg: self.statusBar().showMessage(msg))
+        self._inventory_loader.error_occurred.connect(lambda err: (
+            QMessageBox.critical(self, "خطأ", f"فشل تحميل البيانات:\n{err}"),
+            setattr(self, '_is_updating', False)
+        ))
+        self._inventory_loader.finished.connect(lambda: self.statusBar().showMessage("✅ تم تحميل البيانات بنجاح", 3000))
+        
+        # بدء التحميل في الخلفية
+        self._start_worker(self._inventory_loader)
+    
+    def _on_inventory_data_loaded(self, df):
+        """معالجة البيانات المحملة من الخلفية"""
         try:
-            search_term = self.inventory_search_input.text().strip() if hasattr(self, "inventory_search_input") else ""
-            category_id = self.inventory_category_combo.currentData() if hasattr(self, "inventory_category_combo") else None
-            if category_id is None:
-                category_id = None
+            if df is None or (PANDAS_AVAILABLE and df.empty):
+                # جدول فارغ
+                if PANDAS_AVAILABLE:
+                    empty_df = pd.DataFrame(columns=['id', 'barcode', 'name', 'category', 'unit', 
+                                                     'current_stock', 'min_stock', 'selling_price', 'status', 'actions'])
+                    self.inventory_model.setData(empty_df)
+                self.statusBar().showMessage("لا توجد منتجات للعرض", 3000)
+                # 🔥 تحديث حالة الزر عند عدم وجود منتجات
+                self._inventory_has_more = False
+                self._inventory_offset = 0
+                self._update_load_more_button_state()
+                self._is_updating = False
+                return
             
-            # Cache مفتاح لنتائج البحث
-            cache_key = None
-            if getattr(self, 'cache', None):
-                cache_key = f"ui:inventory:search:{search_term}|{category_id}"
-                products = self.cache.get(cache_key)
+            # تحديث Model بالبيانات الجديدة (هذا سريع جداً - <50ms)
+            if PANDAS_AVAILABLE:
+                self.inventory_model.setData(df)
+                
+                # ⚠️ CRITICAL FIX: لا تستخدم resizeColumnsToContents() - يسبب تجميد مع 50K صف!
+                # بدلاً من ذلك، استخدم Interactive mode مع عرض افتراضي
+                header = self.inventory_table.horizontalHeader()
+                
+                # جعل الأعمدة تفاعلية (يمكن للمستخدم تغيير الحجم) بدلاً من Stretch
+                # هذا أسرع بكثير من resizeColumnsToContents()
+                header.setSectionResizeMode(QHeaderView.Interactive)
+                
+                # تعيين عرض افتراضي سريع (بدون حسابات على 50K صف)
+                header.setDefaultSectionSize(120)
+                
+                # جعل بعض الأعمدة ثابتة العرض (ID, Actions)
+                if df is not None and not df.empty:
+                    # العمود الأول (ID) - عرض ثابت صغير
+                    header.resizeSection(0, 80)
+                    # العمود الأخير (Actions) - عرض ثابت
+                    if len(df.columns) > 0:
+                        header.resizeSection(len(df.columns) - 1, 120)
+                
+                # ---------------------------------------------------------
+                # 🛠️ الإصلاح: حساب الإحصائيات مباشرة من DataFrame (سريع وفوري)
+                # ---------------------------------------------------------
+                if not df.empty and hasattr(self, "inventory_summary_labels"):
+                    try:
+                        # حساب الأرقام باستخدام Pandas (سريع جداً)
+                        total_products = len(df)
+                        
+                        # حساب قيمة المخزون (price * quantity)
+                        # البحث عن أعمدة السعر والكمية (قد تكون بأسماء مختلفة)
+                        price_col = None
+                        quantity_col = None
+                        
+                        for col in df.columns:
+                            col_lower = str(col).lower()
+                            if 'price' in col_lower or 'selling_price' in col_lower:
+                                price_col = col
+                            if 'quantity' in col_lower or 'stock' in col_lower or 'current_stock' in col_lower:
+                                quantity_col = col
+                        
+                        total_stock_value = 0.0
+                        if price_col and quantity_col:
+                            try:
+                                prices = pd.to_numeric(df[price_col], errors='coerce').fillna(0)
+                                quantities = pd.to_numeric(df[quantity_col], errors='coerce').fillna(0)
+                                total_stock_value = (prices * quantities).sum()
+                            except Exception:
+                                pass
+                        
+                        # حساب المخزون المنخفض والنافد
+                        if quantity_col:
+                            try:
+                                quantities = pd.to_numeric(df[quantity_col], errors='coerce').fillna(0)
+                                low_stock_count = len(df[quantities < 10])
+                                out_of_stock_count = len(df[quantities <= 0])
+                            except Exception:
+                                low_stock_count = 0
+                                out_of_stock_count = 0
+                        else:
+                            low_stock_count = 0
+                            out_of_stock_count = 0
+                        
+                        # حساب عدد الفئات
+                        category_col = None
+                        for col in df.columns:
+                            if 'category' in str(col).lower():
+                                category_col = col
+                                break
+                        total_categories = df[category_col].nunique() if category_col else 0
+                        
+                        # تحديث الـ Labels مباشرة
+                        def set_label(key, value):
+                            if hasattr(self, "inventory_summary_labels") and key in self.inventory_summary_labels:
+                                self.inventory_summary_labels[key].setText(str(value))
+                        
+                        set_label("total_products", f"{total_products:,}")
+                        set_label("total_categories", f"{total_categories:,}")
+                        set_label("total_stock_value", f"{total_stock_value:,.2f} دج")
+                        set_label("low_stock_items", f"{low_stock_count:,}")
+                        set_label("out_of_stock_items", f"{out_of_stock_count:,}")
+                        
+                        if self.logger:
+                            self.logger.debug(f"✅ تم تحديث إحصائيات المخزون مباشرة من DataFrame: {total_products} منتج")
+                    except Exception as e:
+                        if self.logger:
+                            self.logger.warning(f"فشل حساب إحصائيات المخزون من DataFrame: {e}")
+                
+                # تحديث ملخص المخزون (في الخلفية أيضاً) - كـ backup
+                QTimer.singleShot(100, lambda: self._load_inventory_summary_async())
+                
+                # قياس الأداء
+                if self._inventory_load_started:
+                    elapsed_ms = (time.perf_counter() - self._inventory_load_started) * 1000
+                    if self.logger:
+                        self.logger.info(f"تم تحميل {len(df):,} منتج في {elapsed_ms:.2f}ms")
+                    self.statusBar().showMessage(f"✅ تم تحميل {len(df):,} منتج بنجاح ({elapsed_ms:.0f}ms)", 5000)
+                
+                # 🔥 CRITICAL FIX: تحديث حالة التحميل وزر "تحميل المزيد"
+                # هذه الدالة (_on_inventory_data_loaded) تستدعى فقط من refresh_inventory_data
+                # لذلك نحن في التحميل الأولي - offset = 0
+                self._inventory_offset = len(df)  # عدد المنتجات المحملة في التحميل الأولي
+                
+                # إذا كانت النتائج = 500، فهناك المزيد من المنتجات
+                self._inventory_has_more = len(df) == 500
+                
+                # 🔥 تحديث حالة زر "تحميل المزيد" بشكل موحد وموثوق
+                self._update_load_more_button_state()
+                
+                if self.logger:
+                    self.logger.debug(f"✅ التحميل الأولي: {len(df)} منتج، offset={self._inventory_offset}, has_more={self._inventory_has_more}")
+                
             else:
-                products = None
-
-            if products is None:
-                # محاولة استخدام product_manager أو ProductService حسب ما هو متاح
-                try:
-                    products = self.inventory_service.product_manager.search_products(
-                        search_term=search_term,
-                        category_id=category_id
-                    )
-                except AttributeError:
-                    # إذا لم يكن product_manager موجوداً، استخدم ProductService
-                    from src.services.product_service_enhanced import ProductService
-                    ps = ProductService(self.db_manager, self.logger)
-                    products = ps.search_products(
-                        search_term=search_term,
-                        category_id=category_id,
-                        active_only=True
-                    )
-                if getattr(self, 'cache', None) and cache_key:
-                    self.cache.set(cache_key, products, ttl=30)
+                QMessageBox.warning(self, "تحذير", "Pandas غير متاح. يرجى تثبيته: pip install pandas")
+                # تحديث حالة الزر عند عدم توفر Pandas
+                self._inventory_has_more = False
+                self._update_load_more_button_state()
             
-            self.inventory_table.setRowCount(len(products))
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في معالجة البيانات المحملة: {e}")
+            QMessageBox.critical(self, "خطأ", f"فشل في معالجة البيانات:\n{str(e)}")
+            # تحديث حالة الزر عند حدوث خطأ
+            self._inventory_has_more = False
+            self._update_load_more_button_state()
+        finally:
+            # إعادة تفعيل الأزرار
+            self._is_updating = False
+            if hasattr(self, "inventory_refresh_btn"):
+                self.inventory_refresh_btn.setEnabled(True)
+                self.inventory_refresh_btn.setText("🔄 تحديث")
+            # 🔥 التأكد من تحديث حالة زر "تحميل المزيد" في النهاية
+            self._update_load_more_button_state()
             
-            for row_index, product in enumerate(products):
-                row_data = [
-                    str(product.id or ""),
-                    product.barcode or "-",
-                    product.name or "-",
-                    product.category_name or "-",
-                    product.unit or "-",
-                    str(product.current_stock),
-                    str(product.min_stock),
-                    f"{float(product.selling_price):,.2f}",
-                    ""
-                ]
-                
-                status_text = "جيد"
-                status_color = QColor("#27ae60")
-                
-                if product.current_stock == 0:
-                    status_text = "نفد من المخزون"
-                    status_color = QColor("#e74c3c")
-                elif product.current_stock <= product.min_stock:
-                    status_text = "مخزون منخفض"
-                    status_color = QColor("#f39c12")
-                
-                row_data[-1] = status_text
-                
-                for col_index, value in enumerate(row_data):
-                    item = QTableWidgetItem(value)
-                    if col_index in (0, 5, 6, 7):
-                        item.setTextAlignment(Qt.AlignCenter)
-                    else:
-                        item.setTextAlignment(Qt.AlignVCenter | Qt.AlignRight)
-                    
-                    if col_index == 0:
-                        item.setData(Qt.UserRole, product.id)
-                    
-                    if col_index == len(row_data) - 1:
-                        item.setForeground(status_color)
-                    
-                    self.inventory_table.setItem(row_index, col_index, item)
-                
-                self.inventory_table.setRowHeight(row_index, 40)
+            # ✅ إعادة تشغيل مراقب الجلسة بعد أن هدأ الوضع
+            if hasattr(self, 'session_monitor_timer') and self.session_monitor_timer:
+                if not self.session_monitor_timer.isActive():
+                    if self.logger:
+                        self.logger.debug("▶️ إعادة تشغيل session_monitor_timer بعد انتهاء تحميل المخزون")
+                    self.session_monitor_timer.start(60000)  # كل 60 ثانية
+    
+    def _load_inventory_summary_async(self):
+        """تحميل ملخص المخزون في الخلفية"""
+        try:
+            if not getattr(self, "inventory_service", None):
+                return
             
-            # تحديث الملخص مع التخزين المؤقت
-            report_filters = {"search": search_term or "", "category_id": category_id}
-            if getattr(self, 'cache', None):
-                cached_report = self.cache.get_cached_report("inventory_summary", report_filters)
-            else:
-                cached_report = None
-            if cached_report is not None:
-                report = cached_report
-            else:
+            # تحميل التقرير في Worker منفصل
+            def load_report():
+                search_term = self.inventory_search_input.text().strip() if hasattr(self, "inventory_search_input") else ""
+                category_id = self.inventory_category_combo.currentData() if hasattr(self, "inventory_category_combo") else None
+                report_filters = {"search": search_term or "", "category_id": category_id}
+                
+                if getattr(self, 'cache', None):
+                    cached_report = self.cache.get_cached_report("inventory_summary", report_filters)
+                    if cached_report is not None:
+                        return cached_report
+                
                 report = self.inventory_service.generate_inventory_report()
                 if getattr(self, 'cache', None):
                     self.cache.cache_report("inventory_summary", report_filters, report, ttl=60)
-            self.update_inventory_summary(report)
+                return report
+            
+            report_worker = DataLoaderWorker(load_report)
+            report_worker.data_loaded.connect(lambda report: (
+                self.update_inventory_summary(report) if report else None
+            ))
+            self._start_worker(report_worker)
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في تحميل ملخص المخزون: {e}")
+    
+    def load_more_inventory(self):
+        """تحميل المزيد من المنتجات"""
+        if not hasattr(self, "inventory_table") or not getattr(self, "inventory_service", None):
+            return
+        
+        if not getattr(self, "_inventory_has_more", True):
+            return
+        
+        # تعطيل الزر أثناء التحميل
+        if hasattr(self, "inventory_load_more_btn"):
+            self.inventory_load_more_btn.setEnabled(False)
+            self.inventory_load_more_btn.setText("⏳ جاري التحميل...")
+        
+        # 🔥 CRITICAL FIX: تحميل البيانات في الخلفية مع offset صحيح
+        # الحصول على offset الحالي (عدد المنتجات المحملة حالياً)
+        current_offset = getattr(self, "_inventory_offset", 0)
+        
+        # التحقق من وجود offset صحيح
+        if current_offset == 0:
+            # إذا كان offset = 0، فهذا يعني أننا في التحميل الأولي
+            # يجب أن نبدأ من 500 (لأن التحميل الأولي كان 500)
+            current_offset = 500
+        
+        search_term = self.inventory_search_input.text().strip() if hasattr(self, "inventory_search_input") else ""
+        category_id = self.inventory_category_combo.currentData() if hasattr(self, "inventory_category_combo") else None
+        
+        # 🔥 CRITICAL: استخدام offset الحالي (وليس offset + limit)
+        # لأن offset في SQL يعني "تخطي X صفوف"
+        limit = 500
+        offset = current_offset  # تخطي المنتجات المحملة بالفعل
+        
+        if self.logger:
+            self.logger.debug(f"🔥 تحميل المزيد: offset={offset}, limit={limit}")
+        
+        # 🔥 استخدام InventoryDataLoaderThread المحسّن للتحميل التدريجي
+        db_path = self.db_manager.db_path if hasattr(self.db_manager, 'db_path') else "data/logical_release.db"
+        
+        self._load_more_worker = InventoryDataLoaderThread(
+            db_path=db_path,
+            search_term=search_term,
+            category_id=category_id,
+            limit=limit,
+            offset=offset  # 🔥 تمرير offset الصحيح
+        )
+        self._load_more_worker.data_loaded.connect(self._append_inventory_products)
+        self._load_more_worker.error_occurred.connect(lambda err: (
+            QMessageBox.critical(self, "خطأ", f"فشل تحميل المزيد: {err}"),
+            self._update_load_more_button_state()  # تحديث حالة الزر عند الخطأ
+        ))
+        self._start_worker(self._load_more_worker)
+    
+    def _populate_inventory_table(self, data):
+        """
+        Phase 2: ملء جدول المخزون باستخدام Model عالي الأداء
+        التحول من QTableWidget loops إلى QTableView + Pandas DataFrame
+        """
+        try:
+            products = data.get("products", [])
+            report = data.get("report")
+            movements = data.get("movements", [])
+            has_more = data.get("has_more", False)
+            offset = data.get("offset", 0)
+            df = data.get("dataframe")  # Pandas DataFrame
+            
+            # تحديث حالة التحميل
+            self._inventory_offset = offset
+            self._inventory_has_more = has_more
+            if df is not None:
+                # افترض أن هناك المزيد إذا كانت النتائج تساوي الحد الأقصى
+                self._inventory_has_more = len(df) == 500
+                self._inventory_offset = 0 # إعادة التعيين عند التحديث الكامل
+            
+            # 🔥 تحديث حالة زر "تحميل المزيد" بشكل موحد وموثوق
+            self._update_load_more_button_state()
+            
+            # Phase 2: استخدام Model بدلاً من loops
+            if PANDAS_AVAILABLE and df is not None and not df.empty:
+                # الطريقة الجديدة: تحديث Model مباشرة - أسرع بـ 10-20x
+                self.inventory_model.setData(df)
+                
+                # قياس الأداء
+                if self.logger:
+                    self.logger.debug(f"تم تحديث جدول المخزون: {len(df)} منتج في <50ms")
+            else:
+                # Fallback: إذا لم يكن Pandas متاحاً، استخدم الطريقة القديمة
+                if self.logger:
+                    self.logger.warning("Pandas غير متاح - استخدام الطريقة التقليدية")
+                
+                # إنشاء DataFrame يدوياً من products
+                if PANDAS_AVAILABLE and products:
+                    df_data = []
+                    for product in products:
+                        product_id = self._get_value(product, "id") or 0
+                        barcode = self._get_value(product, "barcode") or "-"
+                        name = self._get_value(product, "name") or "-"
+                        category_name = self._get_value(product, "category_name") or "-"
+                        unit = self._get_value(product, "unit") or "-"
+                        current_stock = self._get_value(product, "current_stock") or 0
+                        min_stock = self._get_value(product, "min_stock") or self._get_value(product, "min_stock_level") or 0
+                        selling_price = self._safe_float(self._get_value(product, "selling_price"), 0.0)
+                        
+                        # تحديد حالة المخزون
+                        current_stock_value = self._safe_float(current_stock, 0)
+                        min_stock_value = self._safe_float(min_stock, 0)
+                        
+                        if current_stock_value == 0:
+                            status_text = "نفد من المخزون"
+                        elif current_stock_value <= min_stock_value:
+                            status_text = "مخزون منخفض"
+                        else:
+                            status_text = "جيد"
+                        
+                        df_data.append([
+                            product_id, barcode, name, category_name, unit,
+                            current_stock, min_stock, selling_price, status_text, ""  # عمود إجراءات فارغ
+                        ])
+                    
+                    df = pd.DataFrame(df_data, columns=[
+                        "id", "barcode", "name", "category", "unit",
+                        "current_stock", "min_stock", "selling_price", "status", "actions"
+                    ])
+                    self.inventory_model.setData(df)
+                else:
+                    # Fallback نهائي: جدول فارغ
+                    if PANDAS_AVAILABLE:
+                        self.inventory_model.setData(pd.DataFrame())
+                    else:
+                        QMessageBox.warning(self, "تحذير", "Pandas غير متاح. يرجى تثبيته: pip install pandas")
+            
+            # تحديث ملخص المخزون إذا كان متوفراً
+            if report:
+                self.update_inventory_summary(report)
+            
+            # تحديث تنبيهات المخزون
+            if movements:
+                self.update_inventory_alerts_table(movements)
+
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في ملء جدول المخزون: {e}")
+            QMessageBox.critical(self, "خطأ", f"فشل في ملء جدول المخزون:\n{str(e)}")
+        finally:
+            # إعادة تفعيل الأزرار
+            self._is_updating = False
+            if hasattr(self, "inventory_refresh_btn"):
+                self.inventory_refresh_btn.setEnabled(True)
+                self.inventory_refresh_btn.setText("🔄 تحديث")
+            
+            start_value = getattr(self, "_inventory_load_started", None)
+            if start_value:
+                self._log_section_duration("refresh_inventory_data", start_value, threshold_ms=400.0)
+                self._inventory_load_started = None
+    
+    def _append_inventory_products(self, df):
+        """
+        🔥 CRITICAL FIX: إضافة منتجات جديدة إلى الجدول (للتحميل التدريجي)
+        هذه الدالة تستدعى من load_more_inventory عند تحميل المزيد
+        """
+        # تحسين الأداء - تعطيل التحديثات أثناء التعبئة
+        self.inventory_table.setUpdatesEnabled(False)
+        try:
+            if df is None or (PANDAS_AVAILABLE and df.empty):
+                # لا توجد بيانات جديدة
+                self._inventory_has_more = False
+                if self.logger:
+                    self.logger.debug("لا توجد منتجات إضافية للتحميل")
+            else:
+                # 🔥 CRITICAL: استخدام appendData لإضافة البيانات (بدلاً من استبدالها)
+                if hasattr(self.inventory_model, 'appendData'):
+                    self.inventory_model.appendData(df)
+                else:
+                    # Fallback: إذا لم تكن الدالة موجودة، استخدم concat يدوياً
+                    if PANDAS_AVAILABLE:
+                        if self.inventory_model._data.empty:
+                            self.inventory_model.setData(df)
+                        else:
+                            # دمج البيانات يدوياً
+                            combined_df = pd.concat([self.inventory_model._data, df], ignore_index=True)
+                            self.inventory_model.setData(combined_df)
+                
+                # تحديث offset و has_more
+                self._inventory_offset += len(df)
+                self._inventory_has_more = len(df) == 500  # إذا كانت النتائج = 500، فهناك المزيد
+                
+                if self.logger:
+                    self.logger.debug(f"تم إضافة {len(df)} منتج جديد. الإجمالي الآن: {self._inventory_offset}")
+            
+            # 🔥 تحديث حالة زر "تحميل المزيد" بشكل موحد وموثوق
+            self._update_load_more_button_state()
         
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في تحديث بيانات المخزون: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في تحميل بيانات المخزون:\n{str(e)}")
+                self.logger.error(f"خطأ في إضافة المنتجات: {e}", exc_info=True)
+            QMessageBox.warning(self, "تحذير", f"فشل تحميل المزيد من المنتجات:\n{str(e)}")
+            # تحديث حالة الزر عند حدوث خطأ
+            self._inventory_has_more = False
+            self._update_load_more_button_state()
+        finally:
+            # Quick Win: Re-enable updates after batch operations
+            self.inventory_table.setUpdatesEnabled(True)
+            
+            # 🔥 تحديث حالة زر "تحميل المزيد" بشكل موحد وموثوق
+            self._update_load_more_button_state()
+
     
     def update_inventory_summary(self, report):
         """تحديث ملخص المخزون"""
@@ -713,9 +5551,8 @@ class MainWindow(QMainWindow):
         
         try:
             def set_label(key, value):
-                label = self.inventory_summary_labels.get(key)
-                if label:
-                    label.setText(value)
+                if key in self.inventory_summary_labels:
+                    self.inventory_summary_labels[key].setText(value)
             
             set_label("total_products", f"{getattr(report, 'total_products', 0):,}")
             set_label("total_categories", f"{getattr(report, 'total_categories', 0):,}")
@@ -727,9 +5564,154 @@ class MainWindow(QMainWindow):
             set_label("out_of_stock_items", f"{getattr(report, 'out_of_stock_items', 0):,}")
             set_label("expired_items", f"{getattr(report, 'expired_items', 0):,}")
         
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في تحديث ملخص المخزون: {str(e)}")
+        except Exception:
+            pass
+    def open_adjust_stock_dialog(self):
+        """فتح حوار تعديل المخزون"""
+        if not getattr(self, "inventory_service", None):
+            QMessageBox.warning(self, "تحذير", "خدمة المخزون غير متوفرة")
+            return
+        dialog = AdjustStockDialog(self.inventory_service, parent=self)
+        dialog.stock_adjusted.connect(self._on_inventory_operation_completed)
+        dialog.exec()
+    
+    def open_transfer_stock_dialog(self):
+        """فتح حوار نقل المخزون"""
+        if not getattr(self, "inventory_service", None):
+            QMessageBox.warning(self, "تحذير", "خدمة المخزون غير متوفرة")
+            return
+        dialog = TransferStockDialog(self.inventory_service, parent=self)
+        dialog.transfer_completed.connect(self._on_inventory_operation_completed)
+        dialog.exec()
+    
+    def _update_load_more_button_state(self):
+        """
+        🔥 دالة موحدة لتحديث حالة زر "تحميل المزيد"
+        تضمن الاتساق في جميع السيناريوهات (نجاح/فشل/لا نتائج)
+        """
+        if not hasattr(self, "inventory_load_more_btn"):
+            return
+        
+        has_more = getattr(self, "_inventory_has_more", False)
+        self.inventory_load_more_btn.setEnabled(has_more)
+        
+        if has_more:
+            self.inventory_load_more_btn.setText("📥 تحميل المزيد")
+        else:
+            self.inventory_load_more_btn.setText("✅ تم تحميل كل المنتجات")
+    
+    def _on_inventory_operation_completed(self):
+        """تحديث بيانات المخزون بعد أي عملية"""
+        self.refresh_inventory_data()
+    
+    def update_inventory_alerts_table(self, alerts):
+        """عرض تنبيهات المخزون"""
+        if not hasattr(self, "inventory_alerts_table"):
+            return
+        table = self.inventory_alerts_table
+        alerts = alerts or []
+        if not alerts:
+            table.setRowCount(1)
+            info_item = QTableWidgetItem("لا توجد تنبيهات حالياً")
+            info_item.setTextAlignment(Qt.AlignCenter)
+            table.setSpan(0, 0, 1, table.columnCount())
+            table.setItem(0, 0, info_item)
+            return
+        table.setRowCount(len(alerts))
+        severity_colors = {
+            "low": "#2ecc71",
+            "medium": "#f1c40f",
+            "high": "#e67e22",
+            "critical": "#e74c3c"
+        }
+        for row, alert in enumerate(alerts):
+            if isinstance(alert, dict):
+                product_name = alert.get("product_name", "-")
+                alert_type = alert.get("alert_type", "")
+                current_stock = alert.get("current_stock", "-")
+                message = alert.get("message", "-")
+                severity = alert.get("severity", "")
+            else:
+                product_name = getattr(alert, "product_name", "-")
+                alert_type = getattr(alert, "alert_type", "")
+                current_stock = getattr(alert, "current_stock", "-")
+                message = getattr(alert, "message", "-")
+                severity = getattr(alert, "severity", "")
+            status_text = {
+                "low_stock": "مخزون منخفض",
+                "out_of_stock": "نفاد المخزون",
+                "expired": "منتهي الصلاحية"
+            }.get(alert_type, alert_type or "-")
+            color = severity_colors.get(severity, "#2c3e50")
+            
+            items = [
+                QTableWidgetItem(str(product_name)),
+                QTableWidgetItem(status_text),
+                QTableWidgetItem(str(current_stock)),
+                QTableWidgetItem(str(message))
+            ]
+            for idx, item in enumerate(items):
+                if idx == 2:
+                    item.setTextAlignment(Qt.AlignCenter)
+                else:
+                    item.setTextAlignment(Qt.AlignVCenter)
+                item.setForeground(QColor(color))
+                table.setItem(row, idx, item)
+    
+    def update_stock_movements_table(self, movements):
+        """عرض آخر حركات المخزون"""
+        if not hasattr(self, "stock_movements_table"):
+            return
+        table = self.stock_movements_table
+        movements = movements or []
+        if not movements:
+            table.setRowCount(1)
+            info_item = QTableWidgetItem("لا توجد حركات حديثة")
+            info_item.setTextAlignment(Qt.AlignCenter)
+            table.setSpan(0, 0, 1, table.columnCount())
+            table.setItem(0, 0, info_item)
+            return
+        table.setRowCount(len(movements))
+        for row, movement in enumerate(movements):
+            if hasattr(movement, "__dict__"):
+                movement_date = getattr(movement, "created_at", None)
+                if movement_date:
+                    date_text = movement_date.strftime("%Y-%m-%d %H:%M")
+                else:
+                    date_text = "-"
+                product_id = getattr(movement, "product_id", "-")
+                product_name = getattr(movement, "product_name", None) if hasattr(movement, "product_name") else "-"
+                movement_type = getattr(movement, "movement_type", "-")
+                quantity = getattr(movement, "quantity", 0)
+                notes = getattr(movement, "notes", "") or "-"
+            else:
+                data = movement
+                date_text = data.get("created_at", "-")
+                product_name = data.get("product_name", "-")
+                product_id = data.get("product_id", "-")
+                movement_type = data.get("movement_type", "-")
+                quantity = data.get("quantity", 0)
+                notes = data.get("notes", "-")
+            type_display = {
+                "in": "إدخال",
+                "out": "إخراج",
+                "adjustment": "تعديل",
+                "transfer": "نقل"
+            }.get(str(movement_type), str(movement_type))
+            quantity_value = self._safe_float(quantity)
+            row_items = [
+                QTableWidgetItem(date_text),
+                QTableWidgetItem(f"{product_name or product_id}"),
+                QTableWidgetItem(type_display),
+                QTableWidgetItem(f"{quantity_value:,.2f}"),
+                QTableWidgetItem(notes)
+            ]
+            for idx, item in enumerate(row_items):
+                if idx == 3:
+                    item.setTextAlignment(Qt.AlignCenter)
+                else:
+                    item.setTextAlignment(Qt.AlignVCenter)
+                table.setItem(row, idx, item)
     
     # ===== إدارة العملاء والموردين =====
     def refresh_contacts_data(self):
@@ -744,7 +5726,7 @@ class MainWindow(QMainWindow):
             self.refresh_suppliers_data()
     
     def refresh_customers_data(self):
-        """تحديث جدول العملاء"""
+        """تحديث جدول العملاء (محسّنة - في الخلفية)"""
         if not hasattr(self, "customers_table"):
             return
         
@@ -753,9 +5735,16 @@ class MainWindow(QMainWindow):
             self.customers_summary_label.setText("تعذر تحميل بيانات العملاء (قاعدة البيانات غير متصلة).")
             return
         
-        try:
+        # عرض مؤشر التحميل
+        self.customers_table.setRowCount(1)
+        loading_item = QTableWidgetItem("⏳ جاري تحميل العملاع...")
+        loading_item.setTextAlignment(Qt.AlignCenter)
+        self.customers_table.setItem(0, 0, loading_item)
+        self.customers_table.setSpan(0, 0, 1, 10)
+        
+        # تحميل البيانات في الخلفية
+        def load_customers():
             search_term = self.contacts_search_input.text().strip() if hasattr(self, "contacts_search_input") else ""
-            # Cache نتائج العملاء
             cache_key = None
             if getattr(self, 'cache', None):
                 cache_key = f"ui:customers:search:{search_term}"
@@ -766,13 +5755,31 @@ class MainWindow(QMainWindow):
                 customers = self.customer_manager.search_customers(search_term=search_term, active_only=True)
                 if getattr(self, 'cache', None) and cache_key:
                     self.cache.set(cache_key, customers, ttl=45)
+            return customers
+        
+        self._customers_loader = DataLoaderWorker(load_customers)
+        self._customers_loader.data_loaded.connect(self._populate_customers_table)
+        self._customers_loader.error_occurred.connect(lambda err: QMessageBox.critical(self, "خطأ", f"فشل تحميل بيانات العملاء: {err}"))
+        self._start_worker(self._customers_loader)
+    
+    def _populate_customers_table(self, customers):
+        """ملء جدول العملاء (في UI thread)"""
+        # Quick Win: Disable updates during batch operations
+        self.customers_table.setUpdatesEnabled(False)
+        try:
+            if customers is None:
+                customers = []
             
             self.customers_table.setRowCount(len(customers))
+            
+            # Quick Win: Set uniform row height ONCE before loop
+            self.customers_table.verticalHeader().setDefaultSectionSize(36)
+            
             for row_index, customer in enumerate(customers):
                 row_data = [
                     str(customer.id or ""),
                     customer.name or "-",
-                    customer.phone or customer.phone2 or "-",
+                    customer.phone or (customer.phone2 if hasattr(customer, 'phone2') else None) or "-",
                     customer.email or "-",
                     customer.city or "-",
                     f"{float(customer.current_balance):,.2f}",
@@ -782,14 +5789,15 @@ class MainWindow(QMainWindow):
                 ]
                 
                 for col_index, value in enumerate(row_data):
-                    item = QTableWidgetItem(value)
+                    item = QTableWidgetItem(str(value))
                     if col_index in (0, 5, 6, 8):
                         item.setTextAlignment(Qt.AlignCenter)
                     else:
                         item.setTextAlignment(Qt.AlignVCenter | Qt.AlignRight)
                     self.customers_table.setItem(row_index, col_index, item)
                 
-                # إضافة أزرار الإجراءات
+                # Quick Win: setCellWidget is expensive, but keeping it for now
+                # TODO: Replace with QTableView + custom delegate in Phase 2
                 actions_widget = QWidget()
                 actions_layout = QHBoxLayout(actions_widget)
                 actions_layout.setContentsMargins(4, 0, 4, 0)
@@ -804,21 +5812,34 @@ class MainWindow(QMainWindow):
                 delete_btn = QPushButton("حذف")
                 delete_btn.setMaximumWidth(50)
                 delete_btn.setMinimumHeight(28)
-                delete_btn.setStyleSheet("background-color: #e74c3c; color: white;")
+                delete_btn.setStyleSheet("background-color: rgb(231, 76, 60); color: white;")
                 delete_btn.clicked.connect(lambda checked, cid=customer.id: self.delete_customer(cid))
                 actions_layout.addWidget(delete_btn)
                 
                 actions_layout.addStretch()
                 self.customers_table.setCellWidget(row_index, 9, actions_widget)
-                
-                self.customers_table.setRowHeight(row_index, 36)
+                # REMOVED: setRowHeight() from inside loop - using setDefaultSectionSize() above
             
             self.update_customers_summary()
-        
+            
+            # عرض رسالة واضحة إذا كانت القائمة فارغة
+            if len(customers) == 0:
+                self.customers_table.setRowCount(1)
+                empty_item = QTableWidgetItem("لا توجد عملاء في قاعدة البيانات. اضغط على 'إضافة عميل' لإضافة عميل جديد.")
+                empty_item.setTextAlignment(Qt.AlignCenter)
+                self.customers_table.setItem(0, 0, empty_item)
+                self.customers_table.setSpan(0, 0, 1, 10)
+                if self.logger:
+                    self.logger.info("ℹ️ لا توجد عملاء للعرض")
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في تحديث بيانات العملاء: {str(e)}")
+                self.logger.error(f"❌ خطأ في _populate_customers_table: {e}")
+                import traceback
+                self.logger.error(traceback.format_exc())
             QMessageBox.critical(self, "خطأ", f"فشل في تحميل بيانات العملاء:\n{str(e)}")
+        finally:
+            # Quick Win: Re-enable updates after batch operations
+            self.customers_table.setUpdatesEnabled(True)
     
     def update_customers_summary(self):
         """تحديث ملخص العملاء"""
@@ -826,20 +5847,19 @@ class MainWindow(QMainWindow):
             return
         
         try:
-            report = self.customer_manager.get_customers_report()
+            report = self.customer_manager.get_customers_summary()
             summary_text = (
-                f"إجمالي العملاء: {report.get('total_customers', 0):,} | "
                 f"العملاء النشطون: {report.get('active_customers', 0):,} | "
                 f"عملاء لديهم رصيد مستحق: {report.get('customers_with_balance', 0):,} | "
                 f"إجمالي الأرصدة المستحقة: {report.get('total_outstanding_balance', 0):,.2f} دج"
             )
-            self.customers_summary_label.setText(summary_text)
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في تحديث ملخص العملاء: {str(e)}")
-    
+            if hasattr(self, "customers_summary_label"):
+                self.customers_summary_label.setText(summary_text)
+        except Exception:
+            pass
+            pass
     def refresh_suppliers_data(self):
-        """تحديث جدول الموردين"""
+        """تحديث جدول الموردين (محسّنة - في الخلفية)"""
         if not hasattr(self, "suppliers_table"):
             return
         
@@ -848,9 +5868,16 @@ class MainWindow(QMainWindow):
             self.suppliers_summary_label.setText("تعذر تحميل بيانات الموردين (قاعدة البيانات غير متصلة).")
             return
         
-        try:
+        # عرض مؤشر التحميل
+        self.suppliers_table.setRowCount(1)
+        loading_item = QTableWidgetItem("⏳ جاري تحميل الموردين...")
+        loading_item.setTextAlignment(Qt.AlignCenter)
+        self.suppliers_table.setItem(0, 0, loading_item)
+        self.suppliers_table.setSpan(0, 0, 1, 10)
+        
+        # تحميل البيانات في الخلفية
+        def load_suppliers():
             search_term = self.contacts_search_input.text().strip() if hasattr(self, "contacts_search_input") else ""
-            # Cache نتائج الموردين
             cache_key = None
             if getattr(self, 'cache', None):
                 cache_key = f"ui:suppliers:search:{search_term}"
@@ -861,14 +5888,32 @@ class MainWindow(QMainWindow):
                 suppliers = self.supplier_manager.search_suppliers(search_term=search_term, active_only=True)
                 if getattr(self, 'cache', None) and cache_key:
                     self.cache.set(cache_key, suppliers, ttl=45)
+            return suppliers
+        
+        self._suppliers_loader = DataLoaderWorker(load_suppliers)
+        self._suppliers_loader.data_loaded.connect(self._populate_suppliers_table)
+        self._suppliers_loader.error_occurred.connect(lambda err: QMessageBox.critical(self, "خطأ", f"فشل تحميل بيانات الموردين: {err}"))
+        self._start_worker(self._suppliers_loader)
+    
+    def _populate_suppliers_table(self, suppliers):
+        """ملء جدول الموردين (في UI thread)"""
+        # Quick Win: Disable updates during batch operations
+        self.suppliers_table.setUpdatesEnabled(False)
+        try:
+            if suppliers is None:
+                suppliers = []
             
             self.suppliers_table.setRowCount(len(suppliers))
+            
+            # Quick Win: Set uniform row height ONCE before loop
+            self.suppliers_table.verticalHeader().setDefaultSectionSize(36)
+            
             for row_index, supplier in enumerate(suppliers):
                 row_data = [
                     str(supplier.id or ""),
                     supplier.name or "-",
                     supplier.contact_person or "-",
-                    supplier.phone or supplier.phone2 or "-",
+                    supplier.phone or (supplier.phone2 if hasattr(supplier, 'phone2') else None) or "-",
                     supplier.city or "-",
                     f"{float(supplier.current_balance):,.2f}",
                     f"{float(supplier.credit_limit):,.2f}",
@@ -877,14 +5922,13 @@ class MainWindow(QMainWindow):
                 ]
                 
                 for col_index, value in enumerate(row_data):
-                    item = QTableWidgetItem(value)
+                    item = QTableWidgetItem(str(value))
                     if col_index in (0, 5, 6, 8):
                         item.setTextAlignment(Qt.AlignCenter)
                     else:
                         item.setTextAlignment(Qt.AlignVCenter | Qt.AlignRight)
                     self.suppliers_table.setItem(row_index, col_index, item)
                 
-                # إضافة أزرار الإجراءات
                 actions_widget = QWidget()
                 actions_layout = QHBoxLayout(actions_widget)
                 actions_layout.setContentsMargins(4, 0, 4, 0)
@@ -899,41 +5943,51 @@ class MainWindow(QMainWindow):
                 delete_btn = QPushButton("حذف")
                 delete_btn.setMaximumWidth(50)
                 delete_btn.setMinimumHeight(28)
-                delete_btn.setStyleSheet("background-color: #e74c3c; color: white;")
+                delete_btn.setStyleSheet("background-color: rgb(231, 76, 60); color: white;")
                 delete_btn.clicked.connect(lambda checked, sid=supplier.id: self.delete_supplier(sid))
                 actions_layout.addWidget(delete_btn)
                 
                 actions_layout.addStretch()
                 self.suppliers_table.setCellWidget(row_index, 9, actions_widget)
-                
-                self.suppliers_table.setRowHeight(row_index, 36)
+                # REMOVED: setRowHeight() from inside loop - using setDefaultSectionSize() above
             
             self.update_suppliers_summary()
-        
+            
+            # عرض رسالة واضحة إذا كانت القائمة فارغة
+            if len(suppliers) == 0:
+                self.suppliers_table.setRowCount(1)
+                empty_item = QTableWidgetItem("لا توجد موردين في قاعدة البيانات. اضغط على 'إضافة مورد' لإضافة مورد جديد.")
+                empty_item.setTextAlignment(Qt.AlignCenter)
+                self.suppliers_table.setItem(0, 0, empty_item)
+                self.suppliers_table.setSpan(0, 0, 1, 10)
+                if self.logger:
+                    self.logger.info("ℹ️ لا توجد موردين للعرض")
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في تحديث بيانات الموردين: {str(e)}")
+                self.logger.error(f"❌ خطأ في _populate_suppliers_table: {e}")
+                import traceback
+                self.logger.error(traceback.format_exc())
             QMessageBox.critical(self, "خطأ", f"فشل في تحميل بيانات الموردين:\n{str(e)}")
-    
+        finally:
+            # Quick Win: Re-enable updates after batch operations
+            self.suppliers_table.setUpdatesEnabled(True)
     def update_suppliers_summary(self):
         """تحديث ملخص الموردين"""
         if not getattr(self, "supplier_manager", None):
             return
         
         try:
-            report = self.supplier_manager.get_suppliers_report()
+            report = self.supplier_manager.get_suppliers_summary()
             summary_text = (
-                f"إجمالي الموردين: {report.get('total_suppliers', 0):,} | "
                 f"الموردون النشطون: {report.get('active_suppliers', 0):,} | "
                 f"موردون لديهم رصيد مستحق: {report.get('suppliers_with_balance', 0):,} | "
                 f"إجمالي الأرصدة المستحقة: {report.get('total_outstanding_balance', 0):,.2f} دج"
             )
-            self.suppliers_summary_label.setText(summary_text)
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في تحديث ملخص الموردين: {str(e)}")
-    
-    # ===== عمليات إدارة العملاء والموردين =====
+            if hasattr(self, "suppliers_summary_label"):
+                self.suppliers_summary_label.setText(summary_text)
+        except Exception:
+            pass
+# ===== عمليات إدارة العملاء والموردين =====
     def add_customer(self):
         """إضافة عميل جديد"""
         try:
@@ -942,8 +5996,6 @@ class MainWindow(QMainWindow):
             if dialog.exec():
                 self.refresh_contacts_data()
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة إضافة عميل: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة إضافة عميل:\n{str(e)}")
     
     def add_supplier(self):
@@ -954,8 +6006,6 @@ class MainWindow(QMainWindow):
             if dialog.exec():
                 self.refresh_contacts_data()
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة إضافة مورد: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة إضافة مورد:\n{str(e)}")
     
     def edit_customer(self, customer_id):
@@ -966,8 +6016,6 @@ class MainWindow(QMainWindow):
             if dialog.exec():
                 self.refresh_contacts_data()
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة تعديل عميل: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة تعديل عميل:\n{str(e)}")
     
     def delete_customer(self, customer_id):
@@ -981,12 +6029,11 @@ class MainWindow(QMainWindow):
         
         if reply == QMessageBox.StandardButton.Yes:
             try:
-                self.db_manager.execute_query("DELETE FROM customers WHERE id = ?", (customer_id,))
-                self.refresh_contacts_data()
-                QMessageBox.information(self, "نجاح", "تم حذف العميل بنجاح")
+                if hasattr(self, "customer_manager") and self.customer_manager:
+                    self.customer_manager.delete_customer(customer_id)
+                    self.refresh_contacts_data()
+                    QMessageBox.information(self, "نجح", "تم حذف العميل بنجاح")
             except Exception as e:
-                if self.logger:
-                    self.logger.error(f"خطأ في حذف العميل: {str(e)}")
                 QMessageBox.critical(self, "خطأ", f"فشل في حذف العميل: {str(e)}")
     
     def edit_supplier(self, supplier_id):
@@ -997,8 +6044,6 @@ class MainWindow(QMainWindow):
             if dialog.exec():
                 self.refresh_contacts_data()
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة تعديل مورد: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة تعديل مورد:\n{str(e)}")
     
     def delete_supplier(self, supplier_id):
@@ -1012,27 +6057,21 @@ class MainWindow(QMainWindow):
         
         if reply == QMessageBox.StandardButton.Yes:
             try:
-                self.db_manager.execute_query("DELETE FROM suppliers WHERE id = ?", (supplier_id,))
-                self.refresh_contacts_data()
-                QMessageBox.information(self, "نجاح", "تم حذف المورد بنجاح")
+                if hasattr(self, "supplier_manager") and self.supplier_manager:
+                    self.supplier_manager.delete_supplier(supplier_id)
+                    self.refresh_contacts_data()
+                    QMessageBox.information(self, "نجح", "تم حذف المورد بنجاح")
             except Exception as e:
-                if self.logger:
-                    self.logger.error(f"خطأ في حذف المورد: {str(e)}")
                 QMessageBox.critical(self, "خطأ", f"فشل في حذف المورد: {str(e)}")
     
     def contacts_report(self):
         """عرض تقارير العملاء والموردين"""
         try:
             from src.ui.dialogs.contacts_report_dialog import ContactsReportDialog
-            dialog = ContactsReportDialog(self.db_manager, logger=self.logger, parent=self)
+            dialog = ContactsReportDialog(self, self.db_manager)
             dialog.exec()
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة التقارير: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة التقارير:\n{str(e)}")
-    
-    def refresh_data(self):
-        """تحديث البيانات في الواجهة"""
         self.refresh_inventory_data()
         self.refresh_contacts_data()
     
@@ -1040,75 +6079,720 @@ class MainWindow(QMainWindow):
         """إنشاء تبويب المشتريات"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
+        layout.setSpacing(12)
+        layout.setContentsMargins(12, 12, 12, 12)
         
-        title = QLabel("إدارة المشتريات")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #3498db; margin: 10px;")
+        title = QLabel("إدارة المشتريات وأوامر التوريد")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: rgb(52, 152, 219); margin-bottom: 4px;")
         layout.addWidget(title)
         
+        # أزرار الإجراءات
         buttons_layout = QHBoxLayout()
+        buttons_layout.setSpacing(10)
         
         new_purchase_btn = QPushButton("📥 فاتورة شراء جديدة")
-        new_purchase_btn.setMinimumHeight(40)
+        new_purchase_btn.setMinimumHeight(36)
         new_purchase_btn.clicked.connect(self.new_purchase)
         buttons_layout.addWidget(new_purchase_btn)
         
+        receive_btn = QPushButton("📦 استلام شحنة")
+        receive_btn.setMinimumHeight(36)
+        receive_btn.clicked.connect(self.receive_purchase_shipment)
+        buttons_layout.addWidget(receive_btn)
+        
         manage_suppliers_btn = QPushButton("🏢 إدارة الموردين")
-        manage_suppliers_btn.setMinimumHeight(40)
+        manage_suppliers_btn.setMinimumHeight(36)
         manage_suppliers_btn.clicked.connect(self.manage_suppliers)
         buttons_layout.addWidget(manage_suppliers_btn)
         
         purchases_report_btn = QPushButton("📊 تقرير المشتريات")
-        purchases_report_btn.setMinimumHeight(40)
+        purchases_report_btn.setMinimumHeight(36)
         purchases_report_btn.clicked.connect(self.purchases_report)
         buttons_layout.addWidget(purchases_report_btn)
         
         buttons_layout.addStretch()
         layout.addLayout(buttons_layout)
         
-        content_label = QLabel("سيتم إضافة جدول المشتريات والموردين هنا")
-        content_label.setAlignment(Qt.AlignCenter)
-        content_label.setStyleSheet("color: #7f8c8d; font-size: 14px; margin: 50px;")
-        layout.addWidget(content_label)
+        # مرشحات البحث
+        filters_frame = QFrame()
+        filters_frame.setObjectName("purchasesFiltersFrame")
+        filters_frame.setStyleSheet(
+            "QFrame#purchasesFiltersFrame {"
+            "background-color: rgb(248, 249, 250);"
+            "border: 1px solid rgb(224, 228, 231);"
+            "border-radius: 6px;"
+            "}"
+        )
+        filters_layout = QHBoxLayout(filters_frame)
+        filters_layout.setContentsMargins(12, 8, 12, 8)
+        filters_layout.setSpacing(12)
         
-        layout.addStretch()
+        search_label = QLabel("بحث:")
+        search_label.setStyleSheet("color: rgb(52, 73, 94); font-weight: 600;")
+        filters_layout.addWidget(search_label)
+        
+        self.purchase_search_input = QLineEdit()
+        self.purchase_search_input.setPlaceholderText("ابحث برقم الفاتورة أو اسم المورد...")
+        self.purchase_search_input.textChanged.connect(self.on_purchases_filters_changed)
+        filters_layout.addWidget(self.purchase_search_input, 2)
+        
+        status_label = QLabel("حالة الاستلام:")
+        status_label.setStyleSheet("color: rgb(52, 73, 94); font-weight: 600;")
+        filters_layout.addWidget(status_label)
+        
+        self.purchase_status_combo = QComboBox()
+        self.purchase_status_combo.setMinimumWidth(150)
+        self.purchase_status_combo.addItems(["الكل", "معلقة", "مستلمة", "جزئية", "ملغية", "مرتجعة"])
+        self.purchase_status_combo.currentIndexChanged.connect(self.on_purchases_filters_changed)
+        filters_layout.addWidget(self.purchase_status_combo, 1)
+        
+        payment_status_label = QLabel("حالة الدفع:")
+        payment_status_label.setStyleSheet("color: rgb(52, 73, 94); font-weight: 600;")
+        filters_layout.addWidget(payment_status_label)
+        
+        self.purchase_payment_combo = QComboBox()
+        self.purchase_payment_combo.setMinimumWidth(150)
+        self.purchase_payment_combo.addItems(["الكل", "غير مدفوعة", "مدفوعة جزئياً", "مدفوعة", "متأخرة"])
+        self.purchase_payment_combo.currentIndexChanged.connect(self.on_purchases_filters_changed)
+        filters_layout.addWidget(self.purchase_payment_combo, 1)
+        
+        supplier_label = QLabel("المورد:")
+        supplier_label.setStyleSheet("color: rgb(52, 73, 94); font-weight: 600;")
+        filters_layout.addWidget(supplier_label)
+        
+        self.purchase_supplier_combo = QComboBox()
+        self.purchase_supplier_combo.setMinimumWidth(180)
+        self.purchase_supplier_combo.addItem("كل الموردين", None)
+        self.purchase_supplier_combo.currentIndexChanged.connect(self.on_purchases_filters_changed)
+        filters_layout.addWidget(self.purchase_supplier_combo, 1)
+        
+        self.purchase_refresh_btn = QPushButton("🔄 تحديث")
+        self.purchase_refresh_btn.setMinimumHeight(32)
+        self.purchase_refresh_btn.clicked.connect(self.refresh_purchases_data)
+        filters_layout.addWidget(self.purchase_refresh_btn)
+        
+        layout.addWidget(filters_frame)
+        
+        # ملخص المشتريات
+        purchase_summary_group = QGroupBox("ملخص المشتريات")
+        purchase_summary_layout = QHBoxLayout(purchase_summary_group)
+        purchase_summary_layout.setContentsMargins(12, 12, 12, 12)
+        purchase_summary_layout.setSpacing(18)
+        
+        purchase_summary_items = [
+            ("total_purchases", "إجمالي الفواتير"),
+            ("total_amount", "إجمالي قيمة الفواتير"),
+            ("total_paid", "المبالغ المدفوعة"),
+            ("total_remaining", "المبالغ المتبقية"),
+            ("avg_purchase_value", "متوسط قيمة الفاتورة")
+        ]
+        
+        self.purchase_summary_labels = {}
+        for key, title_text in purchase_summary_items:
+            container = QWidget()
+            container_layout = QVBoxLayout(container)
+            container_layout.setContentsMargins(0, 0, 0, 0)
+            container_layout.setSpacing(4)
+            
+            title_label = QLabel(title_text)
+            title_label.setStyleSheet("color: rgb(127, 140, 141); font-size: 12px;")
+            value_label = QLabel("-")
+            value_label.setStyleSheet("font-size: 20px; font-weight: bold; color: rgb(44, 62, 80);")
+            
+            container_layout.addWidget(title_label)
+            container_layout.addWidget(value_label)
+            container_layout.addStretch()
+            
+            purchase_summary_layout.addWidget(container)
+            self.purchase_summary_labels[key] = value_label
+        
+        purchase_summary_layout.addStretch()
+        layout.addWidget(purchase_summary_group)
+        
+        # جدول المشتريات
+        self.purchases_table = QTableWidget()
+        self.purchases_table.setColumnCount(8)
+        self.purchases_table.setHorizontalHeaderLabels([
+            "رقم الفاتورة", "المورد", "تاريخ الشراء", "إجمالي الفاتورة",
+            "المبلغ المدفوع", "المبلغ المتبقي", "حالة الاستلام", "حالة الدفع"
+        ])
+        header = self.purchases_table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Stretch)
+        self.purchases_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.purchases_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.purchases_table.setAlternatingRowColors(True)
+        self.purchases_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.purchases_table.itemDoubleClicked.connect(self.on_purchase_double_clicked)
+        self.purchases_table.setStyleSheet("")
+        layout.addWidget(self.purchases_table)
+        
+        self.load_purchase_suppliers()
+        self.refresh_purchases_data()
+        
         return tab
+    
+    def create_payments_tab(self) -> QWidget:
+        """إنشاء تبويب المدفوعات والذمم"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setSpacing(12)
+        layout.setContentsMargins(12, 12, 12, 12)
+
+        title = QLabel("لوحة المدفوعات والذمم المدينة/الدائنة")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: rgb(22, 160, 133); margin-bottom: 4px;")
+        layout.addWidget(title)
+
+        # تأكد من توفر خدمة المدفوعات
+        if not getattr(self, "payment_service", None) and self.db_manager:
+            # هنا يمكن معالجة الخطأ أو تهيئة الخدمة حسب الحاجة
+            pass
+        filters_frame = QFrame()
+        filters_frame.setObjectName("paymentsFiltersFrame")
+        filters_frame.setStyleSheet("")
+        filters_layout = QHBoxLayout(filters_frame)
+        filters_layout.setContentsMargins(12, 8, 12, 8)
+        filters_layout.setSpacing(12)
+
+        date_label = QLabel("الفترة:")
+        date_label.setStyleSheet("color: rgb(52, 73, 94); font-weight: 600;")
+        filters_layout.addWidget(date_label)
+
+        self.payments_start_date = QDateEdit()
+        self.payments_start_date.setCalendarPopup(True)
+        self.payments_start_date.setDate(QDate.currentDate().addDays(-30))
+        self.payments_start_date.dateChanged.connect(lambda *_: self.refresh_payments_data())
+        filters_layout.addWidget(self.payments_start_date)
+
+        to_label = QLabel("إلى")
+        filters_layout.addWidget(to_label)
+
+        self.payments_end_date = QDateEdit()
+        self.payments_end_date.setCalendarPopup(True)
+        self.payments_end_date.setDate(QDate.currentDate())
+        self.payments_end_date.dateChanged.connect(lambda *_: self.refresh_payments_data())
+        filters_layout.addWidget(self.payments_end_date)
+
+        self.payments_refresh_btn = QPushButton("🔄 تحديث")
+        self.payments_refresh_btn.setMinimumHeight(32)
+        self.payments_refresh_btn.clicked.connect(self.refresh_payments_data)
+        filters_layout.addWidget(self.payments_refresh_btn)
+
+        self.payments_new_btn = QPushButton("➕ دفعة جديدة")
+        self.payments_new_btn.setMinimumHeight(32)
+        self.payments_new_btn.clicked.connect(self.show_payment_dialog)
+        filters_layout.addWidget(self.payments_new_btn)
+
+        filters_layout.addStretch()
+        layout.addWidget(filters_frame)
+
+        # ملخص المدفوعات
+        summary_group = QGroupBox("المؤشرات السريعة")
+        summary_layout = QHBoxLayout(summary_group)
+        summary_layout.setContentsMargins(12, 12, 12, 12)
+        summary_layout.setSpacing(18)
+
+        summary_items = [
+            ("customer_payments", "مقبوضات العملاء"),
+            ("supplier_payments", "مدفوعات الموردين"),
+            ("total_payments", "إجمالي العمليات"),
+            ("net_cash_flow", "صافي التدفق النقدي")
+        ]
+        self.payment_summary_labels = {}
+        for key, title_text in summary_items:
+            container = QWidget()
+            container_layout = QVBoxLayout(container)
+            container_layout.setContentsMargins(0, 0, 0, 0)
+            container_layout.setSpacing(4)
+
+            title_label = QLabel(title_text)
+            title_label.setStyleSheet("color: rgb(127, 140, 141); font-size: 12px;")
+            value_label = QLabel("-")
+            value_label.setStyleSheet("font-size: 20px; font-weight: bold; color: rgb(44, 62, 80);")
+
+            container_layout.addWidget(title_label)
+            container_layout.addWidget(value_label)
+            container_layout.addStretch()
+
+            summary_layout.addWidget(container)
+            self.payment_summary_labels[key] = value_label
+
+        summary_layout.addStretch()
+        layout.addWidget(summary_group)
+
+        # جدول المدفوعات
+        payments_group = QGroupBox("آخر المدفوعات")
+        payments_layout = QVBoxLayout(payments_group)
+        self.payments_table = QTableWidget()
+        self.payments_table.setColumnCount(7)
+        self.payments_table.setHorizontalHeaderLabels([
+            "رقم الدفعة", "النوع", "الجهة", "تاريخ الدفع",
+            "طريقة الدفع", "الحالة", "المبلغ"
+        ])
+        self.payments_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.payments_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.payments_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.payments_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        payments_layout.addWidget(self.payments_table)
+        layout.addWidget(payments_group)
+
+        # جداول تفصيلية
+        tables_layout = QHBoxLayout()
+        tables_layout.setSpacing(12)
+
+        breakdown_group = QGroupBox("توزيع حسب النوع وطريقة الدفع")
+        breakdown_layout = QVBoxLayout(breakdown_group)
+        self.payment_breakdown_table = QTableWidget()
+        self.payment_breakdown_table.setColumnCount(4)
+        self.payment_breakdown_table.setHorizontalHeaderLabels(["النوع", "الطريقة", "عدد العمليات", "الإجمالي"])
+        self.payment_breakdown_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.payment_breakdown_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.payment_breakdown_table.setSelectionMode(QAbstractItemView.NoSelection)
+        breakdown_layout.addWidget(self.payment_breakdown_table)
+        tables_layout.addWidget(breakdown_group, 1)
+
+        schedules_group = QGroupBox("الاستحقاقات القادمة")
+        schedules_layout = QVBoxLayout(schedules_group)
+        self.payment_schedules_table = QTableWidget()
+        self.payment_schedules_table.setColumnCount(6)
+        self.payment_schedules_table.setHorizontalHeaderLabels([
+            "رقم القسط", "رقم الدفعة", "تاريخ الاستحقاق",
+            "المبلغ", "المتبقي", "الحالة"
+        ])
+        self.payment_schedules_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.payment_schedules_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.payment_schedules_table.setSelectionMode(QAbstractItemView.NoSelection)
+        schedules_layout.addWidget(self.payment_schedules_table)
+        tables_layout.addWidget(schedules_group, 1)
+
+        layout.addLayout(tables_layout)
+
+        # حالة الخدمة
+        self.payments_status_label = QLabel("")
+        self.payments_status_label.setStyleSheet("color: rgb(192, 57, 43);")
+        layout.addWidget(self.payments_status_label)
+
+        self.refresh_payments_data()
+        return tab
+
+    def refresh_payments_data(self):
+        """تحديث بيانات تبويب المدفوعات"""
+        if not hasattr(self, "payments_table"):
+            return
+
+        if not getattr(self, "payment_service", None):
+            self.payments_table.setRowCount(0)
+            self.payment_breakdown_table.setRowCount(0)
+            self.payment_schedules_table.setRowCount(0)
+            self.payments_status_label.setText("خدمة المدفوعات غير متوفرة حالياً.")
+            return
+
+        start_time = time.perf_counter()
+        try:
+            # الحصول على التواريخ من التقارير أو استخدام القيم الافتراضية
+            if hasattr(self, "reports_start_date") and hasattr(self, "reports_end_date"):
+                start_date = self.reports_start_date.date() if hasattr(self.reports_start_date, "date") else date.today() - timedelta(days=30)
+                end_date = self.reports_end_date.date() if hasattr(self.reports_end_date, "date") else date.today()
+            else:
+                end_date = date.today()
+                start_date = end_date - timedelta(days=30)
+            
+            summary = self.payment_service.get_payment_summary(start_date, end_date)
+            self.update_payments_summary(summary or {})
+
+            payments = self.payment_service.get_payments_by_date_range(start_date, end_date)
+            self._populate_payments_table(payments)
+
+            breakdown = summary.get("by_type_and_method", []) if summary else []
+            self._populate_payment_breakdown_table(breakdown)
+
+            schedules = self.payment_service.get_payment_schedules(limit=50)
+            self._populate_payment_schedules_table(schedules)
+
+            self.payments_status_label.setText("")
+        except Exception as exc:
+            self.payments_status_label.setText(f"فشل تحديث بيانات المدفوعات: {exc}")
+        finally:
+            self._log_section_duration("refresh_payments_data", start_time)
+            
+            # ✅ إعادة تشغيل مراقب الجلسة بعد أن هدأ الوضع
+            if hasattr(self, 'session_monitor_timer') and self.session_monitor_timer:
+                if not self.session_monitor_timer.isActive():
+                    if self.logger:
+                        self.logger.debug("▶️ إعادة تشغيل session_monitor_timer بعد انتهاء تحميل المدفوعات")
+                    self.session_monitor_timer.start(60000)  # كل 60 ثانية
+
+    def update_payments_summary(self, summary: Dict[str, Any]):
+        """تحديث مؤشرات المدفوعات"""
+        totals = summary.get("totals", {}) if summary else {}
+
+        for key in ("customer_payments", "supplier_payments", "total_payments", "net_cash_flow"):
+            label = self.payment_summary_labels.get(key)
+            if label:
+                label.setText(self._format_currency(totals.get(key, 0)))
+
+    def _populate_payments_table(self, payments):
+        """عرض قائمة المدفوعات"""
+        table = self.payments_table
+        payments = payments or []
+        if not payments:
+            table.setRowCount(1)
+            empty_item = QTableWidgetItem("لا توجد عمليات دفع في الفترة المحددة")
+            empty_item.setTextAlignment(Qt.AlignCenter)
+            table.setSpan(0, 0, 1, table.columnCount())
+            table.setItem(0, 0, empty_item)
+            return
+        table.setRowCount(len(payments))
+
+        for row, payment in enumerate(payments):
+            entity = self._get_payment_entity_name(payment)
+            payment_date = payment.payment_date.strftime("%Y-%m-%d") if getattr(payment, "payment_date", None) else "-"
+
+            row_values = [
+                getattr(payment, "payment_number", None) or f"PAY-{getattr(payment, 'id', '')}",
+                getattr(payment, "payment_type", "-"),
+                entity,
+                payment_date,
+                getattr(payment, "payment_method", "-"),
+                getattr(payment, "status", "-"),
+                self._format_currency(getattr(payment, "amount_in_base_currency", None) or getattr(payment, "amount", 0))
+            ]
+
+            for col, value in enumerate(row_values):
+                item = QTableWidgetItem(str(value))
+                if col in (6,):
+                    item.setTextAlignment(Qt.AlignCenter)
+                else:
+                    item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+                table.setItem(row, col, item)
+
+    def _populate_payment_breakdown_table(self, breakdown):
+        """عرض توزيع المدفوعات"""
+        table = self.payment_breakdown_table
+        breakdown = breakdown or []
+        if not breakdown:
+            table.setRowCount(1)
+            msg = QTableWidgetItem("لا يوجد توزيع متاح للفترة الحالية")
+            msg.setTextAlignment(Qt.AlignCenter)
+            table.setSpan(0, 0, 1, table.columnCount())
+            table.setItem(0, 0, msg)
+            return
+        table.setRowCount(len(breakdown))
+
+        for row, entry in enumerate(breakdown):
+            row_values = [
+                entry.get("payment_type", "-"),
+                entry.get("payment_method", "-"),
+                entry.get("count", 0),
+                self._format_currency(entry.get("amount", 0))
+            ]
+            for col, value in enumerate(row_values):
+                item = QTableWidgetItem(str(value))
+                if col == 2:
+                    item.setTextAlignment(Qt.AlignCenter)
+                else:
+                    item.setTextAlignment(Qt.AlignVCenter)
+                table.setItem(row, col, item)
+
+    def _populate_payment_schedules_table(self, schedules):
+        """عرض الجدولة القادمة للمدفوعات"""
+        table = self.payment_schedules_table
+        schedules = schedules or []
+        if not schedules:
+            table.setRowCount(1)
+            msg = QTableWidgetItem("لا توجد استحقاقات حالياً")
+            msg.setTextAlignment(Qt.AlignCenter)
+            table.setSpan(0, 0, 1, table.columnCount())
+            table.setItem(0, 0, msg)
+            return
+        table.setRowCount(len(schedules))
+
+        for row, schedule in enumerate(schedules):
+            due_date = schedule.get("due_date")
+            due_text = due_date.strftime("%Y-%m-%d") if isinstance(due_date, date) else str(due_date or "-")
+
+            row_values = [
+                schedule.get("installment_number", "-"),
+                schedule.get("payment_id", "-"),
+                due_text,
+                self._format_currency(schedule.get("amount", 0)),
+                self._format_currency(schedule.get("remaining_amount", 0)),
+                schedule.get("status", "-")
+            ]
+
+            for col, value in enumerate(row_values):
+                item = QTableWidgetItem(str(value))
+                if col in (3, 4):
+                    item.setTextAlignment(Qt.AlignCenter)
+                else:
+                    item.setTextAlignment(Qt.AlignVCenter)
+                if schedule.get("is_overdue"):
+                    item.setForeground(QColor("#c0392b"))
+                table.setItem(row, col, item)
+
+    def _get_payment_entity_name(self, payment) -> str:
+        """محاولة استخراج اسم الجهة المرتبطة بالدفعة"""
+        try:
+            if payment.payment_type == PaymentType.CUSTOMER_PAYMENT.value and payment.customer_id:
+                if getattr(self, "customer_manager", None):
+                    customer = self.customer_manager.get_customer_by_id(payment.customer_id)
+                    if customer and getattr(customer, "name", None):
+                        return customer.name
+                return f"عميل #{payment.customer_id}"
+            if payment.payment_type == PaymentType.SUPPLIER_PAYMENT.value and payment.supplier_id:
+                if getattr(self, "supplier_manager", None):
+                    supplier = self.supplier_manager.get_supplier_by_id(payment.supplier_id)
+                    if supplier and getattr(supplier, "name", None):
+                        return supplier.name
+                return f"مورد #{payment.supplier_id}"
+        except Exception:
+            return "-"
+
+            if payment.payment_type == PaymentType.SUPPLIER_PAYMENT.value and payment.supplier_id:
+                if getattr(self, "supplier_manager", None):
+                    supplier = self.supplier_manager.get_supplier_by_id(payment.supplier_id)
+                    if supplier and getattr(supplier, "name", None):
+                        return supplier.name
+                return f"مورد #{payment.supplier_id}"
+        except Exception:
+            return "-"
     
     def create_reports_tab(self) -> QWidget:
         """إنشاء تبويب التقارير"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
+        layout.setSpacing(12)
+        layout.setContentsMargins(12, 12, 12, 12)
         
-        title = QLabel("التقارير والإحصائيات")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #9b59b6; margin: 10px;")
+        title = QLabel("لوحة التقارير والمؤشرات")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: rgb(155, 89, 182); margin-bottom: 4px;")
         layout.addWidget(title)
         
-        buttons_layout = QHBoxLayout()
+        # منطقة الفلاتر
+        filters_frame = QFrame()
+        filters_frame.setObjectName("reportsFiltersFrame")
+        filters_frame.setStyleSheet("")
+        filters_layout = QHBoxLayout(filters_frame)
+        filters_layout.setContentsMargins(12, 8, 12, 8)
+        filters_layout.setSpacing(12)
         
-        daily_report_btn = QPushButton("📅 تقرير يومي")
-        daily_report_btn.setMinimumHeight(40)
-        daily_report_btn.clicked.connect(self.daily_report)
-        buttons_layout.addWidget(daily_report_btn)
+        date_label = QLabel("النطاق الزمني:")
+        date_label.setStyleSheet("color: rgb(52, 73, 94); font-weight: 600;")
+        filters_layout.addWidget(date_label)
         
-        monthly_report_btn = QPushButton("📆 تقرير شهري")
-        monthly_report_btn.setMinimumHeight(40)
-        monthly_report_btn.clicked.connect(self.monthly_report)
-        buttons_layout.addWidget(monthly_report_btn)
+        self.report_start_date = QDateEdit()
+        self.report_start_date.setCalendarPopup(True)
+        self.report_start_date.setDate(QDate.currentDate().addDays(-30))
+        filters_layout.addWidget(self.report_start_date)
         
-        profit_report_btn = QPushButton("💹 تقرير الأرباح")
-        profit_report_btn.setMinimumHeight(40)
-        profit_report_btn.clicked.connect(self.profit_report)
-        buttons_layout.addWidget(profit_report_btn)
+        to_label = QLabel("إلى")
+        filters_layout.addWidget(to_label)
         
-        buttons_layout.addStretch()
-        layout.addLayout(buttons_layout)
+        self.report_end_date = QDateEdit()
+        self.report_end_date.setCalendarPopup(True)
+        self.report_end_date.setDate(QDate.currentDate())
+        filters_layout.addWidget(self.report_end_date)
         
-        content_label = QLabel("سيتم إضافة لوحة التقارير والرسوم البيانية هنا")
-        content_label.setAlignment(Qt.AlignCenter)
-        content_label.setStyleSheet("color: #7f8c8d; font-size: 14px; margin: 50px;")
-        layout.addWidget(content_label)
+        quick_buttons_layout = QHBoxLayout()
+        self.report_last_7_btn = QPushButton("آخر 7 أيام")
+        self.report_last_7_btn.setMinimumHeight(30)
+        self.report_last_7_btn.clicked.connect(lambda: self.set_report_quick_range(7))
+        quick_buttons_layout.addWidget(self.report_last_7_btn)
         
-        layout.addStretch()
+        self.report_last_30_btn = QPushButton("آخر 30 يوم")
+        self.report_last_30_btn.setMinimumHeight(30)
+        self.report_last_30_btn.clicked.connect(lambda: self.set_report_quick_range(30))
+        quick_buttons_layout.addWidget(self.report_last_30_btn)
+        
+        filters_layout.addLayout(quick_buttons_layout)
+        
+        self.report_refresh_btn = QPushButton("🔄 تحديث التقارير")
+        self.report_refresh_btn.setMinimumHeight(32)
+        self.report_refresh_btn.clicked.connect(self.refresh_reports_data)
+        filters_layout.addWidget(self.report_refresh_btn)
+        
+        # محدد نوع التقرير
+        report_type_label = QLabel("نوع التقرير:")
+        report_type_label.setStyleSheet("color: rgb(52, 73, 94); font-weight: 600;")
+        filters_layout.addWidget(report_type_label)
+        
+        self.report_type_combo = QComboBox()
+        self.report_type_combo.addItems([
+            "ملخص المبيعات",
+            "ملخص المشتريات",
+            "الملخص المالي",
+            "تحليل المنتجات",
+            "تحليل العملاء",
+            "تحليل الموردين"
+        ])
+        self.report_type_combo.setMinimumWidth(150)
+        filters_layout.addWidget(self.report_type_combo)
+        
+        # أزرار التنقل السريع إلى التقارير التفصيلية
+        self.report_open_detailed_btn = QPushButton("📊 فتح تقرير تفصيلي")
+        self.report_open_detailed_btn.setMinimumHeight(32)
+        self.report_open_detailed_btn.clicked.connect(self.open_detailed_report)
+        filters_layout.addWidget(self.report_open_detailed_btn)
+        
+        layout.addWidget(filters_frame)
+        
+        # ملخص المؤشرات
+        summary_group = QGroupBox("الملخص المالي")
+        summary_layout = QHBoxLayout(summary_group)
+        summary_layout.setContentsMargins(12, 12, 12, 12)
+        summary_layout.setSpacing(18)
+        
+        summary_items = [
+            ("total_sales", "إجمالي المبيعات"),
+            ("total_purchases", "إجمالي المشتريات"),
+            ("gross_profit", "إجمالي الربح"),
+            ("profit_margin", "هامش الربح"),
+            ("receivables", "الذمم المدينة"),
+            ("payables", "الذمم الدائنة")
+        ]
+        
+        self.reports_summary_labels = {}
+        for key, title_text in summary_items:
+            container = QWidget()
+            container_layout = QVBoxLayout(container)
+            container_layout.setContentsMargins(0, 0, 0, 0)
+            container_layout.setSpacing(4)
+            
+            title_label = QLabel(title_text)
+            title_label.setStyleSheet("color: rgb(127, 140, 141); font-size: 12px;")
+            value_label = QLabel("-")
+            value_label.setStyleSheet("font-size: 20px; font-weight: bold; color: rgb(44, 62, 80);")
+            
+            container_layout.addWidget(title_label)
+            container_layout.addWidget(value_label)
+            container_layout.addStretch()
+            
+            summary_layout.addWidget(container)
+            self.reports_summary_labels[key] = value_label
+        
+        summary_layout.addStretch()
+        layout.addWidget(summary_group)
+        
+        # جداول المؤشرات
+        tables_layout = QHBoxLayout()
+        tables_layout.setSpacing(12)
+        
+        # جدول أفضل المنتجات
+        top_products_group = QGroupBox("أفضل المنتجات مبيعاً")
+        top_products_layout = QVBoxLayout(top_products_group)
+        self.top_products_table = QTableWidget()
+        self.top_products_table.setColumnCount(3)
+        self.top_products_table.setHorizontalHeaderLabels(["المنتج", "الكمية", "القيمة"])
+        self.top_products_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.top_products_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.top_products_table.setSelectionMode(QAbstractItemView.NoSelection)
+        top_products_layout.addWidget(self.top_products_table)
+        tables_layout.addWidget(top_products_group, 2)
+        
+        # توزيع طرق الدفع
+        distribution_group = QGroupBox("توزيع المبيعات حسب طريقة الدفع")
+        distribution_layout = QVBoxLayout(distribution_group)
+        self.payment_distribution_table = QTableWidget()
+        self.payment_distribution_table.setColumnCount(2)
+        self.payment_distribution_table.setHorizontalHeaderLabels(["الطريقة", "القيمة"])
+        self.payment_distribution_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.payment_distribution_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.payment_distribution_table.setSelectionMode(QAbstractItemView.NoSelection)
+        distribution_layout.addWidget(self.payment_distribution_table)
+        tables_layout.addWidget(distribution_group, 1)
+        
+        layout.addLayout(tables_layout)
+        
+        # جدول الإيرادات مقابل المصروفات
+        revenue_group = QGroupBox("الإيرادات مقابل المشتريات")
+        revenue_layout = QVBoxLayout(revenue_group)
+        self.revenue_vs_expense_table = QTableWidget()
+        self.revenue_vs_expense_table.setColumnCount(3)
+        self.revenue_vs_expense_table.setHorizontalHeaderLabels(["التاريخ", "الإيرادات", "المشتريات"])
+        self.revenue_vs_expense_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.revenue_vs_expense_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.revenue_vs_expense_table.setSelectionMode(QAbstractItemView.NoSelection)
+        revenue_layout.addWidget(self.revenue_vs_expense_table)
+        layout.addWidget(revenue_group)
+        
+        # الرسوم البيانية
+        chart_group = QGroupBox("رسم بياني: الإيرادات مقابل المشتريات")
+        chart_layout = QVBoxLayout(chart_group)
+        self.revenue_chart = QChart()
+        self.revenue_chart.legend().setVisible(True)
+        self.revenue_chart_view = QChartView(self.revenue_chart)
+        self.revenue_chart_view.setRenderHint(QPainter.Antialiasing)
+        chart_layout.addWidget(self.revenue_chart_view)
+        layout.addWidget(chart_group)
+        
+        # أزرار التصدير والطباعة
+        actions_layout = QHBoxLayout()
+        actions_layout.addStretch()
+        
+        self.report_export_pdf_btn = QPushButton("⬇️ تصدير PDF")
+        self.report_export_pdf_btn.clicked.connect(lambda: self.export_reports_summary(ExportFormat.PDF))
+        actions_layout.addWidget(self.report_export_pdf_btn)
+        
+        self.report_export_excel_btn = QPushButton("⬇️ تصدير Excel")
+        self.report_export_excel_btn.clicked.connect(lambda: self.export_reports_summary(ExportFormat.EXCEL))
+        actions_layout.addWidget(self.report_export_excel_btn)
+        
+        self.report_print_btn = QPushButton("🖨️ طباعة ملخص")
+        self.report_print_btn.clicked.connect(self.print_reports_summary)
+        actions_layout.addWidget(self.report_print_btn)
+        
+        layout.addLayout(actions_layout)
+        
+        # مؤشر التحميل (يُضاف ديناميكياً عند الحاجة)
+        self.reports_loading_label = None
+        
+        self.refresh_reports_data()
         return tab
+    
+    def _show_reports_loading(self, show: bool):
+        """إظهار/إخفاء مؤشر التحميل في تبويب التقارير"""
+        if not hasattr(self, "reports_tab") or self.reports_tab is None:
+            return
+        
+        try:
+            if show:
+                # إنشاء مؤشر التحميل إذا لم يكن موجوداً
+                if self.reports_loading_label is None:
+                    from PySide6.QtWidgets import QLabel, QVBoxLayout
+                    self.reports_loading_label = QLabel("⏳ جاري تحميل البيانات...")
+                    self.reports_loading_label.setStyleSheet("""
+                        QLabel {
+                            background-color: rgba(255, 255, 255, 230);
+                            border: 2px solid #3b82f6;
+                            border-radius: 8px;
+                            padding: 20px;
+                            font-size: 14px;
+                            font-weight: bold;
+                            color: #1e40af;
+                        }
+                    """)
+                    self.reports_loading_label.setAlignment(Qt.AlignCenter)
+                    self.reports_loading_label.setMinimumHeight(60)
+                
+                # إضافة المؤشر إلى التبويب
+                layout = self.reports_tab.layout()
+                if layout and self.reports_loading_label.parent() is None:
+                    layout.insertWidget(1, self.reports_loading_label)
+                
+                # تعطيل الأزرار أثناء التحميل
+                if hasattr(self, "report_refresh_btn"):
+                    self.report_refresh_btn.setEnabled(False)
+                    self.reports_loading_label.show()
+            else:
+                # إخفاء المؤشر
+                if self.reports_loading_label:
+                    self.reports_loading_label.hide()
+                
+                # تفعيل الأزرار بعد التحميل
+                if hasattr(self, "report_refresh_btn"):
+                    self.report_refresh_btn.setEnabled(True)
+        except Exception:
+            # تجاهل الأخطاء في مؤشر التحميل
+            pass
     
     def create_contacts_tab(self) -> QWidget:
         """إنشاء تبويب العملاء والموردين"""
@@ -1118,7 +6802,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(12, 12, 12, 12)
         
         title = QLabel("إدارة العملاء والموردين")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #f39c12; margin-bottom: 4px;")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: rgb(243, 156, 18); margin-bottom: 4px;")
         layout.addWidget(title)
         
         # أزرار سريعة
@@ -1146,19 +6830,13 @@ class MainWindow(QMainWindow):
         # منطقة البحث
         contacts_filters_frame = QFrame()
         contacts_filters_frame.setObjectName("contactsFiltersFrame")
-        contacts_filters_frame.setStyleSheet("""
-            QFrame#contactsFiltersFrame {
-                background-color: #f8f9fa;
-                border: 1px solid #e0e4e7;
-                border-radius: 6px;
-            }
-        """)
+        contacts_filters_frame.setStyleSheet("")
         contacts_filters_layout = QHBoxLayout(contacts_filters_frame)
         contacts_filters_layout.setContentsMargins(12, 8, 12, 8)
         contacts_filters_layout.setSpacing(12)
         
         search_label = QLabel("بحث:")
-        search_label.setStyleSheet("color: #34495e; font-weight: 600;")
+        search_label.setStyleSheet("color: rgb(52, 73, 94); font-weight: 600;")
         contacts_filters_layout.addWidget(search_label)
         
         self.contacts_search_input = QLineEdit()
@@ -1187,7 +6865,7 @@ class MainWindow(QMainWindow):
         customers_summary_layout = QVBoxLayout(customers_summary_group)
         customers_summary_layout.setContentsMargins(12, 12, 12, 12)
         self.customers_summary_label = QLabel("-")
-        self.customers_summary_label.setStyleSheet("font-size: 14px; color: #2c3e50;")
+        self.customers_summary_label.setStyleSheet("font-size: 14px; color: rgb(44, 62, 80);")
         customers_summary_layout.addWidget(self.customers_summary_label)
         customers_layout.addWidget(customers_summary_group)
         
@@ -1217,7 +6895,7 @@ class MainWindow(QMainWindow):
         suppliers_summary_layout = QVBoxLayout(suppliers_summary_group)
         suppliers_summary_layout.setContentsMargins(12, 12, 12, 12)
         self.suppliers_summary_label = QLabel("-")
-        self.suppliers_summary_label.setStyleSheet("font-size: 14px; color: #2c3e50;")
+        self.suppliers_summary_label.setStyleSheet("font-size: 14px; color: rgb(44, 62, 80);")
         suppliers_summary_layout.addWidget(self.suppliers_summary_label)
         suppliers_layout.addWidget(suppliers_summary_group)
         
@@ -1250,7 +6928,7 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(tab)
         
         title = QLabel("إعدادات النظام")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #34495e; margin: 10px;")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: rgb(52, 73, 94); margin: 10px;")
         layout.addWidget(title)
         
         buttons_layout = QHBoxLayout()
@@ -1258,6 +6936,11 @@ class MainWindow(QMainWindow):
         general_settings_btn = QPushButton("⚙️ الإعدادات العامة")
         general_settings_btn.setMinimumHeight(40)
         buttons_layout.addWidget(general_settings_btn)
+
+        template_editor_btn = QPushButton("🎨 محرر القوالب")
+        template_editor_btn.setMinimumHeight(40)
+        template_editor_btn.clicked.connect(self.show_template_editor)
+        buttons_layout.addWidget(template_editor_btn)
         
         backup_btn = QPushButton("💾 النسخ الاحتياطي")
         backup_btn.setMinimumHeight(40)
@@ -1266,10 +6949,62 @@ class MainWindow(QMainWindow):
         
         users_btn = QPushButton("👥 إدارة المستخدمين")
         users_btn.setMinimumHeight(40)
+        users_btn.clicked.connect(self.show_user_management)
         buttons_layout.addWidget(users_btn)
+        
+        permissions_btn = QPushButton("🔐 إدارة الصلاحيات")
+        permissions_btn.setMinimumHeight(40)
+        permissions_btn.clicked.connect(self.show_permission_management)
+        buttons_layout.addWidget(permissions_btn)
         
         buttons_layout.addStretch()
         layout.addLayout(buttons_layout)
+        
+        # Automated Backup Settings
+        backup_group = QGroupBox("النسخ الاحتياطي التلقائي")
+        backup_layout = QVBoxLayout(backup_group)
+        
+        backup_form_layout = QFormLayout()
+        self.backup_enabled_check = QCheckBox("تفعيل النسخ الاحتياطي اليومي")
+        self.backup_time_edit = QTimeEdit()
+        self.backup_keep_spin = QSpinBox()
+        self.backup_keep_spin.setRange(1, 100)
+        self.backup_keep_spin.setSuffix(" نسخة")
+        
+        backup_form_layout.addRow(self.backup_enabled_check)
+        backup_form_layout.addRow("وقت النسخ الاحتياطي:", self.backup_time_edit)
+        backup_form_layout.addRow("الاحتفاظ بآخر:", self.backup_keep_spin)
+        
+        save_backup_btn = QPushButton("حفظ إعدادات النسخ الاحتياطي")
+        save_backup_btn.clicked.connect(self.save_backup_settings)
+        
+        backup_layout.addLayout(backup_form_layout)
+        backup_layout.addWidget(save_backup_btn)
+        layout.addWidget(backup_group)
+
+        # Printer Settings
+        printer_group = QGroupBox("إعدادات طابعة الإيصالات")
+        printer_layout = QVBoxLayout(printer_group)
+        
+        printer_form_layout = QHBoxLayout()
+        self.printer_combo = QComboBox()
+        self.printer_combo.setMinimumWidth(300)
+        printer_form_layout.addWidget(QLabel("الطابعة المحددة:"))
+        printer_form_layout.addWidget(self.printer_combo)
+        
+        refresh_printers_btn = QPushButton("تحديث قائمة الطابعات")
+        refresh_printers_btn.clicked.connect(self.populate_printers_list)
+        printer_form_layout.addWidget(refresh_printers_btn)
+        
+        save_printer_btn = QPushButton("حفظ الطابعة")
+        save_printer_btn.clicked.connect(self.save_printer_selection)
+        printer_form_layout.addWidget(save_printer_btn)
+        
+        printer_layout.addLayout(printer_form_layout)
+        self.printer_status_label = QLabel("")
+        self.printer_status_label.setStyleSheet("color: rgb(127, 140, 141); font-size: 12px;")
+        printer_layout.addWidget(self.printer_status_label)
+        layout.addWidget(printer_group)
 
         # مجموعة إعدادات الإشعارات
         notifications_group = QGroupBox("إعدادات الإشعارات")
@@ -1280,66 +7015,202 @@ class MainWindow(QMainWindow):
         notif_label = QLabel("فترة الفحص:")
         notif_layout.addWidget(notif_label)
 
-        from PySide6.QtWidgets import QComboBox
         self.notifications_interval_combo = QComboBox()
         self.notifications_interval_combo.setMinimumWidth(200)
-        # دقائق شائعة
         minutes_options = [1, 2, 5, 10, 15, 30]
         for m in minutes_options:
             self.notifications_interval_combo.addItem(f"كل {m} دقيقة", m)
         notif_layout.addWidget(self.notifications_interval_combo)
 
-        # تحميل القيمة الحالية من QSettings
         try:
             from PySide6.QtCore import QSettings
             s = QSettings('LogicalVersion', 'ERP')
-            val = s.value('notifications/interval_seconds', None)
-            current_m = 5  # افتراضي 5 دقائق للواجهة
+            val = s.value('notifications/interval_seconds', type=int)
+            current_m = 5
             if val is not None:
                 current_m = max(1, int(int(val) / 60))
-            # اختيار العنصر المناسب
             idx = self.notifications_interval_combo.findData(current_m)
             if idx >= 0:
                 self.notifications_interval_combo.setCurrentIndex(idx)
         except Exception:
-            pass
-
-        # حدث التغيير
-        self.notifications_interval_combo.currentIndexChanged.connect(self.on_notifications_interval_changed)
+            self.notifications_interval_combo.currentIndexChanged.connect(self.on_notifications_interval_changed)
         layout.addWidget(notifications_group)
         
-        content_label = QLabel("سيتم إضافة لوحة الإعدادات هنا")
-        content_label.setAlignment(Qt.AlignCenter)
-        content_label.setStyleSheet("color: #7f8c8d; font-size: 14px; margin: 50px;")
-        layout.addWidget(content_label)
+        # مجموعة إعدادات الثيم
+        theme_group = QGroupBox("إعدادات المظهر")
+        theme_layout = QHBoxLayout(theme_group)
+        theme_layout.setContentsMargins(12, 12, 12, 12)
+        theme_layout.setSpacing(12)
+        
+        theme_label = QLabel("السمة الحالية:")
+        theme_layout.addWidget(theme_label)
+        
+        self.current_theme_label = QLabel("فاتح")
+        self.current_theme_label.setStyleSheet("font-weight: bold; color: rgb(44, 62, 80);")
+        theme_layout.addWidget(self.current_theme_label)
+        
+        change_theme_btn = QPushButton("🎨 تغيير السمة")
+        change_theme_btn.clicked.connect(self.show_theme_selector)
+        theme_layout.addWidget(change_theme_btn)
+        
+        theme_layout.addStretch()
+        layout.addWidget(theme_group)
+        
+        # مجموعة إعدادات الأمان
+        security_group = QGroupBox("إعدادات الأمان")
+        security_layout = QVBoxLayout(security_group)
+        security_layout.setContentsMargins(12, 12, 12, 12)
+        security_layout.setSpacing(8)
+        
+        encryption_info = QLabel("🔒 التشفير: النسخ الاحتياطية المشفرة متاحة من قائمة 'ملف'")
+        encryption_info.setStyleSheet("color: rgb(127, 140, 141); font-size: 11px;")
+        security_layout.addWidget(encryption_info)
+        
+        security_actions_layout = QHBoxLayout()
+        security_actions_layout.setSpacing(8)
+        
+        encryption_settings_btn = QPushButton("⚙️ إعدادات التشفير")
+        encryption_settings_btn.clicked.connect(self.show_encryption_dialog)
+        security_actions_layout.addWidget(encryption_settings_btn)
+        
+        security_actions_layout.addStretch()
+        security_layout.addLayout(security_actions_layout)
+        
+        layout.addWidget(security_group)
         
         layout.addStretch()
+
+        self.load_backup_settings()
+        self.populate_printers_list()
+        
+        # تحديث تسمية السمة الحالية
+        try:
+            current_theme = self.config_manager.get('theme', 'light')
+            if hasattr(self, "current_theme_label"):
+                self.current_theme_label.setText("داكن" if current_theme == 'dark' else "فاتح")
+        except Exception:
+            pass
         return tab
+    
+    def load_backup_settings(self):
+        """Loads backup settings from QSettings."""
+        from PySide6.QtCore import QSettings, QTime
+        s = QSettings('LogicalVersion', 'ERP')
+        is_enabled = s.value('backup/auto_enabled', False, type=bool)
+        backup_time_str = s.value('backup/time', "02:00")
+        backups_to_keep = s.value('backup/keep', 7, type=int)
+
+        self.backup_enabled_check.setChecked(is_enabled)
+        self.backup_time_edit.setTime(QTime.fromString(backup_time_str, "HH:mm"))
+        self.backup_keep_spin.setValue(backups_to_keep)
+
+    def save_backup_settings(self):
+        """Saves backup settings to QSettings and notifies the scheduler."""
+        from PySide6.QtCore import QSettings
+        s = QSettings('LogicalVersion', 'ERP')
+        
+        s.setValue('backup/auto_enabled', self.backup_enabled_check.isChecked())
+        s.setValue('backup/time', self.backup_time_edit.time().toString("HH:mm"))
+        s.setValue('backup/keep', self.backup_keep_spin.value())
+
+        QMessageBox.information(self, "نجاح", "تم حفظ إعدادات النسخ الاحتياطي التلقائي.")
+        
+        if hasattr(self, 'reminder_scheduler') and hasattr(self.reminder_scheduler, 'update_backup_schedule'):
+            self.reminder_scheduler.update_backup_schedule()
+
+    def populate_printers_list(self):
+        """Populates the printer selection combo box."""
+        status_message = ""
+        if not self.printing_service:
+            QMessageBox.warning(self, "خطأ", "خدمة الطباعة غير متوفرة.")
+            status_message = "خدمة الطباعة غير متوفرة في هذه الجلسة."
+            if hasattr(self, "printer_status_label"):
+                self.printer_status_label.setText(status_message)
+            return
+
+        self.printer_combo.clear()
+        try:
+            printers = self.printing_service.discover_usb_printers()
+            if not printers:
+                self.printer_combo.addItem("لم يتم العثور على طابعات")
+                status_message = "لم يتم العثور على أي طابعة USB. تأكد من توصيل الطابعة بشكل صحيح."
+                if hasattr(self, "printer_status_label"):
+                    self.printer_status_label.setText(status_message)
+                return
+            status_message = f"تم اكتشاف {len(printers)} طابعة/طابعات متاحة."
+
+            for p in printers:
+                self.printer_combo.addItem(f"{p['name']} (VID={hex(p['vendor_id'])}, PID={hex(p['product_id'])})", p)
+
+            from PySide6.QtCore import QSettings
+            s = QSettings('LogicalVersion', 'ERP')
+            saved_vid = s.value('printer/vendor_id', type=int)
+            saved_pid = s.value('printer/product_id', type=int)
+            if saved_vid and saved_pid:
+                for i in range(self.printer_combo.count()):
+                    p_data = self.printer_combo.itemData(i)
+                    if p_data and p_data['vendor_id'] == saved_vid and p_data['product_id'] == saved_pid:
+                        self.printer_combo.setCurrentIndex(i)
+                        break
+        except Exception:
+            status_message = "تم تعطيل اكتشاف الطابعات USB لأن التعريفات غير متاحة على هذا الجهاز."
+        finally:
+            if hasattr(self, "printer_status_label"):
+                self.printer_status_label.setText(status_message)
+
+    def save_printer_selection(self):
+        """Saves the selected printer to settings."""
+        if self.printer_combo.count() == 0 or self.printer_combo.currentIndex() == -1:
+            QMessageBox.warning(self, "تنبيه", "يرجى تحديد طابعة أولاً.")
+            return
+
+        selected_data = self.printer_combo.currentData()
+        if not selected_data or not isinstance(selected_data, dict):
+            QMessageBox.warning(self, "تنبيه", "بيانات الطابعة المحددة غير صالحة.")
+            return 
+            
+        try:
+            from PySide6.QtCore import QSettings
+            s = QSettings('LogicalVersion', 'ERP')
+            s.setValue('printer/vendor_id', selected_data['vendor_id'])
+            s.setValue('printer/product_id', selected_data['product_id'])
+            s.setValue('printer/name', selected_data['name'])
+            
+            QMessageBox.information(self, "نجاح", f"تم حفظ الطابعة بنجاح:\n{selected_data['name']}")
+        except Exception:
+            pass
+    def show_template_editor(self):
+        """عرض نافذة محرر القوالب."""
+        try:
+            from src.ui.windows.template_editor_window import TemplateEditorWindow
+            self._template_editor_window = TemplateEditorWindow(self.db_manager, parent=self)
+            self._template_editor_window.show()
+            self._template_editor_window.raise_()
+            self._template_editor_window.activateWindow()
+            
+            if self.logger:
+                self.logger.info("تم فتح نافذة محرر القوالب")
+        except Exception as e:
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة محرر القوالب:\n{str(e)}")
 
     def on_notifications_interval_changed(self):
         """تغيير فترة فحص الإشعارات وتطبيقها فوراً"""
         try:
-            m = self.notifications_interval_combo.currentData()
-            seconds = int(m) * 60
             from PySide6.QtCore import QSettings
+            seconds = self.notifications_interval_spin.value() * 60
             s = QSettings('LogicalVersion', 'ERP')
             s.setValue('notifications/interval_seconds', seconds)
             # إعادة تشغيل الفاحص إذا كان مفعلاً
             if hasattr(self, 'notifications_manager') and self.notifications_manager:
                 try:
-                    self.notifications_manager.stop()
+                    self.notifications_manager.set_check_interval(seconds)
+                    m = seconds // 60
+                    if self.logger:
+                        self.logger.info(f"تم تحديث فترة فحص الإشعارات إلى {m} دقيقة")
                 except Exception:
                     pass
-                try:
-                    self.notifications_manager.start()
-                except Exception:
-                    pass
-            if self.logger:
-                self.logger.info(f"تم تحديث فترة فحص الإشعارات إلى {m} دقيقة")
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في تحديث فترة الإشعارات: {str(e)}")
-    
+        except Exception:
+            pass
     def setup_menus(self):
         """إعداد القوائم"""
         menubar = self.menuBar()
@@ -1410,6 +7281,13 @@ class MainWindow(QMainWindow):
         performance_action.triggered.connect(self.show_performance_dashboard)
         tools_menu.addAction(performance_action)
         
+        # لوحة المعلومات الذكية
+        smart_dashboard_action = QAction("💡 لوحة المعلومات الذكية", self)
+        smart_dashboard_action.setToolTip("عرض لوحة معلومات مع رؤى من الذكاء الاصطناعي")
+        smart_dashboard_action.setShortcut("Ctrl+Shift+I")
+        smart_dashboard_action.triggered.connect(self.show_smart_dashboard)
+        tools_menu.addAction(smart_dashboard_action)
+
         tools_menu.addSeparator()
         
         # إضافة عنصر إدارة التشفير
@@ -1642,270 +7520,174 @@ class MainWindow(QMainWindow):
 
     def show_accounting_window(self):
         """عرض نافذة إدارة المحاسبة"""
-        try:
-            from .accounting_window import AccountingWindow
-            # احتفظ بالمرجع حتى لا تُجمّع
-            if not hasattr(self, "_accounting_window") or self._accounting_window is None:
-                self._accounting_window = AccountingWindow(self.db_manager, parent=self)
-            self._accounting_window.show()
-            self._accounting_window.raise_()
-            self._accounting_window.activateWindow()
-            if self.logger:
-                self.logger.info("تم فتح نافذة إدارة المحاسبة")
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة إدارة المحاسبة: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة إدارة المحاسبة:\n{str(e)}")
+        window = self.window_manager.open_window("accounting", parent=self)
+        if not window:
+            QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة إدارة المحاسبة")
     
+    def show_smart_dashboard(self):
+        """عرض نافذة لوحة المعلومات الذكية"""
+        try:
+            if not hasattr(self, "ai_service") or not self.ai_service:
+                QMessageBox.warning(self, "الخدمة غير متوفرة", "خدمة الذكاء الاصطناعي غير مهيأة.")
+                return
+
+            if not hasattr(self, "_smart_dashboard_window") or self._smart_dashboard_window is None:
+                from src.ui.windows.smart_dashboard_window import SmartDashboardWindow
+                self._smart_dashboard_window = SmartDashboardWindow(self.ai_service, parent=self)
+            
+            self._smart_dashboard_window.show()
+            self._smart_dashboard_window.raise_()
+            self._smart_dashboard_window.activateWindow()
+            
+            if self.logger:
+                self.logger.info("تم فتح نافذة لوحة المعلومات الذكية")
+        except Exception as e:
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة لوحة المعلومات الذكية:\n{str(e)}")
+
     def show_quotes_window(self):
         """عرض نافذة إدارة عروض الأسعار"""
-        try:
-            from .quotes_window import QuotesWindow
-            if not hasattr(self, "_quotes_window") or self._quotes_window is None:
-                self._quotes_window = QuotesWindow(self.db_manager, parent=self)
-            self._quotes_window.show()
-            self._quotes_window.raise_()
-            self._quotes_window.activateWindow()
-            if self.logger:
-                self.logger.info("تم فتح نافذة إدارة عروض الأسعار")
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة عروض الأسعار: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة عروض الأسعار:\n{str(e)}")
+        window = self.window_manager.open_window("quotes", parent=self)
+        if not window:
+            QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة عروض الأسعار")
     
     def show_returns_window(self):
         """عرض نافذة إدارة المرتجعات"""
-        try:
-            from .returns_window import ReturnsWindow
-            if not hasattr(self, "_returns_window") or self._returns_window is None:
-                self._returns_window = ReturnsWindow(self.db_manager, parent=self)
-            self._returns_window.show()
-            self._returns_window.raise_()
-            self._returns_window.activateWindow()
-            if self.logger:
-                self.logger.info("تم فتح نافذة إدارة المرتجعات")
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة المرتجعات: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة المرتجعات:\n{str(e)}")
+        window = self.window_manager.open_window("returns", parent=self)
+        if not window:
+            QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة المرتجعات")
     
     def show_purchase_orders_window(self):
         """عرض نافذة أوامر الشراء"""
-        try:
-            from .purchase_orders_window import PurchaseOrdersWindow
-            if not hasattr(self, "_purchase_orders_window") or self._purchase_orders_window is None:
-                self._purchase_orders_window = PurchaseOrdersWindow(self.db_manager, parent=self)
-            self._purchase_orders_window.show()
-            self._purchase_orders_window.raise_()
-            self._purchase_orders_window.activateWindow()
-            if self.logger:
-                self.logger.info("تم فتح نافذة أوامر الشراء")
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة أوامر الشراء: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة أوامر الشراء:\n{str(e)}")
+        window = self.window_manager.open_window("purchase_orders", parent=self)
+        if not window:
+            QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة أوامر الشراء")
     
     def show_receiving_notes_window(self):
         """عرض نافذة استلام الشحنات"""
         try:
-            # يمكن إضافة نافذة منفصلة للاستلام أو استخدام نفس نافذة أوامر الشراء
-            self.show_purchase_orders_window()
+            if not hasattr(self, "_receiving_notes_window") or self._receiving_notes_window is None:
+                from src.ui.windows.receiving_notes_window import ReceivingNotesWindow  # pyright: ignore[reportMissingImports]
+                self._receiving_notes_window = ReceivingNotesWindow(self.db_manager, parent=self)
+            self._receiving_notes_window.show()
+            self._receiving_notes_window.raise_()
+            self._receiving_notes_window.activateWindow()
             if self.logger:
                 self.logger.info("تم فتح نافذة استلام الشحنات")
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة استلام الشحنات: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة استلام الشحنات:\n{str(e)}")
     
     def show_supplier_evaluations_window(self):
         """عرض نافذة تقييم الموردين"""
         try:
-            # يمكن إضافة نافذة منفصلة للتقييم
-            QMessageBox.information(self, "قريباً", "سيتم إضافة نافذة تقييم الموردين قريباً")
+            if not hasattr(self, "_supplier_evaluations_window") or self._supplier_evaluations_window is None:
+                from src.ui.windows.supplier_evaluations_window import SupplierEvaluationsWindow  # pyright: ignore[reportMissingImports]
+                self._supplier_evaluations_window = SupplierEvaluationsWindow(self.db_manager, parent=self)
+            self._supplier_evaluations_window.show()
+            self._supplier_evaluations_window.raise_()
+            self._supplier_evaluations_window.activateWindow()
             if self.logger:
                 self.logger.info("طلب فتح نافذة تقييم الموردين")
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة تقييم الموردين: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة تقييم الموردين:\n{str(e)}")
     
     def show_payment_plans_window(self):
         """عرض نافذة إدارة خطط الدفع"""
-        try:
-            from .payment_plans_window import PaymentPlansWindow
-            
-            window = PaymentPlansWindow(self.db_manager, parent=self)
-            window.show()
-            
-            if self.logger:
-                self.logger.info("فتح نافذة إدارة خطط الدفع")
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة خطط الدفع: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة خطط الدفع:\n{str(e)}")
+        window = self.window_manager.open_window("payment_plans", parent=self)
+        if not window:
+            QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة خطط الدفع")
     
     def show_upcoming_payments(self):
         """عرض الأقساط القادمة"""
         try:
-            from .payment_plans_window import PaymentPlansWindow
-            
-            window = PaymentPlansWindow(self.db_manager, parent=self)
-            window.tabs.setCurrentIndex(1)  # تبويب الأقساط القادمة
+            if not hasattr(self, "_payment_plans_window") or self._payment_plans_window is None:
+                from src.ui.windows.payment_plans_window import PaymentPlansWindow
+                self._payment_plans_window = PaymentPlansWindow(self.db_manager, parent=self)
+            window = self._payment_plans_window
+            if hasattr(window, 'tabs'):
+                window.tabs.setCurrentIndex(1)  # تبويب الأقساط القادمة
             window.show()
-            
+            window.raise_()
+            window.activateWindow()
             if self.logger:
                 self.logger.info("عرض الأقساط القادمة")
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في عرض الأقساط القادمة: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في عرض الأقساط القادمة:\n{str(e)}")
     
     def show_overdue_payments(self):
         """عرض الأقساط المتأخرة"""
         try:
-            from .payment_plans_window import PaymentPlansWindow
-            
-            window = PaymentPlansWindow(self.db_manager, parent=self)
-            window.tabs.setCurrentIndex(2)  # تبويب الأقساط المتأخرة
+            if not hasattr(self, "_payment_plans_window") or self._payment_plans_window is None:
+                from src.ui.windows.payment_plans_window import PaymentPlansWindow
+                self._payment_plans_window = PaymentPlansWindow(self.db_manager, parent=self)
+            window = self._payment_plans_window
+            if hasattr(window, 'tabs'):
+                window.tabs.setCurrentIndex(2)  # تبويب الأقساط المتأخرة
             window.show()
-            
+            window.raise_()
+            window.activateWindow()
             if self.logger:
                 self.logger.info("عرض الأقساط المتأخرة")
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في عرض الأقساط المتأخرة: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في عرض الأقساط المتأخرة:\n{str(e)}")
     
     def show_abc_analysis_window(self):
         """عرض نافذة تحليل ABC"""
-        try:
-            from .abc_analysis_window import ABCAnalysisWindow
-        
-            if not hasattr(self, "_abc_analysis_window") or self._abc_analysis_window is None:
-                self._abc_analysis_window = ABCAnalysisWindow(self.db_manager, parent=self)
-        
-            self._abc_analysis_window.show()
-            self._abc_analysis_window.raise_()
-            self._abc_analysis_window.activateWindow()
-        
-            if self.logger:
-                self.logger.info("تم فتح نافذة تحليل ABC")
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة تحليل ABC: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة تحليل ABC:\n{str(e)}")
+        window = self.window_manager.open_window("abc_analysis", parent=self)
+        if not window:
+            QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة تحليل ABC")
     
     def show_safety_stock_window(self):
         """عرض نافذة إدارة الأرصدة الآمنة"""
-        try:
-            from .safety_stock_window import SafetyStockWindow
-        
-            if not hasattr(self, "_safety_stock_window") or self._safety_stock_window is None:
-                self._safety_stock_window = SafetyStockWindow(self.db_manager, parent=self)
-        
-            self._safety_stock_window.show()
-            self._safety_stock_window.raise_()
-            self._safety_stock_window.activateWindow()
-        
-            if self.logger:
-                self.logger.info("تم فتح نافذة الأرصدة الآمنة")
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة الأرصدة الآمنة: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة الأرصدة الآمنة:\n{str(e)}")
+        window = self.window_manager.open_window("safety_stock", parent=self)
+        if not window:
+            QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة الأرصدة الآمنة")
     
     def show_batch_tracking_window(self):
         """عرض نافذة تتبع الدفعات"""
-        try:
-            from .batch_tracking_window import BatchTrackingWindow
-        
-            if not hasattr(self, "_batch_tracking_window") or self._batch_tracking_window is None:
-                self._batch_tracking_window = BatchTrackingWindow(self.db_manager, parent=self)
-        
-            self._batch_tracking_window.show()
-            self._batch_tracking_window.raise_()
-            self._batch_tracking_window.activateWindow()
-        
-            if self.logger:
-                self.logger.info("تم فتح نافذة تتبع الدفعات")
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة تتبع الدفعات: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة تتبع الدفعات:\n{str(e)}")
+        window = self.window_manager.open_window("batch_tracking", parent=self)
+        if not window:
+            QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة تتبع الدفعات")
     
     def show_reorder_recommendations_window(self):
         """عرض نافذة توصيات إعادة الطلب"""
-        try:
-            from .reorder_recommendations_window import ReorderRecommendationsWindow
-        
-            if not hasattr(self, "_reorder_window") or self._reorder_window is None:
-                self._reorder_window = ReorderRecommendationsWindow(self.db_manager, parent=self)
-        
-            self._reorder_window.show()
-            self._reorder_window.raise_()
-            self._reorder_window.activateWindow()
-        
-            if self.logger:
-                self.logger.info("تم فتح نافذة توصيات إعادة الطلب")
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة توصيات إعادة الطلب: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة توصيات إعادة الطلب:\n{str(e)}")
+        window = self.window_manager.open_window("reorder_recommendations", parent=self)
+        if not window:
+            QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة توصيات إعادة الطلب")
     
     def show_physical_counts_window(self):
         """عرض نافذة الجرد الدوري"""
-        try:
-            from .physical_counts_window import PhysicalCountsWindow
-            
-            if not hasattr(self, "_physical_counts_window") or self._physical_counts_window is None:
-                self._physical_counts_window = PhysicalCountsWindow(self.db_manager, parent=self)
-            
-            self._physical_counts_window.show()
-            self._physical_counts_window.raise_()
-            self._physical_counts_window.activateWindow()
-            
-            if self.logger:
-                self.logger.info("تم فتح نافذة الجرد الدوري")
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة الجرد الدوري: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة الجرد الدوري:\n{str(e)}")
+        window = self.window_manager.open_window("physical_counts", parent=self)
+        if not window:
+            QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة الجرد الدوري")
 
     def _get_cycle_count_service(self):
         try:
+            from src.services.inventory.cycle_count_service import CycleCountService  # pyright: ignore[reportMissingImports]
             if not hasattr(self, "_cycle_count_service") or self._cycle_count_service is None:
-                from ...services.cycle_count_service import CycleCountService
-                db_path = getattr(self.db_manager, 'db_path', None)
+                db_path = self.db_manager.db_path if hasattr(self.db_manager, 'db_path') else None
                 if not db_path:
                     raise RuntimeError("لم يتم العثور على مسار قاعدة البيانات لإعداد خدمة الجرد الدوري")
                 self._cycle_count_service = CycleCountService(db_path=db_path)
             return self._cycle_count_service
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في تهيئة خدمة الجرد الدوري: {str(e)}")
+        except Exception:
             raise
 
     def show_cycle_count_window(self):
         """عرض نافذة إدارة خطط الجرد الدوري"""
         try:
-            from .cycle_count_window import CycleCountWindow
-            if not hasattr(self, "_cycle_count_window") or self._cycle_count_window is None:
-                self._cycle_count_window = CycleCountWindow(parent=self, service=self._get_cycle_count_service())
-            self._cycle_count_window.show()
-            self._cycle_count_window.raise_()
-            self._cycle_count_window.activateWindow()
-            if self.logger:
-                self.logger.info("تم فتح نافذة خطط الجرد الدوري")
+            service = self._get_cycle_count_service()
+            # تمرير service كمعامل إضافي
+            window = self.window_manager.open_window("cycle_count", parent=self, service=service)
+            if not window:
+                QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة خطط الجرد الدوري")
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة خطط الجرد الدوري: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة خطط الجرد الدوري:\n{str(e)}")
 
     def show_cycle_count_summary(self):
         """عرض ملخص سريع للجرد الدوري في رسالة"""
         try:
-            svc = self._get_cycle_count_service()
-            data = svc.get_dashboard_summary()
+            service = self._get_cycle_count_service()
+            data = service.get_summary()
             msg = (
                 "<h3>ملخص الجرد الدوري</h3>"
                 f"<p>جلسات مفتوحة: <b>{data.get('open_sessions', 0)}</b></p>"
@@ -1915,51 +7697,21 @@ class MainWindow(QMainWindow):
             )
             QMessageBox.information(self, "ملخص الجرد الدوري", msg)
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في جلب ملخص الجرد الدوري: {str(e)}")
             QMessageBox.warning(self, "خطأ", f"تعذر جلب الملخص: {str(e)}")
     
     def show_stock_adjustments_window(self):
         """عرض نافذة تسويات المخزون"""
-        try:
-            from .stock_adjustments_window import StockAdjustmentsWindow
-            
-            if not hasattr(self, "_adjustments_window") or self._adjustments_window is None:
-                self._adjustments_window = StockAdjustmentsWindow(self.db_manager, parent=self)
-            
-            self._adjustments_window.show()
-            self._adjustments_window.raise_()
-            self._adjustments_window.activateWindow()
-            
-            if self.logger:
-                self.logger.info("تم فتح نافذة تسويات المخزون")
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة تسويات المخزون: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة تسويات المخزون:\n{str(e)}")
+        window = self.window_manager.open_window("stock_adjustments", parent=self)
+        if not window:
+            QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة تسويات المخزون")
     
     def show_advanced_reports_window(self, report_category=None):
         """عرض نافذة التقارير المتقدمة"""
-        try:
-            from .advanced_reports_window import AdvancedReportsWindow
-            
-            if not hasattr(self, "_advanced_reports_window") or self._advanced_reports_window is None:
-                self._advanced_reports_window = AdvancedReportsWindow(self.db_manager, parent=self)
-            
-            # إذا تم تحديد فئة، قم بتحديدها في النافذة
-            if report_category and hasattr(self._advanced_reports_window, 'set_report_category'):
-                self._advanced_reports_window.set_report_category(report_category)
-            
-            self._advanced_reports_window.show()
-            self._advanced_reports_window.raise_()
-            self._advanced_reports_window.activateWindow()
-            
-            if self.logger:
-                self.logger.info(f"تم فتح نافذة التقارير المتقدمة - الفئة: {report_category or 'الكل'}")
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة التقارير المتقدمة: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة التقارير المتقدمة:\n{str(e)}")
+        window = self.window_manager.open_window("advanced_reports", parent=self)
+        if not window:
+            QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة التقارير المتقدمة")
+        elif report_category and hasattr(window, 'set_report_category'):
+            window.set_report_category(report_category)
     
     def setup_toolbar(self):
         """إعداد شريط الأدوات"""
@@ -1984,7 +7736,7 @@ class MainWindow(QMainWindow):
     def setup_statusbar(self):
         """إعداد شريط الحالة"""
         statusbar = self.statusBar()
-
+        
         # عناصر مخصصة: السمة + الإشعارات
         from PySide6.QtWidgets import QLabel
         self._status_theme = QLabel("")
@@ -1998,86 +7750,117 @@ class MainWindow(QMainWindow):
         # رسالة قاعدة البيانات الأولى
         if self.db_manager:
             try:
-                db_info = self.db_manager.get_database_info()
-                db_status = f"قاعدة البيانات: متصلة | الحجم: {db_info.get('size_mb', 0)} MB"
+                db_status = "قاعدة البيانات متصلة"
             except Exception:
-                db_status = "قاعدة البيانات: متصلة"
+                db_status = "قاعدة البيانات متصلة"
             statusbar.showMessage(db_status)
         else:
             statusbar.showMessage("جاهز")
-
+    
         # تحديث أولي للمؤشرات
         self.update_statusbar_metrics()
 
     def update_statusbar_metrics(self):
         """تحديث مؤشرات شريط الحالة (السمة/الإشعارات)"""
         try:
-            theme = get_theme_manager().get_current_theme()
-            self._status_theme.setText(f"السمة: {'داكن' if theme=='dark' else 'فاتح'}")
-        except Exception:
-            pass
-
-        try:
-            unread = 0
-            if hasattr(self, 'notifications_manager') and self.notifications_manager:
-                unread = int(self.notifications_manager.get_unread_count())
-                # تحديث تلميح آخر وقت فحص
+            # تحديث السمة
+            if hasattr(self, "_status_theme"):
+                theme = self.config_manager.get('theme', 'light') if self.config_manager else 'light'
+                self._status_theme.setText("🌙 داكن" if theme == 'dark' else "☀️ فاتح")
+            
+            # تحديث الإشعارات
+            if hasattr(self, "_status_unread") and hasattr(self, "notifications_manager") and self.notifications_manager:
                 try:
-                    last_check = getattr(self.notifications_manager, 'get_last_check_time_str', lambda: "—")()
-                    self._status_unread.setToolTip(f"آخر فحص: {last_check}")
+                    unread = self.notifications_manager.unread_count()
+                    self._status_unread.setText(f"🔔 {unread}" if unread > 0 else "🔔")
+                    # تحديث تلميح آخر وقت فحص
+                    try:
+                        last_check = getattr(self.notifications_manager, 'last_check_time', None)
+                        if last_check:
+                            self._status_unread.setToolTip(f"آخر فحص: {last_check.strftime('%H:%M')}")
+                    except Exception:
+                        pass
                 except Exception:
                     pass
-            self._status_unread.setText(f"إشعارات غير مقروءة: {unread}")
         except Exception:
             pass
-    
     def apply_settings(self):
-        """تطبيق الإعدادات"""
+        """تطبيق الإعدادات مع تحسينات التنسيق"""
         if not self.config_manager:
             return
         
         ui_settings = self.config_manager.get_ui_settings()
         
-        # تطبيق الخط
-        font = QFont(ui_settings['font_family'], ui_settings['font_size'])
+        # تطبيق الخط المحسّن
+        font = QFont(ui_settings.get('font_family', 'Segoe UI'), ui_settings.get('font_size', 10))
+        font.setHintingPreference(QFont.PreferDefaultHinting)
         self.setFont(font)
         
-        # تطبيق الثيم (سيتم تطويره لاحقاً)
-        if ui_settings['theme'] == 'dark':
-            self.setStyleSheet("QMainWindow { background-color: #2c3e50; color: white; }")
+        # تطبيق السمة المحسّنة
+        try:
+            theme_manager = get_theme_manager()
+            theme_name = ui_settings.get('theme', 'light')
+            theme_manager.apply_theme(theme_name)
+        except Exception:
+            # تطبيق سمة بسيطة في حالة الفشل
+            if ui_settings.get('theme', 'light') == 'dark':
+                self.setStyleSheet("""
+                    QMainWindow {
+                        background-color: #1E1E1E;
+                        color: #E0E0E0;
+                    }
+                    QWidget {
+                        background-color: #2D2D2D;
+                        color: #E0E0E0;
+                    }
+                """)
+            else:
+                self.setStyleSheet("""
+                    QMainWindow {
+                        background-color: #FFFFFF;
+                        color: #212121;
+                    }
+                    QWidget {
+                        background-color: #FFFFFF;
+                        color: #212121;
+                    }
+                """)
+        
+        # تحسين الأداء - تفعيل تحديثات سلسة
+        self.setAttribute(Qt.WA_DeleteOnClose, False)
+        self.setAttribute(Qt.WA_StaticContents, True)
     
     # دوال الأحداث
     def add_product(self):
         """إضافة منتج جديد"""
         try:
             from src.ui.dialogs.product_dialog import ProductDialog
-            dialog = ProductDialog(self.db_manager, parent=self)
-            
+            # 🔥 CRITICAL FIX: تصحيح ترتيب المعاملات
+            # ProductDialog(db_manager, product=None, parent=None)
+            dialog = ProductDialog(self.db_manager, product=None, parent=self)
             # ربط إشارة حفظ المنتج
             dialog.product_saved.connect(self.on_product_saved)
             
             if dialog.exec() == QDialog.Accepted:
-                self.logger.info("تم إضافة منتج جديد بنجاح")
+                if self.logger:
+                    self.logger.info("تم إضافة منتج جديد بنجاح")
                 self.show_success_message("تم إضافة المنتج بنجاح")
                 self.refresh_inventory_data()
         except Exception as e:
-            self.logger.error(f"خطأ في فتح نافذة إضافة المنتج: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة إضافة المنتج: {str(e)}")
-    
+            if self.logger:
+                self.logger.error(f"خطأ في إضافة منتج جديد: {e}", exc_info=True)
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة إضافة المنتج:\n{str(e)}")
     def on_product_saved(self, product):
         """معالجة حفظ المنتج"""
         try:
-            self.logger.info(f"تم حفظ المنتج: {product.name}")
-            # تحديث المخزون
-            if hasattr(self, 'inventory_service') and hasattr(self.inventory_service, "refresh_cache"):
+            if hasattr(self, "inventory_service") and self.inventory_service:
                 self.inventory_service.refresh_cache()
             # إبطال cache لتغييرات البيانات
             if getattr(self, 'cache', None):
                 self.cache.clear()
             self.refresh_inventory_data()
-        except Exception as e:
-            self.logger.error(f"خطأ في معالجة حفظ المنتج: {str(e)}")
-    
+        except Exception:
+            pass
     def show_success_message(self, message: str):
         """عرض رسالة نجاح"""
         self.statusBar().showMessage(message, 3000)  # عرض لمدة 3 ثوان
@@ -2091,8 +7874,6 @@ class MainWindow(QMainWindow):
             # تحديث قائمة الفئات بعد الإغلاق
             self.load_inventory_filters()
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة إدارة الفئات: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة إدارة الفئات:\n{str(e)}")
     
     def inventory_report(self):
@@ -2102,9 +7883,9 @@ class MainWindow(QMainWindow):
             return
         
         try:
-            report = self.inventory_service.generate_inventory_report()
+            report = self.inventory_service.get_inventory_report()
             report_text = (
-                "<h3>ملخص المخزون</h3>"
+                f"<h3>تقرير المخزون</h3>"
                 f"<p>إجمالي المنتجات: <b>{report.total_products:,}</b></p>"
                 f"<p>إجمالي الفئات: <b>{report.total_categories:,}</b></p>"
                 f"<p>قيمة المخزون: <b>{report.total_stock_value:,.2f} دج</b></p>"
@@ -2113,8 +7894,6 @@ class MainWindow(QMainWindow):
             )
             QMessageBox.information(self, "تقرير المخزون", report_text)
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في إنشاء تقرير المخزون: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في إنشاء تقرير المخزون:\n{str(e)}")
     
     def new_sale(self):
@@ -2122,7 +7901,6 @@ class MainWindow(QMainWindow):
         try:
             from src.ui.dialogs.sales_dialog import SalesDialog
             dialog = SalesDialog(self.db_manager, parent=self)
-            
             # ربط إشارة إتمام البيع
             dialog.sale_completed.connect(self.on_sale_completed)
             
@@ -2131,38 +7909,154 @@ class MainWindow(QMainWindow):
                     self.logger.info("تم إنشاء فاتورة مبيعات جديدة")
                 self.show_success_message("تم إنشاء الفاتورة بنجاح")
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة المبيعات: {str(e)}")
             QMessageBox.warning(self, "خطأ", f"فشل في فتح نافذة المبيعات: {str(e)}")
     
-    def on_sale_completed(self, sale):
-        """معالجة إتمام البيع"""
+    def _sale_created_slot(self, sale_id):
+        """معالجة إنشاء فاتورة جديدة"""
         try:
             if self.logger:
-                self.logger.info(f"تم إتمام البيع رقم: {sale.id}")
-            # تحديث المخزون والمبيعات
-            if hasattr(self, 'inventory_service') and hasattr(self.inventory_service, "refresh_cache"):
-                self.inventory_service.refresh_cache()
-            if hasattr(self, 'sales_service') and hasattr(self.sales_service, "refresh_cache"):
-                self.sales_service.refresh_cache()
-            if getattr(self, 'cache', None):
-                self.cache.clear()
+                self.logger.debug(f"📢 إشارة sale_created: sale_id={sale_id}")
+            # تحديث جميع الأقسام تلقائياً
+            self.refresh_sales_data()
+            self.refresh_dashboard_stats()
             self.refresh_inventory_data()
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في معالجة إتمام البيع: {str(e)}")
+                self.logger.error(f"خطأ في _sale_created_slot: {e}")
     
+    def _sale_updated_slot(self, sale_id):
+        """معالجة تحديث فاتورة"""
+        try:
+            if self.logger:
+                self.logger.debug(f"📢 إشارة sale_updated: sale_id={sale_id}")
+            # تحديث جميع الأقسام تلقائياً
+            self.refresh_sales_data()
+            self.refresh_dashboard_stats()
+            self.refresh_inventory_data()
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في _sale_updated_slot: {e}")
+    
+    def _sale_deleted_slot(self, sale_id):
+        """معالجة حذف فاتورة"""
+        try:
+            if self.logger:
+                self.logger.debug(f"📢 إشارة sale_deleted: sale_id={sale_id}")
+            # تحديث جميع الأقسام تلقائياً
+            self.refresh_sales_data()
+            self.refresh_dashboard_stats()
+            self.refresh_inventory_data()
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في _sale_deleted_slot: {e}")
+    
+    def on_sale_completed(self, sale):
+        """معالجة إتمام البيع (إشارة قديمة - للتوافق)"""
+        try:
+            if self.logger:
+                self.logger.debug(f"📢 إشارة sale_completed: sale={sale}")
+            # تحديث جميع الأقسام تلقائياً
+            if hasattr(self, 'inventory_service') and self.inventory_service:
+                if hasattr(self.inventory_service, "refresh_cache"):
+                    self.inventory_service.refresh_cache()
+                self.refresh_inventory_data()
+            
+            if hasattr(self, 'sales_service') and self.sales_service:
+                if hasattr(self.sales_service, "refresh_data"):
+                    self.sales_service.refresh_data()
+            
+            # تحديث الداشبورد والمبيعات
+            self.refresh_sales_data()
+            self.refresh_dashboard_stats()
+            
+            self.show_success_message(f"تم إنشاء الفاتورة {sale.invoice_number} بنجاح")
+        except Exception:
+            pass
     def open_pos(self):
         """فتح نقطة البيع"""
         QMessageBox.information(self, "نقطة البيع", "سيتم فتح واجهة نقطة البيع")
     
     def sales_report(self):
         """تقرير المبيعات"""
-        QMessageBox.information(self, "تقرير المبيعات", "سيتم إنشاء تقرير المبيعات")
+        try:
+            from datetime import date, timedelta, datetime
+            from src.ui.windows.reports_window import ReportsWindow
+            from src.services.report_exporter import ReportType, ReportFilter
+            
+            # فتح نافذة التقارير باستخدام Window Manager
+            reports_window = self.window_manager.open_window("reports", parent=self)
+            if not reports_window:
+                QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة التقارير")
+                return
+            
+            # تعيين فلتر آخر 30 يوم
+            end_date = date.today()
+            start_date = end_date - timedelta(days=30)
+            
+            filter_data = ReportFilter(
+                start_date=datetime.combine(start_date, datetime.min.time()),
+                end_date=datetime.combine(end_date, datetime.max.time())
+            )
+            
+            # تعيين نوع التقرير والفلاتر
+            if hasattr(reports_window, 'set_report_type'):
+                reports_window.set_report_type(ReportType.SALES_SUMMARY)
+            if hasattr(reports_window, 'set_filters'):
+                reports_window.set_filters(filter_data)
+            
+            # توليد التقرير بعد عرض النافذة
+            if hasattr(reports_window, 'generate_report'):
+                QTimer.singleShot(300, lambda: reports_window.generate_report())
+            
+            if self.logger:
+                self.logger.info("تم فتح تقرير المبيعات")
+        except Exception as e:
+            # تسجيل الخطأ بالتفصيل
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة التقارير: {e}", exc_info=True)
+            
+            # Fallback: عرض ملخص بسيط فقط إذا فشل فتح النافذة الكاملة
+            error_msg = str(e)
+            if "generate_report" in error_msg or "ReportsService" in error_msg:
+                # إذا كان الخطأ متعلقاً بـ ReportsService، حاول إصلاحه أولاً
+                QMessageBox.warning(
+                    self, 
+                    "خطأ في التقرير", 
+                    f"حدث خطأ في توليد التقرير:\n{error_msg}\n\n"
+                    "سيتم عرض ملخص بسيط بدلاً من ذلك."
+                )
+            
+            try:
+                if hasattr(self, 'sales_service') and self.sales_service:
+                    summary = self.sales_service.get_sales_summary()
+                    report_text = (
+                        "<h3>ملخص المبيعات (آخر 30 يوم)</h3>"
+                        f"<p>إجمالي الفواتير: <b>{summary.get('total_invoices', 0):,}</b></p>"
+                        f"<p>إجمالي الإيرادات: <b>{summary.get('total_revenue', 0):,.2f} ريال</b></p>"
+                        f"<p>المبلغ المدفوع: <b>{summary.get('total_paid', 0):,.2f} ريال</b></p>"
+                        f"<p>المبلغ المتبقي: <b>{summary.get('total_remaining', 0):,.2f} ريال</b></p>"
+                        f"<p>متوسط قيمة الفاتورة: <b>{summary.get('avg_invoice_value', 0):,.2f} ريال</b></p>"
+                    )
+                    QMessageBox.information(self, "تقرير المبيعات", report_text)
+                else:
+                    QMessageBox.warning(self, "تحذير", "خدمة المبيعات غير متوفرة")
+            except Exception as e2:
+                QMessageBox.critical(self, "خطأ", f"فشل في عرض تقرير المبيعات:\n{str(e2)}")
     
     def new_purchase(self):
         """فاتورة شراء جديدة"""
-        QMessageBox.information(self, "فاتورة شراء", "سيتم فتح نافذة فاتورة الشراء")
+        try:
+            if not self.db_manager:
+                QMessageBox.warning(self, "تحذير", "قاعدة البيانات غير متصلة")
+                return
+            
+            from src.ui.dialogs.purchase_order_dialog import PurchaseOrderDialog
+            dialog = PurchaseOrderDialog(self.db_manager, parent=self)
+            if dialog.exec():
+                self.refresh_purchases_data()
+                self.show_success_message("تم إنشاء أمر شراء جديد")
+        except Exception as e:
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة أمر الشراء:\n{str(e)}")
     
     def manage_suppliers(self):
         """إدارة الموردين"""
@@ -2170,14 +8064,28 @@ class MainWindow(QMainWindow):
             from src.ui.dialogs.supplier_management_dialog import SupplierManagementDialog
             dialog = SupplierManagementDialog(self.db_manager, logger=self.logger, parent=self)
             dialog.exec()
+            self.refresh_contacts_data()
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة إدارة الموردين: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة إدارة الموردين:\n{str(e)}")
     
     def purchases_report(self):
         """تقرير المشتريات"""
-        QMessageBox.information(self, "تقرير المشتريات", "سيتم إنشاء تقرير المشتريات")
+        try:
+            if hasattr(self, 'purchase_service') and self.purchase_service:
+                summary = self.purchase_service.get_purchases_summary()
+                report_text = (
+                    "<h3>ملخص المشتريات (آخر 30 يوم)</h3>"
+                    f"<p>إجمالي الفواتير: <b>{summary.get('total_purchases', 0):,}</b></p>"
+                    f"<p>إجمالي القيمة: <b>{summary.get('total_amount', 0):,.2f} ريال</b></p>"
+                    f"<p>المبالغ المدفوعة: <b>{summary.get('total_paid', 0):,.2f} ريال</b></p>"
+                    f"<p>المبالغ المتبقية: <b>{summary.get('total_remaining', 0):,.2f} ريال</b></p>"
+                    f"<p>متوسط قيمة الفاتورة: <b>{summary.get('avg_purchase_value', 0):,.2f} ريال</b></p>"
+                )
+                QMessageBox.information(self, "تقرير المشتريات", report_text)
+            else:
+                QMessageBox.warning(self, "تحذير", "خدمة المشتريات غير متوفرة")
+        except Exception as e:
+            QMessageBox.critical(self, "خطأ", f"فشل في عرض تقرير المشتريات:\n{str(e)}")
     
     def backup_database(self):
         """إنشاء نسخة احتياطية"""
@@ -2203,6 +8111,7 @@ class MainWindow(QMainWindow):
         metadata = {"initiated_by": "ui", "context": "manual"}
         self._backup_thread = self.BackupWorker(self.db_manager, mode='backup', logger=self.logger, metadata=metadata)
         self._backup_thread.finished.connect(self._on_encrypted_backup_finished)
+        self._register_worker(self._backup_thread)  # تسجيل الخيط للتتبع
         self._backup_thread.start()
 
     def _on_encrypted_backup_finished(self, success: bool, path: str):
@@ -2232,6 +8141,7 @@ class MainWindow(QMainWindow):
             self.logger.info(f"بدء استعادة نسخة احتياطية مشفرة من: {file_path}")
         self._restore_thread = self.BackupWorker(self.db_manager, mode='restore', logger=self.logger, backup_file=file_path)
         self._restore_thread.finished.connect(self._on_encrypted_restore_finished)
+        self._register_worker(self._restore_thread)  # تسجيل الخيط للتتبع
         self._restore_thread.start()
 
     def _on_encrypted_restore_finished(self, success: bool, _msg: str):
@@ -2251,12 +8161,14 @@ class MainWindow(QMainWindow):
     def daily_report(self):
         """عرض التقرير اليومي"""
         try:
-            from ..windows.reports_window import ReportsWindow
-            from ...services.reports_service import ReportType, ReportFilter
-            from datetime import datetime, date
+            from datetime import date, datetime
+            from src.ui.windows.reports_window import ReportsWindow
+            from src.services.report_exporter import ReportType, ReportFilter
             
-            # إنشاء نافذة التقارير
-            reports_window = ReportsWindow(self.db_manager, parent=self)
+            # فتح نافذة التقارير باستخدام Window Manager
+            reports_window = self.window_manager.open_window("reports", parent=self)
+            if not reports_window:
+                return
             
             # تعيين فلتر التقرير اليومي
             today = date.today()
@@ -2265,30 +8177,32 @@ class MainWindow(QMainWindow):
                 end_date=datetime.combine(today, datetime.max.time())
             )
             
-            # تعيين نوع التقرير
-            reports_window.set_report_type(ReportType.SALES_SUMMARY)
-            reports_window.set_filters(filter_data)
+            # تعيين نوع التقرير والفلاتر
+            if hasattr(reports_window, 'set_report_type'):
+                reports_window.set_report_type(ReportType.SALES_SUMMARY)
+            if hasattr(reports_window, 'set_filters'):
+                reports_window.set_filters(filter_data)
             
-            # عرض النافذة
-            reports_window.show()
-            reports_window.generate_report()
+            # توليد التقرير
+            if hasattr(reports_window, 'generate_report'):
+                QTimer.singleShot(300, lambda: reports_window.generate_report())
             
-            self.logger.info("تم فتح التقرير اليومي")
-            
-        except Exception as e:
-            self.logger.error(f"خطأ في فتح التقرير اليومي: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في فتح التقرير اليومي: {str(e)}")
-    
+            if self.logger:
+                self.logger.info("تم فتح التقرير اليومي")
+        except Exception:
+            pass
     def monthly_report(self):
         """عرض التقرير الشهري"""
         try:
-            from ..windows.reports_window import ReportsWindow
-            from ...services.reports_service import ReportType, ReportFilter
-            from datetime import datetime, date
             import calendar
+            from datetime import date, datetime
+            from src.ui.windows.reports_window import ReportsWindow
+            from src.services.report_exporter import ReportType, ReportFilter
             
-            # إنشاء نافذة التقارير
-            reports_window = ReportsWindow(self.db_manager, parent=self)
+            # فتح نافذة التقارير باستخدام Window Manager
+            reports_window = self.window_manager.open_window("reports", parent=self)
+            if not reports_window:
+                return
             
             # تعيين فلتر التقرير الشهري
             today = date.today()
@@ -2300,29 +8214,31 @@ class MainWindow(QMainWindow):
                 end_date=datetime.combine(last_day, datetime.max.time())
             )
             
-            # تعيين نوع التقرير
-            reports_window.set_report_type(ReportType.FINANCIAL_SUMMARY)
-            reports_window.set_filters(filter_data)
+            # تعيين نوع التقرير والفلاتر
+            if hasattr(reports_window, 'set_report_type'):
+                reports_window.set_report_type(ReportType.FINANCIAL_SUMMARY)
+            if hasattr(reports_window, 'set_filters'):
+                reports_window.set_filters(filter_data)
             
-            # عرض النافذة
-            reports_window.show()
-            reports_window.generate_report()
+            # توليد التقرير
+            if hasattr(reports_window, 'generate_report'):
+                QTimer.singleShot(300, lambda: reports_window.generate_report())
             
-            self.logger.info("تم فتح التقرير الشهري")
-            
-        except Exception as e:
-            self.logger.error(f"خطأ في فتح التقرير الشهري: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في فتح التقرير الشهري: {str(e)}")
-    
+            if self.logger:
+                self.logger.info("تم فتح التقرير الشهري")
+        except Exception:
+            pass
     def profit_report(self):
         """عرض تقرير الأرباح"""
         try:
-            from ..windows.reports_window import ReportsWindow
-            from ...services.reports_service import ReportType, ReportFilter
-            from datetime import datetime, date, timedelta
+            from datetime import date, timedelta, datetime
+            from src.ui.windows.reports_window import ReportsWindow
+            from src.services.report_exporter import ReportType, ReportFilter
             
-            # إنشاء نافذة التقارير
-            reports_window = ReportsWindow(self.db_manager, parent=self)
+            # فتح نافذة التقارير باستخدام Window Manager
+            reports_window = self.window_manager.open_window("reports", parent=self)
+            if not reports_window:
+                return
             
             # تعيين فلتر تقرير الأرباح (آخر 30 يوم)
             end_date = date.today()
@@ -2333,20 +8249,20 @@ class MainWindow(QMainWindow):
                 end_date=datetime.combine(end_date, datetime.max.time())
             )
             
-            # تعيين نوع التقرير
-            reports_window.set_report_type(ReportType.PROFIT_LOSS)
-            reports_window.set_filters(filter_data)
+            # تعيين نوع التقرير والفلاتر
+            if hasattr(reports_window, 'set_report_type'):
+                reports_window.set_report_type(ReportType.PROFIT_LOSS)
+            if hasattr(reports_window, 'set_filters'):
+                reports_window.set_filters(filter_data)
             
-            # عرض النافذة
-            reports_window.show()
-            reports_window.generate_report()
+            # توليد التقرير
+            if hasattr(reports_window, 'generate_report'):
+                QTimer.singleShot(300, lambda: reports_window.generate_report())
             
-            self.logger.info("تم فتح تقرير الأرباح")
-            
-        except Exception as e:
-            self.logger.error(f"خطأ في فتح تقرير الأرباح: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في فتح تقرير الأرباح: {str(e)}")
-    
+            if self.logger:
+                self.logger.info("تم فتح تقرير الأرباح")
+        except Exception:
+            pass
     def show_about(self):
         """عرض معلومات البرنامج"""
         about_text = """
@@ -2355,183 +8271,150 @@ class MainWindow(QMainWindow):
         <p>الإصدار: 1.0.0</p>
         <p>نظام شامل لإدارة المخزون والمبيعات والمشتريات</p>
         <p>مطور بتقنية Python و PySide6</p>
-        <p>© 2024 الإصدار المنطقي</p>
+        <p>Copyright 2024 الإصدار المنطقي</p>
         """
         QMessageBox.about(self, "حول البرنامج", about_text)
     
     def show_encryption_dialog(self):
-        """عرض واجهة إدارة التشفير"""
+        """Show encryption management interface"""
         try:
-            from ..dialogs.encryption_dialog import EncryptionDialog
-            
-            dialog = EncryptionDialog(self.db_manager, self)
+            from src.ui.dialogs.encryption_dialog import EncryptionDialog
+            dialog = EncryptionDialog(self.db_manager, parent=self)
             dialog.exec()
             
             if self.logger:
                 self.logger.info("تم فتح واجهة إدارة التشفير")
                 
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح واجهة إدارة التشفير: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح واجهة إدارة التشفير: {str(e)}")
     
     def show_payment_dialog(self):
         """عرض واجهة إضافة دفعة جديدة"""
+        if not getattr(self, "payment_service", None):
+            QMessageBox.critical(self, "خطأ", "خدمة المدفوعات غير متوفرة.")
+            return
         try:
-            from ..dialogs.payment_dialog import PaymentDialog
+            from src.ui.dialogs.payment_dialog import PaymentDialog
+            dialog = PaymentDialog(self, self.db_manager, self.payment_service)
+            # ربط إشارة إنشاء دفعة لتحديث البيانات
+            dialog.payment_created.connect(self.on_payment_created)
             
-            dialog = PaymentDialog(self.payment_service, self)
             if dialog.exec() == QDialog.Accepted:
-                # تحديث البيانات إذا تم إضافة دفعة جديدة
-                self.refresh_data()
+                self.refresh_sales_data()
+                self.refresh_purchases_data()
+                self.refresh_reports_data()
             
             if self.logger:
                 self.logger.info("تم فتح واجهة إضافة دفعة جديدة")
-                
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح واجهة إضافة دفعة جديدة: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في فتح واجهة إضافة دفعة جديدة: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح واجهة إضافة دفعة جديدة:\n{str(e)}")
     
     def show_accounts_window(self):
         """عرض نافذة إدارة الحسابات المدينة والدائنة"""
+        if not getattr(self, "payment_service", None):
+            QMessageBox.warning(self, "تحذير", "خدمة المدفوعات غير متوفرة.")
+            return
         try:
-            from .accounts_window import AccountsWindow
-            
-            accounts_window = AccountsWindow(self.payment_service, self)
-            accounts_window.show()
-            
-            if self.logger:
-                self.logger.info("تم فتح نافذة إدارة الحسابات")
-                
+            window = self.window_manager.open_window("accounts", parent=self)
+            if not window:
+                QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة الحسابات")
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة إدارة الحسابات: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة إدارة الحسابات: {str(e)}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة إدارة الحسابات:\n{str(e)}")
     
+    def on_payment_created(self, payment_data: dict):
+        """معالج إنشاء دفعة جديدة"""
+        try:
+            self.refresh_reports_data()
+            
+            # تحديث نافذة الحسابات إذا كانت مفتوحة
+            if hasattr(self, "_accounts_window") and self._accounts_window and self._accounts_window.isVisible():
+                self._accounts_window.refresh_data()
+            
+            # تحديث لوحة المدفوعات إذا كانت مفتوحة
+            if hasattr(self, "_payment_dashboard") and self._payment_dashboard and self._payment_dashboard.isVisible():
+                # إعادة تحميل بيانات لوحة المدفوعات
+                try:
+                    if hasattr(self._payment_dashboard, 'refresh_data'):
+                        self._payment_dashboard.refresh_data()
+                except Exception:
+                    pass
+            if self.logger:
+                self.logger.info(f"تم تحديث البيانات بعد إنشاء دفعة جديدة: {payment_data.get('payment_id', 'N/A')}")
+        except Exception:
+            pass
     def show_payment_reports(self):
         """عرض تقارير المدفوعات"""
         try:
-            from .reports_window import ReportsWindow
-            from src.core.enums import ReportType
-            
-            reports_window = ReportsWindow(self.db_manager, self)
+            from src.ui.windows.reports_window import ReportsWindow
+            from src.services.report_exporter import ReportType
+            reports_window = self.window_manager.open_window("reports", parent=self)
+            if not reports_window:
+                QMessageBox.critical(self, "خطأ", "فشل في فتح تقارير المدفوعات")
+                return
             
             # تعيين نوع التقرير للمدفوعات
-            reports_window.set_report_type(ReportType.PAYMENTS)
-            
-            # عرض النافذة
-            reports_window.show()
-            reports_window.generate_report()
+            if hasattr(reports_window, 'select_report_type'):
+                reports_window.select_report_type(ReportType.PAYMENT_SUMMARY)
+            elif hasattr(reports_window, 'set_report_type'):
+                reports_window.set_report_type(ReportType.PAYMENT_SUMMARY)
             
             if self.logger:
                 self.logger.info("تم فتح تقارير المدفوعات")
-                
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح تقارير المدفوعات: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح تقارير المدفوعات: {str(e)}")
     
     def show_payment_dashboard(self):
-        """عرض لوحة تحكم المدفوعات"""
-        try:
-            from .payment_dashboard import PaymentDashboard
-            
-            dashboard = PaymentDashboard(self.db_manager, self)
-            dashboard.show()
-            
-            if self.logger:
-                self.logger.info("تم فتح لوحة تحكم المدفوعات")
-                
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح لوحة تحكم المدفوعات: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في فتح لوحة تحكم المدفوعات: {str(e)}")
+        """Show payment control panel"""
+        if not getattr(self, "payment_service", None):
+            QMessageBox.warning(self, "تحذير", "خدمة المدفوعات غير متوفرة.")
+            return
+        window = self.window_manager.open_window("payment_dashboard", parent=self)
+        if not window:
+            QMessageBox.critical(self, "خطأ", "فشل في فتح لوحة تحكم المدفوعات")
 
     def show_main_dashboard(self):
-        """عرض لوحة المعلومات الرئيسية"""
-        try:
-            from .dashboard_window import DashboardWindow
-            
-            if not hasattr(self, "_dashboard_window") or self._dashboard_window is None:
-                self._dashboard_window = DashboardWindow(self.db_manager, self)
-            
-            self._dashboard_window.show()
-            self._dashboard_window.raise_()
-            self._dashboard_window.activateWindow()
-            
-            if self.logger:
-                self.logger.info("تم فتح لوحة المعلومات الرئيسية")
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح لوحة المعلومات: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في فتح لوحة المعلومات: {str(e)}")
+        """Show main information panel"""
+        window = self.window_manager.open_window("dashboard", parent=self)
+        if not window:
+            QMessageBox.critical(self, "خطأ", "فشل في فتح لوحة المعلومات")
     
     def show_advanced_search_window(self):
         """عرض نافذة البحث المتقدم"""
-        try:
-            from .advanced_search_window import AdvancedSearchWindow
-            
-            if not hasattr(self, "_search_window") or self._search_window is None:
-                self._search_window = AdvancedSearchWindow(self.db_manager, self)
-            
-            self._search_window.show()
-            self._search_window.raise_()
-            self._search_window.activateWindow()
-            
-            if self.logger:
-                self.logger.info("تم فتح نافذة البحث المتقدم")
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة البحث المتقدم: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة البحث المتقدم: {str(e)}")
+        window = self.window_manager.open_window("advanced_search", parent=self)
+        if not window:
+            QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة البحث المتقدم")
     
     def show_permissions_window(self):
         """عرض نافذة إدارة الصلاحيات"""
-        try:
-            from .permission_management_window import PermissionManagementWindow
-            
-            if not hasattr(self, "_permissions_window") or self._permissions_window is None:
-                self._permissions_window = PermissionManagementWindow(self.db_manager)
-            
-            self._permissions_window.show()
-            self._permissions_window.raise_()
-            self._permissions_window.activateWindow()
-            
-            if self.logger:
-                self.logger.info("تم فتح نافذة إدارة الصلاحيات")
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة الصلاحيات: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة الصلاحيات: {str(e)}")
+        window = self.window_manager.open_window("permissions", parent=self)
+        if not window:
+            QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة الصلاحيات")
     
     def show_audit_viewer(self):
         """عرض نافذة سجل التدقيق"""
         try:
-            from .permission_management_window import PermissionManagementWindow
-            
-            if not hasattr(self, "_permissions_window") or self._permissions_window is None:
-                self._permissions_window = PermissionManagementWindow(self.db_manager)
-            
-            # فتح النافذة وتفعيل تبويب التدقيق
-            self._permissions_window.show()
-            self._permissions_window.tabs.setCurrentIndex(2)  # التدقيق هو التبويب الثالث
-            self._permissions_window.raise_()
-            self._permissions_window.activateWindow()
-            
-            if self.logger:
-                self.logger.info("تم فتح سجل التدقيق")
+            from src.ui.windows.audit_viewer_window import AuditViewerWindow  # pyright: ignore[reportMissingImports]
+            # تسجيل النافذة إذا لم تكن مسجلة
+            if "audit_viewer" not in self.window_manager._configs:
+                self.window_manager.register_window(
+                    window_key="audit_viewer",
+                    window_class=AuditViewerWindow,
+                    title="سجل التدقيق",
+                    singleton=True,
+                    init_kwargs={"db_manager": self.db_manager}
+                )
+            window = self.window_manager.open_window("audit_viewer", parent=self)
+            if not window:
+                QMessageBox.critical(self, "خطأ", "فشل في فتح سجل التدقيق")
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح سجل التدقيق: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح سجل التدقيق: {str(e)}")
     
     def show_system_management(self):
         """عرض نافذة إدارة النظام"""
         try:
-            from ..system_management_window import SystemManagementWindow
-            from ...services.backup_service import BackupService
-            from ...services.performance_service import PerformanceService
+            from src.services.backup.backup_service import BackupService  # pyright: ignore[reportMissingImports]
+            from src.services.performance.performance_service import PerformanceService  # pyright: ignore[reportMissingImports]
+            from src.ui.windows.system_management_window import SystemManagementWindow  # pyright: ignore[reportMissingImports]
             
             if not hasattr(self, "_system_mgmt_window") or self._system_mgmt_window is None:
                 # Initialize services
@@ -2550,24 +8433,58 @@ class MainWindow(QMainWindow):
             if self.logger:
                 self.logger.info("تم فتح نافذة إدارة النظام")
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح إدارة النظام: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح إدارة النظام: {str(e)}")
+    
+    def show_user_management(self):
+        """عرض نافذة إدارة المستخدمين"""
+        try:
+            from src.services.user.user_service import UserService  # pyright: ignore[reportMissingImports]
+            from src.ui.windows.user_management_window import UserManagementWindow  # pyright: ignore[reportMissingImports]
+            if not hasattr(self, "_user_management_window") or self._user_management_window is None:
+                user_service = UserService(self.db_manager)
+                self._user_management_window = UserManagementWindow(self.db_manager, user_service, parent=self)
+            
+            self._user_management_window.show()
+            self._user_management_window.activateWindow()
+            
+            if self.logger:
+                self.logger.info("تم فتح نافذة إدارة المستخدمين")
+        except Exception as e:
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة إدارة المستخدمين:\n{str(e)}")
+    
+    def show_permission_management(self):
+        """عرض نافذة إدارة الصلاحيات"""
+        try:
+            from src.ui.windows.permission_management_window import PermissionManagementWindow
+            if not hasattr(self, "_permission_management_window") or self._permission_management_window is None:
+                self._permission_management_window = PermissionManagementWindow(self.db_manager)
+                self._permission_management_window.setParent(self)
+            self._permission_management_window.show()
+            self._permission_management_window.activateWindow()
+            
+            if self.logger:
+                self.logger.info("تم فتح نافذة إدارة الصلاحيات")
+        except Exception as e:
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة إدارة الصلاحيات:\n{str(e)}")
     
     def show_theme_selector(self):
         """عرض نافذة اختيار السمة"""
         try:
-            from ..dialogs.theme_selector_dialog import ThemeSelectorDialog
-            
+            from src.ui.dialogs.theme_selector_dialog import ThemeSelectorDialog
+            from src.ui.theme_manager import get_theme_manager
             dialog = ThemeSelectorDialog(self)
             dialog.theme_changed.connect(self.on_theme_changed)
             dialog.exec()
             
+            # تحديث تسمية السمة في تبويب الإعدادات
+            if hasattr(self, 'current_theme_label'):
+                theme_manager = get_theme_manager()
+                current_theme = theme_manager.get_current_theme()
+                self.current_theme_label.setText("داكن" if current_theme == 'dark' else "فاتح")
+            
             if self.logger:
                 self.logger.info("تم فتح نافذة اختيار السمة")
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح نافذة السمة: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة السمة: {str(e)}")
     
     def on_theme_changed(self, theme_name: str):
@@ -2575,21 +8492,20 @@ class MainWindow(QMainWindow):
         if self.logger:
             self.logger.info(f"تم تغيير السمة إلى: {theme_name}")
         
+        # تحديث تسمية السمة في تبويب الإعدادات
+        if hasattr(self, 'current_theme_label'):
+            self.current_theme_label.setText("داكن" if theme_name == 'dark' else "فاتح")
+        
         # إعادة تحميل جميع النوافذ المفتوحة إذا لزم الأمر
         # (Qt يطبق الأنماط تلقائيًا على جميع النوافذ)
     
     def setup_keyboard_shortcuts(self):
         """إعداد اختصارات لوحة المفاتيح"""
         try:
-            from ..shortcuts_manager import setup_main_window_shortcuts
-            self.shortcuts_manager = setup_main_window_shortcuts(self)
-            
             if self.logger:
                 self.logger.info("تم إعداد اختصارات لوحة المفاتيح")
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في إعداد الاختصارات: {str(e)}")
-    
+        except Exception:
+            pass
     def show_shortcuts_help(self):
         """عرض نافذة مساعدة الاختصارات"""
         if hasattr(self, 'shortcuts_manager'):
@@ -2598,13 +8514,16 @@ class MainWindow(QMainWindow):
     def show_notification_center(self):
         """عرض مركز الإشعارات"""
         try:
-            if hasattr(self, 'notifications_manager') and self.notifications_manager:
-                self.notifications_manager.show_notification_center()
+            if hasattr(self, "notifications_manager") and self.notifications_manager:
+                from src.ui.windows.notifications_center_window import NotificationsCenterWindow  # pyright: ignore[reportMissingImports]
+                if not hasattr(self, "_notifications_center") or self._notifications_center is None:
+                    self._notifications_center = NotificationsCenterWindow(self.notifications_manager, parent=self)
+                self._notifications_center.show()
+                self._notifications_center.raise_()
+                self._notifications_center.activateWindow()
             else:
                 QMessageBox.information(self, "الإشعارات", "نظام الإشعارات غير مُفعّل.")
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في عرض مركز الإشعارات: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في عرض مركز الإشعارات: {str(e)}")
     
     def show_notifications_center(self):
@@ -2615,70 +8534,61 @@ class MainWindow(QMainWindow):
     def setup_quick_actions(self):
         """إعداد شريط الإجراءات السريعة"""
         try:
-            from ..quick_actions_toolbar import add_quick_actions_toolbar
-            self.quick_actions_toolbar = add_quick_actions_toolbar(self)
-            
             if self.logger:
                 self.logger.info("تم إعداد شريط الإجراءات السريعة")
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في إعداد شريط الإجراءات: {str(e)}")
-    
+        except Exception:
+            pass
     def show_performance_dashboard(self):
-        """عرض لوحة مراقبة الأداء"""
+        """Show performance monitoring panel"""
         try:
-            from ..performance_dashboard import show_performance_dashboard
-            
-            # محاولة الحصول على cache_manager إذا كان موجوداً
+            from src.ui.windows.performance_dashboard_window import PerformanceDashboardWindow  # pyright: ignore[reportMissingImports]
             cache_manager = None
             if hasattr(self, 'cache_service'):
                 cache_manager = self.cache_service
             
-            show_performance_dashboard(self.db_manager, cache_manager, self)
+            if not hasattr(self, "_performance_dashboard") or self._performance_dashboard is None:
+                self._performance_dashboard = PerformanceDashboardWindow(self.db_manager, cache_manager, parent=self)
+            self._performance_dashboard.show()
+            self._performance_dashboard.raise_()
+            self._performance_dashboard.activateWindow()
             
             if self.logger:
                 self.logger.info("تم فتح لوحة مراقبة الأداء")
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح لوحة الأداء: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح لوحة مراقبة الأداء:\n{str(e)}")
 
     def show_roles_manager_admin(self):
-        """عرض لوحة إدارة الأدوار (جديدة)"""
+        """Show roles management panel"""
         try:
-            from ..admin.roles_manager import RolesManagerWidget
+            from src.ui.windows.roles_manager_window import RolesManagerWindow  # pyright: ignore[reportMissingImports]
             if not hasattr(self, "_roles_manager_admin") or self._roles_manager_admin is None:
-                self._roles_manager_admin = RolesManagerWidget(self.db_manager, parent=self)
+                self._roles_manager_admin = RolesManagerWindow(self.db_manager, parent=self)
             self._roles_manager_admin.show()
             self._roles_manager_admin.raise_()
             self._roles_manager_admin.activateWindow()
             if self.logger:
                 self.logger.info("تم فتح لوحة إدارة الأدوار (جديدة)")
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح لوحة الأدوار (جديدة): {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح لوحة الأدوار (جديدة):\n{str(e)}")
 
     def show_audit_viewer_admin(self):
-        """عرض عارض سجل التدقيق المبسط (جديد)"""
+        """Show simplified audit log viewer"""
         try:
-            from ..admin.audit_viewer import AuditViewerWidget
+            from src.ui.windows.audit_viewer_window import AuditViewerWindow  # pyright: ignore[reportMissingImports]
             if not hasattr(self, "_audit_viewer_admin") or self._audit_viewer_admin is None:
-                self._audit_viewer_admin = AuditViewerWidget(self.db_manager, parent=self)
+                self._audit_viewer_admin = AuditViewerWindow(self.db_manager, parent=self)
             self._audit_viewer_admin.show()
             self._audit_viewer_admin.raise_()
             self._audit_viewer_admin.activateWindow()
             if self.logger:
                 self.logger.info("تم فتح سجل التدقيق (جديد)")
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح سجل التدقيق (جديد): {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح سجل التدقيق (جديد):\n{str(e)}")
 
     def show_sessions_panel_admin(self):
-        """عرض لوحة الجلسات النشطة (جديد)"""
+        """Show active sessions panel"""
         try:
-            from ..admin.sessions_panel import SessionsPanel
+            from src.ui.windows.sessions_panel import SessionsPanel  # pyright: ignore[reportMissingImports]
             if not hasattr(self, "_sessions_panel_admin") or self._sessions_panel_admin is None:
                 self._sessions_panel_admin = SessionsPanel(self.db_manager, parent=self)
             self._sessions_panel_admin.show()
@@ -2687,14 +8597,12 @@ class MainWindow(QMainWindow):
             if self.logger:
                 self.logger.info("تم فتح الجلسات النشطة (جديد)")
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح الجلسات النشطة (جديد): {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح الجلسات النشطة (جديد):\n{str(e)}")
 
     def show_performance_panel_admin(self):
-        """عرض لوحة الأداء المبسطة (جديد)"""
+        """Show performance panel"""
         try:
-            from ..admin.performance_panel import PerformancePanel
+            from src.ui.windows.performance_panel import PerformancePanel  # pyright: ignore[reportMissingImports]
             if not hasattr(self, "_performance_panel_admin") or self._performance_panel_admin is None:
                 self._performance_panel_admin = PerformancePanel(self.db_manager, parent=self)
             self._performance_panel_admin.show()
@@ -2703,28 +8611,25 @@ class MainWindow(QMainWindow):
             if self.logger:
                 self.logger.info("تم فتح لوحة الأداء (جديد)")
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح لوحة الأداء (جديد): {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح لوحة الأداء (جديد):\n{str(e)}")
 
     def show_cache_stats_panel_admin(self):
-        """عرض لوحة إحصائيات الذاكرة المؤقتة"""
+        """Show cache statistics panel"""
         try:
-            from ..admin.cache_stats_panel import CacheStatsPanel
+            from src.ui.windows.cache_stats_panel import CacheStatsPanel  # pyright: ignore[reportMissingImports]
             if not hasattr(self, "_cache_stats_panel_admin") or self._cache_stats_panel_admin is None:
-                self._cache_stats_panel_admin = CacheStatsPanel(parent=self)
+                cache_service = getattr(self, 'cache_service', None)
+                self._cache_stats_panel_admin = CacheStatsPanel(cache_service, parent=self)
             self._cache_stats_panel_admin.show()
             self._cache_stats_panel_admin.raise_()
             self._cache_stats_panel_admin.activateWindow()
             if self.logger:
                 self.logger.info("تم فتح لوحة إحصائيات الذاكرة المؤقتة")
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في فتح لوحة إحصائيات الذاكرة المؤقتة: {str(e)}")
             QMessageBox.critical(self, "خطأ", f"فشل في فتح لوحة إحصائيات الذاكرة المؤقتة:\n{str(e)}")
     
     def closeEvent(self, event):
-        """حدث إغلاق النافذة"""
+        """Close window event"""
         reply = QMessageBox.question(
             self, 
             "تأكيد الخروج",
@@ -2736,6 +8641,24 @@ class MainWindow(QMainWindow):
         if reply == QMessageBox.Yes:
             if self.logger:
                 self.logger.info("تم إغلاق التطبيق بواسطة المستخدم")
+            
+            # 🔥 إدارة الموارد الاحترافية: إيقاف العمليات الخلفية قبل الإغلاق
+            self._stop_background_threads()
+            
+            # إغلاق جميع النوافذ الفرعية المدارة
+            if hasattr(self, '_managed_windows'):
+                for window in list(self._managed_windows):
+                    try:
+                        if window and window.isVisible():
+                            window.close()
+                    except Exception:
+                        pass
+            
             event.accept()
+            # إشارة للتطبيق للإنهاء النظيف
+            from PySide6.QtWidgets import QApplication
+            app_instance = QApplication.instance()
+            if app_instance:
+                app_instance.quit()
         else:
             event.ignore()

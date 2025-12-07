@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QTimer, Signal, QThread, QDate, QStringListModel
 from PySide6.QtGui import QFont, QPixmap, QIcon, QPalette, QColor, QValidator, QDoubleValidator
+from pathlib import Path
 
 from ...core.database_manager import DatabaseManager
 from ...models.payment import Payment, PaymentManager, PaymentType, PaymentMethod, PaymentStatus, AccountBalance
@@ -28,6 +29,7 @@ from ...models.supplier import SupplierManager
 from ...services.payment_service import PaymentService
 from ...services.billing_service import BillingService
 from ...utils.logger import setup_logger
+from ...utils.i18n_api import I18n
 
 
 class PaymentWorker(QThread):
@@ -72,14 +74,22 @@ class PaymentDialog(QDialog):
     
     payment_created = Signal(dict)  # إشارة إنشاء دفعة جديدة
     
-    def __init__(self, parent=None, payment_type: PaymentType = PaymentType.CUSTOMER_PAYMENT):
+    def __init__(self, payment_service: Optional[PaymentService] = None,
+                 parent=None, payment_type: PaymentType = PaymentType.CUSTOMER_PAYMENT,
+                 entity_id: Optional[int] = None, amount: Optional[Decimal] = None):
         super().__init__(parent)
         self.payment_type = payment_type
         self.logger = setup_logger(__name__)
+        self.prefill_entity_id = entity_id
+        self.prefill_amount = Decimal(str(amount)) if amount is not None else None
         
         # إعداد قاعدة البيانات والخدمات
-        self.db_manager = DatabaseManager()
-        self.payment_service = PaymentService(self.db_manager)
+        if payment_service is not None:
+            self.payment_service = payment_service
+            self.db_manager = payment_service.db_manager
+        else:
+            self.db_manager = DatabaseManager()
+            self.payment_service = PaymentService(self.db_manager)
         self.billing_service = BillingService(self.db_manager)
         self.customer_manager = CustomerManager(self.db_manager)
         self.supplier_manager = SupplierManager(self.db_manager)
@@ -94,9 +104,13 @@ class PaymentDialog(QDialog):
         self.setup_connections()
         self.setup_styles()
         self.load_data()
+        self.apply_prefill_data()
+        
+        # تهيئة نظام الترجمة
+        self.i18n = I18n(locales_dir=str(Path(__file__).parent.parent.parent.parent / "locales"))
         
         # إعداد النافذة
-        self.setWindowTitle("إدارة المدفوعات")
+        self.setWindowTitle(self.i18n.get_message("payment_management"))
         self.setModal(True)
         self.resize(800, 600)
         
@@ -135,14 +149,14 @@ class PaymentDialog(QDialog):
         header_layout = QHBoxLayout(header_frame)
         
         # العنوان
-        title_label = QLabel("إدارة المدفوعات والحسابات")
+        title_label = QLabel(self.i18n.get_message("payment_accounts_management"))
         title_label.setObjectName("header_title")
         header_layout.addWidget(title_label)
         
         header_layout.addStretch()
         
         # معلومات الحالة
-        self.status_label = QLabel("جاهز")
+        self.status_label = QLabel(self.i18n.get_message("ready"))
         self.status_label.setObjectName("status_label")
         header_layout.addWidget(self.status_label)
         
@@ -154,11 +168,11 @@ class PaymentDialog(QDialog):
         layout = QVBoxLayout(payment_widget)
         
         # نوع المدفوعات
-        type_group = QGroupBox("نوع المدفوعات")
+        type_group = QGroupBox(self.i18n.get_message("payment_type"))
         type_layout = QHBoxLayout(type_group)
         
-        self.customer_payment_radio = QCheckBox("دفعة من عميل")
-        self.supplier_payment_radio = QCheckBox("دفعة لمورد")
+        self.customer_payment_radio = QCheckBox(self.i18n.get_message("customer_payment"))
+        self.supplier_payment_radio = QCheckBox(self.i18n.get_message("supplier_payment"))
         
         type_layout.addWidget(self.customer_payment_radio)
         type_layout.addWidget(self.supplier_payment_radio)
@@ -167,75 +181,86 @@ class PaymentDialog(QDialog):
         layout.addWidget(type_group)
         
         # نموذج المدفوعات
-        form_group = QGroupBox("بيانات المدفوعات")
+        form_group = QGroupBox(self.i18n.get_message("payment_data"))
         form_layout = QFormLayout(form_group)
         
         # العميل/المورد
         self.entity_combo = QComboBox()
         self.entity_combo.setEditable(True)
-        form_layout.addRow("العميل/المورد:", self.entity_combo)
+        form_layout.addRow(self.i18n.get_message("customer_supplier") + ":", self.entity_combo)
         
         # المبلغ
         self.amount_spinbox = QDoubleSpinBox()
         self.amount_spinbox.setRange(0.01, 999999.99)
         self.amount_spinbox.setDecimals(2)
-        self.amount_spinbox.setSuffix(" دج")
-        form_layout.addRow("المبلغ:", self.amount_spinbox)
+        currency_symbol = self.i18n.get_message("currency_symbol")
+        self.amount_spinbox.setSuffix(f" {currency_symbol}")
+        form_layout.addRow(self.i18n.get_message("amount") + ":", self.amount_spinbox)
         
         # طريقة الدفع
         self.payment_method_combo = QComboBox()
-        self.payment_method_combo.addItems([
-            "نقدي", "شيك", "تحويل بنكي", "بطاقة ائتمان", "بطاقة مدين"
-        ])
-        form_layout.addRow("طريقة الدفع:", self.payment_method_combo)
+        payment_methods = [
+            self.i18n.get_message("cash"),
+            self.i18n.get_message("check"),
+            self.i18n.get_message("bank_transfer"),
+            self.i18n.get_message("credit_card"),
+            self.i18n.get_message("debit_card")
+        ]
+        self.payment_method_combo.addItems(payment_methods)
+        form_layout.addRow(self.i18n.get_message("payment_method") + ":", self.payment_method_combo)
         
         # رقم المرجع
         self.reference_edit = QLineEdit()
-        self.reference_edit.setPlaceholderText("رقم الشيك أو التحويل (اختياري)")
-        form_layout.addRow("رقم المرجع:", self.reference_edit)
+        self.reference_edit.setPlaceholderText(self.i18n.get_message("reference_number_optional"))
+        form_layout.addRow(self.i18n.get_message("reference_number") + ":", self.reference_edit)
         
         # تاريخ المدفوعات
         self.payment_date = QDateEdit()
         self.payment_date.setDate(QDate.currentDate())
         self.payment_date.setCalendarPopup(True)
-        form_layout.addRow("تاريخ المدفوعات:", self.payment_date)
+        form_layout.addRow(self.i18n.get_message("payment_date") + ":", self.payment_date)
         
         # ملاحظات
         self.notes_edit = QTextEdit()
         self.notes_edit.setMaximumHeight(80)
-        self.notes_edit.setPlaceholderText("ملاحظات إضافية...")
-        form_layout.addRow("ملاحظات:", self.notes_edit)
+        self.notes_edit.setPlaceholderText(self.i18n.get_message("additional_notes"))
+        form_layout.addRow(self.i18n.get_message("notes_label") + ":", self.notes_edit)
         
         layout.addWidget(form_group)
         
         # أزرار العمليات
         buttons_layout = QHBoxLayout()
         
-        self.save_payment_btn = QPushButton("حفظ المدفوعات")
+        self.save_payment_btn = QPushButton(self.i18n.get_message("save_payment"))
         self.save_payment_btn.setObjectName("primary_button")
         buttons_layout.addWidget(self.save_payment_btn)
         
-        self.clear_form_btn = QPushButton("مسح النموذج")
+        self.clear_form_btn = QPushButton(self.i18n.get_message("clear_form"))
         buttons_layout.addWidget(self.clear_form_btn)
         
         buttons_layout.addStretch()
         layout.addLayout(buttons_layout)
         
         # جدول المدفوعات الأخيرة
-        recent_group = QGroupBox("المدفوعات الأخيرة")
+        recent_group = QGroupBox(self.i18n.get_message("recent_payments"))
         recent_layout = QVBoxLayout(recent_group)
         
         self.recent_payments_table = QTableWidget()
         self.recent_payments_table.setColumnCount(6)
         self.recent_payments_table.setHorizontalHeaderLabels([
-            "التاريخ", "العميل/المورد", "المبلغ", "طريقة الدفع", "المرجع", "الحالة"
+            self.i18n.get_message("date"),
+            self.i18n.get_message("customer_supplier"),
+            self.i18n.get_message("amount"),
+            self.i18n.get_message("payment_method"),
+            self.i18n.get_message("reference_number"),
+            self.i18n.get_message("status")
         ])
         self.recent_payments_table.horizontalHeader().setStretchLastSection(True)
         recent_layout.addWidget(self.recent_payments_table)
         
         layout.addWidget(recent_group)
         
-        self.tab_widget.addTab(payment_widget, "المدفوعات")
+        self.tab_widget.addTab(payment_widget, self.i18n.get_message("payments"))
         
     def setup_accounts_tab(self):
         """إعداد تبويب الحسابات"""
@@ -243,50 +268,60 @@ class PaymentDialog(QDialog):
         layout = QVBoxLayout(accounts_widget)
         
         # فلاتر البحث
-        filter_group = QGroupBox("فلاتر البحث")
+        filter_group = QGroupBox(self.i18n.get_message("search_filters"))
         filter_layout = QGridLayout(filter_group)
         
         # نوع الحساب
-        filter_layout.addWidget(QLabel("نوع الحساب:"), 0, 0)
+        filter_layout.addWidget(QLabel(self.i18n.get_message("account_type") + ":"), 0, 0)
         self.account_type_combo = QComboBox()
-        self.account_type_combo.addItems(["الكل", "حسابات مدينة", "حسابات دائنة"])
+        self.account_type_combo.addItems([
+            self.i18n.get_message("all"),
+            self.i18n.get_message("receivables"),
+            self.i18n.get_message("payables")
+        ])
         filter_layout.addWidget(self.account_type_combo, 0, 1)
         
         # فترة التاريخ
-        filter_layout.addWidget(QLabel("من تاريخ:"), 0, 2)
+        filter_layout.addWidget(QLabel(self.i18n.get_message("from_date") + ":"), 0, 2)
         self.from_date = QDateEdit()
         self.from_date.setDate(QDate.currentDate().addDays(-30))
         self.from_date.setCalendarPopup(True)
         filter_layout.addWidget(self.from_date, 0, 3)
         
-        filter_layout.addWidget(QLabel("إلى تاريخ:"), 1, 2)
+        filter_layout.addWidget(QLabel(self.i18n.get_message("to_date") + ":"), 1, 2)
         self.to_date = QDateEdit()
         self.to_date.setDate(QDate.currentDate())
         self.to_date.setCalendarPopup(True)
         filter_layout.addWidget(self.to_date, 1, 3)
         
         # زر البحث
-        self.search_accounts_btn = QPushButton("بحث")
+        self.search_accounts_btn = QPushButton(self.i18n.get_message("search"))
         self.search_accounts_btn.setObjectName("primary_button")
         filter_layout.addWidget(self.search_accounts_btn, 1, 4)
         
         layout.addWidget(filter_group)
         
         # جدول الحسابات
-        accounts_group = QGroupBox("الحسابات المدينة والدائنة")
+        accounts_group = QGroupBox(self.i18n.get_message("receivables_payables"))
         accounts_layout = QVBoxLayout(accounts_group)
         
         self.accounts_table = QTableWidget()
         self.accounts_table.setColumnCount(7)
         self.accounts_table.setHorizontalHeaderLabels([
-            "الاسم", "نوع الحساب", "الرصيد", "آخر معاملة", "تاريخ آخر معاملة", "الحالة", "الإجراءات"
+            self.i18n.get_message("name"),
+            self.i18n.get_message("account_type"),
+            self.i18n.get_message("balance"),
+            self.i18n.get_message("last_transaction"),
+            self.i18n.get_message("last_transaction_date"),
+            self.i18n.get_message("status"),
+            self.i18n.get_message("actions")
         ])
         self.accounts_table.horizontalHeader().setStretchLastSection(True)
         accounts_layout.addWidget(self.accounts_table)
         
         layout.addWidget(accounts_group)
         
-        self.tab_widget.addTab(accounts_widget, "الحسابات")
+        self.tab_widget.addTab(accounts_widget, self.i18n.get_message("accounts"))
         
     def setup_reports_tab(self):
         """إعداد تبويب التقارير"""
@@ -294,42 +329,46 @@ class PaymentDialog(QDialog):
         layout = QVBoxLayout(reports_widget)
         
         # خيارات التقارير
-        options_group = QGroupBox("خيارات التقارير")
+        options_group = QGroupBox(self.i18n.get_message("report_options"))
         options_layout = QGridLayout(options_group)
         
         # نوع التقرير
-        options_layout.addWidget(QLabel("نوع التقرير:"), 0, 0)
+        options_layout.addWidget(QLabel(self.i18n.get_message("report_type") + ":"), 0, 0)
         self.report_type_combo = QComboBox()
         self.report_type_combo.addItems([
-            "ملخص المدفوعات", "تقرير الأعمار", "تدفق نقدي", "حسابات مدينة", "حسابات دائنة"
+            self.i18n.get_message("payments_summary"),
+            self.i18n.get_message("aging_report"),
+            self.i18n.get_message("cash_flow_report"),
+            self.i18n.get_message("receivables"),
+            self.i18n.get_message("payables")
         ])
         options_layout.addWidget(self.report_type_combo, 0, 1)
         
         # فترة التقرير
-        options_layout.addWidget(QLabel("من تاريخ:"), 1, 0)
+        options_layout.addWidget(QLabel(self.i18n.get_message("from_date") + ":"), 1, 0)
         self.report_from_date = QDateEdit()
         self.report_from_date.setDate(QDate.currentDate().addDays(-30))
         self.report_from_date.setCalendarPopup(True)
         options_layout.addWidget(self.report_from_date, 1, 1)
         
-        options_layout.addWidget(QLabel("إلى تاريخ:"), 1, 2)
+        options_layout.addWidget(QLabel(self.i18n.get_message("to_date") + ":"), 1, 2)
         self.report_to_date = QDateEdit()
         self.report_to_date.setDate(QDate.currentDate())
         self.report_to_date.setCalendarPopup(True)
         options_layout.addWidget(self.report_to_date, 1, 3)
         
         # أزرار التقارير
-        self.generate_report_btn = QPushButton("إنشاء التقرير")
+        self.generate_report_btn = QPushButton(self.i18n.get_message("generate_report"))
         self.generate_report_btn.setObjectName("primary_button")
         options_layout.addWidget(self.generate_report_btn, 2, 0)
         
-        self.export_report_btn = QPushButton("تصدير التقرير")
+        self.export_report_btn = QPushButton(self.i18n.get_message("export_report"))
         options_layout.addWidget(self.export_report_btn, 2, 1)
         
         layout.addWidget(options_group)
         
         # منطقة عرض التقرير
-        report_group = QGroupBox("التقرير")
+        report_group = QGroupBox(self.i18n.get_message("report"))
         report_layout = QVBoxLayout(report_group)
         
         self.report_table = QTableWidget()
@@ -337,20 +376,20 @@ class PaymentDialog(QDialog):
         
         layout.addWidget(report_group)
         
-        self.tab_widget.addTab(reports_widget, "التقارير")
+        self.tab_widget.addTab(reports_widget, self.i18n.get_message("reports"))
         
     def setup_control_buttons(self, layout):
         """إعداد أزرار التحكم"""
         buttons_frame = QFrame()
         buttons_layout = QHBoxLayout(buttons_frame)
         
-        self.refresh_btn = QPushButton("تحديث")
+        self.refresh_btn = QPushButton(self.i18n.get_message("refresh"))
         self.refresh_btn.setObjectName("secondary_button")
         buttons_layout.addWidget(self.refresh_btn)
         
         buttons_layout.addStretch()
         
-        self.close_btn = QPushButton("إغلاق")
+        self.close_btn = QPushButton(self.i18n.get_message("close"))
         self.close_btn.setObjectName("secondary_button")
         buttons_layout.addWidget(self.close_btn)
         
@@ -494,7 +533,7 @@ class PaymentDialog(QDialog):
     def load_data(self):
         """تحميل البيانات"""
         try:
-            self.status_label.setText("جاري تحميل البيانات...")
+            self.status_label.setText(self.i18n.get_message("loading_data"))
             
             # تحميل العملاء والموردين
             self.customers = self.customer_manager.get_all_customers()
@@ -509,12 +548,12 @@ class PaymentDialog(QDialog):
             # تحميل الحسابات
             self.load_accounts()
             
-            self.status_label.setText("تم تحميل البيانات بنجاح")
+            self.status_label.setText(self.i18n.get_message("data_loaded_successfully"))
             
         except Exception as e:
             self.logger.error(f"خطأ في تحميل البيانات: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في تحميل البيانات: {str(e)}")
-            self.status_label.setText("خطأ في تحميل البيانات")
+            QMessageBox.critical(self, self.i18n.get_message("error"), f"{self.i18n.get_message('load_data_failed')}: {str(e)}")
+            self.status_label.setText(self.i18n.get_message("load_data_error"))
             
     def update_entity_combo(self):
         """تحديث قائمة العملاء/الموردين"""
@@ -564,20 +603,20 @@ class PaymentDialog(QDialog):
             
         except Exception as e:
             self.logger.error(f"خطأ في حفظ المدفوعات: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في حفظ المدفوعات: {str(e)}")
+            QMessageBox.critical(self, self.i18n.get_message("error"), f"{self.i18n.get_message('save_payment_failed')}: {str(e)}")
             
     def validate_payment_form(self) -> bool:
         """التحقق من صحة نموذج المدفوعات"""
         if not (self.customer_payment_radio.isChecked() or self.supplier_payment_radio.isChecked()):
-            QMessageBox.warning(self, "تحذير", "يرجى اختيار نوع المدفوعات")
+            QMessageBox.warning(self, self.i18n.get_message("warning"), self.i18n.get_message("select_payment_type_warning"))
             return False
             
         if self.entity_combo.currentIndex() == -1:
-            QMessageBox.warning(self, "تحذير", "يرجى اختيار العميل أو المورد")
+            QMessageBox.warning(self, self.i18n.get_message("warning"), self.i18n.get_message("select_customer_supplier_warning"))
             return False
             
         if self.amount_spinbox.value() <= 0:
-            QMessageBox.warning(self, "تحذير", "يرجى إدخال مبلغ صحيح")
+            QMessageBox.warning(self, self.i18n.get_message("warning"), self.i18n.get_message("enter_valid_amount"))
             return False
             
         return True
@@ -608,13 +647,13 @@ class PaymentDialog(QDialog):
         self.save_payment_btn.setEnabled(True)
         
         if success:
-            QMessageBox.information(self, "نجح", message)
+            QMessageBox.information(self, self.i18n.get_message("success"), message)
             self.clear_payment_form()
             self.load_recent_payments()
             self.load_accounts()
             self.payment_created.emit(data)
         else:
-            QMessageBox.critical(self, "خطأ", message)
+            QMessageBox.critical(self, self.i18n.get_message("error"), message)
             
     def clear_payment_form(self):
         """مسح نموذج المدفوعات"""
@@ -721,25 +760,29 @@ class PaymentDialog(QDialog):
             start_date = self.report_from_date.date().toPython()
             end_date = self.report_to_date.date().toPython()
             
-            self.status_label.setText(f"جاري إنشاء تقرير {report_type}...")
+            self.status_label.setText(self.i18n.get_message("generating_report", report_type=report_type))
             
-            if report_type == "ملخص المدفوعات":
+            payments_summary_key = self.i18n.get_message("payments_summary")
+            aging_report_key = self.i18n.get_message("aging_report")
+            cash_flow_key = self.i18n.get_message("cash_flow_report")
+            
+            if report_type == payments_summary_key:
                 report_data = self.payment_service.get_payment_summary(start_date, end_date)
-            elif report_type == "تقرير الأعمار":
+            elif report_type == aging_report_key:
                 report_data = self.payment_service.get_aging_report()
-            elif report_type == "تدفق نقدي":
+            elif report_type == cash_flow_key:
                 report_data = self.payment_service.get_cash_flow_report(start_date, end_date)
             else:
                 report_data = []
                 
             # عرض التقرير في الجدول
             self.display_report(report_data, report_type)
-            self.status_label.setText("تم إنشاء التقرير بنجاح")
+            self.status_label.setText(self.i18n.get_message("report_generated_successfully"))
             
         except Exception as e:
             self.logger.error(f"خطأ في إنشاء التقرير: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في إنشاء التقرير: {str(e)}")
-            self.status_label.setText("خطأ في إنشاء التقرير")
+            QMessageBox.critical(self, self.i18n.get_message("error"), f"{self.i18n.get_message('generate_report_failed')}: {str(e)}")
+            self.status_label.setText(self.i18n.get_message("generate_report_error"))
             
     def display_report(self, data: List[Dict], report_type: str):
         """عرض التقرير"""
@@ -748,10 +791,24 @@ class PaymentDialog(QDialog):
             return
             
         # تحديد أعمدة التقرير حسب النوع
-        if report_type == "ملخص المدفوعات":
-            headers = ["التاريخ", "العدد", "المبلغ الإجمالي", "نقدي", "شيكات", "تحويلات"]
-        elif report_type == "تقرير الأعمار":
-            headers = ["العميل/المورد", "الرصيد", "0-30 يوم", "31-60 يوم", "61-90 يوم", "+90 يوم"]
+        if report_type == self.i18n.get_message("payments_summary"):
+            headers = [
+                self.i18n.get_message("date"),
+                self.i18n.get_message("count"),
+                self.i18n.get_message("total_amount"),
+                self.i18n.get_message("cash"),
+                self.i18n.get_message("checks"),
+                self.i18n.get_message("transfers")
+            ]
+        elif report_type == self.i18n.get_message("aging_report"):
+            headers = [
+                self.i18n.get_message("customer_supplier"),
+                self.i18n.get_message("balance"),
+                "0-30 " + self.i18n.get_message("days"),
+                "31-60 " + self.i18n.get_message("days"),
+                "61-90 " + self.i18n.get_message("days"),
+                "+90 " + self.i18n.get_message("days")
+            ]
         else:
             headers = list(data[0].keys()) if data else []
             
@@ -769,19 +826,19 @@ class PaymentDialog(QDialog):
         """تصدير التقرير"""
         try:
             file_path, _ = QFileDialog.getSaveFileName(
-                self, "تصدير التقرير", "", "CSV Files (*.csv);;Excel Files (*.xlsx)"
+                self, self.i18n.get_message("export_report"), "", "CSV Files (*.csv);;Excel Files (*.xlsx)"
             )
             
             if file_path:
                 # تصدير بيانات الجدول
-                self.status_label.setText("جاري تصدير التقرير...")
+                self.status_label.setText(self.i18n.get_message("exporting_report"))
                 # هنا يمكن إضافة كود التصدير الفعلي
-                self.status_label.setText("تم تصدير التقرير بنجاح")
-                QMessageBox.information(self, "نجح", f"تم تصدير التقرير إلى: {file_path}")
+                self.status_label.setText(self.i18n.get_message("report_exported_successfully"))
+                QMessageBox.information(self, self.i18n.get_message("success"), self.i18n.get_message("report_exported_to", file_path=file_path))
                 
         except Exception as e:
             self.logger.error(f"خطأ في تصدير التقرير: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في تصدير التقرير: {str(e)}")
+            QMessageBox.critical(self, self.i18n.get_message("error"), f"{self.i18n.get_message('export_report_failed')}: {str(e)}")
 
 
 if __name__ == "__main__":

@@ -22,6 +22,11 @@ from ..dialogs.safety_stock_dialog import SafetyStockDialog
 class SafetyStockWindow(QWidget):
     """نافذة إدارة الأرصدة الآمنة"""
     
+    # Window Manager attributes (للتسجيل التلقائي)
+    window_key = "safety_stock"
+    window_singleton = True
+    window_title = "إدارة الأرصدة الآمنة"
+    
     def __init__(self, db_manager: DatabaseManager, parent=None):
         super().__init__(parent)
         self.db_manager = db_manager
@@ -78,8 +83,8 @@ class SafetyStockWindow(QWidget):
         self.status_filter = QComboBox()
         self.status_filter.addItem("الكل", None)
         self.status_filter.addItem("⚠️ عادي", ReorderStatus.NORMAL.value)
-        self.status_filter.addItem("🟡 اقتراب من نقطة الطلب", ReorderStatus.APPROACHING_REORDER.value)
-        self.status_filter.addItem("🟠 يحتاج إعادة طلب", ReorderStatus.REORDER_NEEDED.value)
+        self.status_filter.addItem("🟡 اقتراب من نقطة الطلب", ReorderStatus.APPROACHING.value)
+        self.status_filter.addItem("🟠 يحتاج إعادة طلب", ReorderStatus.REORDER.value)
         self.status_filter.addItem("🔴 حرج", ReorderStatus.CRITICAL.value)
         self.status_filter.addItem("❌ نفاد المخزون", ReorderStatus.STOCKOUT.value)
         self.status_filter.currentIndexChanged.connect(self.apply_filters)
@@ -201,9 +206,9 @@ class SafetyStockWindow(QWidget):
                 # عد الحالات
                 if config.reorder_status == ReorderStatus.NORMAL.value:
                     status_counts["normal"] += 1
-                elif config.reorder_status == ReorderStatus.APPROACHING_REORDER.value:
+                elif config.reorder_status == ReorderStatus.APPROACHING.value:
                     status_counts["approaching"] += 1
-                elif config.reorder_status == ReorderStatus.REORDER_NEEDED.value:
+                elif config.reorder_status == ReorderStatus.REORDER.value:
                     status_counts["reorder"] += 1
                 elif config.reorder_status == ReorderStatus.CRITICAL.value:
                     status_counts["critical"] += 1
@@ -239,9 +244,9 @@ class SafetyStockWindow(QWidget):
                     show = False
                     if status == ReorderStatus.NORMAL.value and "عادي" in item.text():
                         show = True
-                    elif status == ReorderStatus.APPROACHING_REORDER.value and "اقتراب" in item.text():
+                    elif status == ReorderStatus.APPROACHING.value and "اقتراب" in item.text():
                         show = True
-                    elif status == ReorderStatus.REORDER_NEEDED.value and "يحتاج" in item.text():
+                    elif status == ReorderStatus.REORDER.value and "يحتاج" in item.text():
                         show = True
                     elif status == ReorderStatus.CRITICAL.value and "حرج" in item.text():
                         show = True
@@ -288,8 +293,8 @@ class SafetyStockWindow(QWidget):
         """الحصول على لون الحالة"""
         colors = {
             ReorderStatus.NORMAL.value: QColor(200, 255, 200),
-            ReorderStatus.APPROACHING_REORDER.value: QColor(255, 255, 200),
-            ReorderStatus.REORDER_NEEDED.value: QColor(255, 220, 200),
+            ReorderStatus.APPROACHING.value: QColor(255, 255, 200),
+            ReorderStatus.REORDER.value: QColor(255, 220, 200),
             ReorderStatus.CRITICAL.value: QColor(255, 180, 180),
             ReorderStatus.STOCKOUT.value: QColor(255, 100, 100)
         }
