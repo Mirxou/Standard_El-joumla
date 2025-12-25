@@ -1,64 +1,214 @@
-name: CI - Window Manager Tests
+name: CI - Continuous Integration
 
 on:
   push:
     branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  PYTHON_VERSION: '3.12'
+  DOCKER_BUILDKIT: 0
+  COMPOSE_DOCKER_CLI_BUILD: 0
 
 jobs:
-  test:
-    runs-on: windows-latest
+  # ==================== Linting & Code Quality ====================
+  lint:
+    name: Code Quality & Linting
+    runs-on: ubuntu-latest
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.10'
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
     
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install pytest pytest-qt
+        pip install flake8 black mypy pylint
     
-    - name: Run linting
+    - name: Run flake8
       run: |
-        pip install flake8 black
         flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
-        black --check src/
       continue-on-error: true
+    
+    - name: Run black (check)
+      run: |
+        black --check src/ tests/
+      continue-on-error: true
+    
+    - name: Run pylint
+      run: |
+        pylint src/ --disable=all --enable=E,F --max-line-length=120
+      continue-on-error: true
+
+  # ==================== Unit Tests ====================
+  test-unit:
+    name: Unit Tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ['3.10', '3.11', '3.12']
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-qt
     
     - name: Run unit tests
       run: |
-        pytest tests/unit/ -v
+        pytest tests/unit/ -v --cov=src --cov-report=xml --cov-report=html
       continue-on-error: true
+    
+    - name: Upload coverage
+      if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unit
+        name: unit-tests
+      continue-on-error: true
+
+  # ==================== Integration Tests ====================
+  test-integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov
     
     - name: Run integration tests
       run: |
         pytest tests/integration/ -v
       continue-on-error: true
+
+  # ==================== API Tests ====================
+  test-api:
+    name: API Tests
+    runs-on: ubuntu-latest
     
-    - name: Run Window Manager smoke test
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+    
+    - name: Install dependencies
       run: |
-        python test_window_manager_smoke_test.py
-      continue-on-error: false
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest httpx
     
-    - name: Run Window Manager integration test
+    - name: Start API Server
       run: |
-        python test_window_manager_integration.py
-      continue-on-error: false
+        uvicorn src.api.app:app --host 0.0.0.0 --port 8000 &
+        sleep 5
+      continue-on-error: true
     
-    - name: Upload test results
+    - name: Run API tests
+      run: |
+        pytest tests/api/ -v
+      continue-on-error: true
+
+  # ==================== Docker Build Test ====================
+  test-docker:
+    name: Docker Build Test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build API Docker image
+      run: |
+        docker build -f Dockerfile.api -t erp-api:test .
+      env:
+        DOCKER_BUILDKIT: 0
+        COMPOSE_DOCKER_CLI_BUILD: 0
+    
+    - name: Test Docker image
+      run: |
+        docker run -d --name erp-api-test -p 8000:8000 erp-api:test
+        sleep 10
+        curl -f http://localhost:8000/health || exit 1
+        docker stop erp-api-test
+        docker rm erp-api-test
+
+  # ==================== Security Scan ====================
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Run Bandit security scan
+      run: |
+        pip install bandit
+        bandit -r src/ -f json -o bandit-report.json
+      continue-on-error: true
+    
+    - name: Upload security report
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: test-results
-        path: |
-          logs/
-          *.log
+        name: security-report
+        path: bandit-report.json
       continue-on-error: true
 
+  # ==================== Build Summary ====================
+  build-summary:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: [lint, test-unit, test-integration, test-api, test-docker, security]
+    if: always()
+    
+    steps:
+    - name: Check job results
+      run: |
+        echo "Lint: ${{ needs.lint.result }}"
+        echo "Unit Tests: ${{ needs.test-unit.result }}"
+        echo "Integration Tests: ${{ needs.test-integration.result }}"
+        echo "API Tests: ${{ needs.test-api.result }}"
+        echo "Docker Build: ${{ needs.test-docker.result }}"
+        echo "Security: ${{ needs.security.result }}"

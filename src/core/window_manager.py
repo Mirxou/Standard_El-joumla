@@ -368,6 +368,31 @@ class WindowManager(QObject):
         for key in list(self._open_refs.keys()):
             self.close_window(key)
 
+    def cleanup(self) -> None:
+        """
+        تنظيف الموارد عند إغلاق التطبيق.
+        Cleanup resources on application shutdown.
+        """
+        try:
+            # إغلاق جميع النوافذ المفتوحة
+            self.close_all()
+            
+            # تنظيف المراجع الميتة
+            for key in list(self._open_refs.keys()):
+                self._clean_dead_refs(key)
+            
+            # تنظيف الـ hooks (اختياري)
+            self.on_before_open.clear()
+            self.on_after_open.clear()
+            self.on_before_close.clear()
+            self.on_after_close.clear()
+            
+            if self.logger:
+                self.logger.debug("WindowManager cleanup completed")
+        except Exception as e:
+            if self.logger:
+                self.logger.exception("Error during WindowManager cleanup: %s", e)
+
     def get_open_instances(self, window_key: str) -> List[QWidget]:
         self._clean_dead_refs(window_key)
         return [r() for r in self._open_refs.get(window_key, []) if r() is not None]

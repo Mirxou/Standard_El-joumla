@@ -22,6 +22,8 @@ from .payment import Payment, PaymentManager, PaymentType
 from .payment_plan import PaymentPlan, PaymentInstallment
 from .account import Account, ChartOfAccounts
 from .journal_entry import JournalEntry, JournalLine
+from .currency import Currency, ExchangeRate, CurrencyManager
+from .company import Company, UserCompany, CompanyManager
 
 # Reporting & Analytics
 from .report import (
@@ -66,6 +68,8 @@ __all__ = [
     'PaymentPlan', 'PaymentInstallment',
     'Account', 'ChartOfAccounts',
     'JournalEntry', 'JournalLine',
+    'Currency', 'ExchangeRate', 'CurrencyManager',
+    'Company', 'UserCompany', 'CompanyManager',
     
     # Reporting & Analytics
     'Report', 'ReportData', 'ReportTemplate', 'ReportType', 'ReportPeriod',

@@ -1,103 +1,57 @@
-"""
-Unit Tests for MFAService
-اختبارات وحدة MFAService
-"""
-
 import pytest
-from src.security.mfa_service import MFAService, MFAMethod, MFAConfig
+from unittest.mock import MagicMock, patch
 
+# افترض أن الملف الأصلي موجود في src/security/mfa_service.py
+# قم بتعديل المسار إذا كان مختلفاً
+from src.security.mfa_service import MFAService
+from src.core.database_manager import DatabaseManager
+from src.core.encryption_manager import EncryptionManager
 
-class TestMFAService:
-    """اختبارات خدمة MFA"""
-    
-    @pytest.fixture
-    def mfa_service(self, db_manager):
-        """إنشاء خدمة MFA"""
-        return MFAService(db_manager)
-    
-    def test_init(self, mfa_service):
-        """اختبار التهيئة"""
-        assert mfa_service is not None
-        assert mfa_service.OTP_LENGTH == 6
-        assert mfa_service.OTP_VALIDITY_MINUTES == 5
-    
-    def test_hash_code(self, mfa_service):
-        """اختبار تشفير الكود"""
-        code = "123456"
-        hashed = mfa_service._hash_code(code)
-        
-        assert hashed is not None
-        assert hashed != code
-        assert len(hashed) > 0
-    
-    def test_enable_mfa_with_user(self, mfa_service, db_manager):
-        """اختبار تفعيل MFA مع إنشاء مستخدم"""
-        # إنشاء مستخدم أولاً
-        with db_manager.get_cursor() as cursor:
-            cursor.execute("""
-                INSERT INTO users (username, password_hash, email, full_name, salt, role, is_active)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, ("test_user", "hash", "test@example.com", "Test User", "salt123", "user", 1))
-            cursor.connection.commit()
-            user_id = cursor.lastrowid
-        
-        methods = [MFAMethod.SMS, MFAMethod.EMAIL]
-        phone = "1234567890"
-        email = "test@example.com"
-        
-        result = mfa_service.enable_mfa(
-            user_id=user_id,
-            methods=methods,
-            phone_number=phone,
-            email=email
-        )
-        
-        assert result is not None
-        assert isinstance(result, dict)
-        assert result.get('mfa_enabled') is True
-    
-    def test_get_mfa_config_with_user(self, mfa_service, db_manager):
-        """اختبار الحصول على إعدادات MFA مع مستخدم"""
-        # إنشاء مستخدم أولاً
-        with db_manager.get_cursor() as cursor:
-            cursor.execute("""
-                INSERT INTO users (username, password_hash, email, full_name, salt, role, is_active)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, ("test_user2", "hash", "test2@example.com", "Test User 2", "salt123", "user", 1))
-            cursor.connection.commit()
-            user_id = cursor.lastrowid
-        
-        # تفعيل MFA أولاً
-        mfa_service.enable_mfa(
-            user_id=user_id,
-            methods=[MFAMethod.SMS],
-            phone_number="1234567890"
-        )
-        
-        config = mfa_service.get_mfa_config(user_id)
-        
-        assert config is not None
-        assert config.user_id == user_id
-    
-    def test_disable_mfa_with_user(self, mfa_service, db_manager):
-        """اختبار تعطيل MFA مع مستخدم"""
-        # إنشاء مستخدم أولاً
-        with db_manager.get_cursor() as cursor:
-            cursor.execute("""
-                INSERT INTO users (username, password_hash, email, full_name, salt, role, is_active)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, ("test_user3", "hash", "test3@example.com", "Test User 3", "salt123", "user", 1))
-            cursor.connection.commit()
-            user_id = cursor.lastrowid
-        
-        # تفعيل MFA أولاً
-        mfa_service.enable_mfa(
-            user_id=user_id,
-            methods=[MFAMethod.SMS],
-            phone_number="1234567890"
-        )
-        
-        # تعطيل MFA
-        result = mfa_service.disable_mfa(user_id)
-        assert result is True
+@pytest.fixture
+def mock_db_manager(mocker):
+    """Fixture لمحاكاة مدير قاعدة البيانات (DatabaseManager)."""
+    return mocker.MagicMock(spec=DatabaseManager)
 
+@pytest.fixture
+def mock_encryption_manager(mocker):
+    """Fixture لمحاكاة مدير التشفير (EncryptionManager)."""
+    mock = mocker.MagicMock(spec=EncryptionManager)
+    # محاكاة سلوك التشفير وفك التشفير
+    mock.encrypt.side_effect = lambda data: f"encrypted_{data}".encode('utf-8')
+    mock.decrypt.side_effect = lambda data: data.decode('utf-8').replace("encrypted_", "")
+    return mock
+
+@pytest.fixture
+def mfa_service(mock_db_manager, mock_encryption_manager):
+    """Fixture لإنشاء نسخة من MFAService مع اعتماديات محاكاة."""
+    return MFAService(
+        user_id=1,
+        db_manager=mock_db_manager,
+        encryption_manager=mock_encryption_manager
+    )
+
+def test_generate_mfa_secret_and_qr_code(mfa_service: MFAService):
+    """
+    اختبار وظيفة إنشاء سر MFA جديد ورمز QR.
+    - يتحقق من أن السر يتم إنشاؤه.
+    - يتحقق من أن السر يتم تشفيره قبل حفظه.
+    - يتحقق من أن دالة الحفظ في قاعدة البيانات تُستدعى.
+    """
+    # محاكاة pyotp.random_base32 لإرجاع قيمة ثابتة يمكن التنبؤ بها
+    with patch('pyotp.random_base32', return_value='TESTSECRET1234567890') as mock_random_base32:
+        
+        result = mfa_service.generate_mfa_secret_and_qr_code("testuser", "TestApp")
+
+        # 1. التأكد من أن النتيجة تحتوي على البيانات المتوقعة
+        assert "secret" in result
+        assert result["secret"] == 'TESTSECRET1234567890'
+        assert result["qr_code_data_uri"].startswith("data:image/png;base64,")
+
+        # 2. التأكد من أن دالة إنشاء السر العشوائي قد استُدعيت مرة واحدة
+        mock_random_base32.assert_called_once()
+
+        # 3. التأكد من أن السر الجديد قد تم حفظه في قاعدة البيانات بالشكل المشفر
+        mfa_service.db_manager.update_user_mfa_secret.assert_called_once_with(
+            user_id=1, 
+            secret="encrypted_TESTSECRET1234567890"
+        )

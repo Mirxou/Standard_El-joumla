@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 نماذج Pydantic للتحقق من صحة البيانات
@@ -117,7 +117,7 @@ class UserResponse(BaseModel):
     
     if PYDANTIC_AVAILABLE:
         class Config:
-            orm_mode = True
+            from_attributes = True  # تم تغيير orm_mode إلى from_attributes في pydantic v2
             use_enum_values = True
 
 
@@ -211,7 +211,7 @@ class ProductResponse(BaseModel):
     
     if PYDANTIC_AVAILABLE:
         class Config:
-            orm_mode = True
+            from_attributes = True  # تم تغيير orm_mode إلى from_attributes في pydantic v2
 
 
 # ==================== Customer Models ====================
@@ -256,7 +256,7 @@ class CustomerResponse(BaseModel):
     
     if PYDANTIC_AVAILABLE:
         class Config:
-            orm_mode = True
+            from_attributes = True  # تم تغيير orm_mode إلى from_attributes في pydantic v2
 
 
 # ==================== Invoice Models ====================
@@ -360,7 +360,7 @@ class InvoiceResponse(BaseModel):
     
     if PYDANTIC_AVAILABLE:
         class Config:
-            orm_mode = True
+            from_attributes = True  # تم تغيير orm_mode إلى from_attributes في pydantic v2
             use_enum_values = True
 
 
@@ -441,7 +441,7 @@ class PaymentResponse(BaseModel):
     
     if PYDANTIC_AVAILABLE:
         class Config:
-            orm_mode = True
+            from_attributes = True  # تم تغيير orm_mode إلى from_attributes في pydantic v2
             use_enum_values = True
 
 
@@ -484,6 +484,43 @@ class SalesReportFilter(BaseModel):
                 if v < values['start_date']:
                     raise ValueError('تاريخ النهاية يجب أن يكون بعد تاريخ البداية')
             return v
+
+
+# ==================== مثال على الاستخدام ====================
+
+# ==================== Returns Models ====================
+
+class ReturnItemCreate(BaseModel):
+    """نموذج عنصر مرتجع"""
+    product_id: int
+    quantity: confloat(gt=0)
+    unit_price: confloat(ge=0)
+    return_reason: str = "DEFECTIVE"
+    notes: Optional[str] = None
+
+class ReturnCreate(BaseModel):
+    """نموذج إنشاء مرتجع"""
+    return_type: str = "SALE_RETURN"
+    return_reason: str = "OTHER"
+    original_sale_id: Optional[int] = None
+    original_purchase_id: Optional[int] = None
+    customer_id: Optional[int] = None
+    supplier_id: Optional[int] = None
+    items: List[ReturnItemCreate]
+    notes: Optional[str] = None
+
+class ReturnResponse(BaseModel):
+    """نموذج استجابة المرتجع"""
+    id: int
+    return_number: str
+    return_type: str
+    status: str
+    total_amount: float
+    created_at: datetime
+    
+    if PYDANTIC_AVAILABLE:
+        class Config:
+            from_attributes = True
 
 
 # ==================== مثال على الاستخدام ====================

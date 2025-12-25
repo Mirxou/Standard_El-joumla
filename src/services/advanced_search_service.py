@@ -167,18 +167,26 @@ class AdvancedSearchService:
         
         # Custom filters
         for filt in query.filters:
-            filter_sql, filter_params = self._build_filter_clause(filt)
-            if filter_sql:
-                sql += f" AND {filter_sql}"
-                params.extend(filter_params)
+            # التحقق من أن الحقل موجود في config['fields'] قبل استخدامه
+            if filt.field in config['fields']:
+                filter_sql, filter_params = self._build_filter_clause(filt)
+                if filter_sql:
+                    sql += f" AND {filter_sql}"
+                    params.extend(filter_params)
         
         # Sorting
         if query.sort_by:
             order_parts = []
             for sort in query.sort_by:
-                direction = "ASC" if sort.direction == SortDirection.ASC else "DESC"
-                order_parts.append(f"{sort.field} {direction}")
-            sql += f" ORDER BY {', '.join(order_parts)}"
+                # التحقق من أن الحقل موجود في config['fields'] قبل استخدامه
+                if sort.field in config['fields']:
+                    direction = "ASC" if sort.direction == SortDirection.ASC else "DESC"
+                    order_parts.append(f"{sort.field} {direction}")
+            if order_parts:
+                sql += f" ORDER BY {', '.join(order_parts)}"
+            else:
+                # إذا لم يكن هناك حقول صالحة، استخدم الترتيب الافتراضي
+                sql += f" ORDER BY id DESC"
         else:
             # Default sorting
             sql += f" ORDER BY id DESC"
@@ -205,6 +213,10 @@ class AdvancedSearchService:
         field = filt.field
         op = filt.operator
         val = filt.value
+        
+        # التحقق من أن الحقل موجود في config['fields'] (يتم تمرير config من خلال query)
+        # لكن بما أن هذه دالة مساعدة، سنتحقق من الحقل في _build_search_query قبل استدعاء هذه الدالة
+        # لذلك نضيف التحقق هنا أيضاً كحماية إضافية
         
         if op == FilterOperator.EQUALS:
             return f"{field} = ?", [val]

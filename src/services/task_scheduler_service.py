@@ -39,6 +39,9 @@ class TaskScheduler:
 
         # Backup Job
         self.add_job(self.run_backup_job, interval=3600) # Check every hour
+        
+        # Scheduled Reports Job
+        self.add_job(self.run_scheduled_reports_job, interval=300) # Every 5 minutes
 
     def add_job(self, job_func: Callable, interval: int):
         """Adds a job to the scheduler."""
@@ -125,6 +128,24 @@ class TaskScheduler:
                         logger.error("Scheduled backup failed.")
                 else:
                     logger.warning("Encrypted backup method not found on db_manager.")
+    
+    def run_scheduled_reports_job(self):
+        """Job to run scheduled reports."""
+        try:
+            from src.services.scheduled_reports_service import ScheduledReportsService
+            
+            scheduled_reports_service = ScheduledReportsService(self.db_manager, logger)
+            results = scheduled_reports_service.check_and_run_due_reports()
+            
+            if results:
+                logger.info(f"Ran {len(results)} scheduled reports")
+                for result in results:
+                    if result.get("success"):
+                        logger.info(f"Report {result.get('report_id')} generated successfully")
+                    else:
+                        logger.error(f"Report failed: {result.get('error')}")
+        except Exception as e:
+            logger.error(f"Error running scheduled reports job: {e}", exc_info=True)
 
 # Global instance
 _scheduler_global: Optional[TaskScheduler] = None

@@ -7,8 +7,9 @@ Write-Host "============================================================" -Foreg
 Write-Host ""
 
 # الحصول على مسار المشروع
-$projectPath = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$projectPath = Split-Path -Parent $PSScriptRoot
 $pythonPath = Join-Path $projectPath ".venv\Scripts\python.exe"
+$pythonwPath = Join-Path $projectPath ".venv\Scripts\pythonw.exe"
 $cleanupScript = Join-Path $projectPath "scripts\cleanup_test_logs.py"
 $monitorScript = Join-Path $projectPath "scripts\monitor_logs.py"
 
@@ -22,6 +23,8 @@ if (-not (Test-Path $pythonPath)) {
         exit 1
     }
     Write-Host "✅ تم العثور على Python: $pythonPath" -ForegroundColor Green
+    # استخدام pythonw من نفس المسار إذا لم يكن في venv
+    $pythonwPath = $pythonPath.Replace("python.exe", "pythonw.exe")
 }
 
 Write-Host "📁 مسار المشروع: $projectPath" -ForegroundColor Gray
@@ -73,7 +76,7 @@ if ($existingTask2) {
 }
 
 # إنشاء المهمة (كل 5 دقائق)
-$action2 = New-ScheduledTaskAction -Execute $pythonPath -Argument "`"$monitorScript`" --continuous 300" -WorkingDirectory $projectPath
+$action2 = New-ScheduledTaskAction -Execute $pythonwPath -Argument "`"$monitorScript`" --continuous 300" -WorkingDirectory $projectPath
 $trigger2 = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Days 365)
 $settings2 = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
 $principal2 = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
@@ -105,4 +108,3 @@ Write-Host "💡 ملاحظات:" -ForegroundColor Yellow
 Write-Host "   - يمكنك إدارة المهام من: Task Scheduler (taskschd.msc)" -ForegroundColor Gray
 Write-Host "   - يمكنك تشغيل المهام يدوياً من Task Scheduler" -ForegroundColor Gray
 Write-Host "   - يمكنك حذف المهام باستخدام: Unregister-ScheduledTask -TaskName <TaskName>" -ForegroundColor Gray
-

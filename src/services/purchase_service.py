@@ -7,6 +7,7 @@
 
 from typing import List, Dict, Any, Optional
 from datetime import date
+from decimal import Decimal
 import sys
 from pathlib import Path
 
@@ -16,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from models.purchase import Purchase, PurchaseManager
 from models.purchase import PurchaseStatus, PaymentStatus
 from models.supplier import SupplierManager
+from services.exchange_rate_service import ExchangeRateService
 
 
 class PurchaseService:
@@ -26,6 +28,7 @@ class PurchaseService:
         self.logger = logger
         self.purchase_manager = PurchaseManager(db_manager, logger)
         self.supplier_manager = SupplierManager(db_manager, logger)
+        self.exchange_rate_service = ExchangeRateService(db_manager, logger)
         self._purchase_cache: Dict[str, Any] = {
             'data': [],
             'summary': {},
@@ -37,6 +40,53 @@ class PurchaseService:
     def create_purchase(self, purchase: Purchase) -> Optional[int]:
         """إنشاء فاتورة شراء"""
         try:
+            # Multi-Currency: حساب المبالغ بالعملة الأساسية
+            if purchase.currency_id:
+                try:
+                    # الحصول على العملة الأساسية
+                    base_currency = self.exchange_rate_service.currency_manager.get_base_currency()
+                    if base_currency:
+                        # الحصول على سعر الصرف
+                        exchange_rate = self.exchange_rate_service.get_exchange_rate(
+                            purchase.currency_id,
+                            base_currency.id,
+                            purchase.purchase_date
+                        )
+                        
+                        if exchange_rate:
+                            purchase.exchange_rate = exchange_rate
+                            # حساب المبلغ بالعملة الأساسية
+                            purchase.base_amount = purchase.total_amount * exchange_rate
+                            purchase.converted_amount = purchase.total_amount
+                            
+                            if self.logger:
+                                self.logger.debug(
+                                    f"تم حساب المبلغ بالعملة الأساسية: {purchase.base_amount} "
+                                    f"(سعر الصرف: {exchange_rate})"
+                                )
+                        else:
+                            # إذا لم يوجد سعر صرف، استخدم المبلغ الأساسي
+                            purchase.base_amount = purchase.total_amount
+                            purchase.converted_amount = purchase.total_amount
+                            purchase.exchange_rate = Decimal('1.0')
+                    else:
+                        # إذا لم توجد عملة أساسية، استخدم المبلغ الأساسي
+                        purchase.base_amount = purchase.total_amount
+                        purchase.converted_amount = purchase.total_amount
+                        purchase.exchange_rate = Decimal('1.0')
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"خطأ في حساب سعر الصرف: {str(e)}")
+                    # في حالة الخطأ، استخدم المبلغ الأساسي
+                    purchase.base_amount = purchase.total_amount
+                    purchase.converted_amount = purchase.total_amount
+                    purchase.exchange_rate = Decimal('1.0')
+            else:
+                # إذا لم تكن هناك عملة محددة، استخدم المبلغ الأساسي
+                purchase.base_amount = purchase.total_amount
+                purchase.converted_amount = purchase.total_amount
+                purchase.exchange_rate = Decimal('1.0')
+            
             return self.purchase_manager.create_purchase(purchase)
         except Exception as e:
             if self.logger:

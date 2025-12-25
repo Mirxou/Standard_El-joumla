@@ -96,6 +96,40 @@ class ProductManager:
     def __init__(self, db_manager, logger=None):
         self.db_manager = db_manager
         self.logger = logger
+        # Multi-Company Support
+        self._tenant_manager = None
+    
+    @property
+    def tenant_manager(self):
+        """Lazy loading لـ TenantIsolationManager"""
+        if self._tenant_manager is None:
+            try:
+                from src.core.tenant_isolation import TenantIsolationManager
+                self._tenant_manager = TenantIsolationManager(self.db_manager)
+            except ImportError:
+                if self.logger:
+                    self.logger.warning("TenantIsolationManager غير متاح - Multi-Company غير مفعل")
+        return self._tenant_manager
+    
+    def _get_company_id(self) -> Optional[int]:
+        """الحصول على معرف الشركة الحالية"""
+        if self.tenant_manager:
+            return self.tenant_manager.get_current_company_id()
+        return None
+    
+    def _add_company_filter(self, query: str, params: list, company_id: Optional[int] = None) -> tuple:
+        """إضافة فلتر الشركة إلى الاستعلام"""
+        if company_id is None:
+            company_id = self._get_company_id()
+        
+        if company_id is not None:
+            if "WHERE" in query.upper():
+                query += " AND company_id = ?"
+            else:
+                query += " WHERE company_id = ?"
+            params.append(company_id)
+        
+        return query, params
     
     def create_product(self, product: Product) -> Optional[int]:
         """إنشاء منتج جديد"""
@@ -133,6 +167,38 @@ class ProductManager:
             if product_id and product_id > 0:
                 if self.logger:
                     self.logger.info(f"تم إنشاء منتج جديد: {product.name} (ID: {product_id})")
+                
+                # 🔔 إطلاق Webhook: إرسال Webhook عند إنشاء منتج
+                try:
+                    from ...services.webhook_service import WebhookService
+                    webhook_service = WebhookService(self.db_manager, self.logger)
+                    
+                    # بناء Payload للـ Webhook
+                    webhook_payload = {
+                        "event": "product_created",
+                        "product_id": product_id,
+                        "name": product.name,
+                        "barcode": product.barcode,
+                        "cost_price": float(product.cost_price) if product.cost_price else 0.0,
+                        "selling_price": float(product.selling_price) if product.selling_price else 0.0,
+                        "current_stock": float(product.current_stock) if product.current_stock else 0.0,
+                        "created_at": datetime.now().isoformat(),
+                        "product": product.to_dict() if hasattr(product, 'to_dict') else {}
+                    }
+                    
+                    webhook_service.trigger_webhook(
+                        event_type="product_created",
+                        payload=webhook_payload,
+                        entity_id=product_id,
+                        company_id=product.company_id if hasattr(product, 'company_id') else None
+                    )
+                    
+                    if self.logger:
+                        self.logger.debug(f"✅ تم إطلاق Webhook: product_created (Product ID: {product_id})")
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"⚠️ فشل إطلاق Webhook: {e}")
+                
                 return product_id
             else:
                 if self.logger:
@@ -167,7 +233,7 @@ class ProductManager:
         
         return None
     
-    def get_product_by_barcode(self, barcode: str, active_only: bool = True) -> Optional[Product]:
+    def get_product_by_barcode(self, barcode: str, active_only: bool = True, company_id: Optional[int] = None) -> Optional[Product]:
         """الحصول على منتج بالباركود"""
         try:
             query = """
@@ -181,6 +247,9 @@ class ProductManager:
             if active_only:
                 query += " AND p.is_active = 1"
             
+            # إضافة فلتر الشركة
+            query, params = self._add_company_filter(query, params, company_id)
+            
             result = self.db_manager.fetch_one(query, tuple(params))
             if result:
                 return self._row_to_product(result)
@@ -193,7 +262,7 @@ class ProductManager:
     
     def search_products(self, search_term: str = "", category_id: Optional[int] = None, 
                        active_only: bool = True, limit: Optional[int] = None, 
-                       offset: Optional[int] = None) -> List[Product]:
+                       offset: Optional[int] = None, company_id: Optional[int] = None) -> List[Product]:
         """البحث في المنتجات"""
         try:
             query = """
@@ -216,6 +285,9 @@ class ProductManager:
             if active_only:
                 query += " AND p.is_active = 1"
             
+            # إضافة فلتر الشركة
+            query, params = self._add_company_filter(query, params, company_id)
+            
             query += " ORDER BY p.name"
             
             # إضافة LIMIT و OFFSET للتحكم في عدد النتائج
@@ -232,9 +304,9 @@ class ProductManager:
                 self.logger.error(f"خطأ في البحث في المنتجات: {str(e)}")
             return []
     
-    def get_all_products(self, active_only: bool = True) -> List[Product]:
+    def get_all_products(self, active_only: bool = True, company_id: Optional[int] = None) -> List[Product]:
         """الحصول على جميع المنتجات"""
-        return self.search_products(active_only=active_only)
+        return self.search_products(active_only=active_only, company_id=company_id)
     
     def update_product(self, product: Product) -> bool:
         """تحديث منتج"""
@@ -394,7 +466,20 @@ class ProductManager:
     
     def _row_to_product(self, row) -> Product:
         """تحويل صف قاعدة البيانات إلى كائن منتج"""
-        return Product(
+        # إذا كان هناك company_id في الجدول، سيزيد عدد الأعمدة
+        # p.* تعيد جميع الأعمدة، و category_name هو العمود الأخير المضاف يدوياً في الاستعلام
+        
+        # الأساسي (قبل company_id): 15 عمود للمنتج + 1 category_name = 16 (index 0-15)
+        # مع company_id: 16 عمود للمنتج + 1 category_name = 17 (index 0-16)
+        
+        category_name = row[-1] if len(row) > 15 else None
+        
+        # التأكد من أن category_name هو نص أو None (لتجنب الخطأ إذا كان رقم في حال اختلاف الترتيب)
+        if category_name is not None and not isinstance(category_name, str):
+            # إذا لم يكن نصاً، ربما نحن نقرأ عموداً خطأ، نجعله None
+            category_name = None
+            
+        product = Product(
             id=row[0],
             name=row[1],
             name_en=row[2],
@@ -410,5 +495,13 @@ class ProductManager:
             is_active=bool(row[12]),
             created_at=datetime.fromisoformat(row[13]) if row[13] else None,
             updated_at=datetime.fromisoformat(row[14]) if row[14] else None,
-            category_name=row[15] if len(row) > 15 else None
+            category_name=category_name
         )
+        
+        # محاولة تعيين company_id إذا كان موجوداً (عادة في index 15 إذا كان الجدول 16 عمود)
+        # لكن Product dataclass لا يحتوي على company_id حالياً بشكل صريح في التعريف أعلاه (إلا إذا تم تعديله)
+        # ولكن يمكن إضافته ديناميكياً
+        if len(row) > 16:
+             setattr(product, 'company_id', row[15])
+             
+        return product

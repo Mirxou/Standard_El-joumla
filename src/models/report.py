@@ -52,6 +52,12 @@ class ReportType(Enum):
     PAYABLES_AGING = "payables_aging"                    # أعمار الذمم الدائنة
     CASH_FLOW = "cash_flow"                              # التدفق النقدي
     DEBT_ANALYSIS = "debt_analysis"                      # تحليل الديون
+    
+    # Multi-Warehouse Reports
+    WAREHOUSE_INVENTORY = "warehouse_inventory"          # المخزون حسب المستودع
+    WAREHOUSE_TRANSFERS = "warehouse_transfers"          # حركات النقل بين المستودعات
+    WAREHOUSE_LOW_STOCK = "warehouse_low_stock"          # المنتجات منخفضة المخزون حسب المستودع
+    WAREHOUSE_SUMMARY = "warehouse_summary"              # ملخص المستودعات
 
 
 class ReportPeriod(Enum):
@@ -115,6 +121,8 @@ class ReportFilter:
     
     min_amount: Optional[float] = None
     max_amount: Optional[float] = None
+    warehouse_id: Optional[int] = None  # Multi-Warehouse Support
+    currency_id: Optional[int] = None  # Multi-Currency Support
     
     # فلاتر المدفوعات
     payment_method: Optional[str] = None

@@ -113,7 +113,7 @@ class PrintService:
                 template_id=template.id,
                 document_type="sale",
                 document_id=sale_id,
-                user_id=1,  # TODO: get from session
+                user_id=getattr(self, 'current_user_id', 1),  # من الجلسة أو الافتراضي
                 status="success",
                 output_format="pdf" if save_pdf else "html"
             )
@@ -191,7 +191,7 @@ class PrintService:
                 template_id=template.id,
                 document_type="quote",
                 document_id=quote_id,
-                user_id=1,
+                user_id=getattr(self, 'current_user_id', 1),
                 status="success",
                 output_format="pdf" if save_pdf else "html"
             )
@@ -247,11 +247,12 @@ class PrintService:
             html_content = self.print_manager.render_template(template.id, data)
             
             # تسجيل
+            user_id = getattr(self, 'current_user_id', 1)
             self.print_manager.log_print_job(
                 template_id=template.id,
                 document_type="sale",
                 document_id=sale_id,
-                user_id=1,
+                user_id=user_id,
                 status="success",
                 output_format="thermal"
             )

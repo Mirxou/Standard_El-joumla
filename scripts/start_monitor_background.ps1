@@ -12,7 +12,7 @@ Write-Host "============================================================" -Foreg
 Write-Host ""
 
 # الحصول على مسار المشروع
-$projectPath = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$projectPath = Split-Path -Parent $PSScriptRoot
 $pythonPath = Join-Path $projectPath ".venv\Scripts\python.exe"
 $monitorScript = Join-Path $projectPath "scripts\monitor_logs.py"
 
@@ -68,4 +68,3 @@ Write-Host "   - الملف: $monitorScript" -ForegroundColor Gray
 Write-Host "   - الفترة: كل $Interval ثانية" -ForegroundColor Gray
 Write-Host "   - السجلات المراقبة: exception_handler.log, database_operations.log, __main__.log" -ForegroundColor Gray
 Write-Host "============================================================" -ForegroundColor Cyan
-

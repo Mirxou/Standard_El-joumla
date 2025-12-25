@@ -4,30 +4,58 @@ API Client للتطبيق - يدعم الوضع المحلي والسحابي
 Hybrid Mode: يعمل محليًا أو عبر API حسب توفر الاتصال
 """
 import requests
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Callable
 from datetime import datetime
 import json
+import time
+import logging
+
+from src.utils.logger import setup_logger
 
 class APIClient:
     """
     عميل API هجين يدعم:
     - الوضع المحلي (Offline): الوصول المباشر لقاعدة البيانات
     - الوضع السحابي (Online): الاتصال بـ API
+    - Retry Logic مع Exponential Backoff
+    - Request/Response Logging
     """
     
-    def __init__(self, base_url: str = "http://127.0.0.1:8000", timeout: int = 5):
+    def __init__(
+        self,
+        base_url: str = "http://127.0.0.1:8000",
+        timeout: int = 5,
+        max_retries: int = 3,
+        retry_backoff_factor: float = 0.5,
+        retry_status_codes: Optional[List[int]] = None,
+        enable_logging: bool = True
+    ):
         """
         تهيئة عميل API
         
         Args:
             base_url: عنوان الـ API (افتراضي: localhost)
             timeout: وقت انتظار الاتصال بالثواني
+            max_retries: عدد محاولات إعادة المحاولة (افتراضي: 3)
+            retry_backoff_factor: عامل الانتظار الأسي (افتراضي: 0.5)
+                الانتظار = retry_backoff_factor * (2 ** attempt_number)
+            retry_status_codes: قائمة أكواد الحالة التي تستدعي إعادة المحاولة
+                (افتراضي: [500, 502, 503, 504])
+            enable_logging: تفعيل تسجيل الطلبات (افتراضي: True)
         """
         self.base_url = base_url.rstrip('/')
         self.timeout = timeout
+        self.max_retries = max_retries
+        self.retry_backoff_factor = retry_backoff_factor
+        self.retry_status_codes = retry_status_codes or [500, 502, 503, 504]
+        self.enable_logging = enable_logging
+        
         self.token: Optional[str] = None
         self._is_online: Optional[bool] = None
         self._last_check: Optional[datetime] = None
+        
+        # Logger
+        self.logger = setup_logger(__name__) if enable_logging else logging.getLogger(__name__)
     
     def is_online(self, force_check: bool = False) -> bool:
         """
@@ -59,7 +87,7 @@ class APIClient:
     
     def login(self, username: str, password: str) -> bool:
         """
-        تسجيل الدخول والحصول على JWT Token
+        تسجيل الدخول والحصول على JWT Token مع Retry Logic
         
         Args:
             username: اسم المستخدم
@@ -71,21 +99,193 @@ class APIClient:
         if not self.is_online():
             return False
         
-        try:
-            response = requests.post(
-                f"{self.base_url}/auth/login",
-                json={"username": username, "password": password},
-                timeout=self.timeout
-            )
-            
-            if response.status_code == 200:
+        # تسجيل الدخول لا يحتاج retry (أخطاء المصادقة لا يجب إعادة المحاولة)
+        response = self._make_request(
+            "POST",
+            "/api/v1/auth/login",
+            json_data={"username": username, "password": password}
+        )
+        
+        if response and response.status_code == 200:
+            try:
                 data = response.json()
                 self.token = data.get("access_token")
+                if self.enable_logging:
+                    self.logger.info(f"تم تسجيل الدخول بنجاح للمستخدم: {username}")
                 return True
+            except ValueError:
+                if self.enable_logging:
+                    self.logger.warning("فشل تحويل استجابة تسجيل الدخول إلى JSON")
+                return False
+        
+        if self.enable_logging:
+            self.logger.warning(f"فشل تسجيل الدخول للمستخدم: {username}")
+        
+        return False
+    
+    def _should_retry(self, status_code: int, exception: Optional[Exception] = None) -> bool:
+        """
+        تحديد ما إذا كان يجب إعادة المحاولة
+        
+        Args:
+            status_code: كود حالة HTTP
+            exception: استثناء (إن وجد)
             
-            return False
-        except Exception:
-            return False
+        Returns:
+            True إذا كان يجب إعادة المحاولة
+        """
+        # إعادة المحاولة في حالة أخطاء الشبكة
+        if exception:
+            return isinstance(exception, (
+                requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout,
+                requests.exceptions.RequestException
+            ))
+        
+        # إعادة المحاولة في حالة أكواد الحالة المحددة
+        return status_code in self.retry_status_codes
+    
+    def _calculate_backoff(self, attempt: int) -> float:
+        """
+        حساب وقت الانتظار باستخدام Exponential Backoff
+        
+        Args:
+            attempt: رقم المحاولة (0-based)
+            
+        Returns:
+            وقت الانتظار بالثواني
+        """
+        return self.retry_backoff_factor * (2 ** attempt)
+    
+    def _make_request(
+        self,
+        method: str,
+        endpoint: str,
+        params: Optional[Dict] = None,
+        data: Optional[Dict[str, Any]] = None,
+        json_data: Optional[Dict[str, Any]] = None
+    ) -> Optional[requests.Response]:
+        """
+        تنفيذ طلب HTTP مع Retry Logic و Exponential Backoff
+        
+        Args:
+            method: طريقة HTTP (GET, POST, PUT, DELETE)
+            endpoint: مسار الـ endpoint
+            params: معاملات الاستعلام (لـ GET)
+            data: البيانات (لـ POST/PUT)
+            json_data: بيانات JSON (لـ POST/PUT)
+            
+        Returns:
+            Response object أو None في حالة الفشل
+        """
+        url = f"{self.base_url}/{endpoint.lstrip('/')}"
+        headers = self._get_headers()
+        
+        last_exception = None
+        
+        for attempt in range(self.max_retries + 1):
+            try:
+                # تسجيل المحاولة
+                if self.enable_logging and attempt > 0:
+                    self.logger.debug(
+                        f"إعادة محاولة {attempt}/{self.max_retries} للطلب: {method} {url}"
+                    )
+                
+                # تنفيذ الطلب
+                if method.upper() == "GET":
+                    response = requests.get(
+                        url,
+                        params=params,
+                        headers=headers,
+                        timeout=self.timeout
+                    )
+                elif method.upper() == "POST":
+                    response = requests.post(
+                        url,
+                        json=json_data or data,
+                        headers=headers,
+                        timeout=self.timeout
+                    )
+                elif method.upper() == "PUT":
+                    response = requests.put(
+                        url,
+                        json=json_data or data,
+                        headers=headers,
+                        timeout=self.timeout
+                    )
+                elif method.upper() == "DELETE":
+                    response = requests.delete(
+                        url,
+                        headers=headers,
+                        timeout=self.timeout
+                    )
+                else:
+                    raise ValueError(f"طريقة HTTP غير مدعومة: {method}")
+                
+                # تسجيل الاستجابة
+                if self.enable_logging:
+                    self.logger.debug(
+                        f"API Request: {method} {url} - "
+                        f"Status: {response.status_code} - "
+                        f"Attempt: {attempt + 1}/{self.max_retries + 1}"
+                    )
+                
+                # التحقق من الحاجة لإعادة المحاولة
+                if self._should_retry(response.status_code):
+                    if attempt < self.max_retries:
+                        backoff_time = self._calculate_backoff(attempt)
+                        if self.enable_logging:
+                            self.logger.warning(
+                                f"طلب فاشل (Status: {response.status_code}) - "
+                                f"إعادة المحاولة بعد {backoff_time:.2f} ثانية"
+                            )
+                        time.sleep(backoff_time)
+                        continue
+                    else:
+                        if self.enable_logging:
+                            self.logger.error(
+                                f"فشل الطلب بعد {self.max_retries + 1} محاولات: "
+                                f"{method} {url} - Status: {response.status_code}"
+                            )
+                        return None
+                
+                # نجح الطلب
+                return response
+                
+            except requests.exceptions.RequestException as e:
+                last_exception = e
+                
+                # التحقق من الحاجة لإعادة المحاولة
+                if self._should_retry(0, e) and attempt < self.max_retries:
+                    backoff_time = self._calculate_backoff(attempt)
+                    if self.enable_logging:
+                        self.logger.warning(
+                            f"خطأ في الاتصال: {str(e)} - "
+                            f"إعادة المحاولة بعد {backoff_time:.2f} ثانية"
+                        )
+                    time.sleep(backoff_time)
+                    continue
+                else:
+                    if self.enable_logging:
+                        self.logger.error(
+                            f"فشل الطلب بعد {attempt + 1} محاولات: {method} {url} - {str(e)}"
+                        )
+                    return None
+            
+            except Exception as e:
+                # أخطاء غير متوقعة - لا إعادة محاولة
+                if self.enable_logging:
+                    self.logger.error(f"خطأ غير متوقع في الطلب: {method} {url} - {str(e)}")
+                return None
+        
+        # فشل جميع المحاولات
+        if self.enable_logging and last_exception:
+            self.logger.error(
+                f"فشل الطلب نهائياً بعد {self.max_retries + 1} محاولات: "
+                f"{method} {url} - {str(last_exception)}"
+            )
+        
+        return None
     
     def _get_headers(self) -> Dict[str, str]:
         """الحصول على Headers مع Token"""
@@ -96,7 +296,7 @@ class APIClient:
     
     def get(self, endpoint: str, params: Optional[Dict] = None) -> Optional[Dict[str, Any]]:
         """
-        طلب GET من API
+        طلب GET من API مع Retry Logic
         
         Args:
             endpoint: مسار الـ endpoint (بدون base_url)
@@ -108,24 +308,21 @@ class APIClient:
         if not self.is_online():
             return None
         
-        try:
-            response = requests.get(
-                f"{self.base_url}/{endpoint.lstrip('/')}",
-                params=params,
-                headers=self._get_headers(),
-                timeout=self.timeout
-            )
-            
-            if response.status_code == 200:
+        response = self._make_request("GET", endpoint, params=params)
+        
+        if response and response.status_code == 200:
+            try:
                 return response.json()
-            
-            return None
-        except Exception:
-            return None
+            except ValueError:
+                if self.enable_logging:
+                    self.logger.warning(f"فشل تحويل الاستجابة إلى JSON: {endpoint}")
+                return None
+        
+        return None
     
     def post(self, endpoint: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
-        طلب POST إلى API
+        طلب POST إلى API مع Retry Logic
         
         Args:
             endpoint: مسار الـ endpoint
@@ -137,56 +334,60 @@ class APIClient:
         if not self.is_online():
             return None
         
-        try:
-            response = requests.post(
-                f"{self.base_url}/{endpoint.lstrip('/')}",
-                json=data,
-                headers=self._get_headers(),
-                timeout=self.timeout
-            )
-            
-            if response.status_code in [200, 201]:
+        response = self._make_request("POST", endpoint, json_data=data)
+        
+        if response and response.status_code in [200, 201]:
+            try:
                 return response.json()
-            
-            return None
-        except Exception:
-            return None
+            except ValueError:
+                if self.enable_logging:
+                    self.logger.warning(f"فشل تحويل الاستجابة إلى JSON: {endpoint}")
+                return None
+        
+        return None
     
     def put(self, endpoint: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """طلب PUT إلى API"""
+        """
+        طلب PUT إلى API مع Retry Logic
+        
+        Args:
+            endpoint: مسار الـ endpoint
+            data: البيانات المراد إرسالها
+            
+        Returns:
+            الاستجابة أو None
+        """
         if not self.is_online():
             return None
         
-        try:
-            response = requests.put(
-                f"{self.base_url}/{endpoint.lstrip('/')}",
-                json=data,
-                headers=self._get_headers(),
-                timeout=self.timeout
-            )
-            
-            if response.status_code == 200:
+        response = self._make_request("PUT", endpoint, json_data=data)
+        
+        if response and response.status_code == 200:
+            try:
                 return response.json()
-            
-            return None
-        except Exception:
-            return None
+            except ValueError:
+                if self.enable_logging:
+                    self.logger.warning(f"فشل تحويل الاستجابة إلى JSON: {endpoint}")
+                return None
+        
+        return None
     
     def delete(self, endpoint: str) -> bool:
-        """طلب DELETE إلى API"""
+        """
+        طلب DELETE إلى API مع Retry Logic
+        
+        Args:
+            endpoint: مسار الـ endpoint
+            
+        Returns:
+            True إذا نجح الحذف
+        """
         if not self.is_online():
             return False
         
-        try:
-            response = requests.delete(
-                f"{self.base_url}/{endpoint.lstrip('/')}",
-                headers=self._get_headers(),
-                timeout=self.timeout
-            )
-            
-            return response.status_code in [200, 204]
-        except Exception:
-            return False
+        response = self._make_request("DELETE", endpoint)
+        
+        return response is not None and response.status_code in [200, 204]
 
 
 class HybridDataService:

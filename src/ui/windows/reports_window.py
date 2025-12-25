@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 نافذة التقارير - Reports Window
 واجهة شاملة لعرض وتصدير التقارير المختلفة مع دعم اللغة العربية
@@ -279,6 +279,27 @@ class ReportsWindow(QMainWindow):
         inventory_action.triggered.connect(lambda: self.select_report_type(ReportType.INVENTORY_STATUS))
         reports_menu.addAction(inventory_action)
         
+        reports_menu.addSeparator()
+        
+        # تقارير المستودعات (Multi-Warehouse)
+        warehouse_menu = reports_menu.addMenu("🏭 تقارير المستودعات")
+        
+        warehouse_inventory_action = QAction("📦 المخزون حسب المستودع", self)
+        warehouse_inventory_action.triggered.connect(lambda: self.select_report_type(ReportType.WAREHOUSE_INVENTORY))
+        warehouse_menu.addAction(warehouse_inventory_action)
+        
+        warehouse_transfers_action = QAction("🚚 حركات النقل", self)
+        warehouse_transfers_action.triggered.connect(lambda: self.select_report_type(ReportType.WAREHOUSE_TRANSFERS))
+        warehouse_menu.addAction(warehouse_transfers_action)
+        
+        warehouse_low_stock_action = QAction("⚠️ المنتجات منخفضة المخزون", self)
+        warehouse_low_stock_action.triggered.connect(lambda: self.select_report_type(ReportType.WAREHOUSE_LOW_STOCK))
+        warehouse_menu.addAction(warehouse_low_stock_action)
+        
+        warehouse_summary_action = QAction("📊 ملخص المستودعات", self)
+        warehouse_summary_action.triggered.connect(lambda: self.select_report_type(ReportType.WAREHOUSE_SUMMARY))
+        warehouse_menu.addAction(warehouse_summary_action)
+        
         # التقارير المالية
         financial_action = QAction("التقارير المالية", self)
         financial_action.triggered.connect(lambda: self.select_report_type(ReportType.FINANCIAL_SUMMARY))
@@ -368,6 +389,14 @@ class ReportsWindow(QMainWindow):
         self.report_type_combo.addItem("التدفق النقدي", ReportType.CASH_FLOW)
         self.report_type_combo.addItem("تحليل المدفوعات", ReportType.PAYMENT_ANALYSIS)
         self.report_type_combo.addItem("تحليل طرق الدفع", ReportType.PAYMENT_METHODS_ANALYSIS)
+        
+        # تقارير Multi-Warehouse
+        self.report_type_combo.addItem("━━━ المستودعات ━━━", None)  # Separator
+        self.report_type_combo.addItem("📦 المخزون حسب المستودع", ReportType.WAREHOUSE_INVENTORY)
+        self.report_type_combo.addItem("🚚 حركات النقل بين المستودعات", ReportType.WAREHOUSE_TRANSFERS)
+        self.report_type_combo.addItem("⚠️ المنتجات منخفضة المخزون", ReportType.WAREHOUSE_LOW_STOCK)
+        self.report_type_combo.addItem("📊 ملخص المستودعات", ReportType.WAREHOUSE_SUMMARY)
+        
         report_type_layout.addWidget(self.report_type_combo)
         
         layout.addWidget(report_type_group)
@@ -420,6 +449,14 @@ class ReportsWindow(QMainWindow):
         self.product_combo = QComboBox()
         self.product_combo.setEditable(True)
         additional_layout.addRow("المنتج:", self.product_combo)
+        
+        # المستودع (Multi-Warehouse)
+        self.warehouse_combo = QComboBox()
+        self.warehouse_combo.addItem("الكل", None)
+        additional_layout.addRow("المستودع:", self.warehouse_combo)
+        
+        # تحميل المستودعات
+        self.load_warehouses()
         
         # الفئة
         self.category_combo = QComboBox()
@@ -842,7 +879,7 @@ class ReportsWindow(QMainWindow):
         # تحديث الوقت كل دقيقة
         self.time_timer = QTimer()
         self.time_timer.timeout.connect(self.update_time)
-        self.time_timer.start(60000)  # كل دقيقة
+        # self.time_timer.start(60000)  # 🔥 معطّل لمنع التجميد
     
     def setup_connections(self):
         """إعداد الاتصالات"""
@@ -1157,6 +1194,11 @@ class ReportsWindow(QMainWindow):
                 QMessageBox.warning(self, "خطأ", "تاريخ البداية يجب أن يكون قبل تاريخ النهاية")
                 return
             
+            # الحصول على warehouse_id من الفلتر (Multi-Warehouse)
+            warehouse_id = None
+            if hasattr(self, 'warehouse_combo'):
+                warehouse_id = self.warehouse_combo.currentData()
+            
             # إعداد الفلاتر
             filters = ReportFilter(
                 start_date=self.start_date_edit.date().toPython(),
@@ -1168,7 +1210,8 @@ class ReportsWindow(QMainWindow):
                 payment_type=self.payment_type_combo.currentData(),
                 payment_status=self.payment_status_combo.currentData(),
                 account_type=self.account_type_combo.currentData(),
-                group_by=self.group_by_combo.currentData()
+                group_by=self.group_by_combo.currentData(),
+                warehouse_id=warehouse_id  # Multi-Warehouse Support
             )
             
             report_type = self.report_type_combo.currentData()

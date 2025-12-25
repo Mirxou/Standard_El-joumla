@@ -1,4 +1,4 @@
-﻿"""
+"""
 خدمة إدارة المدفوعات والذمم المدينة والدائنة
 """
 
@@ -15,6 +15,7 @@ from ..models.customer import CustomerManager
 from ..models.supplier import SupplierManager
 from ..models.sale import SaleManager
 from ..models.purchase import PurchaseManager
+from ..services.exchange_rate_service import ExchangeRateService
 
 
 class PaymentService:
@@ -28,6 +29,8 @@ class PaymentService:
         self.payment_manager = PaymentManager(db_manager, logger)
         self.customer_manager = CustomerManager(db_manager, logger)
         self.supplier_manager = SupplierManager(db_manager, logger)
+        # خدمة أسعار الصرف
+        self.exchange_rate_service = ExchangeRateService(db_manager, logger)
         
         # إنشاء الجداول إذا لم تكن موجودة
         self._create_tables()
@@ -42,7 +45,7 @@ class PaymentService:
                 payment_number TEXT UNIQUE NOT NULL,
                 payment_type TEXT NOT NULL,
                 payment_method TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'معلق',
+                status TEXT NOT NULL DEFAULT 'pending',
                 
                 amount DECIMAL(15,2) NOT NULL DEFAULT 0.00,
                 currency TEXT NOT NULL DEFAULT 'DZD',
@@ -54,6 +57,7 @@ class PaymentService:
                 
                 customer_id INTEGER,
                 supplier_id INTEGER,
+                entity_id INTEGER,
                 user_id INTEGER,
                 sale_id INTEGER,
                 purchase_id INTEGER,
@@ -183,7 +187,9 @@ class PaymentService:
     def create_customer_payment(self, customer_id: int, amount: Decimal, 
                               payment_method: str = PaymentMethod.CASH.value,
                               payment_date: date = None, reference_number: str = None,
-                              notes: str = None, user_id: int = None) -> Optional[Payment]:
+                              notes: str = None, user_id: int = None,
+                              currency_id: Optional[int] = None,
+                              bank_name: str = None, account_number: str = None) -> Optional[Payment]:
         """إنشاء دفعة من العميل"""
         try:
             payment = Payment(
@@ -195,12 +201,105 @@ class PaymentService:
                 user_id=user_id,
                 reference_number=reference_number,
                 notes=notes,
-                status=PaymentStatus.COMPLETED.value
+                status=PaymentStatus.COMPLETED.value,
+                currency_id=currency_id,
+                bank_name=bank_name,
+                account_number=account_number
             )
             
+            # Multi-Currency: حساب المبالغ بالعملة الأساسية
+            if currency_id:
+                try:
+                    # الحصول على العملة الأساسية
+                    base_currency = self.exchange_rate_service.currency_manager.get_base_currency()
+                    if base_currency:
+                        # الحصول على سعر الصرف
+                        exchange_rate = self.exchange_rate_service.get_exchange_rate(
+                            currency_id,
+                            base_currency.id,
+                            payment_date or date.today()
+                        )
+                        
+                        if exchange_rate:
+                            payment.exchange_rate = exchange_rate
+                            # حساب المبلغ بالعملة الأساسية
+                            payment.base_amount = amount * exchange_rate
+                            payment.converted_amount = amount
+                            payment.amount_in_base_currency = amount * exchange_rate  # للتوافق
+                            
+                            if self.logger:
+                                self.logger.debug(
+                                    f"تم حساب المبلغ بالعملة الأساسية: {payment.base_amount} "
+                                    f"(سعر الصرف: {exchange_rate})"
+                                )
+                        else:
+                            # إذا لم يوجد سعر صرف، استخدم المبلغ الأساسي
+                            payment.base_amount = amount
+                            payment.converted_amount = amount
+                            payment.exchange_rate = Decimal('1.0')
+                    else:
+                        # إذا لم توجد عملة أساسية، استخدم المبلغ الأساسي
+                        payment.base_amount = amount
+                        payment.converted_amount = amount
+                        payment.exchange_rate = Decimal('1.0')
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"خطأ في حساب سعر الصرف: {str(e)}")
+                    # في حالة الخطأ، استخدم المبلغ الأساسي
+                    payment.base_amount = amount
+                    payment.converted_amount = amount
+                    payment.exchange_rate = Decimal('1.0')
+            else:
+                # إذا لم تكن هناك عملة محددة، استخدم المبلغ الأساسي
+                payment.base_amount = amount
+                payment.converted_amount = amount
+                payment.exchange_rate = Decimal('1.0')
+            
             payment_id = self.payment_manager.create_payment(payment)
+            if not payment_id:
+                try:
+                    # Fallback: lookup by unique payment_number
+                    cursor = self.db_manager.connection.cursor()
+                    cursor.execute("SELECT id FROM payments WHERE payment_number = ? ORDER BY id DESC LIMIT 1", (payment.payment_number,))
+                    r = cursor.fetchone()
+                    if r:
+                        payment_id = r[0]
+                except Exception:
+                    pass
             if payment_id:
-                return self.payment_manager.get_payment_by_id(payment_id)
+                payment_obj = self.payment_manager.get_payment_by_id(payment_id)
+                
+                # 🔔 إطلاق Webhook: إرسال Webhook عند إنشاء دفعة عميل
+                try:
+                    from ..services.webhook_service import WebhookService
+                    webhook_service = WebhookService(self.db_manager, self.logger)
+                    
+                    # بناء Payload للـ Webhook
+                    webhook_payload = {
+                        "event": "payment_received",
+                        "payment_id": payment_id,
+                        "payment_type": payment.payment_type,
+                        "customer_id": customer_id,
+                        "amount": float(amount),
+                        "payment_method": payment_method,
+                        "created_at": datetime.now().isoformat(),
+                        "payment": payment_obj.to_dict() if payment_obj and hasattr(payment_obj, 'to_dict') else {}
+                    }
+                    
+                    webhook_service.trigger_webhook(
+                        event_type="payment_received",
+                        payload=webhook_payload,
+                        entity_id=payment_id,
+                        company_id=payment_obj.company_id if payment_obj and hasattr(payment_obj, 'company_id') else None
+                    )
+                    
+                    if self.logger:
+                        self.logger.debug(f"✅ تم إطلاق Webhook: payment_received (Payment ID: {payment_id})")
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"⚠️ فشل إطلاق Webhook: {e}")
+                
+                return payment_obj
             
             return None
             
@@ -209,10 +308,38 @@ class PaymentService:
                 self.logger.error(f"خطأ في إنشاء دفعة العميل: {str(e)}")
             return None
     
+    def get_payment_by_id(self, payment_id: int) -> Optional[Payment]:
+        """الحصول على دفعة بالمعرف"""
+        try:
+            return self.payment_manager.get_payment_by_id(payment_id)
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في الحصول على الدفعة {payment_id}: {str(e)}")
+            return None
+    
+    def get_customer_payments(self, customer_id: int) -> List[Payment]:
+        """الحصول على جميع دفعات العميل"""
+        try:
+            return self.payment_manager.get_customer_payments(customer_id)
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في الحصول على دفعات العميل {customer_id}: {str(e)}")
+            return []
+    
+    def get_supplier_payments(self, supplier_id: int) -> List[Payment]:
+        """الحصول على جميع دفعات المورد"""
+        try:
+            return self.payment_manager.get_supplier_payments(supplier_id)
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في الحصول على دفعات المورد {supplier_id}: {str(e)}")
+            return []
+    
     def create_supplier_payment(self, supplier_id: int, amount: Decimal,
                               payment_method: str = PaymentMethod.CASH.value,
                               payment_date: date = None, reference_number: str = None,
-                              notes: str = None, user_id: int = None) -> Optional[Payment]:
+                              notes: str = None, user_id: int = None,
+                              currency_id: Optional[int] = None) -> Optional[Payment]:
         """إنشاء دفعة للمورد"""
         try:
             payment = Payment(
@@ -224,12 +351,87 @@ class PaymentService:
                 user_id=user_id,
                 reference_number=reference_number,
                 notes=notes,
-                status=PaymentStatus.COMPLETED.value
+                status=PaymentStatus.COMPLETED.value,
+                currency_id=currency_id
             )
+            
+            # Multi-Currency: حساب المبالغ بالعملة الأساسية
+            if currency_id:
+                try:
+                    # الحصول على العملة الأساسية
+                    base_currency = self.exchange_rate_service.currency_manager.get_base_currency()
+                    if base_currency:
+                        # الحصول على سعر الصرف
+                        exchange_rate = self.exchange_rate_service.get_exchange_rate(
+                            currency_id,
+                            base_currency.id,
+                            payment_date or date.today()
+                        )
+                        
+                        if exchange_rate:
+                            payment.exchange_rate = exchange_rate
+                            # حساب المبلغ بالعملة الأساسية
+                            payment.base_amount = amount * exchange_rate
+                            payment.converted_amount = amount
+                            payment.amount_in_base_currency = amount * exchange_rate  # للتوافق
+                        else:
+                            # إذا لم يوجد سعر صرف، استخدم المبلغ الأساسي
+                            payment.base_amount = amount
+                            payment.converted_amount = amount
+                            payment.exchange_rate = Decimal('1.0')
+                    else:
+                        # إذا لم توجد عملة أساسية، استخدم المبلغ الأساسي
+                        payment.base_amount = amount
+                        payment.converted_amount = amount
+                        payment.exchange_rate = Decimal('1.0')
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"خطأ في حساب سعر الصرف: {str(e)}")
+                    # في حالة الخطأ، استخدم المبلغ الأساسي
+                    payment.base_amount = amount
+                    payment.converted_amount = amount
+                    payment.exchange_rate = Decimal('1.0')
+            else:
+                # إذا لم تكن هناك عملة محددة، استخدم المبلغ الأساسي
+                payment.base_amount = amount
+                payment.converted_amount = amount
+                payment.exchange_rate = Decimal('1.0')
             
             payment_id = self.payment_manager.create_payment(payment)
             if payment_id:
-                return self.payment_manager.get_payment_by_id(payment_id)
+                payment_obj = self.payment_manager.get_payment_by_id(payment_id)
+                
+                # 🔔 إطلاق Webhook: إرسال Webhook عند إنشاء دفعة مورد
+                try:
+                    from ..services.webhook_service import WebhookService
+                    webhook_service = WebhookService(self.db_manager, self.logger)
+                    
+                    # بناء Payload للـ Webhook
+                    webhook_payload = {
+                        "event": "supplier_payment_made",
+                        "payment_id": payment_id,
+                        "payment_type": payment.payment_type,
+                        "supplier_id": supplier_id,
+                        "amount": float(amount),
+                        "payment_method": payment_method,
+                        "created_at": datetime.now().isoformat(),
+                        "payment": payment_obj.to_dict() if payment_obj and hasattr(payment_obj, 'to_dict') else {}
+                    }
+                    
+                    webhook_service.trigger_webhook(
+                        event_type="supplier_payment_made",
+                        payload=webhook_payload,
+                        entity_id=payment_id,
+                        company_id=payment_obj.company_id if payment_obj and hasattr(payment_obj, 'company_id') else None
+                    )
+                    
+                    if self.logger:
+                        self.logger.debug(f"✅ تم إطلاق Webhook: supplier_payment_made (Payment ID: {payment_id})")
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"⚠️ فشل إطلاق Webhook: {e}")
+                
+                return payment_obj
             
             return None
             

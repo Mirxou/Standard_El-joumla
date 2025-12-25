@@ -23,13 +23,35 @@ except ImportError:
     EXCEL_AVAILABLE = False
 
 from jinja2 import Template
+import warnings
+import sys
+import os
+
+# قمع تحذيرات WeasyPrint قبل الاستيراد
+warnings.filterwarnings('ignore', category=UserWarning, module='weasyprint')
+warnings.filterwarnings('ignore', message='.*WeasyPrint.*', category=UserWarning)
+
+# قمع stdout/stderr مؤقتاً أثناء استيراد WeasyPrint
+# لأن WeasyPrint يطبع تحذيرات مباشرة إلى stdout/stderr
+old_stdout = sys.stdout
+old_stderr = sys.stderr
+sys.stdout = open(os.devnull, 'w')
+sys.stderr = open(os.devnull, 'w')
+
 try:
     from weasyprint import HTML, CSS  # type: ignore
     PDF_AVAILABLE = True
-except Exception:
+except (ImportError, OSError, RuntimeError) as e:
     # يشمل ImportError و OSError الناتج عن عدم توفر مكتبات نظام مثل gobject/pango
+    # RuntimeError قد يحدث عند عدم توفر مكتبات النظام المطلوبة
     PDF_AVAILABLE = False
     HTML = CSS = None  # تعيين قيم افتراضية آمنة
+finally:
+    # استعادة stdout/stderr دائماً
+    sys.stdout.close()
+    sys.stderr.close()
+    sys.stdout = old_stdout
+    sys.stderr = old_stderr
 
 try:
     # محاولة الاستيراد النسبي أولاً (عند الاستيراد من داخل الحزمة)
@@ -71,6 +93,11 @@ except ImportError:
             PRODUCT_PERFORMANCE = "product_performance"
             PROFIT_LOSS = "profit_loss"
             STOCK_MOVEMENT = "stock_movement"
+            # Multi-Warehouse Reports
+            WAREHOUSE_INVENTORY = "warehouse_inventory"
+            WAREHOUSE_TRANSFERS = "warehouse_transfers"
+            WAREHOUSE_LOW_STOCK = "warehouse_low_stock"
+            WAREHOUSE_SUMMARY = "warehouse_summary"
     
     @dataclass
     class ReportFilter:
@@ -92,6 +119,7 @@ except ImportError:
         max_amount: Optional[float] = None
         aging_periods: Optional[List[int]] = None
         include_zero_balances: bool = True
+        warehouse_id: Optional[int] = None  # Multi-Warehouse Support
     
     @dataclass
     class ReportData:
@@ -127,6 +155,16 @@ class ReportExporter:
         self.purchase_manager = PurchaseManager(db_manager)
         self.customer_manager = CustomerManager(db_manager)
         self.supplier_manager = SupplierManager(db_manager)
+        
+        # Multi-Currency Support
+        try:
+            from ..models.currency import CurrencyManager
+            from ..services.exchange_rate_service import ExchangeRateService
+            self.currency_manager = CurrencyManager(db_manager)
+            self.exchange_rate_service = ExchangeRateService(db_manager, self.logger)
+        except ImportError:
+            self.currency_manager = None
+            self.exchange_rate_service = None
         
         # إعداد مجلد التقارير
         self.reports_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'exports')
@@ -168,6 +206,14 @@ class ReportExporter:
             elif report_type == ReportType.STOCK_MOVEMENT:
                 # استخدام تقرير المخزون كبديل مؤقت
                 return self.generate_inventory_status_report(filters)
+            elif report_type == ReportType.WAREHOUSE_INVENTORY:
+                return self.generate_warehouse_inventory_report(filters)
+            elif report_type == ReportType.WAREHOUSE_TRANSFERS:
+                return self.generate_warehouse_transfers_report(filters)
+            elif report_type == ReportType.WAREHOUSE_LOW_STOCK:
+                return self.generate_warehouse_low_stock_report(filters)
+            elif report_type == ReportType.WAREHOUSE_SUMMARY:
+                return self.generate_warehouse_summary_report(filters)
             else:
                 raise ValueError(f"نوع التقرير غير مدعوم: {report_type}")
         except Exception as e:
@@ -177,7 +223,7 @@ class ReportExporter:
     def generate_sales_summary_report(self, filters: ReportFilter) -> ReportData:
         """إنشاء تقرير ملخص المبيعات"""
         try:
-            # بناء استعلام المبيعات
+            # بناء استعلام المبيعات (مع دعم Multi-Currency)
             query = """
                 SELECT 
                     s.id,
@@ -189,11 +235,19 @@ class ReportExporter:
                     s.final_amount,
                     s.payment_method,
                     s.status,
+                    s.currency_id,
+                    s.exchange_rate,
+                    s.base_amount,
+                    s.converted_amount,
                     c.name as customer_name,
-                    u.username as user_name
+                    u.username as user_name,
+                    curr.code as currency_code,
+                    curr.name as currency_name,
+                    curr.symbol as currency_symbol
                 FROM sales s
                 LEFT JOIN customers c ON s.customer_id = c.id
                 LEFT JOIN users u ON s.user_id = u.id
+                LEFT JOIN currencies curr ON s.currency_id = curr.id
                 WHERE 1=1
             """
             
@@ -275,6 +329,17 @@ class ReportExporter:
             # تحويل الصفوف إلى قواميس مع تحويل الحالة وطريقة الدفع
             sales_data = []
             for row in rows:
+                currency_id = row.get('currency_id')
+                currency_code = row.get('currency_code') or 'DZD'
+                currency_name = row.get('currency_name') or 'الدينار الجزائري'
+                currency_symbol = row.get('currency_symbol') or 'د.ج'
+                base_amount = row.get('base_amount')
+                converted_amount = row.get('converted_amount')
+                exchange_rate = row.get('exchange_rate') or 1.0
+                
+                # استخدام base_amount إذا كان متوفراً، وإلا استخدام final_amount
+                display_amount = float(base_amount) if base_amount else float(row.get('final_amount') or 0)
+                
                 # row هو dictionary من execute_query
                 sales_data.append({
                     'id': row.get('id'),
@@ -284,17 +349,40 @@ class ReportExporter:
                     'discount_amount': float(row.get('discount_amount') or 0),
                     'tax_amount': float(row.get('tax_amount') or 0),
                     'final_amount': float(row.get('final_amount') or 0),
+                    # Multi-Currency Support
+                    'currency_id': currency_id,
+                    'currency_code': currency_code,
+                    'currency_name': currency_name,
+                    'currency_symbol': currency_symbol,
+                    'base_amount': float(base_amount) if base_amount else display_amount,
+                    'converted_amount': float(converted_amount) if converted_amount else display_amount,
+                    'exchange_rate': float(exchange_rate),
+                    'display_amount': display_amount,  # المبلغ للعرض (بالعملة الأساسية)
                     'payment_method': translate_payment_method(row.get('payment_method')),
                     'status': translate_status(row.get('status')),
                     'customer_name': row.get('customer_name') or '',
                     'user_name': row.get('user_name') or ''
                 })
             
-            # حساب الملخص
+            # حساب الملخص (باستخدام المبالغ بالعملة الأساسية)
             total_sales = len(sales_data)
-            total_amount = sum(row['final_amount'] for row in sales_data)
+            total_amount = sum(row.get('base_amount', row['final_amount']) for row in sales_data)
             total_discount = sum(row['discount_amount'] or 0 for row in sales_data)
             total_tax = sum(row['tax_amount'] or 0 for row in sales_data)
+            
+            # تجميع حسب العملة
+            currencies_summary = {}
+            for row in sales_data:
+                currency_code = row.get('currency_code', 'DZD')
+                if currency_code not in currencies_summary:
+                    currencies_summary[currency_code] = {
+                        'count': 0,
+                        'amount': 0,
+                        'base_amount': 0
+                    }
+                currencies_summary[currency_code]['count'] += 1
+                currencies_summary[currency_code]['amount'] += row.get('converted_amount', row['final_amount'])
+                currencies_summary[currency_code]['base_amount'] += row.get('base_amount', row['final_amount'])
             
             # تجميع البيانات حسب طريقة الدفع
             payment_methods = {}
@@ -307,11 +395,13 @@ class ReportExporter:
             
             summary = {
                 'total_sales': total_sales,
-                'total_amount': total_amount,
+                'total_amount': total_amount,  # بالعملة الأساسية
                 'total_discount': total_discount,
                 'total_tax': total_tax,
                 'average_sale': total_amount / total_sales if total_sales > 0 else 0,
-                'payment_methods': payment_methods
+                'payment_methods': payment_methods,
+                # Multi-Currency Support
+                'currencies_summary': currencies_summary
             }
             
             # بيانات الرسوم البيانية
@@ -453,11 +543,23 @@ class ReportExporter:
     def generate_financial_summary_report(self, filters: ReportFilter) -> ReportData:
         """إنشاء تقرير الملخص المالي"""
         try:
-            # المبيعات
-            sales_query = "SELECT SUM(final_amount) as total_sales, COUNT(*) as sales_count FROM sales WHERE status != 'cancelled'"
+            # المبيعات (باستخدام base_amount للعملة الأساسية)
+            sales_query = """
+                SELECT 
+                    SUM(COALESCE(base_amount, final_amount)) as total_sales, 
+                    COUNT(*) as sales_count 
+                FROM sales 
+                WHERE status != 'cancelled'
+            """
             
-            # المشتريات
-            purchases_query = "SELECT SUM(total_amount) as total_purchases, COUNT(*) as purchases_count FROM purchases WHERE status != 'cancelled'"
+            # المشتريات (باستخدام base_amount للعملة الأساسية)
+            purchases_query = """
+                SELECT 
+                    SUM(COALESCE(base_amount, total_amount)) as total_purchases, 
+                    COUNT(*) as purchases_count 
+                FROM purchases 
+                WHERE status != 'cancelled'
+            """
 
             # الربح الفعلي من بنود المبيعات
             profit_query = """
@@ -889,14 +991,22 @@ class ReportExporter:
                     p.payment_method,
                     p.amount,
                     p.payment_status,
+                    p.currency_id,
+                    p.exchange_rate,
+                    p.base_amount,
+                    p.converted_amount,
+                    curr.code as currency_code,
+                    curr.name as currency_name,
+                    curr.symbol as currency_symbol,
                     CASE 
                         WHEN p.payment_type = 'دفعة عميل' THEN c.name
                         WHEN p.payment_type = 'دفعة مورد' THEN s.name
                         ELSE 'غير محدد'
                     END as entity_name
                 FROM payments p
-                LEFT JOIN customers c ON p.entity_id = c.id AND p.payment_type = 'دفعة عميل'
-                LEFT JOIN suppliers s ON p.entity_id = s.id AND p.payment_type = 'دفعة مورد'
+                LEFT JOIN customers c ON p.customer_id = c.id AND p.payment_type = 'دفعة عميل'
+                LEFT JOIN suppliers s ON p.supplier_id = s.id AND p.payment_type = 'دفعة مورد'
+                LEFT JOIN currencies curr ON p.currency_id = curr.id
                 WHERE 1=1
             """
             
@@ -937,10 +1047,8 @@ class ReportExporter:
             
             query += " ORDER BY p.payment_date DESC"
             
-            # تنفيذ الاستعلام
-            cursor = self.db_manager.connection.cursor()
-            cursor.execute(query, params)
-            results = cursor.fetchall()
+            # تنفيذ الاستعلام - استخدام execute_query للحصول على dictionaries
+            rows = self.db.execute_query(query, tuple(params))
             
             # تحويل النتائج إلى قائمة من القواميس
             data = []
@@ -948,32 +1056,69 @@ class ReportExporter:
             customer_payments = 0
             supplier_payments = 0
             
-            for row in results:
+            # تجميع حسب العملة
+            currencies_summary = {}
+            
+            for row in rows:
+                currency_id = row.get('currency_id')
+                currency_code = row.get('currency_code') or 'DZD'
+                currency_name = row.get('currency_name') or 'الدينار الجزائري'
+                currency_symbol = row.get('currency_symbol') or 'د.ج'
+                base_amount = row.get('base_amount')
+                converted_amount = row.get('converted_amount')
+                exchange_rate = row.get('exchange_rate') or 1.0
+                
+                # استخدام base_amount إذا كان متوفراً، وإلا استخدام amount
+                display_amount = float(base_amount) if base_amount else float(row.get('amount') or 0)
+                
                 payment_data = {
-                    'payment_date': row[0],
-                    'payment_type': row[1],
-                    'payment_method': row[2],
-                    'amount': float(row[3]),
-                    'payment_status': row[4],
-                    'entity_name': row[5]
+                    'payment_date': row.get('payment_date'),
+                    'payment_type': row.get('payment_type'),
+                    'payment_method': row.get('payment_method'),
+                    'amount': float(row.get('amount') or 0),
+                    'payment_status': row.get('payment_status'),
+                    'entity_name': row.get('entity_name') or '',
+                    # Multi-Currency Support
+                    'currency_id': currency_id,
+                    'currency_code': currency_code,
+                    'currency_name': currency_name,
+                    'currency_symbol': currency_symbol,
+                    'base_amount': float(base_amount) if base_amount else display_amount,
+                    'converted_amount': float(converted_amount) if converted_amount else display_amount,
+                    'exchange_rate': float(exchange_rate),
+                    'display_amount': display_amount  # المبلغ للعرض (بالعملة الأساسية)
                 }
                 data.append(payment_data)
                 
-                amount = float(row[3])
+                # استخدام base_amount في الحسابات
+                amount = display_amount
                 total_amount += amount
                 
-                if row[1] == 'دفعة عميل':
+                # تجميع حسب العملة
+                if currency_code not in currencies_summary:
+                    currencies_summary[currency_code] = {
+                        'count': 0,
+                        'amount': 0,
+                        'base_amount': 0
+                    }
+                currencies_summary[currency_code]['count'] += 1
+                currencies_summary[currency_code]['amount'] += float(converted_amount) if converted_amount else float(row.get('amount') or 0)
+                currencies_summary[currency_code]['base_amount'] += amount
+                
+                if row.get('payment_type') == 'دفعة عميل':
                     customer_payments += amount
-                elif row[1] == 'دفعة مورد':
+                elif row.get('payment_type') == 'دفعة مورد':
                     supplier_payments += amount
             
             # إعداد الملخص
             summary = {
                 'total_payments': len(data),
-                'total_amount': total_amount,
+                'total_amount': total_amount,  # بالعملة الأساسية
                 'customer_payments': customer_payments,
                 'supplier_payments': supplier_payments,
-                'net_cash_flow': customer_payments - supplier_payments
+                'net_cash_flow': customer_payments - supplier_payments,
+                # Multi-Currency Support
+                'currencies_summary': currencies_summary
             }
             
             return ReportData(
@@ -1005,12 +1150,12 @@ class ReportExporter:
                         CASE WHEN p.payment_type = 'دفعة عميل' THEN p.amount ELSE 0 END
                     ), 0) as total_payments,
                     COALESCE(SUM(
-                        CASE WHEN s.customer_id = c.id THEN s.total_amount ELSE 0 END
+                        CASE WHEN s.customer_id = c.id THEN COALESCE(s.base_amount, s.final_amount) ELSE 0 END
                     ), 0) as total_sales,
                     (COALESCE(SUM(
-                        CASE WHEN s.customer_id = c.id THEN s.total_amount ELSE 0 END
+                        CASE WHEN s.customer_id = c.id THEN COALESCE(s.base_amount, s.final_amount) ELSE 0 END
                     ), 0) - COALESCE(SUM(
-                        CASE WHEN p.payment_type = 'دفعة عميل' THEN p.amount ELSE 0 END
+                        CASE WHEN p.payment_type = 'دفعة عميل' THEN COALESCE(p.base_amount, p.amount) ELSE 0 END
                     ), 0)) as balance
                 FROM customers c
                 LEFT JOIN payments p ON c.id = p.entity_id
@@ -1088,12 +1233,12 @@ class ReportExporter:
                         CASE WHEN p.payment_type = 'دفعة مورد' THEN p.amount ELSE 0 END
                     ), 0) as total_payments,
                     COALESCE(SUM(
-                        CASE WHEN pur.supplier_id = s.id THEN pur.total_amount ELSE 0 END
+                        CASE WHEN pur.supplier_id = s.id THEN COALESCE(pur.base_amount, pur.total_amount) ELSE 0 END
                     ), 0) as total_purchases,
                     (COALESCE(SUM(
-                        CASE WHEN pur.supplier_id = s.id THEN pur.total_amount ELSE 0 END
+                        CASE WHEN pur.supplier_id = s.id THEN COALESCE(pur.base_amount, pur.total_amount) ELSE 0 END
                     ), 0) - COALESCE(SUM(
-                        CASE WHEN p.payment_type = 'دفعة مورد' THEN p.amount ELSE 0 END
+                        CASE WHEN p.payment_type = 'دفعة مورد' THEN COALESCE(p.base_amount, p.amount) ELSE 0 END
                     ), 0)) as balance
                 FROM suppliers s
                 LEFT JOIN payments p ON s.id = p.entity_id
@@ -1164,7 +1309,7 @@ class ReportExporter:
                     DATE(p.payment_date) as payment_date,
                     p.payment_type,
                     p.payment_method,
-                    SUM(p.amount) as daily_amount
+                    SUM(COALESCE(p.base_amount, p.amount)) as daily_amount
                 FROM payments p
                 WHERE p.payment_status = 'مكتمل'
             """
@@ -1407,4 +1552,296 @@ class ReportExporter:
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في توليد تقرير تحليل طرق الدفع: {str(e)}")
+            raise
+    
+    # ===== Multi-Warehouse Reports =====
+    
+    def generate_warehouse_inventory_report(self, filters: ReportFilter) -> ReportData:
+        """توليد تقرير المخزون حسب المستودع"""
+        try:
+            from src.services.warehouse_service import WarehouseService
+            warehouse_service = WarehouseService(self.db_manager)
+            
+            # تحديد المستودع
+            warehouse_id = filters.warehouse_id
+            warehouses = []
+            
+            if warehouse_id:
+                # مستودع محدد
+                warehouse = warehouse_service.get_warehouse(warehouse_id)
+                if warehouse:
+                    warehouses = [warehouse]
+            else:
+                # جميع المستودعات
+                warehouses = warehouse_service.get_all_warehouses(include_inactive=False)
+            
+            data = []
+            total_stock_value = 0
+            total_products = 0
+            
+            for warehouse in warehouses:
+                inventory = warehouse_service.get_warehouse_inventory(warehouse.id)
+                
+                for inv in inventory:
+                    stock_value = inv.quantity * (inv.cost_price or 0)
+                    total_stock_value += stock_value
+                    total_products += 1
+                    
+                    data.append({
+                        'warehouse_name': warehouse.name,
+                        'warehouse_code': warehouse.code,
+                        'product_name': inv.product_name or '',
+                        'product_id': inv.product_id,
+                        'quantity': inv.quantity,
+                        'reserved_quantity': inv.reserved_quantity,
+                        'available_quantity': inv.available_quantity,
+                        'min_stock': inv.min_stock,
+                        'reorder_point': inv.reorder_point,
+                        'cost_price': inv.cost_price or 0,
+                        'stock_value': stock_value,
+                        'status': 'نفد' if inv.available_quantity <= 0 else ('منخفض' if inv.available_quantity <= inv.min_stock else 'جيد')
+                    })
+            
+            # تجميع حسب المستودع
+            warehouses_summary = {}
+            for item in data:
+                wh_name = item['warehouse_name']
+                if wh_name not in warehouses_summary:
+                    warehouses_summary[wh_name] = {
+                        'products_count': 0,
+                        'total_value': 0,
+                        'low_stock_count': 0,
+                        'out_of_stock_count': 0
+                    }
+                warehouses_summary[wh_name]['products_count'] += 1
+                warehouses_summary[wh_name]['total_value'] += item['stock_value']
+                if item['status'] == 'منخفض':
+                    warehouses_summary[wh_name]['low_stock_count'] += 1
+                elif item['status'] == 'نفد':
+                    warehouses_summary[wh_name]['out_of_stock_count'] += 1
+            
+            summary = {
+                'total_warehouses': len(warehouses),
+                'total_products': total_products,
+                'total_stock_value': total_stock_value,
+                'warehouses_summary': warehouses_summary
+            }
+            
+            return ReportData(
+                title="تقرير المخزون حسب المستودع",
+                subtitle=f"{warehouses[0].name if len(warehouses) == 1 else 'جميع المستودعات'}" if warehouses else "لا توجد مستودعات",
+                generated_at=datetime.now(),
+                filters=filters,
+                data=data,
+                summary=summary
+            )
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في توليد تقرير مخزون المستودع: {str(e)}")
+            raise
+    
+    def generate_warehouse_transfers_report(self, filters: ReportFilter) -> ReportData:
+        """توليد تقرير حركات النقل بين المستودعات"""
+        try:
+            from src.services.warehouse_service import WarehouseService
+            warehouse_service = WarehouseService(self.db_manager)
+            
+            # الحصول على التحويلات
+            warehouse_id = filters.warehouse_id
+            transfers = warehouse_service.get_transfers(warehouse_id=warehouse_id)
+            
+            # فلترة حسب التاريخ
+            if filters.start_date or filters.end_date:
+                filtered_transfers = []
+                for transfer in transfers:
+                    if transfer.transfer_date:
+                        transfer_date = transfer.transfer_date if isinstance(transfer.transfer_date, datetime) else datetime.combine(transfer.transfer_date, datetime.min.time())
+                        if filters.start_date and transfer_date < filters.start_date:
+                            continue
+                        if filters.end_date and transfer_date > filters.end_date:
+                            continue
+                    filtered_transfers.append(transfer)
+                transfers = filtered_transfers
+            
+            data = []
+            total_quantity = 0
+            completed_count = 0
+            pending_count = 0
+            
+            for transfer in transfers:
+                total_quantity += transfer.quantity
+                if transfer.status == 'completed':
+                    completed_count += 1
+                elif transfer.status == 'pending':
+                    pending_count += 1
+                
+                data.append({
+                    'transfer_number': transfer.transfer_number,
+                    'from_warehouse': transfer.from_warehouse_name or '',
+                    'to_warehouse': transfer.to_warehouse_name or '',
+                    'product_name': transfer.product_name or '',
+                    'quantity': transfer.quantity,
+                    'status': transfer.status,
+                    'transfer_date': transfer.transfer_date.strftime('%Y-%m-%d %H:%M') if transfer.transfer_date else '',
+                    'received_date': transfer.received_date.strftime('%Y-%m-%d %H:%M') if transfer.received_date else '',
+                    'notes': transfer.notes or ''
+                })
+            
+            summary = {
+                'total_transfers': len(transfers),
+                'total_quantity': total_quantity,
+                'completed_count': completed_count,
+                'pending_count': pending_count,
+                'in_transit_count': len([t for t in transfers if t.status == 'in_transit']),
+                'cancelled_count': len([t for t in transfers if t.status == 'cancelled'])
+            }
+            
+            return ReportData(
+                title="تقرير حركات النقل بين المستودعات",
+                subtitle=f"من {filters.start_date.strftime('%Y-%m-%d') if filters.start_date else 'البداية'} إلى {filters.end_date.strftime('%Y-%m-%d') if filters.end_date else 'النهاية'}",
+                generated_at=datetime.now(),
+                filters=filters,
+                data=data,
+                summary=summary
+            )
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في توليد تقرير حركات النقل: {str(e)}")
+            raise
+    
+    def generate_warehouse_low_stock_report(self, filters: ReportFilter) -> ReportData:
+        """توليد تقرير المنتجات منخفضة المخزون حسب المستودع"""
+        try:
+            from src.services.warehouse_service import WarehouseService
+            warehouse_service = WarehouseService(self.db_manager)
+            
+            warehouse_id = filters.warehouse_id
+            warehouses = []
+            
+            if warehouse_id:
+                warehouse = warehouse_service.get_warehouse(warehouse_id)
+                if warehouse:
+                    warehouses = [warehouse]
+            else:
+                warehouses = warehouse_service.get_all_warehouses(include_inactive=False)
+            
+            data = []
+            
+            for warehouse in warehouses:
+                inventory = warehouse_service.get_warehouse_inventory(warehouse.id)
+                
+                for inv in inventory:
+                    # فقط المنتجات منخفضة أو نافذة المخزون
+                    if inv.available_quantity <= inv.min_stock:
+                        stock_value = inv.quantity * (inv.cost_price or 0)
+                        
+                        data.append({
+                            'warehouse_name': warehouse.name,
+                            'warehouse_code': warehouse.code,
+                            'product_name': inv.product_name or '',
+                            'product_id': inv.product_id,
+                            'current_stock': inv.quantity,
+                            'available_quantity': inv.available_quantity,
+                            'min_stock': inv.min_stock,
+                            'reorder_point': inv.reorder_point,
+                            'needed_quantity': max(0, inv.reorder_point - inv.available_quantity),
+                            'cost_price': inv.cost_price or 0,
+                            'stock_value': stock_value,
+                            'status': 'نفد' if inv.available_quantity <= 0 else 'منخفض'
+                        })
+            
+            # ترتيب حسب الأولوية (نفد أولاً، ثم الأكثر حاجة)
+            data.sort(key=lambda x: (0 if x['status'] == 'نفد' else 1, -x['needed_quantity']))
+            
+            # تجميع حسب المستودع
+            warehouses_summary = {}
+            for item in data:
+                wh_name = item['warehouse_name']
+                if wh_name not in warehouses_summary:
+                    warehouses_summary[wh_name] = {
+                        'low_stock_count': 0,
+                        'out_of_stock_count': 0,
+                        'total_needed_value': 0
+                    }
+                if item['status'] == 'نفد':
+                    warehouses_summary[wh_name]['out_of_stock_count'] += 1
+                else:
+                    warehouses_summary[wh_name]['low_stock_count'] += 1
+                warehouses_summary[wh_name]['total_needed_value'] += item['needed_quantity'] * item['cost_price']
+            
+            summary = {
+                'total_items': len(data),
+                'out_of_stock_count': len([d for d in data if d['status'] == 'نفد']),
+                'low_stock_count': len([d for d in data if d['status'] == 'منخفض']),
+                'warehouses_summary': warehouses_summary
+            }
+            
+            return ReportData(
+                title="تقرير المنتجات منخفضة المخزون",
+                subtitle=f"حسب المستودعات - {len(warehouses)} مستودع",
+                generated_at=datetime.now(),
+                filters=filters,
+                data=data,
+                summary=summary
+            )
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في توليد تقرير المنتجات منخفضة المخزون: {str(e)}")
+            raise
+    
+    def generate_warehouse_summary_report(self, filters: ReportFilter) -> ReportData:
+        """توليد تقرير ملخص المستودعات"""
+        try:
+            from src.services.warehouse_service import WarehouseService
+            warehouse_service = WarehouseService(self.db_manager)
+            
+            warehouses = warehouse_service.get_all_warehouses(include_inactive=False)
+            
+            data = []
+            total_stock_value = 0
+            total_products = 0
+            
+            for warehouse in warehouses:
+                summary = warehouse_service.get_warehouse_summary(warehouse.id)
+                
+                total_stock_value += summary.get('total_stock_value', 0)
+                total_products += summary.get('total_products', 0)
+                
+                data.append({
+                    'warehouse_name': warehouse.name,
+                    'warehouse_code': warehouse.code,
+                    'city': warehouse.city or '',
+                    'manager_name': warehouse.manager_name or '',
+                    'phone': warehouse.phone or '',
+                    'is_active': warehouse.is_active,
+                    'is_default': warehouse.is_default,
+                    'total_products': summary.get('total_products', 0),
+                    'total_stock_value': summary.get('total_stock_value', 0),
+                    'low_stock_count': summary.get('low_stock_count', 0),
+                    'out_of_stock_count': summary.get('out_of_stock_count', 0)
+                })
+            
+            summary_data = {
+                'total_warehouses': len(warehouses),
+                'active_warehouses': len([w for w in warehouses if w.is_active]),
+                'total_products': total_products,
+                'total_stock_value': total_stock_value,
+                'average_stock_per_warehouse': total_stock_value / len(warehouses) if warehouses else 0
+            }
+            
+            return ReportData(
+                title="تقرير ملخص المستودعات",
+                subtitle="نظرة شاملة على جميع المستودعات",
+                generated_at=datetime.now(),
+                filters=filters,
+                data=data,
+                summary=summary_data
+            )
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في توليد تقرير ملخص المستودعات: {str(e)}")
             raise

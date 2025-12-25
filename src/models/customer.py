@@ -103,6 +103,40 @@ class CustomerManager:
         self.db_manager = db_manager
         self.logger = logger
         self._available_columns = None  # سيتم التخزين المؤقت للأعمدة المتاحة
+        # Multi-Company Support
+        self._tenant_manager = None
+    
+    @property
+    def tenant_manager(self):
+        """Lazy loading لـ TenantIsolationManager"""
+        if self._tenant_manager is None:
+            try:
+                from src.core.tenant_isolation import TenantIsolationManager
+                self._tenant_manager = TenantIsolationManager(self.db_manager)
+            except ImportError:
+                if self.logger:
+                    self.logger.warning("TenantIsolationManager غير متاح - Multi-Company غير مفعل")
+        return self._tenant_manager
+    
+    def _get_company_id(self) -> Optional[int]:
+        """الحصول على معرف الشركة الحالية"""
+        if self.tenant_manager:
+            return self.tenant_manager.get_current_company_id()
+        return None
+    
+    def _add_company_filter(self, query: str, params: list, company_id: Optional[int] = None) -> tuple:
+        """إضافة فلتر الشركة إلى الاستعلام"""
+        if company_id is None:
+            company_id = self._get_company_id()
+        
+        if company_id is not None:
+            if "WHERE" in query.upper():
+                query += " AND company_id = ?"
+            else:
+                query += " WHERE company_id = ?"
+            params.append(company_id)
+        
+        return query, params
     
     def _get_available_columns(self) -> List[str]:
         """الحصول على الأعمدة المتاحة في جدول customers مع التخزين المؤقت"""
@@ -174,6 +208,36 @@ class CustomerManager:
             if customer_id:
                 if self.logger:
                     self.logger.info(f"تم إنشاء عميل جديد: {customer.name} (ID: {customer_id})")
+                
+                # 🔔 إطلاق Webhook: إرسال Webhook عند إنشاء عميل
+                try:
+                    from ...services.webhook_service import WebhookService
+                    webhook_service = WebhookService(self.db_manager, self.logger)
+                    
+                    # بناء Payload للـ Webhook
+                    webhook_payload = {
+                        "event": "customer_created",
+                        "customer_id": customer_id,
+                        "name": customer.name,
+                        "phone": customer.phone,
+                        "email": customer.email,
+                        "created_at": datetime.now().isoformat(),
+                        "customer": customer.to_dict() if hasattr(customer, 'to_dict') else {}
+                    }
+                    
+                    webhook_service.trigger_webhook(
+                        event_type="customer_created",
+                        payload=webhook_payload,
+                        entity_id=customer_id,
+                        company_id=customer.company_id if hasattr(customer, 'company_id') else None
+                    )
+                    
+                    if self.logger:
+                        self.logger.debug(f"✅ تم إطلاق Webhook: customer_created (Customer ID: {customer_id})")
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"⚠️ فشل إطلاق Webhook: {e}")
+                
                 return customer_id
             
         except Exception as e:

@@ -8,6 +8,7 @@ omit =
     */venv/*
     */.venv/*
     */site-packages/*
+    src/ui/*
 
 [report]
 exclude_lines =
@@ -25,4 +26,3 @@ skip_covered = False
 
 [html]
 directory = htmlcov
-

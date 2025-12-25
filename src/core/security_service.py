@@ -55,6 +55,8 @@ class AdvancedSecurityService:
             db_manager: مدير قاعدة البيانات (اختياري)
         """
         self.db = db_manager
+        # Multi-Company Support
+        self._tenant_manager = None
         
         # تهيئة Password Hasher (Argon2 أو PBKDF2)
         if ARGON2_AVAILABLE:

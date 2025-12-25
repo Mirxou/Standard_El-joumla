@@ -143,6 +143,11 @@ class Purchase:
     total_amount: Decimal = Decimal('0.00')
     paid_amount: Decimal = Decimal('0.00')
     remaining_amount: Decimal = Decimal('0.00')
+    # Multi-Currency Support
+    currency_id: Optional[int] = None  # معرف العملة المستخدمة
+    exchange_rate: Decimal = Decimal('1.0')  # سعر الصرف المستخدم
+    base_amount: Optional[Decimal] = None  # المبلغ بالعملة الأساسية
+    converted_amount: Optional[Decimal] = None  # المبلغ بالعملة المحددة
     notes: Optional[str] = None
     created_by: Optional[int] = None
     created_at: Optional[datetime] = None
@@ -152,10 +157,11 @@ class Purchase:
     def __post_init__(self):
         """تحويل القيم بعد الإنشاء"""
         decimal_fields = ['subtotal_amount', 'discount_amount', 'tax_amount', 
-                         'shipping_cost', 'total_amount', 'paid_amount', 'remaining_amount']
+                         'shipping_cost', 'total_amount', 'paid_amount', 'remaining_amount',
+                         'exchange_rate', 'base_amount', 'converted_amount']
         for field_name in decimal_fields:
             value = getattr(self, field_name)
-            if isinstance(value, (int, float, str)):
+            if value is not None and isinstance(value, (int, float, str)):
                 setattr(self, field_name, Decimal(str(value)))
     
     @property
@@ -224,6 +230,17 @@ class Purchase:
         # حساب المبلغ المتبقي
         self.remaining_amount = self.total_amount - self.paid_amount
         
+        # Multi-Currency: حساب المبالغ بالعملة المحددة والأساسية
+        if self.currency_id:
+            # المبلغ بالعملة المحددة
+            self.converted_amount = self.total_amount
+            # المبلغ بالعملة الأساسية (سيتم حسابه من ExchangeRateService)
+            # سيتم تعيينه من Service Layer
+        else:
+            # إذا لم تكن هناك عملة محددة، استخدم المبلغ الأساسي
+            self.base_amount = self.total_amount
+            self.converted_amount = self.total_amount
+        
         # تحديث حالة الدفع
         self._update_payment_status()
     
@@ -261,6 +278,11 @@ class Purchase:
             'total_amount': float(self.total_amount),
             'paid_amount': float(self.paid_amount),
             'remaining_amount': float(self.remaining_amount),
+            # Multi-Currency Support
+            'currency_id': self.currency_id,
+            'exchange_rate': float(self.exchange_rate) if self.exchange_rate else 1.0,
+            'base_amount': float(self.base_amount) if self.base_amount else None,
+            'converted_amount': float(self.converted_amount) if self.converted_amount else None,
             'notes': self.notes,
             'created_by': self.created_by,
             'created_at': self.created_at.isoformat() if self.created_at else None,
@@ -280,6 +302,40 @@ class PurchaseManager:
     def __init__(self, db_manager, logger=None):
         self.db_manager = db_manager
         self.logger = logger
+        # Multi-Company Support
+        self._tenant_manager = None
+    
+    @property
+    def tenant_manager(self):
+        """Lazy loading لـ TenantIsolationManager"""
+        if self._tenant_manager is None:
+            try:
+                from src.core.tenant_isolation import TenantIsolationManager
+                self._tenant_manager = TenantIsolationManager(self.db_manager)
+            except ImportError:
+                if self.logger:
+                    self.logger.warning("TenantIsolationManager غير متاح - Multi-Company غير مفعل")
+        return self._tenant_manager
+    
+    def _get_company_id(self) -> Optional[int]:
+        """الحصول على معرف الشركة الحالية"""
+        if self.tenant_manager:
+            return self.tenant_manager.get_current_company_id()
+        return None
+    
+    def _add_company_filter(self, query: str, params: list, company_id: Optional[int] = None) -> tuple:
+        """إضافة فلتر الشركة إلى الاستعلام"""
+        if company_id is None:
+            company_id = self._get_company_id()
+        
+        if company_id is not None:
+            if "WHERE" in query.upper():
+                query += " AND company_id = ?"
+            else:
+                query += " WHERE company_id = ?"
+            params.append(company_id)
+        
+        return query, params
     
     def create_purchase(self, purchase: Purchase) -> Optional[int]:
         """إنشاء فاتورة شراء جديدة"""
@@ -297,12 +353,18 @@ class PurchaseManager:
                 invoice_number, supplier_invoice_number, supplier_id, purchase_date,
                 expected_delivery_date, status, payment_status, payment_terms,
                 subtotal_amount, discount_amount, tax_amount, shipping_cost,
-                total_amount, paid_amount, remaining_amount, notes, created_by,
+                total_amount, paid_amount, remaining_amount, currency_id, exchange_rate,
+                base_amount, converted_amount, notes, created_by,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
             
             now = datetime.now()
+            # Multi-Currency: حساب المبالغ
+            base_amount = purchase.base_amount if purchase.base_amount is not None else purchase.total_amount
+            converted_amount = purchase.converted_amount if purchase.converted_amount is not None else purchase.total_amount
+            exchange_rate = float(purchase.exchange_rate) if purchase.exchange_rate else 1.0
+            
             params = (
                 purchase.invoice_number,
                 purchase.supplier_invoice_number,
@@ -319,10 +381,15 @@ class PurchaseManager:
                 float(purchase.total_amount),
                 float(purchase.paid_amount),
                 float(purchase.remaining_amount),
+                # Multi-Currency Support
+                purchase.currency_id,
+                exchange_rate,
+                float(base_amount) if base_amount else None,
+                float(converted_amount) if converted_amount else None,
                 purchase.notes,
                 purchase.created_by,
-                now,
-                now
+                now.isoformat(),
+                now.isoformat()
             )
             
             result = self.db_manager.execute_query(query, params)
@@ -345,6 +412,35 @@ class PurchaseManager:
                 except Exception as e:
                     if self.logger:
                         self.logger.warning(f"⚠️ فشل إطلاق الإشارات: {e}")
+                
+                # 🔔 إطلاق Webhook: إرسال Webhook عند إنشاء فاتورة شراء
+                try:
+                    from ...services.webhook_service import WebhookService
+                    webhook_service = WebhookService(self.db_manager, self.logger)
+                    
+                    # بناء Payload للـ Webhook
+                    webhook_payload = {
+                        "event": "purchase_created",
+                        "purchase_id": purchase_id,
+                        "invoice_number": purchase.invoice_number,
+                        "supplier_id": purchase.supplier_id,
+                        "total_amount": float(purchase.total_amount) if purchase.total_amount else 0.0,
+                        "created_at": datetime.now().isoformat(),
+                        "purchase": purchase.to_dict() if hasattr(purchase, 'to_dict') else {}
+                    }
+                    
+                    webhook_service.trigger_webhook(
+                        event_type="purchase_created",
+                        payload=webhook_payload,
+                        entity_id=purchase_id,
+                        company_id=purchase.company_id if hasattr(purchase, 'company_id') else None
+                    )
+                    
+                    if self.logger:
+                        self.logger.debug(f"✅ تم إطلاق Webhook: purchase_created (Purchase ID: {purchase_id})")
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"⚠️ فشل إطلاق Webhook: {e}")
                 
                 if self.logger:
                     self.logger.info(f"تم إنشاء فاتورة شراء جديدة: {purchase.invoice_number} (ID: {purchase_id})")
@@ -623,9 +719,16 @@ class PurchaseManager:
                 received_date = ?, status = ?, payment_status = ?,
                 payment_terms = ?, subtotal_amount = ?, discount_amount = ?,
                 tax_amount = ?, shipping_cost = ?, total_amount = ?,
-                paid_amount = ?, remaining_amount = ?, notes = ?, updated_at = ?
+                paid_amount = ?, remaining_amount = ?, currency_id = ?,
+                exchange_rate = ?, base_amount = ?, converted_amount = ?,
+                notes = ?, updated_at = ?
             WHERE id = ?
             """
+            
+            # Multi-Currency: حساب المبالغ
+            base_amount = purchase.base_amount if purchase.base_amount is not None else purchase.total_amount
+            converted_amount = purchase.converted_amount if purchase.converted_amount is not None else purchase.total_amount
+            exchange_rate = float(purchase.exchange_rate) if purchase.exchange_rate else 1.0
             
             params = (
                 purchase.supplier_invoice_number,
@@ -641,8 +744,13 @@ class PurchaseManager:
                 float(purchase.total_amount),
                 float(purchase.paid_amount),
                 float(purchase.remaining_amount),
+                # Multi-Currency Support
+                purchase.currency_id,
+                exchange_rate,
+                float(base_amount) if base_amount else None,
+                float(converted_amount) if converted_amount else None,
                 purchase.notes,
-                datetime.now(),
+                datetime.now().isoformat(),
                 purchase.id
             )
             
@@ -854,30 +962,50 @@ class PurchaseManager:
         }
     
     def _row_to_purchase(self, row) -> Purchase:
-        """تحويل صف قاعدة البيانات إلى كائن فاتورة شراء"""
+        """تحويل صف قاعدة البيانات إلى كائن فاتورة شراء
+        
+        Schema المتوقع: id, invoice_number, supplier_invoice_number, supplier_id, purchase_date,
+        expected_delivery_date, received_date, status, payment_status, payment_terms,
+        subtotal_amount, discount_amount, tax_amount, shipping_cost, total_amount,
+        paid_amount, remaining_amount, currency_id, exchange_rate, base_amount, converted_amount,
+        notes, created_by, created_at, updated_at (25 عمود) + supplier_name (26)
+        """
+        row_len = len(row)
+        
+        # قراءة حقول Multi-Currency - الأعمدة 17-20
+        currency_id = row[17] if row_len > 17 and row[17] is not None else None
+        exchange_rate = Decimal(str(row[18])) if row_len > 18 and row[18] is not None else Decimal('1.0')
+        base_amount = Decimal(str(row[19])) if row_len > 19 and row[19] is not None else None
+        converted_amount = Decimal(str(row[20])) if row_len > 20 and row[20] is not None else None
+        
         return Purchase(
-            id=row[0],
-            invoice_number=row[1],
-            supplier_invoice_number=row[2],
-            supplier_id=row[3],
-            purchase_date=date.fromisoformat(row[4]) if row[4] else date.today(),
-            expected_delivery_date=date.fromisoformat(row[5]) if row[5] else None,
-            received_date=date.fromisoformat(row[6]) if row[6] else None,
-            status=row[7],
-            payment_status=row[8],
-            payment_terms=row[9],
-            subtotal_amount=Decimal(str(row[10])),
-            discount_amount=Decimal(str(row[11])),
-            tax_amount=Decimal(str(row[12])),
-            shipping_cost=Decimal(str(row[13])),
-            total_amount=Decimal(str(row[14])),
-            paid_amount=Decimal(str(row[15])),
-            remaining_amount=Decimal(str(row[16])),
-            notes=row[17],
-            created_by=row[18],
-            created_at=datetime.fromisoformat(row[19]) if row[19] else None,
-            updated_at=datetime.fromisoformat(row[20]) if row[20] else None,
-            supplier_name=row[21] if len(row) > 21 else ""
+            id=row[0] if row_len > 0 else None,
+            invoice_number=row[1] if row_len > 1 else "",
+            supplier_invoice_number=row[2] if row_len > 2 else None,
+            supplier_id=row[3] if row_len > 3 else 0,
+            purchase_date=date.fromisoformat(row[4]) if row_len > 4 and row[4] else date.today(),
+            expected_delivery_date=date.fromisoformat(row[5]) if row_len > 5 and row[5] else None,
+            received_date=date.fromisoformat(row[6]) if row_len > 6 and row[6] else None,
+            status=row[7] if row_len > 7 else PurchaseStatus.PENDING.value,
+            payment_status=row[8] if row_len > 8 else PaymentStatus.UNPAID.value,
+            payment_terms=row[9] if row_len > 9 else "نقدي",
+            subtotal_amount=Decimal(str(row[10])) if row_len > 10 and row[10] is not None else Decimal('0'),
+            discount_amount=Decimal(str(row[11])) if row_len > 11 and row[11] is not None else Decimal('0'),
+            tax_amount=Decimal(str(row[12])) if row_len > 12 and row[12] is not None else Decimal('0'),
+            shipping_cost=Decimal(str(row[13])) if row_len > 13 and row[13] is not None else Decimal('0'),
+            total_amount=Decimal(str(row[14])) if row_len > 14 and row[14] is not None else Decimal('0'),
+            paid_amount=Decimal(str(row[15])) if row_len > 15 and row[15] is not None else Decimal('0'),
+            remaining_amount=Decimal(str(row[16])) if row_len > 16 and row[16] is not None else Decimal('0'),
+            # Multi-Currency Support
+            currency_id=currency_id,
+            exchange_rate=exchange_rate,
+            base_amount=base_amount,
+            converted_amount=converted_amount,
+            notes=row[21] if row_len > 21 else None,
+            created_by=row[22] if row_len > 22 else None,
+            created_at=datetime.fromisoformat(row[23]) if row_len > 23 and row[23] else None,
+            updated_at=datetime.fromisoformat(row[24]) if row_len > 24 and row[24] else None,
+            supplier_name=row[25] if row_len > 25 else ""
         )
     
     def _row_to_purchase_item(self, row) -> PurchaseItem:

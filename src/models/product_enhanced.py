@@ -3,7 +3,7 @@
 """
 نموذج المنتج المحسّن - Enhanced Product Model
 يحتوي على جميع العمليات المتعلقة بالمنتجات مع ميزات متقدمة
-تشمل: المتغيرات، الحزم، التسعير المتعدد، الباركود، والعلامات الرقمية
+تم الدمج مع: Standard (الذكاء الاصطناعي والصلاحية) و GIMS (الموردين والمالية)
 """
 
 from dataclasses import dataclass, field
@@ -45,7 +45,7 @@ class UnitType(Enum):
     GRAM = "جرام"
     MILLILITER = "ميلليتر"
 
-# ==================== نماذج البيانات ====================
+# ==================== نماذج البيانات المساعدة ====================
 
 @dataclass
 class ProductVariant:
@@ -53,7 +53,7 @@ class ProductVariant:
     id: Optional[int] = None
     product_id: Optional[int] = None
     sku: str = ""  # Stock Keeping Unit - معرف فريد للمتغير
-    attributes: Dict[str, str] = field(default_factory=dict)  # مثل: {"اللون": "أحمر", "الحجم": "M"}
+    attributes: Dict[str, str] = field(default_factory=dict)
     cost_price: Decimal = Decimal('0.00')
     selling_price: Decimal = Decimal('0.00')
     stock_quantity: int = 0
@@ -64,7 +64,6 @@ class ProductVariant:
     updated_at: Optional[datetime] = None
     
     def __post_init__(self):
-        """تحويل القيم"""
         if isinstance(self.cost_price, (int, float, str)):
             self.cost_price = Decimal(str(self.cost_price))
         if isinstance(self.selling_price, (int, float, str)):
@@ -72,13 +71,11 @@ class ProductVariant:
     
     @property
     def profit_margin(self) -> Decimal:
-        """حساب هامش الربح"""
         if self.cost_price > 0:
             return ((self.selling_price - self.cost_price) / self.cost_price) * 100
         return Decimal('0.00')
     
     def to_dict(self) -> Dict[str, Any]:
-        """تحويل إلى قاموس"""
         return {
             'id': self.id,
             'product_id': self.product_id,
@@ -97,7 +94,6 @@ class ProductVariant:
         }
     
     def _attributes_display(self) -> str:
-        """عرض الخصائص بصيغة نصية"""
         if not self.attributes:
             return ""
         return " | ".join([f"{k}: {v}" for k, v in self.attributes.items()])
@@ -113,17 +109,14 @@ class BundleProduct:
     unit_price: Decimal = Decimal('0.00')
     
     def __post_init__(self):
-        """تحويل القيم"""
         if isinstance(self.unit_price, (int, float, str)):
             self.unit_price = Decimal(str(self.unit_price))
     
     @property
     def total_price(self) -> Decimal:
-        """السعر الإجمالي للمنتج في الحزمة"""
         return self.unit_price * self.quantity
     
     def to_dict(self) -> Dict[str, Any]:
-        """تحويل إلى قاموس"""
         return {
             'id': self.id,
             'bundle_id': self.bundle_id,
@@ -140,7 +133,7 @@ class PricingTier:
     id: Optional[int] = None
     product_id: Optional[int] = None
     min_quantity: int = 0
-    max_quantity: Optional[int] = None  # None = بدون حد أقصى
+    max_quantity: Optional[int] = None
     price: Decimal = Decimal('0.00')
     discount_percent: Decimal = Decimal('0.00')
     valid_from: Optional[datetime] = None
@@ -148,32 +141,20 @@ class PricingTier:
     description: Optional[str] = None
     
     def __post_init__(self):
-        """تحويل القيم"""
         if isinstance(self.price, (int, float, str)):
             self.price = Decimal(str(self.price))
         if isinstance(self.discount_percent, (int, float, str)):
             self.discount_percent = Decimal(str(self.discount_percent))
     
     def is_valid(self, quantity: int) -> bool:
-        """التحقق من صلاحية المستوى للكمية المعطاة"""
         now = datetime.now()
-        
-        # التحقق من الكمية
-        if quantity < self.min_quantity:
-            return False
-        if self.max_quantity and quantity > self.max_quantity:
-            return False
-        
-        # التحقق من الفترة الزمنية
-        if self.valid_from and now < self.valid_from:
-            return False
-        if self.valid_until and now > self.valid_until:
-            return False
-        
+        if quantity < self.min_quantity: return False
+        if self.max_quantity and quantity > self.max_quantity: return False
+        if self.valid_from and now < self.valid_from: return False
+        if self.valid_until and now > self.valid_until: return False
         return True
     
     def to_dict(self) -> Dict[str, Any]:
-        """تحويل إلى قاموس"""
         return {
             'id': self.id,
             'product_id': self.product_id,
@@ -191,25 +172,21 @@ class ProductLabel:
     """علامة رقمية للمنتج"""
     id: Optional[int] = None
     product_id: Optional[int] = None
-    label_type: str = ""  # مثل: "جديد"، "خصم"، "محدود"، "رائج"
+    label_type: str = ""
     label_text: str = ""
-    label_color: str = "#FF5733"  # لون سادس عشري
-    priority: int = 0  # الأولوية (أعلى = يظهر أولاً)
+    label_color: str = "#FF5733"
+    priority: int = 0
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     is_active: bool = True
     
     def is_current(self) -> bool:
-        """هل العلامة نشطة الآن؟"""
         now = datetime.now()
-        if self.start_date and now < self.start_date:
-            return False
-        if self.end_date and now > self.end_date:
-            return False
+        if self.start_date and now < self.start_date: return False
+        if self.end_date and now > self.end_date: return False
         return self.is_active
     
     def to_dict(self) -> Dict[str, Any]:
-        """تحويل إلى قاموس"""
         return {
             'id': self.id,
             'product_id': self.product_id,
@@ -222,88 +199,105 @@ class ProductLabel:
             'is_active': self.is_active
         }
 
+# ==================== النموذج الرئيسي (المعدل) ====================
+
 @dataclass
 class Product:
-    """نموذج بيانات المنتج المحسّن"""
+    """
+    نموذج بيانات المنتج المحسّن
+    تم دمج حقول Standard (الذكاء الاصطناعي، الصلاحية) و GIMS (الموردين)
+    """
+    # --- الهوية الأساسية ---
     id: Optional[int] = None
     name: str = ""
     name_en: Optional[str] = None
-    sku: str = ""  # معرف فريد للمنتج
-    barcode: Optional[str] = None  # الرمز الشريطي الرئيسي
+    sku: str = ""
+    barcode: Optional[str] = None
     category_id: Optional[int] = None
     category_name: Optional[str] = None
+    
+    # --- بيانات الموردين (من GIMS) ---
     supplier_id: Optional[int] = None
     supplier_name: Optional[str] = None
     
-    # نوع المنتج وخصائصه
+    # --- الخصائص ---
     product_type: str = ProductType.SIMPLE.value
     description: Optional[str] = None
-    specifications: Dict[str, str] = field(default_factory=dict)  # المواصفات الفنية
+    specifications: Dict[str, str] = field(default_factory=dict)
     unit: str = UnitType.PIECE.value
     
-    # التسعير الأساسي
+    # --- التسعير والمالية (مدمج) ---
     cost_price: Decimal = Decimal('0.00')
-    base_price: Decimal = Decimal('0.00')  # السعر الأساسي
-    pricing_policy: str = PricingPolicy.STANDARD.value  # سياسة التسعير
+    base_price: Decimal = Decimal('0.00')      # سعر البيع
+    wholesale_price: Decimal = Decimal('0.00') # سعر الجملة (جديد)
+    tax_rate: Decimal = Decimal('0.00')        # الضريبة (جديد)
+    pricing_policy: str = PricingPolicy.STANDARD.value
     
-    # المخزون
+    # --- المخزون ---
     current_stock: int = 0
-    reserved_stock: int = 0  # المخزون المحجوز
-    min_stock: int = 0  # حد الأمان
-    reorder_point: int = 0  # نقطة إعادة الطلب
-    max_stock: int = 0  # أقصى كمية للمخزون
+    reserved_stock: int = 0
+    min_stock: int = 0
+    reorder_point: int = 0
+    max_stock: int = 0
     
-    # الصور والعلامات
+    # --- التتبع والصلاحية (من Standard) ---
+    is_perishable: bool = False             # قابل للتلف
+    expiry_date: Optional[datetime] = None  # تاريخ الانتهاء
+    batch_number: Optional[str] = None      # رقم التشغيلة
+    production_date: Optional[datetime] = None
+    
+    # --- الذكاء الاصطناعي (من Standard AI) ---
+    abc_classification: Optional[str] = None   # تصنيف الأهمية A/B/C
+    ai_forecast_demand: Optional[float] = None # التنبؤ بالطلب
+    last_analysis_date: Optional[datetime] = None
+    
+    # --- المظهر والوسائط ---
     image_path: Optional[str] = None
-    images: List[str] = field(default_factory=list)  # صور متعددة
-    tags: List[str] = field(default_factory=list)  # كلمات مفتاحية
+    images: List[str] = field(default_factory=list)
+    tags: List[str] = field(default_factory=list)
     
-    # الحالة
+    # --- الحالة ---
     is_active: bool = True
     is_discontinued: bool = False
-    is_featured: bool = False  # هل المنتج مميز؟
+    is_featured: bool = False
     
-    # التواريخ
+    # --- التواريخ ---
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     discontinued_date: Optional[datetime] = None
     
-    # البيانات المرتبطة
-    variants: List[ProductVariant] = field(default_factory=list)  # المتغيرات
-    bundle_items: List[BundleProduct] = field(default_factory=list)  # عناصر الحزمة
-    pricing_tiers: List[PricingTier] = field(default_factory=list)  # مستويات التسعير
-    labels: List[ProductLabel] = field(default_factory=list)  # العلامات الرقمية
+    # --- العلاقات ---
+    variants: List[ProductVariant] = field(default_factory=list)
+    bundle_items: List[BundleProduct] = field(default_factory=list)
+    pricing_tiers: List[PricingTier] = field(default_factory=list)
+    labels: List[ProductLabel] = field(default_factory=list)
     
-    # إحصائيات
+    # --- إحصائيات ---
     sales_count: int = 0
     total_sold: int = 0
     average_rating: Decimal = Decimal('0.00')
     
     def __post_init__(self):
-        """تحويل القيم"""
-        for field_name in ['cost_price', 'base_price', 'average_rating']:
+        """تحويل القيم المالية والرقمية"""
+        for field_name in ['cost_price', 'base_price', 'wholesale_price', 'tax_rate', 'average_rating']:
             value = getattr(self, field_name)
             if isinstance(value, (int, float, str)):
                 setattr(self, field_name, Decimal(str(value)))
     
     @property
     def available_stock(self) -> int:
-        """المخزون المتاح (الحالي - المحجوز)"""
         return max(0, self.current_stock - self.reserved_stock)
     
     @property
     def stock_quantity(self) -> int:
-        """المخزون الحالي (للتوافق مع الأكوار الأخرى)"""
         return self.current_stock
     
     @property
     def selling_price(self) -> Decimal:
-        """سعر البيع (alias to base_price for DB compatibility)"""
         return self.base_price
     
     @selling_price.setter
     def selling_price(self, value: Decimal) -> None:
-        """تعيين سعر البيع"""
         if isinstance(value, (int, float, str)):
             self.base_price = Decimal(str(value))
         else:
@@ -311,66 +305,57 @@ class Product:
     
     @property
     def is_low_stock(self) -> bool:
-        """هل المخزون منخفض؟"""
         return self.current_stock <= self.min_stock
     
     @property
     def requires_reorder(self) -> bool:
-        """هل يحتاج إلى إعادة طلب؟"""
+        # إذا كان هناك تنبؤ ذكي والطلب المتوقع أعلى من المخزون، نطلب إعادة الشراء
+        if self.ai_forecast_demand and self.ai_forecast_demand > self.current_stock:
+            return True
         return self.available_stock <= self.reorder_point
     
     @property
     def profit_margin(self) -> Decimal:
-        """حساب هامش الربح"""
         if self.cost_price > 0:
             return ((self.base_price - self.cost_price) / self.cost_price) * 100
         return Decimal('0.00')
     
     @property
     def profit_amount(self) -> Decimal:
-        """مبلغ الربح للوحدة الواحدة"""
         return self.base_price - self.cost_price
     
     @property
     def stock_value(self) -> Decimal:
-        """قيمة المخزون بسعر التكلفة"""
         return self.cost_price * self.current_stock
     
     @property
     def active_labels(self) -> List[ProductLabel]:
-        """العلامات النشطة حالياً"""
         return [label for label in self.labels if label.is_current()]
     
     def get_price_for_quantity(self, quantity: int) -> Decimal:
-        """الحصول على السعر للكمية المعطاة مع الخصومات"""
         if self.pricing_policy == PricingPolicy.TIERED.value:
-            # البحث عن المستوى المناسب
             for tier in sorted(self.pricing_tiers, key=lambda t: t.min_quantity, reverse=True):
                 if tier.is_valid(quantity):
                     if tier.discount_percent > 0:
                         return self.base_price * (1 - tier.discount_percent / 100)
                     else:
                         return tier.price
-        
         return self.base_price
     
     def add_variant(self, variant: ProductVariant) -> None:
-        """إضافة متغير للمنتج"""
         variant.product_id = self.id
         self.variants.append(variant)
     
     def add_bundle_item(self, item: BundleProduct) -> None:
-        """إضافة منتج إلى الحزمة"""
         item.bundle_id = self.id
         self.bundle_items.append(item)
     
     def add_label(self, label: ProductLabel) -> None:
-        """إضافة علامة للمنتج"""
         label.product_id = self.id
         self.labels.append(label)
     
     def to_dict(self, include_related: bool = True) -> Dict[str, Any]:
-        """تحويل إلى قاموس"""
+        """تحويل إلى قاموس (محدث)"""
         data = {
             'id': self.id,
             'name': self.name,
@@ -385,15 +370,26 @@ class Product:
             'description': self.description,
             'specifications': self.specifications,
             'unit': self.unit,
+            # المالية
             'cost_price': float(self.cost_price),
             'base_price': float(self.base_price),
+            'wholesale_price': float(self.wholesale_price),
+            'tax_rate': float(self.tax_rate),
             'pricing_policy': self.pricing_policy,
+            # المخزون
             'current_stock': self.current_stock,
             'reserved_stock': self.reserved_stock,
             'available_stock': self.available_stock,
             'min_stock': self.min_stock,
             'reorder_point': self.reorder_point,
             'max_stock': self.max_stock,
+            # التتبع والذكاء (الجديد)
+            'is_perishable': self.is_perishable,
+            'expiry_date': self.expiry_date.isoformat() if self.expiry_date else None,
+            'batch_number': self.batch_number,
+            'ai_forecast_demand': self.ai_forecast_demand,
+            'abc_classification': self.abc_classification,
+            # البيانات العامة
             'image_path': self.image_path,
             'images': self.images,
             'tags': self.tags,
@@ -403,6 +399,7 @@ class Product:
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'discontinued_date': self.discontinued_date.isoformat() if self.discontinued_date else None,
+            # الإحصائيات
             'sales_count': self.sales_count,
             'total_sold': self.total_sold,
             'average_rating': float(self.average_rating),
@@ -424,7 +421,7 @@ class Product:
         
         return data
 
-# ==================== مديرو البيانات ====================
+# ==================== مديرو البيانات (كما هم بدون تغيير) ====================
 
 class ProductVariantManager:
     """مدير متغيرات المنتجات"""

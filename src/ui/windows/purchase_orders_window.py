@@ -772,7 +772,8 @@ class PurchaseOrdersWindow(QMainWindow):
             return
         
         try:
-            if self.po_service.approve_purchase_order(self.current_po.id, approved_by=1):  # TODO: ID المستخدم
+            approved_by = getattr(self.parent(), 'current_user_id', getattr(self.parent(), 'user_id', 1)) if self.parent() else 1
+            if self.po_service.approve_purchase_order(self.current_po.id, approved_by=approved_by):
                 QMessageBox.information(self, "نجح", "تمت الموافقة على أمر الشراء")
                 self._load_purchase_orders()
             else:

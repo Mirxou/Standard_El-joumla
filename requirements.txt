@@ -34,6 +34,8 @@ uvicorn[standard]>=0.30.0    # ASGI server
 httptools>=0.7.1             # HTTP tools for uvicorn
 h11>=0.16.0                  # HTTP/1.1 protocol
 PyJWT>=2.10.1                # JWT token handling
+websockets>=13.1              # WebSockets support for real-time updates
+python-socketio>=5.11.0      # Socket.IO support (optional)
 
 # ============================================
 # HTTP Client
@@ -61,6 +63,7 @@ fonttools>=4.61.0            # Font manipulation
 psutil>=7.1.3                # System and process monitoring
 schedule>=1.2.0              # Lightweight job scheduling for auto-backups
 redis>=5.0.0                 # Optional Redis cache backend (set CACHE_USE_REDIS=1)
+prometheus-client>=0.21.0    # Prometheus metrics client
 
 # ============================================
 # Hardware & Printing
@@ -75,6 +78,7 @@ pandas>=2.3.3                # Data manipulation and analysis
 numpy>=2.3.5                 # Numerical operations
 scikit-learn>=1.3.0          # Machine learning models and tools
 joblib>=1.5.2                # Parallel computing for scikit-learn
+openpyxl>=3.1.2              # Excel file support for pandas
 
 # ============================================
 # Charts & Visualization
@@ -102,6 +106,27 @@ pytest-mock>=3.15.1          # Mocking utilities
 coverage>=7.12.0             # Code coverage tool
 iniconfig>=2.3.0             # Configuration for pytest
 pluggy>=1.6.0                # Plugin system for pytest
+
+# ============================================
+# EDI Support
+# ============================================
+pydifact>=0.1.4              # EDI EDIFACT parsing and generation
+# python-edifact>=0.1.0      # Disabled: Not compatible with Python 3.13 (use Python 3.12 or install manually if needed)
+
+# ============================================
+# Third-party Integrations
+# ============================================
+stripe>=10.0.0               # Stripe Payment Gateway
+paypalrestsdk>=1.13.1        # PayPal SDK (legacy, optional)
+requests>=2.32.0              # HTTP requests (already included, but needed for integrations)
+
+# ============================================
+# Cloud Storage & Sync
+# ============================================
+boto3>=1.35.0                # AWS S3 SDK
+google-cloud-storage>=2.18.0 # Google Cloud Storage SDK
+azure-storage-blob>=12.24.0   # Azure Blob Storage SDK
+# hashlib-compat>=1.0.1      # Disabled: Package not available on PyPI
 
 # ============================================
 # Utilities & Helpers

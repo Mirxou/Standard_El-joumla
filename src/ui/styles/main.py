@@ -41,7 +41,8 @@ def load_qss_file(file_path: Path) -> Optional[str]:
         return content
         
     except Exception as e:
-        print(f"خطأ في تحميل ملف الأنماط {file_path}: {e}")
+        # لا نطبع خطأ هنا لأن هذا قد يكون متوقعاً في بعض البيئات
+        # فقط نعيد None للإشارة إلى أن التحميل فشل
         return None
 
 
@@ -80,11 +81,60 @@ def apply_style_to_app(app, theme: str = 'light') -> bool:
     Returns:
         True إذا تم التطبيق بنجاح
     """
-    style_sheet = load_main_style(theme)
-    if style_sheet:
-        app.setStyleSheet(style_sheet)
-        return True
+    try:
+        style_sheet = load_main_style(theme)
+        if style_sheet:
+            # تنظيف الأنماط من الخصائص غير المدعومة في Qt
+            style_sheet = _clean_qss(style_sheet)
+            # قمع تحذيرات Qt حول الأنماط غير المدعومة
+            import warnings
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                app.setStyleSheet(style_sheet)
+            return True
+    except Exception as e:
+        # لا نطبع خطأ هنا لأن هذا قد يكون متوقعاً في بعض البيئات
+        # فقط نعيد False للإشارة إلى أن التطبيق فشل
+        pass
     return False
+
+
+def _clean_qss(qss_content: str) -> str:
+    """
+    تنظيف محتوى QSS من الخصائص غير المدعومة في Qt
+    
+    Qt لا يدعم بعض خصائص CSS مثل:
+    - box-shadow
+    - text-shadow
+    - transform
+    - filter
+    - وغيرها
+    
+    Args:
+        qss_content: محتوى QSS الأصلي
+    
+    Returns:
+        محتوى QSS بعد التنظيف
+    """
+    import re
+    
+    # قائمة الخصائص غير المدعومة
+    unsupported_properties = [
+        r'box-shadow\s*:[^;]+;',
+        r'text-shadow\s*:[^;]+;',
+        r'transform\s*:[^;]+;',
+        r'filter\s*:[^;]+;',
+        r'backdrop-filter\s*:[^;]+;',
+        r'perspective\s*:[^;]+;',
+        r'transition\s*:[^;]+;',
+        r'animation\s*:[^;]+;',
+    ]
+    
+    cleaned = qss_content
+    for pattern in unsupported_properties:
+        cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE | re.MULTILINE)
+    
+    return cleaned
 
 
 def get_available_themes() -> list:

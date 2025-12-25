@@ -1,0 +1,4 @@
+# Disable BuildKit to avoid gRPC errors on Windows
+# Usage: export DOCKER_BUILDKIT=0
+# Or: set DOCKER_BUILDKIT=0 (Windows)
+

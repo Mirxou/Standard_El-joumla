@@ -418,3 +418,111 @@ class ReturnInvoice:
         return_invoice.items = [ReturnItem.from_dict(item) if isinstance(item, dict) else item 
                                for item in items_data]
         return return_invoice
+
+
+class ReturnManager:
+    """مدير المرتجعات"""
+    
+    def __init__(self, db_manager, logger=None):
+        self.db_manager = db_manager
+        self.logger = logger
+        self._tenant_manager = None
+    
+    @property
+    def tenant_manager(self):
+        if self._tenant_manager is None:
+            try:
+                from src.core.tenant_isolation import TenantIsolationManager
+                self._tenant_manager = TenantIsolationManager(self.db_manager)
+            except ImportError:
+                pass
+        return self._tenant_manager
+    
+    def create_return(self, return_invoice: ReturnInvoice) -> Optional[int]:
+        """إنشاء مرتجع جديد"""
+        try:
+             # Generate Number if empty
+            if not return_invoice.return_number:
+                return_invoice.return_number = f"RET-{int(datetime.now().timestamp())}"
+
+            query = """
+            INSERT INTO returns (
+                return_number, return_type, original_sale_id, original_purchase_id,
+                customer_id, supplier_id, return_date, status, return_reason,
+                total_amount, refund_method, notes, created_by, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+            
+            now = datetime.now()
+            params = (
+                return_invoice.return_number,
+                return_invoice.return_type.name if isinstance(return_invoice.return_type, ReturnType) else return_invoice.return_type,
+                return_invoice.original_sale_id,
+                return_invoice.original_purchase_id,
+                return_invoice.customer_id,
+                return_invoice.supplier_id,
+                return_invoice.return_date,
+                return_invoice.status.name if isinstance(return_invoice.status, ReturnStatus) else return_invoice.status,
+                return_invoice.return_reason.name if isinstance(return_invoice.return_reason, ReturnReason) else return_invoice.return_reason,
+                float(return_invoice.total_amount),
+                return_invoice.refund_method.name if isinstance(return_invoice.refund_method, RefundMethod) and return_invoice.refund_method else None,
+                return_invoice.notes,
+                return_invoice.created_by,
+                now.isoformat(),
+                now.isoformat()
+            )
+            
+            result = self.db_manager.execute_query(query, params)
+            if result and hasattr(result, 'lastrowid'):
+                return_id = result.lastrowid
+                return_invoice.id = return_id
+                
+                # Insert Items
+                for item in return_invoice.items:
+                    item.return_id = return_id
+                    self._create_return_item(item)
+                    
+                return return_id
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Error creating return: {e}")
+            return None
+
+    def _create_return_item(self, item: ReturnItem):
+        try:
+            query = """
+            INSERT INTO return_items (
+                return_id, product_id, quantity_returned, unit_price, total_amount, return_reason
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """
+            params = (
+                item.return_id,
+                item.product_id,
+                float(item.quantity_returned),
+                float(item.unit_price),
+                float(item.total_amount),
+                item.return_reason.name if isinstance(item.return_reason, ReturnReason) else item.return_reason
+            )
+            self.db_manager.execute_query(query, params)
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Error creating return item: {e}")
+
+    def list_returns(self, limit: int = 100) -> List[Dict[str, Any]]:
+        try:
+            query = """
+            SELECT r.*, 
+                   COALESCE(c.name, 'عميل عام') as customer_name, 
+                   COALESCE(s.name, 'مورد عام') as supplier_name
+            FROM returns r
+            LEFT JOIN customers c ON r.customer_id = c.id
+            LEFT JOIN suppliers s ON r.supplier_id = s.id
+            ORDER BY r.return_date DESC
+            LIMIT ?
+            """
+            results = self.db_manager.fetch_all(query, (limit,))
+            return [dict(row) for row in results]
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Error listing returns: {e}")
+            return []

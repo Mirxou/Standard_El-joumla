@@ -21,12 +21,23 @@
 - `test_logging_service.py` - اختبارات خدمة السجلات
 - `test_config_manager.py` - اختبارات مدير الإعدادات
 - `test_exception_handler.py` - اختبارات معالج الاستثناءات
+- `test_main_worker.py` - اختبارات عامل تهيئة النظام (main.py)
+- `test_main_app.py` - اختبارات كلاس التطبيق الرئيسي (main.py)
 
 #### Database Tests
 - `test_database_logger_fixes.py` - اختبارات إصلاحات DatabaseLogger
 - `test_database_logger_extended.py` - اختبارات موسعة لـ DatabaseLogger
 - `test_backup_manager.py` - اختبارات مدير النسخ الاحتياطي
+- `test_database_manager.py` - اختبارات مدير قاعدة البيانات (جديد)
 - `test_incremental_backup.py` - اختبارات النسخ الاحتياطي التدريجي
+
+#### Service Tests
+- `test_inventory_service.py` - اختبارات خدمة المخزون
+- `test_payment_service.py` - اختبارات خدمة المدفوعات (جديد)
+- `test_purchase_service.py` - اختبارات خدمة المشتريات (جديد)
+- `test_user_service.py` - اختبارات خدمة المستخدمين والأمان (جديد)
+- `test_accounting_service.py` - اختبارات خدمة المحاسبة (جديد)
+- `test_report_exporter.py` - اختبارات خدمة تصدير التقارير (جديد)
 
 #### Security Tests
 - `test_encryption_manager.py` - اختبارات مدير التشفير
@@ -42,6 +53,7 @@
 #### Model Tests
 - `test_product_model.py` - اختبارات نموذج المنتج
 - `test_sale_model.py` - اختبارات نموذج المبيعات
+- `test_warehouse_model.py` - اختبارات نموذج المستودعات (جديد)
 
 #### API Tests
 - `test_api_client.py` - اختبارات عميل API
@@ -84,6 +96,9 @@
 - `test_customer_manager.py` - اختبارات مدير العملاء
 - `test_sale_manager.py` - اختبارات مدير المبيعات
 - `test_api_sync.py` - اختبارات مزامنة API
+- `test_workflow_sale_to_payment.py` - اختبار سير عمل البيع (جديد)
+- `test_transaction_rollback.py` - اختبار التراجع عن المعاملات (جديد)
+- `test_api_sales_flow.py` - اختبار تكامل API للمبيعات (جديد)
 - `test_full_workflows.py` - اختبارات سير العمل الكاملة
 
 ---

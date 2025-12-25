@@ -110,17 +110,55 @@ class SupplierManager:
     def __init__(self, db_manager, logger=None):
         self.db_manager = db_manager
         self.logger = logger
+        # Multi-Company Support
+        self._tenant_manager = None
     
-    def create_supplier(self, supplier: Supplier) -> Optional[int]:
+    @property
+    def tenant_manager(self):
+        """Lazy loading لـ TenantIsolationManager"""
+        if self._tenant_manager is None:
+            try:
+                from src.core.tenant_isolation import TenantIsolationManager
+                self._tenant_manager = TenantIsolationManager(self.db_manager)
+            except ImportError:
+                if self.logger:
+                    self.logger.warning("TenantIsolationManager غير متاح - Multi-Company غير مفعل")
+        return self._tenant_manager
+    
+    def _get_company_id(self) -> Optional[int]:
+        """الحصول على معرف الشركة الحالية"""
+        if self.tenant_manager:
+            return self.tenant_manager.get_current_company_id()
+        return None
+    
+    def _add_company_filter(self, query: str, params: list, company_id: Optional[int] = None) -> tuple:
+        """إضافة فلتر الشركة إلى الاستعلام"""
+        if company_id is None:
+            company_id = self._get_company_id()
+        
+        if company_id is not None:
+            if "WHERE" in query.upper():
+                query += " AND company_id = ?"
+            else:
+                query += " WHERE company_id = ?"
+            params.append(company_id)
+        
+        return query, params
+    
+    def create_supplier(self, supplier: Supplier, company_id: Optional[int] = None) -> Optional[int]:
         """إنشاء مورد جديد"""
         try:
+            # الحصول على company_id إذا لم يتم تحديده
+            if company_id is None:
+                company_id = self._get_company_id()
+            
             query = """
             INSERT INTO suppliers (
                 name, name_en, contact_person, phone, phone2, email, website,
                 address, city, country, tax_number, commercial_register,
                 payment_terms, credit_limit, current_balance, notes, is_active,
-                created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                company_id, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
             
             now = datetime.now()
@@ -142,6 +180,7 @@ class SupplierManager:
                 float(supplier.current_balance),
                 supplier.notes,
                 supplier.is_active,
+                company_id,
                 now,
                 now
             )
@@ -158,7 +197,7 @@ class SupplierManager:
                 self.logger.error(f"خطأ في إنشاء المورد: {str(e)}")
             return None
     
-    def get_supplier_by_id(self, supplier_id: int) -> Optional[Supplier]:
+    def get_supplier_by_id(self, supplier_id: int, company_id: Optional[int] = None) -> Optional[Supplier]:
         """الحصول على مورد بالمعرف"""
         try:
             query = """
@@ -169,8 +208,12 @@ class SupplierManager:
             FROM suppliers s
             WHERE s.id = ?
             """
+            params = [supplier_id]
             
-            result = self.db_manager.fetch_one(query, (supplier_id,))
+            # إضافة فلتر الشركة
+            query, params = self._add_company_filter(query, params, company_id)
+            
+            result = self.db_manager.fetch_one(query, tuple(params))
             if result:
                 return self._row_to_supplier(result)
             
@@ -180,7 +223,7 @@ class SupplierManager:
         
         return None
     
-    def get_supplier_by_name(self, name: str) -> Optional[Supplier]:
+    def get_supplier_by_name(self, name: str, company_id: Optional[int] = None) -> Optional[Supplier]:
         """الحصول على مورد بالاسم"""
         try:
             query = """
@@ -191,8 +234,12 @@ class SupplierManager:
             FROM suppliers s
             WHERE s.name = ? OR s.name_en = ?
             """
+            params = [name, name]
             
-            result = self.db_manager.fetch_one(query, (name, name))
+            # إضافة فلتر الشركة
+            query, params = self._add_company_filter(query, params, company_id)
+            
+            result = self.db_manager.fetch_one(query, tuple(params))
             if result:
                 return self._row_to_supplier(result)
             
@@ -202,7 +249,7 @@ class SupplierManager:
         
         return None
     
-    def search_suppliers(self, search_term: str = "", active_only: bool = True) -> List[Supplier]:
+    def search_suppliers(self, search_term: str = "", active_only: bool = True, company_id: Optional[int] = None) -> List[Supplier]:
         """البحث في الموردين"""
         try:
             # التحقق من الأعمدة المتاحة في جدول purchases
@@ -235,6 +282,9 @@ class SupplierManager:
             
             if active_only:
                 query += " AND s.is_active = 1"
+            
+            # إضافة فلتر الشركة
+            query, params = self._add_company_filter(query, params, company_id)
             
             query += " ORDER BY s.name"
             

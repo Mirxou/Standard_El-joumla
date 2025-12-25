@@ -65,6 +65,25 @@ class InventoryService:
         self.product_manager = ProductManager(db_manager, logger)
         self.category_manager = CategoryManager(db_manager, logger)
         self.supplier_manager = SupplierManager(db_manager, logger)
+        
+        # Multi-Warehouse Support (Optional - يتم تحميله عند الحاجة)
+        self._warehouse_service = None
+    
+    @property
+    def warehouse_service(self):
+        """Lazy loading لـ WarehouseService"""
+        if self._warehouse_service is None:
+            try:
+                from src.services.warehouse_service import WarehouseService
+                self._warehouse_service = WarehouseService(self.db_manager, self.logger)
+            except ImportError:
+                if self.logger:
+                    self.logger.warning("WarehouseService غير متاح - Multi-Warehouse غير مفعل")
+        return self._warehouse_service
+    
+    def is_multi_warehouse_enabled(self) -> bool:
+        """التحقق من تفعيل Multi-Warehouse"""
+        return self.warehouse_service is not None
     
     # ===== إدارة المنتجات =====
     
@@ -193,34 +212,100 @@ class InventoryService:
     # ===== إدارة المخزون =====
     
     def adjust_stock(self, product_id: int, new_quantity: float, 
-                    reason: str = "", user_id: Optional[int] = None) -> bool:
-        """تعديل كمية المخزون"""
+                    reason: str = "", user_id: Optional[int] = None,
+                    warehouse_id: Optional[int] = None) -> bool:
+        """تعديل كمية المخزون
+        
+        Args:
+            product_id: معرف المنتج
+            new_quantity: الكمية الجديدة
+            reason: سبب التعديل
+            user_id: معرف المستخدم
+            warehouse_id: معرف المستودع (اختياري - إذا كان None يستخدم المستودع الافتراضي)
+        """
         try:
-            product = self.product_manager.get_product_by_id(product_id)
-            if not product:
-                return False
-            
-            old_quantity = product.current_stock
-            quantity_diff = new_quantity - old_quantity
-            
-            # تحديث الكمية
-            success = self.product_manager.update_stock(product_id, new_quantity)
-            if success:
-                # تسجيل حركة المخزون
-                movement_type = "in" if quantity_diff > 0 else "out"
-                self._record_stock_movement(
-                    product_id=product_id,
-                    movement_type=movement_type,
-                    quantity=abs(quantity_diff),
-                    reference_type="adjustment",
-                    notes=f"تعديل المخزون: {reason}",
-                    created_by=user_id
-                )
+            # إذا كان Multi-Warehouse مفعل، استخدم WarehouseService
+            if self.is_multi_warehouse_enabled():
+                # إذا لم يتم تحديد مستودع، استخدم المستودع الافتراضي (Backward Compatibility)
+                if warehouse_id is None:
+                    default_warehouse = self.warehouse_service.get_default_warehouse()
+                    if default_warehouse:
+                        warehouse_id = default_warehouse.id
+                        if self.logger:
+                            self.logger.debug(f"استخدام المستودع الافتراضي: {default_warehouse.name} (ID: {warehouse_id})")
+                    else:
+                        # لا يوجد مستودع افتراضي، استخدم الطريقة القديمة
+                        if self.logger:
+                            self.logger.warning("لا يوجد مستودع افتراضي، استخدام الطريقة القديمة")
+                        warehouse_id = None
                 
-                if self.logger:
-                    self.logger.info(f"تم تعديل مخزون المنتج {product_id}: {old_quantity} -> {new_quantity}")
-            
-            return success
+                if warehouse_id is not None:
+                    # استخدام Multi-Warehouse
+                    product = self.product_manager.get_product_by_id(product_id)
+                    if not product:
+                        return False
+                    
+                    # الحصول على المخزون الحالي في المستودع
+                    inventory = self.warehouse_service.inventory_manager.get_inventory(
+                        warehouse_id, product_id
+                    )
+                    
+                    old_quantity = inventory.quantity if inventory else 0.0
+                    quantity_diff = new_quantity - old_quantity
+                    
+                    # تحديث المخزون في المستودع
+                    success = self.warehouse_service.adjust_stock(
+                        warehouse_id, product_id, quantity_diff
+                    )
+                    
+                    if success:
+                        # تسجيل حركة المخزون
+                        movement_type = "in" if quantity_diff > 0 else "out"
+                        warehouse_name = self.warehouse_service.get_warehouse(warehouse_id).name if warehouse_id else "غير محدد"
+                        self._record_stock_movement(
+                            product_id=product_id,
+                            movement_type=movement_type,
+                            quantity=abs(quantity_diff),
+                            reference_type="adjustment",
+                            notes=f"تعديل المخزون (مستودع {warehouse_name}): {reason}",
+                            created_by=user_id
+                        )
+                        
+                        # تحديث المخزون الإجمالي في products (للتوافق)
+                        total_stock = self.warehouse_service.get_total_stock(product_id)
+                        self.product_manager.update_stock(product_id, total_stock)
+                        
+                        if self.logger:
+                            self.logger.info(f"تم تعديل مخزون المنتج {product_id} في المستودع {warehouse_id}: {old_quantity} -> {new_quantity}")
+                    
+                    return success
+            else:
+                # الطريقة القديمة (Single Warehouse) - للتوافق مع الكود الحالي
+                product = self.product_manager.get_product_by_id(product_id)
+                if not product:
+                    return False
+                
+                old_quantity = product.current_stock
+                quantity_diff = new_quantity - old_quantity
+                
+                # تحديث الكمية
+                success = self.product_manager.update_stock(product_id, new_quantity)
+                if success:
+                    # تسجيل حركة المخزون
+                    movement_type = "in" if quantity_diff > 0 else "out"
+                    self._record_stock_movement(
+                        product_id=product_id,
+                        movement_type=movement_type,
+                        quantity=abs(quantity_diff),
+                        reference_type="adjustment",
+                        notes=f"تعديل المخزون: {reason}",
+                        created_by=user_id
+                    )
+                    
+                    if self.logger:
+                        self.logger.info(f"تم تعديل مخزون المنتج {product_id}: {old_quantity} -> {new_quantity}")
+                
+                return success
             
         except Exception as e:
             if self.logger:

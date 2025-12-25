@@ -1,4 +1,5 @@
-# 📊 خطة تحسين تغطية الكود - Coverage Improvement Plan
+# 📈 خطة تحسين تغطية الاختبارات
+## Code Coverage Improvement Plan - Enhanced Strategy - Coverage Improvement Plan
 
 ## 📈 الوضع الحالي
 

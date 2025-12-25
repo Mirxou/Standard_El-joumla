@@ -1,0 +1,114 @@
+📁 Logical Version trae/
+│
+├── 🔴 CRITICAL FILES (لا تحذف)
+│   ├── main.py
+│   ├── requirements.txt
+│   ├── docker-compose.yml
+│   ├── Dockerfile
+│   ├── Dockerfile.api
+│   ├── LICENSE.txt
+│   ├── README.md
+│   ├── .docker.env.example
+│   ├── pytest.ini
+│   ├── .gitignore
+│   │
+│   ├── 📁 src/ (Source Code)
+│   │   ├── core/ (database_manager, config_manager, etc.)
+│   │   ├── models/ (product, sale, purchase, user, etc.)
+│   │   ├── services/ (inventory, sales, purchase, etc.)
+│   │   ├── api/ (app.py, routes.py, auth.py)
+│   │   └── ui/ (windows, dialogs, widgets)
+│   │
+│   ├── 📁 web/ (Next.js App)
+│   │   ├── package.json
+│   │   ├── tsconfig.json
+│   │   ├── app/ (pages, routes)
+│   │   ├── lib/ (config, api, types)
+│   │   └── components/ (UI components)
+│   │
+│   └── 📁 mobile/ (React Native App)
+│       ├── package.json
+│       ├── tsconfig.json
+│       ├── app.json
+│       └── src/ (screens, components, services)
+│
+├── 🟠 IMPORTANT FILES (احتفظ بها)
+│   ├── 📁 docs/ (Documentation)
+│   ├── 📁 tests/ (Test files)
+│   ├── 📁 scripts/ (Useful scripts)
+│   ├── 📁 migrations/ (Database migrations)
+│   ├── 📁 assets/ (Icons, templates)
+│   ├── USER_GUIDE_AR.md
+│   ├── USAGE_GUIDE.md
+│   ├── QUICK_START_GUIDE.md
+│   ├── TESTING_GUIDE.md
+│   └── DEPLOYMENT_GUIDE.md
+│
+├── 🟡 OPTIONAL FILES (يمكن حذفها إذا لزم)
+│   ├── *.backup
+│   ├── *.tmp
+│   ├── logs/
+│   ├── web/.next/
+│   ├── web/coverage/
+│   ├── htmlcov/
+│   ├── __pycache__/
+│   ├── node_modules/
+│   └── *.db (test databases)
+│
+└── ⚪ CAN DELETE (يمكن حذفها بأمان)
+    │
+    ├── 📄 Old Reports (تقارير قديمة)
+    │   ├── *_SUMMARY.md (~50 ملف)
+    │   ├── *_REPORT.md (~30 ملف)
+    │   ├── *_COMPLETION*.md (~20 ملف)
+    │   ├── *_STATUS*.md (~15 ملف)
+    │   ├── *_FINAL*.md (~25 ملف)
+    │   ├── SESSION_*.md (~5 ملفات)
+    │   ├── PHASE_*.md (~5 ملفات)
+    │   ├── COVERAGE_*.md (~10 ملفات)
+    │   ├── WINDOW_*.md (~10 ملفات)
+    │   └── MULTI_*.md (~5 ملفات)
+    │
+    ├── 📄 Test Reports (تقارير اختبارات)
+    │   ├── TEST_*.md (~15 ملف)
+    │   ├── TESTING_*.md (~10 ملفات)
+    │   └── web/TEST_REPORT*.md (~5 ملفات)
+    │
+    ├── 📄 Audit Reports (تقارير مراجعة)
+    │   ├── *_AUDIT*.md (~5 ملفات)
+    │   └── *_REVIEW*.md (~10 ملفات)
+    │
+    ├── 📄 Cleanup Reports (تقارير تنظيف)
+    │   └── CLEANUP_*.md (~5 ملفات)
+    │
+    ├── 🐍 Temporary Python Scripts (سكريبتات مؤقتة)
+    │   ├── _gen_tree.py
+    │   ├── _tree_gen.py
+    │   ├── check_*.py (~10 ملفات)
+    │   ├── fix_*.py (~5 ملفات)
+    │   ├── setup_*.py (~5 ملفات)
+    │   ├── test_*.py (في root فقط)
+    │   └── simulate_*.py (~2 ملفات)
+    │
+    └── 📄 Old/Unused Files (ملفات قديمة)
+        ├── App.tsx (في root)
+        ├── InventoryPage.tsx (في root)
+        ├── index.ts (في root)
+        ├── productService.ts (في root)
+        ├── package.json (في root - قديم)
+        ├── tree-full.txt
+        ├── file_tree_raw.txt
+        └── test_output.txt
+
+═══════════════════════════════════════════════════════════════
+
+📊 الإحصائيات:
+- 🔴 Critical: ~150 ملف
+- 🟠 Important: ~100 ملف
+- 🟡 Optional: ~50 ملف
+- ⚪ Can Delete: ~200+ ملف
+
+💡 التوصية:
+احذف جميع الملفات في قسم "CAN DELETE" لتنظيف المشروع.
+احتفظ بجميع الملفات في أقسام "CRITICAL" و "IMPORTANT".
+

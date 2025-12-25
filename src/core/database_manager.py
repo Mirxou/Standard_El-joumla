@@ -18,36 +18,9 @@ from .encryption_manager import EncryptionManager
 from .exceptions import DatabaseException
 from src.database.connection_pool import ConnectionPool, PoolConfig
 from src.core.encrypted_backup_service import EncryptedBackupService
+from src.utils.logger import setup_logger
 
 class DatabaseManager:
-    def get_connection(self):
-        """الحصول على اتصال فعلي من الـ ConnectionPool.
-        يعيد اتصالاً جاهزاً للاستخدام (cursor()).
-        يتم تتبع الاتصالات المستأجرة لإغلاقها لاحقاً في close().
-        """
-        if not hasattr(self, 'pool') or self.pool is None:
-            raise Exception("Database connection pool is not initialized.")
-        cm = self.pool.get_connection()
-        conn = cm.__enter__()
-        if not hasattr(self, '_leased_connections'):
-            self._leased_connections = []
-        self._leased_connections.append(cm)
-        return conn
-
-    def close(self):
-        """إغلاق الاتصالات المستأجرة ثم إغلاق الـ ConnectionPool"""
-        if hasattr(self, '_leased_connections'):
-            for cm in self._leased_connections:
-                try:
-                    cm.__exit__(None, None, None)
-                except Exception:
-                    pass
-            self._leased_connections.clear()
-        if hasattr(self, 'pool') and self.pool is not None:
-            try:
-                self.pool.close()
-            except Exception:
-                pass
     """مدير قاعدة البيانات"""
     
     def __init__(
@@ -73,6 +46,9 @@ class DatabaseManager:
         self._backup_options = backup_options or {}
         # عتبة الاستعلام البطيء بالمللي ثانية (يمكن ضبطها لاحقاً)
         self.slow_query_threshold_ms: float = 100.0
+        
+        # تهيئة logger
+        self.logger = setup_logger(__name__)
         
         self._ensure_data_directory()
         
@@ -544,7 +520,7 @@ class DatabaseManager:
         يفحص هيكل قاعدة البيانات ويضيف الجداول أو الأعمدة الناقصة تلقائياً.
         يعمل عند بدء التشغيل لضمان توافق النسخة الجديدة مع بيانات العميل القديمة.
         """
-        print("🔍 Checking database schema for updates...")
+        print("[DB Migration] Checking database schema for updates...")
         # استخدام الاتصال المباشر إذا لم يكن الـ Pool جاهزاً بعد
         conn = self.connection if self.connection else self.get_connection()
         cursor = conn.cursor()
@@ -558,15 +534,32 @@ class DatabaseManager:
             
             # إضافة عمود 'status' إذا لم يكن موجوداً
             if 'status' not in columns:
-                print("⚙️ Migrating: Adding 'status' column to sales...")
+                print("[DB Migration] Adding 'status' column to sales...")
                 cursor.execute("ALTER TABLE sales ADD COLUMN status TEXT DEFAULT 'completed'")
             
             # إضافة عمود 'return_status' (للمرتجعات)
             if 'return_status' not in columns:
-                print("⚙️ Migrating: Adding 'return_status' column...")
+                print("[DB Migration] Adding 'return_status' column...")
                 cursor.execute("ALTER TABLE sales ADD COLUMN return_status TEXT DEFAULT 'none'")
 
-            # 2. إنشاء جداول المرتجعات (Returns Tables) - للميزات المحسنة
+            # 2. إضافة company_id إلى جدول users (للدعم Multi-Company)
+            # ----------------------------------------------------
+            try:
+                cursor.execute("PRAGMA table_info(users)")
+                user_columns = [info[1] for info in cursor.fetchall()]
+                
+                if 'company_id' not in user_columns:
+                    print("[DB Migration] Adding 'company_id' column to users...")
+                    cursor.execute("ALTER TABLE users ADD COLUMN company_id INTEGER")
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_users_company 
+                        ON users(company_id)
+                    """)
+                    print("[DB Migration] Added company_id column to users table")
+            except Exception as e:
+                print(f"[DB Migration] Warning: Could not add company_id to users: {e}")
+
+            # 3. إنشاء جداول المرتجعات (Returns Tables) - للميزات المحسنة
             # ----------------------------------------------------
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS returns (
@@ -592,12 +585,12 @@ class DatabaseManager:
                 )
             """)
 
-            # 3. إتمام التغييرات
+            # 4. إتمام التغييرات
             conn.commit()
-            print("✅ Database schema is up to date.")
+            print("[DB Migration] Database schema is up to date.")
             
         except Exception as e:
-            print(f"❌ Migration Error: {e}")
+            print(f"[DB Migration] ERROR: {e}")
             # لا نوقف البرنامج، لكن نسجل الخطأ
         finally:
             # لا نغلق الاتصال هنا لأنه قد يكون الاتصال الرئيسي
@@ -1366,7 +1359,51 @@ class DatabaseManager:
                     self.connection.commit()
                 except Exception as e:
                     self.connection.rollback()
+                    # #region agent log
+                    import json
+                    try:
+                        with open(r'c:\Users\pc\Desktop\Logical Version trae\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                            f.write(json.dumps({
+                                "sessionId": "debug-session",
+                                "runId": "run1",
+                                "hypothesisId": "B",
+                                "location": "database_manager.py:1386",
+                                "message": "migration error - logger check",
+                                "data": {
+                                    "has_logger_attr": hasattr(self, 'logger'),
+                                    "logger_exists": hasattr(self, 'logger') and self.logger is not None,
+                                    "migration_file": migration_file.name,
+                                    "error": str(e)
+                                },
+                                "timestamp": int(__import__('time').time() * 1000)
+                            }) + '\n')
+                    except: pass
+                    # #endregion
+                    if hasattr(self, 'logger') and self.logger:
+                        self.logger.warning(f"فشل تطبيق migration {migration_file.name}: {e}", exc_info=True)
         except Exception as e:
+            # #region agent log
+            import json
+            try:
+                with open(r'c:\Users\pc\Desktop\Logical Version trae\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                    f.write(json.dumps({
+                        "sessionId": "debug-session",
+                        "runId": "run1",
+                        "hypothesisId": "B",
+                        "location": "database_manager.py:1389",
+                        "message": "migrations error - logger check",
+                        "data": {
+                            "has_logger_attr": hasattr(self, 'logger'),
+                            "logger_exists": hasattr(self, 'logger') and self.logger is not None,
+                            "error": str(e)
+                        },
+                        "timestamp": int(__import__('time').time() * 1000)
+                    }) + '\n')
+            except: pass
+            # #endregion
+            if hasattr(self, 'logger') and self.logger:
+                self.logger.warning(f"خطأ في تشغيل migrations: {e}", exc_info=True)
+            # لا نرفع الخطأ لأن migrations قد تفشل إذا كانت الجداول موجودة مسبقاً
             pass
     def execute(self, query: str, params: Tuple = ()) -> Any:
         """تنفيذ استعلام باستخدام الاتصال الأساسي (للاستخدام الداخلي)"""

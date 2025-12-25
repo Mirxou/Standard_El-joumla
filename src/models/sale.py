@@ -130,6 +130,11 @@ class Sale:
     total_amount: Decimal = Decimal('0.00')
     paid_amount: Decimal = Decimal('0.00')
     remaining_amount: Decimal = Decimal('0.00')
+    # Multi-Currency Support
+    currency_id: Optional[int] = None  # معرف العملة المستخدمة
+    exchange_rate: Decimal = Decimal('1.0')  # سعر الصرف المستخدم
+    base_amount: Optional[Decimal] = None  # المبلغ بالعملة الأساسية
+    converted_amount: Optional[Decimal] = None  # المبلغ بالعملة المحددة
     notes: Optional[str] = None
     created_by: Optional[int] = None
     created_at: Optional[datetime] = None
@@ -143,9 +148,10 @@ class Sale:
         
         for field in ['subtotal', 'discount_amount', 'discount_percentage', 
                      'tax_amount', 'tax_percentage', 'total_amount', 
-                     'paid_amount', 'remaining_amount']:
+                     'paid_amount', 'remaining_amount', 'exchange_rate', 
+                     'base_amount', 'converted_amount']:
             value = getattr(self, field)
-            if isinstance(value, (int, float, str)):
+            if value is not None and isinstance(value, (int, float, str)):
                 setattr(self, field, Decimal(str(value)))
         
         if isinstance(self.status, str):
@@ -180,6 +186,17 @@ class Sale:
         
         self.total_amount = after_discount + self.tax_amount
         self.remaining_amount = self.total_amount - self.paid_amount
+        
+        # Multi-Currency: حساب المبالغ بالعملة المحددة والأساسية
+        if self.currency_id:
+            # المبلغ بالعملة المحددة
+            self.converted_amount = self.total_amount
+            # المبلغ بالعملة الأساسية (سيتم حسابه من ExchangeRateService)
+            # سيتم تعيينه من Service Layer
+        else:
+            # إذا لم تكن هناك عملة محددة، استخدم المبلغ الأساسي
+            self.base_amount = self.total_amount
+            self.converted_amount = self.total_amount
         
         # تحديث حالة الدفع
         if self.paid_amount >= self.total_amount:
@@ -222,6 +239,11 @@ class Sale:
             'total_amount': float(self.total_amount),
             'paid_amount': float(self.paid_amount),
             'remaining_amount': float(self.remaining_amount),
+            # Multi-Currency Support
+            'currency_id': self.currency_id,
+            'exchange_rate': float(self.exchange_rate) if self.exchange_rate else 1.0,
+            'base_amount': float(self.base_amount) if self.base_amount else None,
+            'converted_amount': float(self.converted_amount) if self.converted_amount else None,
             'notes': self.notes,
             'created_by': self.created_by,
             'created_at': self.created_at.isoformat() if self.created_at else None,
@@ -238,9 +260,48 @@ class SaleManager:
     def __init__(self, db_manager, logger=None):
         self.db_manager = db_manager
         self.logger = logger
+        # Multi-Company Support
+        self._tenant_manager = None
+    
+    @property
+    def tenant_manager(self):
+        """Lazy loading لـ TenantIsolationManager"""
+        if self._tenant_manager is None:
+            try:
+                from src.core.tenant_isolation import TenantIsolationManager
+                self._tenant_manager = TenantIsolationManager(self.db_manager)
+            except ImportError:
+                if self.logger:
+                    self.logger.warning("TenantIsolationManager غير متاح - Multi-Company غير مفعل")
+        return self._tenant_manager
+    
+    def _get_company_id(self) -> Optional[int]:
+        """الحصول على معرف الشركة الحالية"""
+        if self.tenant_manager:
+            return self.tenant_manager.get_current_company_id()
+        return None
+    
+    def _add_company_filter(self, query: str, params: list, company_id: Optional[int] = None) -> tuple:
+        """إضافة فلتر الشركة إلى الاستعلام"""
+        if company_id is None:
+            company_id = self._get_company_id()
+        
+        if company_id is not None:
+            if "WHERE" in query.upper():
+                query += " AND company_id = ?"
+            else:
+                query += " WHERE company_id = ?"
+            params.append(company_id)
+        
+        return query, params
     
     def create_sale(self, sale: Sale) -> Optional[int]:
-        """إنشاء فاتورة مبيعات جديدة - متوافق مع بنية الجدول الفعلية"""
+        """إنشاء فاتورة مبيعات جديدة مع توافق ديناميكي مع أعمدة جدول sales.
+
+        يبني عبارة INSERT اعتماداً على الأعمدة الموجودة فعلياً في الجدول
+        باستخدام PRAGMA table_info(sales) لتجنب فشل الإدراج في البيئات الاختبارية
+        التي تحتوي على مخطط مبسط.
+        """
         # 🔒 التحقق: إذا كان هناك مبلغ متبقي، لا يمكن حفظ الفاتورة بحالة "مدفوعة"
         if sale.status == SaleStatus.PAID and sale.remaining_amount > 0:
             if self.logger:
@@ -257,85 +318,81 @@ class SaleManager:
             # إنشاء الفاتورة الرئيسية - متوافق مع بنية الجدول الفعلية
             # الجدول يحتوي على: invoice_number, customer_id, total_amount, discount_amount, 
             # final_amount, payment_method, sale_date, user_id, notes, status, paid_amount, remaining_amount,
+            # currency_id, exchange_rate, base_amount, converted_amount (Multi-Currency),
             # is_active, created_at, updated_at
-            query = """
-            INSERT INTO sales (
-                invoice_number, customer_id, total_amount, discount_amount,
-                final_amount, payment_method, sale_date, user_id, notes,
-                status, paid_amount, remaining_amount,
-                created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """
-            
+            # اكتشاف الأعمدة المتاحة في جدول sales
+            conn = self.db_manager.connection
+            cur_cols = conn.execute("PRAGMA table_info(sales)").fetchall()
+            available_cols = {row[1] for row in cur_cols}
+
+            # قيم محضّرة وفق نموذج Sale
             now = datetime.now()
-            # final_amount = total_amount (بعد الخصم والضريبة)
             final_amount = sale.total_amount
-            
-            # تحويل payment_method إلى نص
+            base_amount = sale.base_amount if sale.base_amount is not None else sale.total_amount
+            converted_amount = sale.converted_amount if sale.converted_amount is not None else sale.total_amount
+            exchange_rate = float(sale.exchange_rate) if sale.exchange_rate else 1.0
+
             if isinstance(sale.payment_method, PaymentMethod):
                 payment_method_text = sale.payment_method.value
             elif isinstance(sale.payment_method, str):
                 payment_method_text = sale.payment_method
             else:
-                payment_method_text = "نقدي"  # افتراضي
-            
-            # تحويل status إلى نص إنجليزي (لتوافق مع CHECK constraint)
-            # constraint يتوقع: 'draft', 'pending', 'confirmed', 'invoiced', 'paid', 'cancelled'
+                payment_method_text = "نقدي"
+
+            # تحويل الحالة لقيمة متوافقة مع قيود الجدول إن وجدت
             if isinstance(sale.status, SaleStatus):
-                # تحويل القيمة العربية إلى إنجليزية - استخدام mapping مباشر
                 status_to_db_mapping = {
                     SaleStatus.DRAFT: 'draft',
                     SaleStatus.CONFIRMED: 'confirmed',
                     SaleStatus.PAID: 'paid',
-                    SaleStatus.PARTIALLY_PAID: 'pending',  # تحويل إلى 'pending' لأن constraint لا يدعم 'partially_paid'
+                    SaleStatus.PARTIALLY_PAID: 'pending',
                     SaleStatus.CANCELLED: 'cancelled',
-                    SaleStatus.RETURNED: 'cancelled'  # تحويل 'returned' إلى 'cancelled'
+                    SaleStatus.RETURNED: 'cancelled'
                 }
                 status_text = status_to_db_mapping.get(sale.status, 'draft')
-            elif isinstance(sale.status, str):
-                # إذا كان نصاً، تحويله إلى إنجليزية
-                status_mapping = {
-                    'مسودة': 'draft',
-                    'مؤكدة': 'confirmed',
-                    'مدفوعة': 'paid',
-                    'مدفوعة جزئياً': 'pending',  # تحويل إلى 'pending'
-                    'ملغية': 'cancelled',
-                    'مرتجعة': 'cancelled',  # تحويل إلى 'cancelled'
-                    'draft': 'draft',
-                    'pending': 'pending',
-                    'confirmed': 'confirmed',
-                    'invoiced': 'invoiced',
-                    'paid': 'paid',
-                    'partially_paid': 'pending',  # تحويل إلى 'pending'
-                    'cancelled': 'cancelled',
-                    'returned': 'cancelled'  # تحويل إلى 'cancelled'
-                }
-                status_text = status_mapping.get(sale.status.lower(), 'draft')
             else:
-                status_text = "draft"  # افتراضي بالإنجليزية
+                try:
+                    status_text = str(sale.status).lower()
+                except Exception:
+                    status_text = 'draft'
+
+            # خريطة كل القيم المحتملة
+            value_map = {
+                'invoice_number': sale.invoice_number,
+                'customer_id': sale.customer_id,
+                'total_amount': float(sale.total_amount),
+                'discount_amount': float(sale.discount_amount),
+                'final_amount': float(final_amount),
+                'payment_method': payment_method_text,
+                'sale_date': sale.sale_date or date.today(),
+                'user_id': sale.created_by,
+                'notes': sale.notes,
+                'status': status_text,
+                'paid_amount': float(sale.paid_amount),
+                'remaining_amount': float(sale.remaining_amount),
+                'currency_id': sale.currency_id,
+                'exchange_rate': exchange_rate,
+                'base_amount': float(base_amount) if base_amount else None,
+                'converted_amount': float(converted_amount) if converted_amount else None,
+                'created_at': now.isoformat(),
+                'updated_at': now.isoformat(),
+            }
+
+            # الأعمدة الفعلية التي سنُدرِجها
+            insert_cols = [col for col in value_map.keys() if col in available_cols]
+            insert_vals = [value_map[col] for col in insert_cols]
+
+            # بناء عبارة الإدراج ديناميكياً
+            placeholders = ", ".join(["?" for _ in insert_cols])
+            query = f"INSERT INTO sales ({', '.join(insert_cols)}) VALUES ({placeholders})"
             
-            params = (
-                sale.invoice_number,
-                sale.customer_id,
-                float(sale.total_amount),  # total_amount
-                float(sale.discount_amount),  # discount_amount
-                float(final_amount),  # final_amount
-                payment_method_text,  # payment_method (نص)
-                sale.sale_date or date.today(),  # sale_date
-                sale.created_by,  # user_id
-                sale.notes,  # notes
-                status_text,  # status
-                float(sale.paid_amount),  # paid_amount
-                float(sale.remaining_amount),  # remaining_amount
-                now,  # created_at
-                now  # updated_at
-            )
+            # القيم النهائية للإدراج
+            params = tuple(insert_vals)
             
             if self.logger:
                 self.logger.debug(f"محاولة إنشاء فاتورة: {sale.invoice_number}, customer_id={sale.customer_id}, total={sale.total_amount}")
             
             # استخدام connection مباشرة للحصول على lastrowid بشكل صحيح
-            # الحصول على connection من db_manager
             conn = self.db_manager.connection
             
             cursor = conn.cursor()
@@ -357,7 +414,19 @@ class SaleManager:
                     if not sale_id or sale_id == 0:
                         if self.logger:
                             self.logger.error(f"فشل الحصول على sale_id حتى بعد SELECT last_insert_rowid()")
-                        return None
+                        # محاولة أخيرة: البحث عن الفاتورة عبر رقمها
+                        try:
+                            cursor.execute(
+                                "SELECT id FROM sales WHERE invoice_number = ? ORDER BY id DESC LIMIT 1",
+                                (sale.invoice_number,)
+                            )
+                            row = cursor.fetchone()
+                            if row and row[0]:
+                                sale_id = row[0]
+                        except Exception:
+                            pass
+                        if not sale_id or sale_id == 0:
+                            return None
                 
                 if self.logger:
                     self.logger.debug(f"✅ تم الحصول على sale_id: {sale_id}")
@@ -366,6 +435,11 @@ class SaleManager:
                 conn.rollback()
                 if self.logger:
                     self.logger.error(f"خطأ في تنفيذ INSERT: {e}", exc_info=True)
+                # إخراج مباشر للمساعدة في التشخيص داخل الاختبارات
+                try:
+                    print(f"[SaleManager.create_sale] INSERT error: {e}")
+                except Exception:
+                    pass
                 raise
             finally:
                 cursor.close()
@@ -401,6 +475,35 @@ class SaleManager:
             except Exception as e:
                 if self.logger:
                     self.logger.warning(f"⚠️ فشل إطلاق الإشارات: {e}")
+            
+            # 🔔 إطلاق Webhook: إرسال Webhook عند إنشاء فاتورة مبيعات
+            try:
+                from ...services.webhook_service import WebhookService
+                webhook_service = WebhookService(self.db_manager, self.logger)
+                
+                # بناء Payload للـ Webhook
+                webhook_payload = {
+                    "event": "sale_created",
+                    "sale_id": sale_id,
+                    "invoice_number": sale.invoice_number,
+                    "customer_id": sale.customer_id,
+                    "total_amount": float(sale.total_amount) if sale.total_amount else 0.0,
+                    "created_at": datetime.now().isoformat(),
+                    "sale": sale.to_dict() if hasattr(sale, 'to_dict') else {}
+                }
+                
+                webhook_service.trigger_webhook(
+                    event_type="sale_created",
+                    payload=webhook_payload,
+                    entity_id=sale_id,
+                    company_id=sale.company_id if hasattr(sale, 'company_id') else None
+                )
+                
+                if self.logger:
+                    self.logger.debug(f"✅ تم إطلاق Webhook: sale_created (Sale ID: {sale_id})")
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"⚠️ فشل إطلاق Webhook: {e}")
             
             if self.logger:
                 self.logger.info(f"✅ تم إنشاء فاتورة مبيعات جديدة: {sale.invoice_number} (ID: {sale_id})")
@@ -535,6 +638,7 @@ class SaleManager:
                     COALESCE(status, 'مسودة') as status, 
                     COALESCE(paid_amount, 0) as paid_amount, 
                     COALESCE(remaining_amount, final_amount) as remaining_amount,
+                    currency_id, exchange_rate, base_amount, converted_amount,
                     is_active, created_at, updated_at
                 FROM sales WHERE id = ?
                 """
@@ -795,7 +899,8 @@ class SaleManager:
                 customer_id = ?, total_amount = ?, discount_amount = ?,
                 final_amount = ?, payment_method = ?, sale_date = ?,
                 user_id = ?, notes = ?, status = ?, paid_amount = ?,
-                remaining_amount = ?, updated_at = ?
+                remaining_amount = ?, currency_id = ?, exchange_rate = ?,
+                base_amount = ?, converted_amount = ?, updated_at = ?
             WHERE id = ?
             """
             
@@ -845,6 +950,11 @@ class SaleManager:
             else:
                 status_text = "confirmed"  # افتراضي للفاتورة المحدثة
             
+            # Multi-Currency: حساب المبالغ
+            base_amount = sale.base_amount if sale.base_amount is not None else sale.total_amount
+            converted_amount = sale.converted_amount if sale.converted_amount is not None else sale.total_amount
+            exchange_rate = float(sale.exchange_rate) if sale.exchange_rate else 1.0
+            
             params = (
                 sale.customer_id,
                 float(sale.total_amount),
@@ -857,6 +967,11 @@ class SaleManager:
                 status_text,  # status
                 float(sale.paid_amount),  # paid_amount
                 float(sale.remaining_amount),  # remaining_amount
+                # Multi-Currency Support
+                sale.currency_id,
+                exchange_rate,
+                float(base_amount) if base_amount else None,
+                float(converted_amount) if converted_amount else None,
                 datetime.now(),
                 sale.id
             )
@@ -938,6 +1053,36 @@ class SaleManager:
             except Exception as e:
                 if self.logger:
                     self.logger.warning(f"⚠️ فشل إطلاق الإشارات: {e}")
+            
+            # 🔔 إطلاق Webhook: إرسال Webhook عند تحديث فاتورة مبيعات
+            try:
+                from ...services.webhook_service import WebhookService
+                webhook_service = WebhookService(self.db_manager, self.logger)
+                
+                # بناء Payload للـ Webhook
+                webhook_payload = {
+                    "event": "sale_updated",
+                    "sale_id": sale.id,
+                    "invoice_number": sale.invoice_number,
+                    "customer_id": sale.customer_id,
+                    "total_amount": float(sale.total_amount) if sale.total_amount else 0.0,
+                    "status": sale.status.value if hasattr(sale.status, 'value') else str(sale.status),
+                    "updated_at": datetime.now().isoformat(),
+                    "sale": sale.to_dict() if hasattr(sale, 'to_dict') else {}
+                }
+                
+                webhook_service.trigger_webhook(
+                    event_type="sale_updated",
+                    payload=webhook_payload,
+                    entity_id=sale.id,
+                    company_id=sale.company_id if hasattr(sale, 'company_id') else None
+                )
+                
+                if self.logger:
+                    self.logger.debug(f"✅ تم إطلاق Webhook: sale_updated (Sale ID: {sale.id})")
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"⚠️ فشل إطلاق Webhook: {e}")
             
             if self.logger:
                 self.logger.info(f"✅ تم تحديث الفاتورة: ID={sale.id}, invoice_number={sale.invoice_number}")
@@ -1111,9 +1256,38 @@ class SaleManager:
                 try:
                     from ...core.signals import signals  # pyright: ignore[reportMissingImports]
                     signals.sales_updated.emit()
+                    signals.sale_deleted.emit(sale_id)
                     signals.inventory_updated.emit()
                 except Exception:
                     pass
+                
+                # 🔔 إطلاق Webhook: إرسال Webhook عند حذف فاتورة مبيعات
+                try:
+                    from ...services.webhook_service import WebhookService
+                    webhook_service = WebhookService(self.db_manager, self.logger)
+                    
+                    # بناء Payload للـ Webhook
+                    webhook_payload = {
+                        "event": "sale_deleted",
+                        "sale_id": sale_id,
+                        "invoice_number": sale.invoice_number,
+                        "customer_id": sale.customer_id,
+                        "deleted_at": datetime.now().isoformat(),
+                        "soft_delete": soft_delete
+                    }
+                    
+                    webhook_service.trigger_webhook(
+                        event_type="sale_deleted",
+                        payload=webhook_payload,
+                        entity_id=sale_id,
+                        company_id=sale.company_id if hasattr(sale, 'company_id') else None
+                    )
+                    
+                    if self.logger:
+                        self.logger.debug(f"✅ تم إطلاق Webhook: sale_deleted (Sale ID: {sale_id})")
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"⚠️ فشل إطلاق Webhook: {e}")
                 
                 if self.logger:
                     action = "تعطيل" if soft_delete else "حذف"
@@ -1251,7 +1425,8 @@ class SaleManager:
         
         Schema المتوقع: id, invoice_number, customer_id, total_amount, discount_amount, 
         final_amount, payment_method, sale_date, user_id, notes, status, paid_amount, remaining_amount,
-        is_active, created_at, updated_at (16 عمود)
+        currency_id, exchange_rate, base_amount, converted_amount (Multi-Currency),
+        is_active, created_at, updated_at (20 عمود)
         """
         # دالة مساعدة لتحويل التاريخ
         def to_date(value):
@@ -1346,6 +1521,12 @@ class SaleManager:
                 final_amount = to_decimal(row[5]) if row[5] is not None else Decimal('0')
                 remaining_amount = final_amount
             
+            # قراءة حقول Multi-Currency - الأعمدة 13-16
+            currency_id = row[13] if row_len > 13 and row[13] is not None else None
+            exchange_rate = to_decimal(row[14]) if row_len > 14 and row[14] is not None else Decimal('1.0')
+            base_amount = to_decimal(row[15]) if row_len > 15 and row[15] is not None else None
+            converted_amount = to_decimal(row[16]) if row_len > 16 and row[16] is not None else None
+            
             # التوافق مع schema الفعلي
             return Sale(
                 id=row[0] if row_len > 0 else None,                                    # id
@@ -1365,10 +1546,15 @@ class SaleManager:
                 total_amount=to_decimal(row[5]) if row_len > 5 and row[5] is not None else Decimal('0'),  # final_amount
                 paid_amount=paid_amount,                      # paid_amount
                 remaining_amount=remaining_amount,            # remaining_amount
+                # Multi-Currency Support
+                currency_id=currency_id,                      # currency_id
+                exchange_rate=exchange_rate,                  # exchange_rate
+                base_amount=base_amount,                       # base_amount
+                converted_amount=converted_amount,             # converted_amount
                 notes=row[9] if row_len > 9 and row[9] else '',              # notes
                 created_by=row[8] if row_len > 8 and row[8] else None,                           # user_id
-                created_at=to_datetime(row[14]) if row_len > 14 and row[14] else None,             # created_at
-                updated_at=to_datetime(row[15]) if row_len > 15 and row[15] else None              # updated_at
+                created_at=to_datetime(row[18]) if row_len > 18 and row[18] else None,             # created_at (shifted by 4 currency columns)
+                updated_at=to_datetime(row[19]) if row_len > 19 and row[19] else None              # updated_at (shifted by 4 currency columns)
             )
         except Exception as e:
             if self.logger:

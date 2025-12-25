@@ -9,9 +9,23 @@ Main Application - Inventory and Sales Management System
 import sys
 import os
 import logging
+import warnings
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
+
+# قمع تحذيرات WeasyPrint قبل أي استيراد
+warnings.filterwarnings('ignore', category=UserWarning, module='weasyprint')
+warnings.filterwarnings('ignore', message='.*WeasyPrint.*', category=UserWarning)
+# قمع تحذيرات pydantic
+warnings.filterwarnings('ignore', message='.*orm_mode.*', category=UserWarning)
+
+# قمع stdout/stderr مؤقتاً قبل أي استيراد قد يسبب تحذيرات
+# هذا يمنع WeasyPrint من طباعة تحذيرات عند الاستيراد
+_original_stdout = sys.stdout
+_original_stderr = sys.stderr
+sys.stdout = open(os.devnull, 'w')
+sys.stderr = open(os.devnull, 'w')
 
 # إضافة مجلد src إلى sys.path
 project_root = Path(__file__).parent
@@ -25,13 +39,23 @@ from PySide6.QtWidgets import (
     QSystemTrayIcon, QStyle, QFrame, QGridLayout, QPushButton,
     QGroupBox, QTextEdit, QTabWidget, QStackedWidget
 )
-from PySide6.QtCore import Qt, QTimer, Signal, QThread, QSettings, QSize
+from PySide6.QtCore import Qt, QTimer, Signal, QThread, QSettings, QSize, QLoggingCategory
 from PySide6.QtGui import QFont, QPixmap, QIcon, QPalette, QColor, QAction
+
+# قمع تحذيرات Qt حول الأنماط
+qt_style_logger = QLoggingCategory("qt.qpa.qss")
+qt_style_logger.setFilterRules("*.warning=false")
 
 # استيراد المكونات الأساسية
 from src.core.database_manager import DatabaseManager
 from src.core.config_manager import ConfigManager
 from src.utils.logger import setup_logger
+
+# استعادة stdout/stderr بعد قمع الاستيرادات الأولية
+sys.stdout.close()
+sys.stderr.close()
+sys.stdout = _original_stdout
+sys.stderr = _original_stderr
 
 # استيراد الخدمات
 from src.services.inventory_service import InventoryService
@@ -66,6 +90,10 @@ class DatabaseInitWorker(QThread):
     
     def run(self):
         try:
+            # التحقق من طلب الإنهاء قبل كل خطوة
+            if self.isInterruptionRequested():
+                return
+            
             self.progress_updated.emit(10, "تهيئة قاعدة البيانات...")
             
             # تهيئة قاعدة البيانات
@@ -74,21 +102,33 @@ class DatabaseInitWorker(QThread):
                 self.initialization_completed.emit(False, "فشل في تهيئة قاعدة البيانات")
                 return
             
+            if self.isInterruptionRequested():
+                return
+            
             self.progress_updated.emit(30, "إنشاء الجداول...")
             
             # إنشاء الجداول الأساسية
             # الجداول يتم إنشاؤها تلقائياً في initialize()
+            
+            if self.isInterruptionRequested():
+                return
             
             self.progress_updated.emit(50, "تحميل البيانات الأولية...")
             
             # تحميل البيانات الأولية إذا لزم الأمر
             self.load_initial_data()
             
+            if self.isInterruptionRequested():
+                return
+            
             self.progress_updated.emit(80, "التحقق من سلامة البيانات...")
             
             # التحقق من سلامة قاعدة البيانات
             if not self.verify_database_integrity():
                 self.initialization_completed.emit(False, "فشل في التحقق من سلامة قاعدة البيانات")
+                return
+            
+            if self.isInterruptionRequested():
                 return
             
             self.progress_updated.emit(100, "تم الانتهاء من التهيئة")
@@ -288,9 +328,13 @@ class InventoryManagementApp(QApplication):
         # Phase 4: تطبيق الأنماط الحديثة مع دعم السمات
         try:
             from src.ui.styles.main import apply_style_to_app
-            apply_style_to_app(self, theme=theme)
+            # قمع تحذيرات Qt حول الأنماط
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                apply_style_to_app(self, theme=theme)
         except Exception as e:
-            print(f"تحذير: فشل تحميل الأنماط الحديثة: {e}")
+            # لا نطبع تحذير هنا لأن هذا قد يكون متوقعاً في بعض البيئات
+            pass
         
         # إعداد المتغيرات
         self.logger = setup_logger(__name__)
@@ -716,13 +760,9 @@ class InventoryManagementApp(QApplication):
     
     def _start_notifications_system(self):
         """بدء نظام الإشعارات (في الخلفية لتجنب التجميد)"""
-        if self.notifications_manager and self.main_window:
-            try:
-                self.notifications_manager.main_window = self.main_window
-                self.notifications_manager.start()
-                self.logger.info("✓ نظام الإشعارات الذكية يعمل")
-            except Exception as e:
-                self.logger.warning(f"فشل بدء نظام الإشعارات: {e}")
+        # 🔥 نظام الإشعارات معطّل لمنع التجميد
+        self.logger.info("⚠️ نظام الإشعارات معطّل مؤقتاً")
+        return
     
     def show_reports_window(self):
         """عرض نافذة التقارير"""
@@ -786,11 +826,43 @@ class InventoryManagementApp(QApplication):
                 except Exception:
                     pass
             
-            # إيقاف العمال (بدون انتظار طويل)
-            if self.init_worker and self.init_worker.isRunning():
-                self.init_worker.terminate()
-                # لا ننتظر أكثر من 100ms
-                self.init_worker.wait(100)
+            # إيقاف العمال بشكل صحيح
+            if self.init_worker:
+                try:
+                    if self.init_worker.isRunning():
+                        # محاولة إنهاء الـ thread بشكل لطيف أولاً
+                        self.init_worker.requestInterruption()
+                        # انتظار حتى 500ms للإنهاء الطبيعي
+                        if not self.init_worker.wait(500):
+                            # إذا لم ينتهِ، قم بإنهائه قسراً
+                            self.init_worker.terminate()
+                            # انتظار إضافي بعد الإنهاء القسري
+                            if not self.init_worker.wait(500):
+                                if self.logger:
+                                    self.logger.warning("init_worker لم ينتهِ بعد الإنهاء القسري")
+                    
+                    # تنظيف الـ thread فقط بعد التأكد من أنه قد انتهى
+                    if not self.init_worker.isRunning():
+                        # استخدام deleteLater() لتنظيف آمن
+                        self.init_worker.deleteLater()
+                        # إزالة المرجع
+                        self.init_worker = None
+                    else:
+                        # إذا كان لا يزال يعمل، انتظر قليلاً ثم حاول مرة أخرى
+                        if self.logger:
+                            self.logger.warning("init_worker لا يزال يعمل، سيتم تنظيفه لاحقاً")
+                        # جدولة deleteLater() لاحقاً
+                        QTimer.singleShot(100, lambda: self.init_worker.deleteLater() if self.init_worker else None)
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"خطأ في إيقاف init_worker: {e}")
+                    # محاولة تنظيف في أي حال
+                    try:
+                        if self.init_worker:
+                            self.init_worker.deleteLater()
+                            self.init_worker = None
+                    except Exception:
+                        pass
             
             # إنهاء جلسة المستخدم (سريع)
             if self.current_user and self.user_service:
@@ -805,6 +877,10 @@ class InventoryManagementApp(QApplication):
                     QTimer.singleShot(0, self.db_manager.close)
                 except Exception:
                     pass
+            
+            # معالجة الأحداث لضمان تنظيف threads (deleteLater)
+            from PySide6.QtWidgets import QApplication
+            QApplication.processEvents()
             
             self.logger.info("✓ تم تنظيف الموارد")
             

@@ -14,6 +14,7 @@ import logging
 
 from ..models.account import Account, ChartOfAccounts
 from ..models.journal_entry import JournalEntry, JournalLine
+from ..models.sale import Sale
 
 
 class AccountingService:
@@ -210,6 +211,50 @@ class AccountingService:
         except Exception as e:
             self.logger.error(f"خطأ في إنشاء القيد: {e}")
             return 0
+
+    def create_sale_journal_entry(self, sale: Sale) -> Optional[int]:
+        """إنشاء قيد محاسبي خاص بفاتورة المبيعات"""
+        try:
+            entry = JournalEntry(
+                entry_date=sale.sale_date,
+                description=f"فاتورة مبيعات رقم {sale.invoice_number}",
+                reference_type="sale",
+                reference_id=sale.id,
+                created_by=sale.created_by
+            )
+
+            # حسابات ثابتة (يمكن جعلها قابلة للتخصيص لاحقاً)
+            accounts_receivable_acc = self.get_account_by_code("1010") # حسابات العملاء
+            sales_revenue_acc = self.get_account_by_code("4001") # إيرادات المبيعات
+            vat_payable_acc = self.get_account_by_code("2010") # ضريبة القيمة المضافة المستحقة
+
+            if not all([accounts_receivable_acc, sales_revenue_acc, vat_payable_acc]):
+                self.logger.error("الحسابات المحاسبية الأساسية للمبيعات غير موجودة!")
+                return None
+
+            # الطرف المدين: حسابات العملاء (بكامل قيمة الفاتورة)
+            entry.add_line(JournalLine(
+                account_id=accounts_receivable_acc.id,
+                debit_amount=sale.grand_total
+            ))
+
+            # الطرف الدائن: إيرادات المبيعات (قيمة الفاتورة قبل الضريبة)
+            entry.add_line(JournalLine(
+                account_id=sales_revenue_acc.id,
+                credit_amount=sale.subtotal
+            ))
+
+            # الطرف الدائن: ضريبة القيمة المضافة (إذا وجدت)
+            if sale.tax_amount > 0:
+                entry.add_line(JournalLine(
+                    account_id=vat_payable_acc.id,
+                    credit_amount=sale.tax_amount
+                ))
+
+            return self.create_journal_entry(entry)
+        except Exception as e:
+            self.logger.error(f"خطأ في إنشاء قيد المبيعات: {e}")
+            return None
     
     def _insert_journal_line(self, journal_id: int, line: JournalLine) -> int:
         """إدراج سطر من القيد"""

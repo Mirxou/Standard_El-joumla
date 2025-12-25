@@ -10,7 +10,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+/lib/
 lib64/
 parts/
 sdist/
@@ -95,3 +95,4 @@ assets/images/products/
 assets/images/thumbnails/
 assets/images/previews/
 !assets/images/.gitkeep
+node_modules

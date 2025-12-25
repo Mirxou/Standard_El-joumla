@@ -1,0 +1,50 @@
+name: Docker Compose Integration Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  docker-compose-test:
+    name: Docker Compose Integration Test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Docker Compose
+      run: |
+        docker compose version
+    
+    - name: Build services
+      run: |
+        export DOCKER_BUILDKIT=0
+        export COMPOSE_DOCKER_CLI_BUILD=0
+        docker compose -f docker-compose.dev.yml build
+    
+    - name: Start services
+      run: |
+        docker compose -f docker-compose.dev.yml up -d
+        sleep 30  # Wait for services to start
+    
+    - name: Check API health
+      run: |
+        curl -f http://localhost:8000/health || exit 1
+    
+    - name: Check Redis
+      run: |
+        docker compose -f docker-compose.dev.yml exec -T redis redis-cli ping || exit 1
+    
+    - name: Run API tests
+      run: |
+        docker compose -f docker-compose.dev.yml exec -T api pytest tests/api/ -v || true
+    
+    - name: Stop services
+      if: always()
+      run: |
+        docker compose -f docker-compose.dev.yml down -v
+

@@ -23,13 +23,29 @@ from models.receiving_note import (
     ReceivingStatus, InspectionStatus, QualityRating
 )
 from core.database_manager import DatabaseManager
+from services.workflow_service import WorkflowService
 
 
 class PurchaseOrderService:
     """خدمة إدارة أوامر الشراء"""
     
-    def __init__(self, db_manager: DatabaseManager):
+    def __init__(self, db_manager: DatabaseManager, logger=None):
         self.db = db_manager
+        self.logger = logger
+        # Lazy loading لـ WorkflowService
+        self._workflow_service = None
+    
+    @property
+    def workflow_service(self):
+        """Lazy loading لـ WorkflowService"""
+        if self._workflow_service is None:
+            try:
+                from src.services.workflow_service import WorkflowService
+                self._workflow_service = WorkflowService(self.db, self.logger)
+            except ImportError:
+                if self.logger:
+                    self.logger.warning("WorkflowService غير متاح - Workflow Engine غير مفعل")
+        return self._workflow_service
     
     # ===================== إنشاء وإدارة أوامر الشراء =====================
     
@@ -106,6 +122,29 @@ class PurchaseOrderService:
         # حفظ البنود
         for item in po.items:
             self._save_po_item(po_id, item)
+        
+        # بدء سير العمل إذا كان متاحاً
+        if self.workflow_service and po.created_by:
+            try:
+                # الحصول على company_id من PO (إذا كان متوفراً)
+                company_id = getattr(po, 'company_id', None)
+                
+                instance_id = self.workflow_service.start_workflow_for_entity(
+                    entity_type="purchase_order",
+                    entity_id=po_id,
+                    initiated_by=po.created_by,
+                    workflow_id=None,  # استخدام الافتراضي
+                    company_id=company_id,
+                    notes=f"طلب شراء: {po.po_number}",
+                    metadata={'po_number': po.po_number, 'supplier_id': po.supplier_id}
+                )
+                
+                if instance_id and self.logger:
+                    self.logger.info(f"تم بدء سير العمل لأمر الشراء {po_id} (instance: {instance_id})")
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"فشل بدء سير العمل لأمر الشراء {po_id}: {e}")
+                # لا نوقف العملية إذا فشل بدء سير العمل
         
         return po_id
     
@@ -315,8 +354,26 @@ class PurchaseOrderService:
             return True
         return False
     
-    def approve_purchase_order(self, po_id: int, approved_by: int, notes: Optional[str] = None) -> bool:
+    def approve_purchase_order(self, po_id: int, approved_by: int, notes: Optional[str] = None,
+                              approval_id: Optional[int] = None) -> bool:
         """الموافقة على أمر شراء"""
+        # إذا كان هناك approval_id، استخدم Workflow Service
+        if approval_id and self.workflow_service:
+            try:
+                self.workflow_service.approve(approval_id, approved_by, notes or "")
+                # بعد الموافقة في سير العمل، تحديث أمر الشراء
+                po = self.get_purchase_order(po_id)
+                if po:
+                    po.approve(approved_by, notes)
+                    self.update_purchase_order(po)
+                return True
+            except Exception as e:
+                if self.logger:
+                    self.logger.error(f"خطأ في الموافقة عبر سير العمل: {e}")
+                # Fallback إلى الطريقة القديمة
+                pass
+        
+        # الطريقة القديمة (بدون سير العمل)
         po = self.get_purchase_order(po_id)
         if po and po.approve(approved_by, notes):
             self.update_purchase_order(po)

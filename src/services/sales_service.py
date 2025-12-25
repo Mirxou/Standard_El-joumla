@@ -15,9 +15,13 @@ from pathlib import Path
 # إضافة مسار src
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from models.sale import Sale, SaleItem, SaleManager, SaleStatus, PaymentMethod
-from models.product import Product, ProductManager
-from models.customer import Customer, CustomerManager
+from src.models.sale import Sale, SaleItem, SaleManager, SaleStatus, PaymentMethod
+from src.models.product import Product, ProductManager
+from src.models.customer import Customer, CustomerManager
+from src.services.exchange_rate_service import ExchangeRateService
+from src.services.workflow_service import WorkflowService
+from src.services.inventory_service import InventoryService
+from src.services.accounting_service import AccountingService
 
 @dataclass
 class SalesReport:
@@ -69,7 +73,23 @@ class SalesService:
         self.sale_manager = SaleManager(db_manager, logger)
         self.product_manager = ProductManager(db_manager, logger)
         self.customer_manager = CustomerManager(db_manager, logger)
+        self.inventory_service = InventoryService(db_manager, logger)
+        self.accounting_service = AccountingService(db_manager)
+        self.exchange_rate_service = ExchangeRateService(db_manager, logger)
         self.current_session: Optional[POSSession] = None
+        # Lazy loading لـ WorkflowService
+        self._workflow_service = None
+    
+    @property
+    def workflow_service(self):
+        """Lazy loading لـ WorkflowService"""
+        if self._workflow_service is None:
+            try:
+                self._workflow_service = WorkflowService(self.db_manager, self.logger)
+            except ImportError:
+                if self.logger:
+                    self.logger.warning("WorkflowService غير متاح - Workflow Engine غير مفعل")
+        return self._workflow_service
     
     # ===== إدارة المبيعات =====
     
@@ -89,12 +109,109 @@ class SalesService:
                         self.logger.warning(f"كمية غير كافية للمنتج {product.name}")
                     return None
             
+            # Multi-Currency: حساب المبالغ بالعملة الأساسية
+            if sale.currency_id:
+                try:
+                    # الحصول على العملة الأساسية
+                    base_currency = self.exchange_rate_service.currency_manager.get_base_currency()
+                    if base_currency:
+                        # الحصول على سعر الصرف
+                        exchange_rate = self.exchange_rate_service.get_exchange_rate(
+                            sale.currency_id,
+                            base_currency.id,
+                            sale.sale_date
+                        )
+                        
+                        if exchange_rate:
+                            sale.exchange_rate = exchange_rate
+                            # حساب المبلغ بالعملة الأساسية
+                            sale.base_amount = sale.total_amount * exchange_rate
+                            sale.converted_amount = sale.total_amount
+                            
+                            if self.logger:
+                                self.logger.debug(
+                                    f"تم حساب المبلغ بالعملة الأساسية: {sale.base_amount} "
+                                    f"(سعر الصرف: {exchange_rate})"
+                                )
+                        else:
+                            # إذا لم يوجد سعر صرف، استخدم المبلغ الأساسي
+                            sale.base_amount = sale.total_amount
+                            sale.converted_amount = sale.total_amount
+                            sale.exchange_rate = Decimal('1.0')
+                    else:
+                        # إذا لم توجد عملة أساسية، استخدم المبلغ الأساسي
+                        sale.base_amount = sale.total_amount
+                        sale.converted_amount = sale.total_amount
+                        sale.exchange_rate = Decimal('1.0')
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"خطأ في حساب سعر الصرف: {str(e)}")
+                    # في حالة الخطأ، استخدم المبلغ الأساسي
+                    sale.base_amount = sale.total_amount
+                    sale.converted_amount = sale.total_amount
+                    sale.exchange_rate = Decimal('1.0')
+            else:
+                # إذا لم تكن هناك عملة محددة، استخدم المبلغ الأساسي
+                sale.base_amount = sale.total_amount
+                sale.converted_amount = sale.total_amount
+                sale.exchange_rate = Decimal('1.0')
+            
             # إنشاء الفاتورة
             sale_id = self.sale_manager.create_sale(sale)
             if sale_id:
-                # تحديث جلسة نقطة البيع
-                if self.current_session:
-                    self._update_session_sales(sale.total_amount)
+                try:
+                    # --- بدء ربط الخدمات (Glue Code) ---
+                    
+                    # 1. تحديث المخزون
+                    for item in sale.items:
+                        self.inventory_service.adjust_stock(
+                            product_id=item.product_id,
+                            quantity_change=-item.quantity,
+                            reason="sale",
+                            reference_id=sale_id
+                        )
+                    
+                    # 2. إنشاء قيد محاسبي
+                    self.accounting_service.create_sale_journal_entry(sale)
+                    
+                    # 3. تحديث رصيد العميل
+                    if sale.customer_id:
+                        self.customer_manager.update_balance(sale.customer_id, sale.final_amount, "increase")
+
+                    # 4. تحديث جلسة نقطة البيع
+                    if self.current_session:
+                        self._update_session_sales(sale.total_amount)
+                        
+                except Exception as e:
+                    # Transaction Rollback Strategy
+                    # في حالة حدوث أي خطأ بعد إنشاء الفاتورة، نقوم بحذف الفاتورة لضمان سلامة البيانات
+                    if self.logger:
+                        self.logger.error(f"فشل في معالجة ما بعد البيع، جاري التراجع: {e}")
+                    self.sale_manager.delete_sale(sale_id)
+                    return None
+
+                # بدء سير العمل إذا كان متاحاً
+                if self.workflow_service and user_id:
+                    try:
+                        # الحصول على company_id من Sale (إذا كان متوفراً)
+                        company_id = getattr(sale, 'company_id', None)
+                        
+                        instance_id = self.workflow_service.start_workflow_for_entity(
+                            entity_type="sale",
+                            entity_id=sale_id,
+                            initiated_by=user_id,
+                            workflow_id=None,  # استخدام الافتراضي
+                            company_id=company_id,
+                            notes=f"فاتورة مبيعات: {sale.invoice_number}",
+                            metadata={'invoice_number': sale.invoice_number, 'customer_id': sale.customer_id}
+                        )
+                        
+                        if instance_id and self.logger:
+                            self.logger.info(f"تم بدء سير العمل للفاتورة {sale_id} (instance: {instance_id})")
+                    except Exception as e:
+                        if self.logger:
+                            self.logger.warning(f"فشل بدء سير العمل للفاتورة {sale_id}: {e}")
+                        # لا نوقف العملية إذا فشل بدء سير العمل
                 
                 if self.logger:
                     self.logger.info(f"تم إنشاء فاتورة مبيعات جديدة: {sale_id}")

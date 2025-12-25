@@ -202,8 +202,47 @@ class PermissionManager:
             db_manager: مدير قاعدة البيانات
         """
         self.db = db_manager
+        # Multi-Company Support
+        self._tenant_manager = None
         self._create_tables()
         self._initialize_default_roles()
+    
+    @property
+    def tenant_manager(self):
+        """Lazy loading لـ TenantIsolationManager"""
+        if self._tenant_manager is None:
+            try:
+                from src.core.tenant_isolation import TenantIsolationManager
+                self._tenant_manager = TenantIsolationManager(self.db)
+            except ImportError:
+                logger.warning("TenantIsolationManager غير متاح - Multi-Company غير مفعل")
+        return self._tenant_manager
+    
+    def _get_company_id(self) -> Optional[int]:
+        """الحصول على معرف الشركة الحالية"""
+        if self.tenant_manager:
+            return self.tenant_manager.get_current_company_id()
+        return None
+    
+    def _check_user_company_access(self, user_id: int, company_id: Optional[int] = None) -> bool:
+        """التحقق من ربط المستخدم بالشركة"""
+        if company_id is None:
+            company_id = self._get_company_id()
+        
+        if company_id is None:
+            return True  # إذا لم تكن Multi-Company مفعلة، السماح بالوصول
+        
+        try:
+            # التحقق من ربط المستخدم بالشركة
+            query = """
+                SELECT company_id FROM user_companies 
+                WHERE user_id = ? AND company_id = ? AND is_active = 1
+            """
+            result = self.db.fetch_one(query, (user_id, company_id))
+            return result is not None
+        except Exception:
+            # إذا فشل الاستعلام، نسمح بالوصول (للتوافق مع الأنظمة القديمة)
+            return True
         
     def _create_tables(self):
         """إنشاء جداول الصلاحيات"""
@@ -540,18 +579,24 @@ class PermissionManager:
             logger.error(f"Failed to update role permissions: {str(e)}")
             return False
             
-    def check_permission(self, user_id: int, permission: str) -> bool:
+    def check_permission(self, user_id: int, permission: str, company_id: Optional[int] = None) -> bool:
         """
         التحقق من صلاحية مستخدم
         
         Args:
             user_id: معرف المستخدم
             permission: الصلاحية المطلوبة
+            company_id: معرف الشركة (اختياري - سيتم الحصول عليه تلقائياً)
             
         Returns:
             True إذا كان لديه الصلاحية
         """
         try:
+            # التحقق من ربط المستخدم بالشركة
+            if not self._check_user_company_access(user_id, company_id):
+                logger.warning(f"User {user_id} does not have access to company {company_id}")
+                return False
+            
             # الحصول على دور المستخدم
             row = self.db.fetch_one(
                 """SELECT r.permissions 
@@ -571,17 +616,23 @@ class PermissionManager:
             logger.error(f"Permission check failed: {str(e)}")
             return False
             
-    def get_user_permissions(self, user_id: int) -> Set[str]:
+    def get_user_permissions(self, user_id: int, company_id: Optional[int] = None) -> Set[str]:
         """
         الحصول على جميع صلاحيات مستخدم
         
         Args:
             user_id: معرف المستخدم
+            company_id: معرف الشركة (اختياري - سيتم الحصول عليه تلقائياً)
             
         Returns:
             مجموعة الصلاحيات
         """
         try:
+            # التحقق من ربط المستخدم بالشركة
+            if not self._check_user_company_access(user_id, company_id):
+                logger.warning(f"User {user_id} does not have access to company {company_id}")
+                return set()
+            
             row = self.db.fetch_one(
                 """SELECT r.permissions 
                    FROM users u

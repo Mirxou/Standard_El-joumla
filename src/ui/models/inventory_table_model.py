@@ -20,6 +20,7 @@ class InventoryTableModel(QAbstractTableModel):
     def __init__(self, data: Optional[pd.DataFrame] = None, parent=None):
         super().__init__(parent)
         self._data = data if data is not None else pd.DataFrame()
+        # سيتم تحديثها تلقائياً عند setData
         self._column_headers = [
             "المعرف", "الباركود", "اسم المنتج", "الفئة",
             "الوحدة", "الكمية الحالية", "الحد الأدنى",
@@ -52,14 +53,17 @@ class InventoryTableModel(QAbstractTableModel):
         # DisplayRole - النص المعروض
         if role == Qt.DisplayRole:
             try:
+                # الحصول على اسم العمود
+                column_name = self._data.columns[col] if col < len(self._data.columns) else None
                 value = self._data.iloc[row, col]
+                
                 # تنسيق الأرقام
-                if col == 7:  # سعر البيع
+                if column_name == 'selling_price' or (col == 7 and 'warehouse_name' not in self._data.columns):
                     try:
                         return f"{float(value):,.2f}" if pd.notna(value) and str(value).strip() else "0.00"
                     except (ValueError, TypeError):
                         return "0.00"
-                elif col in (5, 6):  # الكمية الحالية والحد الأدنى
+                elif column_name in ('current_stock', 'min_stock') or col in (5, 6):
                     try:
                         # معالجة آمنة للتحويل: تحقق من أن القيمة ليست string فارغ
                         if pd.notna(value) and str(value).strip():
@@ -75,24 +79,37 @@ class InventoryTableModel(QAbstractTableModel):
         
         # TextAlignmentRole - محاذاة النص
         elif role == Qt.TextAlignmentRole:
-            if col in (0, 5, 6, 7):  # أعمدة مركزية
+            column_name = self._data.columns[col] if col < len(self._data.columns) else None
+            # أعمدة مركزية: المعرف، الكميات، السعر
+            if column_name in ('id', 'current_stock', 'min_stock', 'selling_price'):
                 return Qt.AlignCenter
             else:
                 return Qt.AlignVCenter | Qt.AlignRight
         
         # ForegroundRole - لون النص (حسب حالة المخزون)
         elif role == Qt.ForegroundRole:
-            if col == 8:  # عمود حالة المخزون
+            column_name = self._data.columns[col] if col < len(self._data.columns) else None
+            if column_name == 'status':  # عمود حالة المخزون
                 try:
-                    current_stock = float(self._data.iloc[row, 5]) if pd.notna(self._data.iloc[row, 5]) else 0
-                    min_stock = float(self._data.iloc[row, 6]) if pd.notna(self._data.iloc[row, 6]) else 0
+                    # البحث عن عمود current_stock
+                    current_stock_col = None
+                    min_stock_col = None
+                    for idx, col_name in enumerate(self._data.columns):
+                        if col_name == 'current_stock':
+                            current_stock_col = idx
+                        elif col_name == 'min_stock':
+                            min_stock_col = idx
                     
-                    if current_stock == 0:
-                        return QColor("#e74c3c")  # أحمر - نفد
-                    elif current_stock <= min_stock:
-                        return QColor("#f39c12")  # برتقالي - منخفض
-                    else:
-                        return QColor("#27ae60")  # أخضر - جيد
+                    if current_stock_col is not None and min_stock_col is not None:
+                        current_stock = float(self._data.iloc[row, current_stock_col]) if pd.notna(self._data.iloc[row, current_stock_col]) else 0
+                        min_stock = float(self._data.iloc[row, min_stock_col]) if pd.notna(self._data.iloc[row, min_stock_col]) else 0
+                        
+                        if current_stock == 0:
+                            return QColor("#e74c3c")  # أحمر - نفد
+                        elif current_stock <= min_stock:
+                            return QColor("#f39c12")  # برتقالي - منخفض
+                        else:
+                            return QColor("#27ae60")  # أخضر - جيد
                 except (IndexError, ValueError, TypeError):
                     return QColor("#2c3e50")  # رمادي افتراضي
         
@@ -124,6 +141,33 @@ class InventoryTableModel(QAbstractTableModel):
         """
         self.beginResetModel()
         self._data = data.copy() if isinstance(data, pd.DataFrame) else pd.DataFrame()
+        
+        # تحديث رؤوس الأعمدة بناءً على البيانات
+        column_mapping = {
+            'id': 'المعرف',
+            'barcode': 'الباركود',
+            'name': 'اسم المنتج',
+            'category': 'الفئة',
+            'unit': 'الوحدة',
+            'current_stock': 'الكمية الحالية',
+            'min_stock': 'الحد الأدنى',
+            'selling_price': 'سعر البيع',
+            'warehouse_name': 'المستودع',
+            'status': 'حالة المخزون',
+            'actions': 'إجراءات'
+        }
+        
+        # بناء رؤوس الأعمدة من البيانات
+        if not self._data.empty:
+            self._column_headers = [column_mapping.get(col, col) for col in self._data.columns]
+        else:
+            # إذا كانت البيانات فارغة، استخدم الرؤوس الافتراضية
+            self._column_headers = [
+                "المعرف", "الباركود", "اسم المنتج", "الفئة",
+                "الوحدة", "الكمية الحالية", "الحد الأدنى",
+                "سعر البيع", "حالة المخزون", "إجراءات"
+            ]
+        
         self.endResetModel()
     
     def appendData(self, new_data: pd.DataFrame):

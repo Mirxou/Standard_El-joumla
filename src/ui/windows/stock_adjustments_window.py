@@ -31,7 +31,8 @@ class StockAdjustmentsWindow(QMainWindow):
         super().__init__(parent)
         self.db = db_manager
         self.service = InventoryCountService(db_manager)
-        self.current_user_id = 1
+        # استخدام معرّف المستخدم من النافذة الأب أو الافتراضي
+        self.current_user_id = getattr(parent, 'current_user_id', getattr(parent, 'user_id', 1)) if parent else 1
         self.current_user_name = "Admin"
         
         self.setup_ui()

@@ -12,6 +12,11 @@ import logging
 import subprocess
 import tempfile
 import os
+import warnings
+
+# قمع تحذيرات WeasyPrint قبل أي استيراد
+warnings.filterwarnings('ignore', category=UserWarning, module='weasyprint')
+warnings.filterwarnings('ignore', message='.*WeasyPrint.*', category=UserWarning)
 
 logger = logging.getLogger(__name__)
 
@@ -95,8 +100,23 @@ class PDFExportService:
     ) -> bool:
         """محاولة استخدام WeasyPrint"""
         try:
-            from weasyprint import HTML, CSS
-            from weasyprint.text.fonts import FontConfiguration
+            # قمع stdout/stderr مؤقتاً أثناء استيراد WeasyPrint
+            import sys
+            import os
+            old_stdout = sys.stdout
+            old_stderr = sys.stderr
+            sys.stdout = open(os.devnull, 'w')
+            sys.stderr = open(os.devnull, 'w')
+            
+            try:
+                from weasyprint import HTML, CSS
+                from weasyprint.text.fonts import FontConfiguration
+            finally:
+                # استعادة stdout/stderr
+                sys.stdout.close()
+                sys.stderr.close()
+                sys.stdout = old_stdout
+                sys.stderr = old_stderr
             
             # إعداد الخطوط
             font_config = FontConfiguration()
@@ -197,7 +217,22 @@ class PDFExportService:
             True إذا نجح
         """
         try:
-            from weasyprint import HTML
+            # قمع stdout/stderr مؤقتاً أثناء استيراد WeasyPrint
+            import sys
+            import os
+            old_stdout = sys.stdout
+            old_stderr = sys.stderr
+            sys.stdout = open(os.devnull, 'w')
+            sys.stderr = open(os.devnull, 'w')
+            
+            try:
+                from weasyprint import HTML
+            finally:
+                # استعادة stdout/stderr
+                sys.stdout.close()
+                sys.stderr.close()
+                sys.stdout = old_stdout
+                sys.stderr = old_stderr
             
             html = HTML(url=url)
             html.write_pdf(output_path)

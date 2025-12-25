@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 نافذة فاتورة المبيعات - Sales Dialog
 واجهة شاملة لإنشاء وإدارة فواتير المبيعات مع دعم اللغة العربية
@@ -1453,8 +1453,8 @@ class SalesDialog(QDialog):
             self.btn_cancel_invoice.setEnabled(False)
             self.setEnabled(False)
             
-            # نفترض أن user_id = 1 أو نجلبه من الجلسة الحالية
-            current_user_id = 1  # TODO: إضافة معرف المستخدم الحالي من الجلسة
+            # محاولة الحصول على معرف المستخدم من النافذة الأب
+            current_user_id = getattr(self.parent(), 'current_user_id', getattr(self.parent(), 'user_id', 1)) if self.parent() else 1
             
             success = self.sales_service.cancel_invoice(
                 sale_id=self.sale.id,
