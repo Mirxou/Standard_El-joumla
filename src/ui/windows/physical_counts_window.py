@@ -16,6 +16,7 @@ from typing import Optional, List
 from ...core.database_manager import DatabaseManager
 from ...services.inventory_count_service import InventoryCountService
 from ...models.physical_count import PhysicalCount, CountStatus
+from ...utils.logger import setup_logger
 
 
 class PhysicalCountsWindow(QMainWindow):
@@ -46,7 +47,9 @@ class PhysicalCountsWindow(QMainWindow):
         self.db_manager = db_manager
         self.db = db_manager  # للتوافق مع الكود القديم
         self.service = InventoryCountService(db_manager)
-        self.current_user_id = 1  # TODO: من نظام المستخدمين
+        self.logger = setup_logger(__name__)
+        # استخدام معرّف المستخدم من النافذة الأب أو الافتراضي
+        self.current_user_id = getattr(parent, 'current_user_id', getattr(parent, 'user_id', 1)) if parent else 1
         self.current_user_name = "Admin"
         
         # التأكد مرة أخرى من عدم الحذف التلقائي
@@ -58,9 +61,7 @@ class PhysicalCountsWindow(QMainWindow):
             self.setup_ui()
         except Exception as e:
             # لا نرفع الخطأ هنا، فقط نعرض رسالة ولا نغلق النافذة
-            import traceback
-            error_trace = traceback.format_exc()
-            print(f"خطأ في setup_ui: {error_trace}")
+            self.logger.error(f"خطأ في setup_ui: {e}", exc_info=True)
             # لا نعرض QMessageBox هنا لأن النافذة قد لا تكون جاهزة بعد
             # سنعرض الخطأ في console فقط
         
@@ -69,9 +70,7 @@ class PhysicalCountsWindow(QMainWindow):
             self.load_data()
         except Exception as e:
             # لا نرفع الخطأ هنا، فقط نعرض رسالة
-            import traceback
-            error_trace = traceback.format_exc()
-            print(f"خطأ في load_data: {error_trace}")
+            self.logger.error(f"خطأ في load_data: {e}", exc_info=True)
             # لا نعرض QMessageBox هنا لأن النافذة قد لا تكون جاهزة بعد
         
         # ملاحظة: لا نكتب closeEvent هنا

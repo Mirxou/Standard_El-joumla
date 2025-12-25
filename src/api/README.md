@@ -202,5 +202,77 @@ python -m pytest tests/api/test_api_integration.py -v
 - `main.py` - استخدام API Client
 - `tests/unit/test_api_client.py` - اختبارات Unit
 - `tests/api/test_api_integration.py` - اختبارات Integration
-- `docs/INTEGRATION_GUIDE.md` - دليل التكامل
+- `docs/API_EXAMPLES.md` - أمثلة استخدام API
+- `docs/API_DOCUMENTATION.md` - التوثيق الكامل للـ API
+
+## أمثلة سريعة
+
+### Python - استخدام APIClient
+
+```python
+from src.api.api_client import APIClient
+
+# تهيئة العميل
+api_client = APIClient(base_url="http://localhost:8000")
+
+# تسجيل الدخول
+if api_client.login("username", "password"):
+    # الحصول على المنتجات
+    products = api_client.get("products")
+    print(products)
+    
+    # إنشاء منتج جديد
+    new_product = {
+        "name": "منتج جديد",
+        "barcode": "123456",
+        "cost_price": 50.0,
+        "selling_price": 100.0
+    }
+    result = api_client.post("products", new_product)
+    print(result)
+```
+
+### Python - استخدام FastAPI TestClient
+
+```python
+from fastapi.testclient import TestClient
+from src.api.app import app
+
+client = TestClient(app)
+
+# تسجيل الدخول
+response = client.post("/api/v1/auth/login", json={
+    "username": "admin",
+    "password": "password"
+})
+token = response.json()["access_token"]
+
+# استخدام Token
+headers = {"Authorization": f"Bearer {token}"}
+products = client.get("/api/v1/products/", headers=headers)
+print(products.json())
+```
+
+### JavaScript/TypeScript - استخدام fetch
+
+```typescript
+// تسجيل الدخول
+const loginResponse = await fetch('http://localhost:8000/api/v1/auth/login', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ username: 'admin', password: 'password' })
+});
+
+const { access_token } = await loginResponse.json();
+
+// استخدام Token
+const productsResponse = await fetch('http://localhost:8000/api/v1/products/', {
+  headers: { 'Authorization': `Bearer ${access_token}` }
+});
+
+const products = await productsResponse.json();
+console.log(products);
+```
+
+لمزيد من الأمثلة التفصيلية، راجع [docs/API_EXAMPLES.md](../../docs/API_EXAMPLES.md)
 

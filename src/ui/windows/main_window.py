@@ -84,11 +84,12 @@ class InventoryDataLoaderThread(QThread):
     progress_updated = Signal(str)  # يرسل رسالة التقدم
     error_occurred = Signal(str)  # يرسل رسالة خطأ
     
-    def __init__(self, db_path: str, search_term: str = "", category_id: int = None, limit: int = None, offset: int = 0):
+    def __init__(self, db_path: str, search_term: str = "", category_id: int = None, warehouse_id: int = None, limit: int = None, offset: int = 0):
         super().__init__()
         self.db_path = db_path
         self.search_term = search_term
         self.category_id = category_id
+        self.warehouse_id = warehouse_id  # Multi-Warehouse Support
         self.limit = limit
         self.offset = offset
     
@@ -101,25 +102,49 @@ class InventoryDataLoaderThread(QThread):
             self.progress_updated.emit("جاري الاتصال بقاعدة البيانات...")
             
             # فتح اتصال خاص داخل الخيط (Thread-Safe)
-            conn = sqlite3.connect(self.db_path)
+            conn = sqlite3.connect(self.db_path, timeout=30)
             conn.execute("PRAGMA journal_mode=WAL")  # تحسين الأداء
+            conn.execute("PRAGMA query_only=true")   # 🔥 Read-Only لتسريع الاستعلامات
             
-            # بناء الاستعلام
-            query = """
-                SELECT 
-                    p.id,
-                    p.barcode,
-                    p.name,
-                    COALESCE(c.name, 'غير محدد') as category,
-                    COALESCE(p.unit, 'قطعة') as unit,
-                    COALESCE(p.current_stock, 0) as current_stock,
-                    COALESCE(p.min_stock, 0) as min_stock,
-                    COALESCE(p.selling_price, 0.0) as selling_price
-                FROM products p
-                LEFT JOIN categories c ON p.category_id = c.id
-                WHERE 1=1
-            """
-            params = []
+            # بناء الاستعلام - دعم Multi-Warehouse
+            if self.warehouse_id:
+                # استخدام warehouse_inventory إذا كان warehouse_id محدداً
+                query = """
+                    SELECT 
+                        p.id,
+                        p.barcode,
+                        p.name,
+                        COALESCE(c.name, 'غير محدد') as category,
+                        COALESCE(p.unit, 'قطعة') as unit,
+                        COALESCE(wi.quantity, 0) as current_stock,
+                        COALESCE(wi.min_stock, p.min_stock, 0) as min_stock,
+                        COALESCE(p.selling_price, 0.0) as selling_price,
+                        COALESCE(w.name, '') as warehouse_name
+                    FROM products p
+                    LEFT JOIN categories c ON p.category_id = c.id
+                    LEFT JOIN warehouse_inventory wi ON p.id = wi.product_id AND wi.warehouse_id = ?
+                    LEFT JOIN warehouses w ON wi.warehouse_id = w.id
+                    WHERE COALESCE(p.is_active, 1) = 1
+                """
+                params = [self.warehouse_id]
+            else:
+                # الطريقة القديمة (إجمالي المخزون من جميع المستودعات)
+                query = """
+                    SELECT 
+                        p.id,
+                        p.barcode,
+                        p.name,
+                        COALESCE(c.name, 'غير محدد') as category,
+                        COALESCE(p.unit, 'قطعة') as unit,
+                        COALESCE(p.current_stock, 0) as current_stock,
+                        COALESCE(p.min_stock, 0) as min_stock,
+                        COALESCE(p.selling_price, 0.0) as selling_price,
+                        '' as warehouse_name
+                    FROM products p
+                    LEFT JOIN categories c ON p.category_id = c.id
+                    WHERE COALESCE(p.is_active, 1) = 1
+                """
+                params = []
             
             # إضافة مرشحات
             if self.search_term:
@@ -130,9 +155,6 @@ class InventoryDataLoaderThread(QThread):
             if self.category_id:
                 query += " AND p.category_id = ?"
                 params.append(self.category_id)
-            
-            # إضافة فلتر المنتجات النشطة فقط
-            query += " AND COALESCE(p.is_active, 1) = 1"
             
             # إضافة الترتيب
             query += " ORDER BY p.id DESC"
@@ -166,9 +188,13 @@ class InventoryDataLoaderThread(QThread):
                     # إضافة عمود الإجراءات الفارغ
                     df['actions'] = ""
                     
-                    # إعادة ترتيب الأعمدة
-                    df = df[['id', 'barcode', 'name', 'category', 'unit', 
-                            'current_stock', 'min_stock', 'selling_price', 'status', 'actions']]
+                    # إعادة ترتيب الأعمدة (مع عمود warehouse_name إذا كان موجوداً)
+                    if 'warehouse_name' in df.columns:
+                        df = df[['id', 'barcode', 'name', 'category', 'unit', 
+                                'current_stock', 'min_stock', 'selling_price', 'warehouse_name', 'status', 'actions']]
+                    else:
+                        df = df[['id', 'barcode', 'name', 'category', 'unit', 
+                                'current_stock', 'min_stock', 'selling_price', 'status', 'actions']]
                 else:
                     # DataFrame فارغ بنفس الأعمدة
                     df = pd.DataFrame(columns=['id', 'barcode', 'name', 'category', 'unit', 
@@ -376,7 +402,8 @@ class MainWindow(QMainWindow):
             self._status_timer = QTimer(self)
             self._status_timer.setInterval(3000)
             self._status_timer.timeout.connect(self.update_statusbar_metrics)
-            self._status_timer.start()
+            # 🔥 تعطيل مؤقت الحالة لتفادي التجميد
+            # self._status_timer.start()  # ← معطّل الآن
         except Exception:
             pass
         
@@ -886,9 +913,9 @@ class MainWindow(QMainWindow):
                 self.logger.error(f"❌ خطأ في بناء الصفحة '{page_name}': {e}")
                 self.logger.error(f"تفاصيل الخطأ:\n{error_details}")
             else:
-                # Fallback: طباعة في console إذا لم يكن logger متاحاً
-                print(f"❌ خطأ في بناء الصفحة '{page_name}': {e}")
-                print(f"تفاصيل الخطأ:\n{error_details}")
+                # Fallback: استخدام logger افتراضي إذا لم يكن متاحاً
+                import logging
+                logging.error(f"❌ خطأ في بناء الصفحة '{page_name}': {e}\nتفاصيل الخطأ:\n{error_details}", exc_info=True)
             return None
         finally:
             # ✅ Safety Net: إعادة تشغيل مراقب الجلسة مضمونة 100% حتى لو حدث خطأ
@@ -1285,7 +1312,8 @@ class MainWindow(QMainWindow):
         self.dashboard_refresh_timer = QTimer(self)
         self.dashboard_refresh_timer.timeout.connect(self.refresh_dashboard_data)
         self.dashboard_refresh_timer.setInterval(30000)  # 30 ثانية
-        self.dashboard_refresh_timer.start()
+        # 🔥 تعطيل التحديث التلقائي لتفادي التجميد
+        # self.dashboard_refresh_timer.start()  # ← معطّل الآن
         
         return scroll_area
     
@@ -1377,57 +1405,32 @@ class MainWindow(QMainWindow):
                 (SELECT COALESCE(SUM(total_amount - paid_amount), 0) FROM sales WHERE status != 'ملغية' AND status != 'cancelled') as total_remaining_amount
             """
             
-            # تنفيذ الاستعلام باستخدام db_manager
-            result = None
-            try:
-                if hasattr(self.db_manager, 'execute_query'):
-                    results = self.db_manager.execute_query(query_stats)
-                    if results and len(results) > 0:
-                        result = results[0] if isinstance(results[0], dict) else dict(zip(['total_products', 'total_stock_value', 'low_stock_items', 'out_of_stock_items', 'total_sales_count', 'total_sales_amount', 'total_paid_amount', 'total_remaining_amount'], results[0]))
-                elif hasattr(self.db_manager, 'fetch_one'):
-                    result_row = self.db_manager.fetch_one(query_stats)
-                    if result_row:
-                        result = {
-                            'total_products': result_row[0] or 0,
-                            'total_stock_value': result_row[1] or 0.0,
-                            'low_stock_items': result_row[2] or 0,
-                            'out_of_stock_items': result_row[3] or 0,
-                            'total_sales_count': result_row[4] or 0,
-                            'total_sales_amount': result_row[5] or 0.0,
-                            'total_paid_amount': result_row[6] or 0.0,
-                            'total_remaining_amount': result_row[7] or 0.0
-                        }
-            except Exception as e:
-                if self.logger:
-                    self.logger.warning(f"فشل جلب إحصائيات Dashboard من db_manager: {e}")
-                # محاولة اتصال مباشر كـ fallback
-                try:
-                    import sqlite3
-                    db_path = getattr(self.db_manager, 'db_path', None) or (self.config_manager.get_database_path() if self.config_manager else "database.db")
-                    with sqlite3.connect(db_path, timeout=10.0) as conn:
-                        cursor = conn.cursor()
-                        cursor.execute(query_stats)
-                        row = cursor.fetchone()
-                        if row:
-                            result = {
-                                'total_products': row[0] or 0,
-                                'total_stock_value': row[1] or 0.0,
-                                'low_stock_items': row[2] or 0,
-                                'out_of_stock_items': row[3] or 0,
-                                'total_sales_count': row[4] or 0,
-                                'total_sales_amount': row[5] or 0.0,
-                                'total_paid_amount': row[6] or 0.0,
-                                'total_remaining_amount': row[7] or 0.0
-                            }
-                except Exception as e2:
-                    if self.logger:
-                        self.logger.error(f"فشل جلب إحصائيات Dashboard من اتصال مباشر: {e2}")
-                    return
+            # تنفيذ الاستعلام باستخدام اتصال مباشر بـ timeout قصير (تفادي deadlock)
+            import sqlite3
+            db_path = getattr(self.db_manager, 'db_path', None) or (self.config_manager.get_database_path() if self.config_manager else "database.db")
             
-            if not result:
+            # اتصال منفصل بـ read-only mode لتفادي locks
+            conn = sqlite3.connect(db_path, timeout=5.0)
+            conn.execute("PRAGMA query_only=true")
+            cursor = conn.cursor()
+            cursor.execute(query_stats)
+            row = cursor.fetchone()
+            conn.close()
+            if not row:
                 return
             
             # معالجة القيم الفارغة (None) وتحويلها لأصفار
+            result = {
+                'total_products': row[0] or 0,
+                'total_stock_value': row[1] or 0.0,
+                'low_stock_items': row[2] or 0,
+                'out_of_stock_items': row[3] or 0,
+                'total_sales_count': row[4] or 0,
+                'total_sales_amount': row[5] or 0.0,
+                'total_paid_amount': row[6] or 0.0,
+                'total_remaining_amount': row[7] or 0.0
+            }
+            
             total_products = int(result.get('total_products', 0) or 0)
             total_stock_value = float(result.get('total_stock_value', 0) or 0.0)
             low_stock_items = int(result.get('low_stock_items', 0) or 0)
@@ -1552,9 +1555,10 @@ class MainWindow(QMainWindow):
         
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في refresh_dashboard_stats: {e}")
+                self.logger.error(f"خطأ في refresh_dashboard_stats: {e}", exc_info=True)
             else:
-                print(f"Error updating dashboard stats: {e}")
+                import logging
+                logging.error(f"Error updating dashboard stats: {e}", exc_info=True)
     
     def refresh_dashboard_data(self):
         """تحديث بيانات الصفحة الرئيسية (محسّنة - في الخلفية)"""
@@ -2619,7 +2623,8 @@ class MainWindow(QMainWindow):
         self.perf_timer = QTimer(self)
         self.perf_timer.setInterval(2000)
         self.perf_timer.timeout.connect(self.update_performance_tab)
-        self.perf_timer.start()
+        # 🔥 تعطيل مؤقت الأداء لتفادي التجميد
+        # self.perf_timer.start()  # ← معطّل الآن
 
         # تحديث أولي
         self.update_performance_tab()
@@ -2777,6 +2782,12 @@ class MainWindow(QMainWindow):
             transfer_stock_btn.clicked.connect(self.open_transfer_stock_dialog)
             buttons_layout.addWidget(transfer_stock_btn)
             
+            # زر نقل المخزون بين المستودعات (Multi-Warehouse)
+            warehouse_transfer_btn = QPushButton("🚚 نقل بين المستودعات")
+            warehouse_transfer_btn.setStyleSheet(button_style)
+            warehouse_transfer_btn.clicked.connect(self.show_warehouse_transfer_window)
+            buttons_layout.addWidget(warehouse_transfer_btn)
+            
             buttons_layout.addStretch()
             layout.addLayout(buttons_layout)
             
@@ -2814,6 +2825,20 @@ class MainWindow(QMainWindow):
             self.inventory_category_combo.setMinimumWidth(200)
             self.inventory_category_combo.currentIndexChanged.connect(self.on_inventory_filters_changed)
             filters_layout.addWidget(self.inventory_category_combo, 1)
+            
+            # فلتر المستودع (Multi-Warehouse)
+            warehouse_label = QLabel("المستودع:")
+            warehouse_label.setStyleSheet("color: rgb(52, 73, 94); font-weight: 600;")
+            filters_layout.addWidget(warehouse_label)
+            
+            self.inventory_warehouse_combo = QComboBox()
+            self.inventory_warehouse_combo.setMinimumWidth(200)
+            self.inventory_warehouse_combo.addItem("الكل", None)
+            self.inventory_warehouse_combo.currentIndexChanged.connect(self.on_inventory_filters_changed)
+            filters_layout.addWidget(self.inventory_warehouse_combo, 1)
+            
+            # تحميل المستودعات
+            self.load_warehouses_for_inventory_filter()
             
             # أزرار مع تحسينات
             small_button_style = """
@@ -2867,8 +2892,9 @@ class MainWindow(QMainWindow):
             self.inventory_table.setAlternatingRowColors(True)
             self.inventory_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
             
-            # تحسينات السلاسة - Smooth Scrolling
-            self.inventory_table.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+            # تحسينات السلاسة - Virtual Scrolling
+            # 🔥 ANTI-FREEZE: استخدام ScrollPerItem بدلاً من ScrollPerPixel
+            self.inventory_table.setVerticalScrollMode(QAbstractItemView.ScrollPerItem)
             self.inventory_table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
             self.inventory_table.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
             self.inventory_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
@@ -2993,11 +3019,10 @@ class MainWindow(QMainWindow):
             import traceback
             error_details = traceback.format_exc()
             if self.logger:
-                self.logger.error(f"❌ خطأ في create_inventory_tab(): {e}")
-                self.logger.error(f"تفاصيل الخطأ:\n{error_details}")
+                self.logger.error(f"❌ خطأ في create_inventory_tab(): {e}\nتفاصيل الخطأ:\n{error_details}", exc_info=True)
             else:
-                print(f"❌ خطأ في create_inventory_tab(): {e}")
-                print(f"تفاصيل الخطأ:\n{error_details}")
+                import logging
+                logging.error(f"❌ خطأ في create_inventory_tab(): {e}\nتفاصيل الخطأ:\n{error_details}", exc_info=True)
             # إرجاع صفحة فارغة مع رسالة خطأ بدلاً من None
             try:
                 error_widget = QWidget()
@@ -3223,11 +3248,10 @@ class MainWindow(QMainWindow):
             import traceback
             error_details = traceback.format_exc()
             if self.logger:
-                self.logger.error(f"❌ خطأ في create_inventory_tab(): {e}")
-                self.logger.error(f"تفاصيل الخطأ:\n{error_details}")
+                self.logger.error(f"❌ خطأ في create_inventory_tab(): {e}\nتفاصيل الخطأ:\n{error_details}", exc_info=True)
             else:
-                print(f"❌ خطأ في create_inventory_tab(): {e}")
-                print(f"تفاصيل الخطأ:\n{error_details}")
+                import logging
+                logging.error(f"❌ خطأ في create_inventory_tab(): {e}\nتفاصيل الخطأ:\n{error_details}", exc_info=True)
             # إرجاع صفحة فارغة مع رسالة خطأ بدلاً من None
             try:
                 error_widget = QWidget()
@@ -4819,7 +4843,10 @@ class MainWindow(QMainWindow):
         # إيقاف جميع الخيوط
         for thread in all_threads:
             try:
-                if thread and thread.isRunning():
+                if not thread:
+                    continue
+                    
+                if thread.isRunning():
                     if self.logger:
                         self.logger.debug(f"إيقاف خيط: {type(thread).__name__}")
                     
@@ -4835,15 +4862,37 @@ class MainWindow(QMainWindow):
                         if self.logger:
                             self.logger.warning(f"إنهاء قسري للخيط: {type(thread).__name__}")
                         thread.terminate()
-                        thread.wait(1000)  # انتظار إضافي بعد الإنهاء القسري
+                        # انتظار إضافي بعد الإنهاء القسري
+                        if not thread.wait(1000):
+                            if self.logger:
+                                self.logger.warning(f"الخيط {type(thread).__name__} لم ينتهِ بعد الإنهاء القسري")
+                
+                # تنظيف الـ thread فقط بعد التأكد من أنه قد انتهى
+                if not thread.isRunning():
+                    # استخدام deleteLater() لتنظيف آمن
+                    thread.deleteLater()
+                else:
+                    # إذا كان لا يزال يعمل، جدولة deleteLater() لاحقاً
+                    if self.logger:
+                        self.logger.warning(f"الخيط {type(thread).__name__} لا يزال يعمل، سيتم تنظيفه لاحقاً")
+                    QTimer.singleShot(100, lambda t=thread: t.deleteLater() if t and not t.isRunning() else None)
             except Exception as e:
                 if self.logger:
                     self.logger.error(f"خطأ في إيقاف خيط: {e}")
-                pass
+                # محاولة تنظيف في أي حال
+                try:
+                    if thread:
+                        thread.deleteLater()
+                except Exception:
+                    pass
         
         # مسح القائمة
         if hasattr(self, "_background_threads"):
             self._background_threads.clear()
+        
+        # معالجة الأحداث لضمان تنظيف threads (deleteLater)
+        from PySide6.QtWidgets import QApplication
+        QApplication.processEvents()
         
         # إيقاف جميع الموقتات (QTimer)
         timers_to_stop = [
@@ -5007,23 +5056,45 @@ class MainWindow(QMainWindow):
                         if self.logger:
                             self.logger.error(f"فشل تحميل الفئات من قاعدة البيانات: {e2}")
             elif getattr(self, "inventory_service", None):
-                # محاولة استخدام inventory_service
-                try:
-                    # إذا كان inventory_service يحتوي على طريقة للحصول على الفئات
-                    if hasattr(self.inventory_service, 'get_categories'):
-                        categories = self.inventory_service.get_categories()
-                        for category in categories:
-                            self.inventory_category_combo.addItem(category.get('name', ''), category.get('id'))
-                except Exception as e:
-                    if self.logger:
-                        self.logger.warning(f"فشل تحميل الفئات من inventory_service: {e}")
+                # Fallback: استخدام inventory_service
+                pass
+            
+            self.inventory_category_combo.blockSignals(False)
+            
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ عام في load_inventory_filters: {e}")
-        finally:
-            # إعادة تفعيل الإشارات
-            if hasattr(self, "inventory_category_combo"):
-                self.inventory_category_combo.blockSignals(False)
+                self.logger.error(f"خطأ في تحميل فلاتر المخزون: {e}")
+    
+    def load_warehouses_for_inventory_filter(self):
+        """تحميل قائمة المستودعات في فلتر المخزون"""
+        if not hasattr(self, "inventory_warehouse_combo"):
+            return
+        
+        try:
+            self.inventory_warehouse_combo.blockSignals(True)
+            
+            self.inventory_warehouse_combo.clear()
+            self.inventory_warehouse_combo.addItem("الكل", None)
+            
+            # تحميل المستودعات
+            try:
+                from src.services.warehouse_service import WarehouseService
+                warehouse_service = WarehouseService(self.db_manager)
+                warehouses = warehouse_service.get_all_warehouses(include_inactive=False)
+                
+                for warehouse in warehouses:
+                    display_text = f"{warehouse.name} ({warehouse.code})"
+                    self.inventory_warehouse_combo.addItem(display_text, warehouse.id)
+                    
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"فشل تحميل المستودعات: {e}")
+            
+            self.inventory_warehouse_combo.blockSignals(False)
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في تحميل المستودعات للفلتر: {e}")
     def _on_inventory_search_changed(self, text: str):
         """معالجة تغيير نص البحث مع Debouncing"""
         # إلغاء المؤقت السابق
@@ -5126,13 +5197,21 @@ class MainWindow(QMainWindow):
         # إظهار رسالة التحميل في شريط الحالة
         self.statusBar().showMessage("⏳ جاري تحميل المنتجات من قاعدة البيانات... يرجى الانتظار")
         
+        # الحصول على warehouse_id من الفلتر (Multi-Warehouse)
+        warehouse_id = None
+        if hasattr(self, "inventory_warehouse_combo"):
+            warehouse_id = self.inventory_warehouse_combo.currentData()
+        
         # Worker محسّن للتحميل المباشر من SQLite
         self._inventory_load_started = time.perf_counter()
+        # 🔥 تقليل LIMIT إلى 100 فقط للحد الأدنى من تجميد الواجهة
+        inventory_page_size = 100
         self._inventory_loader = InventoryDataLoaderThread(
             db_path=db_path,
             search_term=search_term,
             category_id=category_id,
-            limit=500,  # 🔥 تحميل أول 500 منتج فقط
+            warehouse_id=warehouse_id,  # Multi-Warehouse Support
+            limit=inventory_page_size,  # تحميل 100 منتج في المرة
             offset=self._inventory_offset
         )
         
@@ -7295,6 +7374,44 @@ class MainWindow(QMainWindow):
         encryption_action.triggered.connect(self.show_encryption_dialog)
         tools_menu.addAction(encryption_action)
         
+        tools_menu.addSeparator()
+        
+        # قائمة الذكاء الاصطناعي
+        ai_menu = menubar.addMenu("🤖 الذكاء الاصطناعي")
+        
+        ai_predictions_action = QAction("🔮 التنبؤات والتوصيات", self)
+        ai_predictions_action.setToolTip("التنبؤات بالذكاء الاصطناعي (المبيعات، الطلب، فقدان العملاء، التوصيات)")
+        ai_predictions_action.triggered.connect(self.show_ai_predictions_window)
+        ai_menu.addAction(ai_predictions_action)
+        
+        analytics_dashboard_action = QAction("📊 لوحة التحليلات المتقدمة", self)
+        analytics_dashboard_action.setToolTip("لوحة التحليلات المتقدمة مع الرسوم البيانية والتقارير")
+        analytics_dashboard_action.triggered.connect(self.show_analytics_dashboard_window)
+        ai_menu.addAction(analytics_dashboard_action)
+        
+        scheduled_reports_action = QAction("📅 التقارير المجدولة", self)
+        scheduled_reports_action.setToolTip("إدارة التقارير المجدولة التلقائية")
+        scheduled_reports_action.triggered.connect(self.show_scheduled_reports_window)
+        ai_menu.addAction(scheduled_reports_action)
+        
+        # قائمة الامتثال والأمان
+        compliance_menu = menubar.addMenu("✅ الامتثال والأمان")
+        
+        compliance_management_action = QAction("✅ إدارة الامتثال", self)
+        compliance_management_action.setToolTip("إدارة قواعد الامتثال وفحوصات الامتثال")
+        compliance_management_action.triggered.connect(self.show_compliance_management_window)
+        compliance_menu.addAction(compliance_management_action)
+        
+        security_reports_action = QAction("📊 تقارير الأمان", self)
+        security_reports_action.setToolTip("تقارير الأمان والتهديدات")
+        security_reports_action.triggered.connect(self.show_security_reports_window)
+        compliance_menu.addAction(security_reports_action)
+        
+        super_admin_action = QAction("🎛️ لوحة تحكم المدير الخارق", self)
+        super_admin_action.setToolTip("مراقبة صحة النظام بأكمله")
+        super_admin_action.triggered.connect(self.show_super_admin_dashboard)
+        compliance_menu.addAction(super_admin_action)
+        
         # قائمة المدفوعات والحسابات
         payments_menu = menubar.addMenu("المدفوعات والحسابات")
         
@@ -7334,6 +7451,75 @@ class MainWindow(QMainWindow):
         cycle_count_summary_action.setToolTip("عرض ملخص سريع للجرد الدوري (جلسات وفروقات)")
         cycle_count_summary_action.triggered.connect(self.show_cycle_count_summary)
         dashboards_menu.addAction(cycle_count_summary_action)
+        
+        # قائمة المستودعات (Multi-Warehouse)
+        warehouses_menu = menubar.addMenu("🏭 المستودعات")
+        
+        # إدارة المستودعات
+        warehouse_mgmt_action = QAction("🏭 إدارة المستودعات", self)
+        warehouse_mgmt_action.setToolTip("إدارة المستودعات والمخزون متعدد المستودعات")
+        warehouse_mgmt_action.triggered.connect(self.show_warehouse_management_window)
+        warehouses_menu.addAction(warehouse_mgmt_action)
+        
+        # نقل المخزون بين المستودعات
+        warehouse_transfer_action = QAction("🚚 نقل المخزون بين المستودعات", self)
+        warehouse_transfer_action.setToolTip("نقل المخزون بين المستودعات")
+        warehouse_transfer_action.triggered.connect(self.show_warehouse_transfer_window)
+        warehouses_menu.addAction(warehouse_transfer_action)
+        
+        # قائمة العملات (Multi-Currency)
+        currencies_menu = menubar.addMenu("💰 العملات")
+        
+        # إدارة العملات وأسعار الصرف
+        currency_mgmt_action = QAction("💰 إدارة العملات وأسعار الصرف", self)
+        currency_mgmt_action.setToolTip("إدارة العملات وأسعار الصرف")
+        currency_mgmt_action.triggered.connect(self.show_currency_management_window)
+        
+        currencies_menu.addAction(currency_mgmt_action)
+        
+        # قائمة الشركات (Multi-Company)
+        companies_menu = menubar.addMenu("🏢 الشركات")
+        
+        # إدارة الشركات
+        company_mgmt_action = QAction("🏢 إدارة الشركات", self)
+        company_mgmt_action.setShortcut("Ctrl+Shift+C")
+        company_mgmt_action.setStatusTip("إدارة الشركات والمؤسسات")
+        company_mgmt_action.triggered.connect(self.show_company_management_window)
+        companies_menu.addAction(company_mgmt_action)
+        
+        # قائمة سير العمل (Workflow)
+        workflow_menu = menubar.addMenu("🔄 سير العمل")
+        
+        # تصميم سير العمل
+        workflow_designer_action = QAction("🔄 تصميم سير العمل", self)
+        workflow_designer_action.setToolTip("تصميم وإدارة سير العمل والموافقات")
+        workflow_designer_action.triggered.connect(self.show_workflow_designer_window)
+        workflow_menu.addAction(workflow_designer_action)
+        
+        # قائمة التكامل (Integration)
+        integration_menu = menubar.addMenu("🔗 التكامل")
+        
+        # إدارة Webhooks
+        webhook_mgmt_action = QAction("🔗 إدارة Webhooks", self)
+        webhook_mgmt_action.setToolTip("إدارة Webhooks والتكامل مع الأنظمة الخارجية")
+        webhook_mgmt_action.triggered.connect(self.show_webhook_management_window)
+        integration_menu.addAction(webhook_mgmt_action)
+        
+        # إدارة EDI
+        edi_mgmt_action = QAction("📄 إدارة EDI", self)
+        edi_mgmt_action.setToolTip("إدارة EDI Partners والمستندات")
+        edi_mgmt_action.triggered.connect(self.show_edi_management_window)
+        integration_menu.addAction(edi_mgmt_action)
+        
+        integration_mgmt_action = QAction("🔗 إدارة التكاملات", self)
+        integration_mgmt_action.setToolTip("إدارة التكاملات مع الأنظمة الخارجية")
+        integration_mgmt_action.triggered.connect(self.show_integration_management_window)
+        integration_menu.addAction(integration_mgmt_action)
+        
+        cloud_sync_action = QAction("☁️ المزامنة السحابية", self)
+        cloud_sync_action.setToolTip("إدارة المزامنة السحابية والنسخ الاحتياطي")
+        cloud_sync_action.triggered.connect(self.show_cloud_sync_management_window)
+        integration_menu.addAction(cloud_sync_action)
 
         # قائمة عروض الأسعار والمرتجعات
         quotes_menu = menubar.addMenu("عروض ومرتجعات")
@@ -7659,6 +7845,180 @@ class MainWindow(QMainWindow):
         window = self.window_manager.open_window("physical_counts", parent=self)
         if not window:
             QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة الجرد الدوري")
+    
+    def show_warehouse_management_window(self):
+        """عرض نافذة إدارة المستودعات"""
+        try:
+            window = self.window_manager.open_window("warehouse_management", parent=self)
+            if not window:
+                QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة إدارة المستودعات")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة إدارة المستودعات: {e}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة إدارة المستودعات:\n{str(e)}")
+    
+    def show_warehouse_transfer_window(self):
+        """عرض نافذة نقل المخزون بين المستودعات"""
+        try:
+            window = self.window_manager.open_window("warehouse_transfer", parent=self)
+            if not window:
+                QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة نقل المخزون")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة نقل المخزون: {e}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة نقل المخزون:\n{str(e)}")
+    
+    def show_currency_management_window(self):
+        """عرض نافذة إدارة العملات وأسعار الصرف"""
+        try:
+            window = self.window_manager.open_window("currency_management", parent=self)
+            if not window:
+                QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة إدارة العملات")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة إدارة العملات: {e}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة إدارة العملات:\n{str(e)}")
+    
+    def show_company_management_window(self):
+        """عرض نافذة إدارة الشركات"""
+        try:
+            window = self.window_manager.open_window("company_management", parent=self)
+            if not window:
+                QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة إدارة الشركات")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة إدارة الشركات: {e}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة إدارة الشركات:\n{str(e)}")
+    
+    def show_workflow_designer_window(self):
+        """عرض نافذة تصميم سير العمل"""
+        try:
+            window = self.window_manager.open_window("workflow_designer", parent=self)
+            if not window:
+                QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة تصميم سير العمل")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة تصميم سير العمل: {e}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة تصميم سير العمل:\n{str(e)}")
+    
+    def show_cloud_sync_management_window(self):
+        """فتح نافذة إدارة المزامنة السحابية"""
+        try:
+            from src.ui.windows.cloud_sync_management_window import CloudSyncManagementWindow
+            
+            window = CloudSyncManagementWindow(self.db_manager, self)
+            window.show()
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة المزامنة السحابية: {e}", exc_info=True)
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة المزامنة السحابية: {e}")
+    
+    def show_ai_predictions_window(self):
+        """فتح نافذة التنبؤات بالذكاء الاصطناعي"""
+        try:
+            from src.ui.windows.ai_predictions_window import AIPredictionsWindow
+            
+            window = AIPredictionsWindow(self.db_manager, self)
+            window.show()
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة التنبؤات: {e}", exc_info=True)
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة التنبؤات: {e}")
+    
+    def show_analytics_dashboard_window(self):
+        """فتح نافذة لوحة التحليلات المتقدمة"""
+        try:
+            from src.ui.windows.analytics_dashboard_window import AnalyticsDashboardWindow
+            
+            window = AnalyticsDashboardWindow(self.db_manager, self)
+            window.show()
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح لوحة التحليلات: {e}", exc_info=True)
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح لوحة التحليلات: {e}")
+    
+    def show_scheduled_reports_window(self):
+        """فتح نافذة التقارير المجدولة"""
+        try:
+            from src.ui.windows.scheduled_reports_window import ScheduledReportsWindow
+            
+            window = ScheduledReportsWindow(self.db_manager, self)
+            window.show()
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة التقارير المجدولة: {e}", exc_info=True)
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة التقارير المجدولة: {e}")
+    
+    def show_compliance_management_window(self):
+        """فتح نافذة إدارة الامتثال"""
+        try:
+            from src.ui.windows.compliance_management_window import ComplianceManagementWindow
+            
+            window = ComplianceManagementWindow(self.db_manager, self)
+            window.show()
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة إدارة الامتثال: {e}", exc_info=True)
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة إدارة الامتثال: {e}")
+    
+    def show_security_reports_window(self):
+        """فتح نافذة تقارير الأمان"""
+        try:
+            from src.ui.windows.security_reports_window import SecurityReportsWindow
+            
+            window = SecurityReportsWindow(self.db_manager, self)
+            window.show()
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة تقارير الأمان: {e}", exc_info=True)
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة تقارير الأمان: {e}")
+    
+    def show_super_admin_dashboard(self):
+        """فتح لوحة تحكم المدير الخارق"""
+        try:
+            from src.ui.windows.super_admin_dashboard import SuperAdminDashboard
+            
+            window = SuperAdminDashboard(self.db_manager, self)
+            window.show()
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح لوحة تحكم المدير الخارق: {e}", exc_info=True)
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح لوحة تحكم المدير الخارق: {e}")
+    
+    def show_integration_management_window(self):
+        """فتح نافذة إدارة التكاملات"""
+        try:
+            from src.ui.windows.integration_management_window import IntegrationManagementWindow
+            
+            window = IntegrationManagementWindow(self.db_manager, self)
+            window.show()
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة إدارة التكاملات: {e}", exc_info=True)
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة إدارة التكاملات: {e}")
+    
+    def show_edi_management_window(self):
+        """فتح نافذة إدارة EDI"""
+        try:
+            from src.ui.windows.edi_management_window import EDIManagementWindow
+            
+            window = EDIManagementWindow(self.db_manager, self)
+            window.show()
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة إدارة EDI: {e}", exc_info=True)
+            QMessageBox.critical(self, "خطأ", f"فشل فتح نافذة إدارة EDI: {e}")
+    
+    def show_webhook_management_window(self):
+        """عرض نافذة إدارة Webhooks"""
+        try:
+            window = self.window_manager.open_window("webhook_management", parent=self)
+            if not window:
+                QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة إدارة Webhooks")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في فتح نافذة إدارة Webhooks: {e}")
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة إدارة Webhooks:\n{str(e)}")
 
     def _get_cycle_count_service(self):
         try:
@@ -8541,13 +8901,13 @@ class MainWindow(QMainWindow):
     def show_performance_dashboard(self):
         """Show performance monitoring panel"""
         try:
-            from src.ui.windows.performance_dashboard_window import PerformanceDashboardWindow  # pyright: ignore[reportMissingImports]
+            from src.ui.performance_dashboard import PerformanceMonitoringDashboard
             cache_manager = None
             if hasattr(self, 'cache_service'):
                 cache_manager = self.cache_service
             
             if not hasattr(self, "_performance_dashboard") or self._performance_dashboard is None:
-                self._performance_dashboard = PerformanceDashboardWindow(self.db_manager, cache_manager, parent=self)
+                self._performance_dashboard = PerformanceMonitoringDashboard(self.db_manager, cache_manager, parent=self)
             self._performance_dashboard.show()
             self._performance_dashboard.raise_()
             self._performance_dashboard.activateWindow()

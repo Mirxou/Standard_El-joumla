@@ -26,6 +26,7 @@ from ...models.return_invoice import (
     ReturnInvoice, ReturnItem, ReturnType, 
     ReturnReason, ReturnStatus, RefundMethod
 )
+from ...utils.logger import setup_logger
 
 
 class ReturnsWindow(QMainWindow):
@@ -42,6 +43,7 @@ class ReturnsWindow(QMainWindow):
         self.return_service = ReturnService(db_manager)
         self.parent_window = parent
         self.current_return = None
+        self.logger = setup_logger(__name__)
         
         self.setWindowTitle("إدارة المرتجعات")
         self.setGeometry(100, 100, 1400, 800)
@@ -451,7 +453,7 @@ class ReturnsWindow(QMainWindow):
             self.total_refunded_label.setText(f"المبلغ المسترد: {stats.get('total_refunded', 0):,.2f} دج")
             
         except Exception as e:
-            print(f"خطأ في تحديث الإحصائيات: {e}")
+            self.logger.error(f"خطأ في تحديث الإحصائيات: {e}", exc_info=True)
     
     def _get_status_color(self, status: ReturnStatus) -> str:
         """الحصول على لون الحالة"""
@@ -487,7 +489,8 @@ class ReturnsWindow(QMainWindow):
         if not self.current_return:
             return
         
-        if self.return_service.approve_return(self.current_return.id, approved_by=1):
+        approved_by = getattr(self.parent(), 'current_user_id', getattr(self.parent(), 'user_id', 1)) if self.parent() else 1
+        if self.return_service.approve_return(self.current_return.id, approved_by=approved_by):
             self._load_returns()
             self._on_return_selected()
             QMessageBox.information(self, "نجاح", "تمت الموافقة على المرتجع")

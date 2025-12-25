@@ -16,6 +16,9 @@ from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
 import json
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from src.utils.logger import setup_logger
 
 
 class NotificationType(Enum):
@@ -28,6 +31,17 @@ class NotificationType(Enum):
     LOW_STOCK = "low_stock"
     PAYMENT_DUE = "payment_due"
     SYSTEM = "system"
+    # Multi-Warehouse Notifications
+    WAREHOUSE_LOW_STOCK = "warehouse_low_stock"
+    WAREHOUSE_OUT_OF_STOCK = "warehouse_out_of_stock"
+    WAREHOUSE_TRANSFER_COMPLETED = "warehouse_transfer_completed"
+    WAREHOUSE_TRANSFER_PENDING = "warehouse_transfer_pending"
+    # Workflow Notifications
+    WORKFLOW_PENDING_APPROVAL = "workflow_pending_approval"
+    WORKFLOW_APPROVED = "workflow_approved"
+    WORKFLOW_REJECTED = "workflow_rejected"
+    WORKFLOW_EXPIRED = "workflow_expired"
+    WORKFLOW_COMPLETED = "workflow_completed"
 
 
 @dataclass
@@ -77,11 +91,13 @@ class NotificationChecker(QThread):
     notifications_found = Signal(list)  # قائمة الإشعارات الجديدة
     check_performed = Signal()          # إشارة عند اكتمال كل فحص
     
-    def __init__(self, db_manager, interval_seconds: int = 300):
+    def __init__(self, db_manager, interval_seconds: int = 300, main_window=None):
         super().__init__()
         self.db_manager = db_manager
         self.interval = interval_seconds
         self.running = True
+        self.main_window = main_window  # للحصول على main_window في callbacks
+        self.logger = setup_logger(__name__)
     
     def run(self):
         """تشغيل الفحص الدوري"""
@@ -93,7 +109,7 @@ class NotificationChecker(QThread):
                 # دائماً أعلن عن اكتمال الفحص حتى لو لم توجد إشعارات جديدة
                 self.check_performed.emit()
             except Exception as e:
-                print(f"خطأ في فحص الإشعارات: {e}")
+                self.logger.error(f"خطأ في فحص الإشعارات: {e}", exc_info=True)
             
             # الانتظار
             for _ in range(self.interval):
@@ -116,6 +132,14 @@ class NotificationChecker(QThread):
         # فحص التذكيرات
         reminders = self.check_reminders()
         notifications.extend(reminders)
+        
+        # فحص إشعارات المستودعات (Multi-Warehouse)
+        warehouse_notifications = self.check_warehouse_notifications()
+        notifications.extend(warehouse_notifications)
+        
+        # فحص إشعارات سير العمل (Workflow)
+        workflow_notifications = self.check_workflow_notifications()
+        notifications.extend(workflow_notifications)
         
         return notifications
 
@@ -174,7 +198,7 @@ class NotificationChecker(QThread):
                 notifications.append(notification)
             
         except Exception as e:
-            print(f"خطأ في فحص المخزون: {e}")
+            self.logger.error(f"خطأ في فحص المخزون: {e}", exc_info=True)
         
         return notifications
     
@@ -220,7 +244,7 @@ class NotificationChecker(QThread):
                 notifications.append(notification)
             
         except Exception as e:
-            print(f"خطأ في فحص المدفوعات: {e}")
+            self.logger.error(f"خطأ في فحص المدفوعات: {e}", exc_info=True)
         
         return notifications
     
@@ -258,7 +282,315 @@ class NotificationChecker(QThread):
                 notifications.append(notification)
             
         except Exception as e:
-            print(f"خطأ في فحص التذكيرات: {e}")
+            self.logger.error(f"خطأ في فحص التذكيرات: {e}", exc_info=True)
+        
+        return notifications
+    
+    def check_warehouse_notifications(self) -> List[Notification]:
+        """فحص إشعارات المستودعات (Multi-Warehouse)"""
+        notifications = []
+        
+        try:
+            # التحقق من وجود جدول warehouses
+            if not self._table_exists('warehouses'):
+                return notifications
+            
+            from src.services.warehouse_service import WarehouseService
+            warehouse_service = WarehouseService(self.db_manager)
+            
+            # فحص جميع المستودعات النشطة
+            warehouses = warehouse_service.get_all_warehouses(include_inactive=False)
+            
+            for warehouse in warehouses:
+                # فحص المخزون المنخفض والنافذ في المستودع
+                inventory = warehouse_service.get_warehouse_inventory(warehouse.id)
+                
+                low_stock_count = 0
+                out_of_stock_count = 0
+                low_stock_items = []
+                out_of_stock_items = []
+                
+                for inv in inventory:
+                    if inv.available_quantity <= 0:
+                        out_of_stock_count += 1
+                        if len(out_of_stock_items) < 5:  # أول 5 منتجات فقط
+                            out_of_stock_items.append(inv.product_name or f"منتج #{inv.product_id}")
+                    elif inv.available_quantity <= inv.min_stock:
+                        low_stock_count += 1
+                        if len(low_stock_items) < 5:  # أول 5 منتجات فقط
+                            low_stock_items.append(inv.product_name or f"منتج #{inv.product_id}")
+                
+                # إشعار نفاد المخزون
+                if out_of_stock_count > 0:
+                    items_text = ", ".join(out_of_stock_items)
+                    if out_of_stock_count > 5:
+                        items_text += f" و{out_of_stock_count - 5} منتج آخر"
+                    
+                    # إنشاء callback لفتح نافذة إدارة المستودعات
+                    def open_warehouse_management():
+                        try:
+                            mw = getattr(self, 'main_window', None)
+                            if mw and hasattr(mw, 'show_warehouse_management_window'):
+                                mw.show_warehouse_management_window()
+                        except Exception as e:
+                            self.logger.error(f"خطأ في فتح نافذة إدارة المستودعات: {e}", exc_info=True)
+                    
+                    notification = Notification(
+                        id=f"warehouse_out_{warehouse.id}_{datetime.now().strftime('%Y%m%d')}",
+                        type=NotificationType.WAREHOUSE_OUT_OF_STOCK,
+                        title=f"⚠️ نفاد المخزون في {warehouse.name}",
+                        message=f"نفد المخزون من {out_of_stock_count} منتج في مستودع {warehouse.name}:\n{items_text}",
+                        timestamp=datetime.now(),
+                        priority=3,  # عاجل
+                        action_label="عرض المستودع",
+                        action_callback=open_warehouse_management
+                    )
+                    notifications.append(notification)
+                
+                # إشعار المخزون المنخفض
+                elif low_stock_count > 0:
+                    items_text = ", ".join(low_stock_items)
+                    if low_stock_count > 5:
+                        items_text += f" و{low_stock_count - 5} منتج آخر"
+                    
+                    # إنشاء callback لفتح نافذة إدارة المستودعات
+                    def open_warehouse_management():
+                        try:
+                            mw = getattr(self, 'main_window', None)
+                            if mw and hasattr(mw, 'show_warehouse_management_window'):
+                                mw.show_warehouse_management_window()
+                        except Exception as e:
+                            self.logger.error(f"خطأ في فتح نافذة إدارة المستودعات: {e}", exc_info=True)
+                    
+                    # 🔔 إطلاق Webhook: إرسال Webhook عند اكتشاف مخزون منخفض
+                    try:
+                        from src.services.webhook_service import WebhookService
+                        webhook_service = WebhookService(self.db_manager)
+                        
+                        # بناء Payload للـ Webhook
+                        webhook_payload = {
+                            "event": "inventory_low_stock",
+                            "warehouse_id": warehouse.id,
+                            "warehouse_name": warehouse.name,
+                            "low_stock_count": low_stock_count,
+                            "low_stock_items": low_stock_items[:10],  # أول 10 منتجات فقط
+                            "detected_at": datetime.now().isoformat()
+                        }
+                        
+                        webhook_service.trigger_webhook(
+                            event_type="inventory_low_stock",
+                            payload=webhook_payload,
+                            entity_id=warehouse.id,
+                            company_id=warehouse.company_id if hasattr(warehouse, 'company_id') else None
+                        )
+                    except Exception as e:
+                        if hasattr(self, 'logger') and self.logger:
+                            self.logger.warning(f"⚠️ فشل إطلاق Webhook: {e}")
+                    
+                    notification = Notification(
+                        id=f"warehouse_low_{warehouse.id}_{datetime.now().strftime('%Y%m%d')}",
+                        type=NotificationType.WAREHOUSE_LOW_STOCK,
+                        title=f"📉 مخزون منخفض في {warehouse.name}",
+                        message=f"المخزون منخفض لـ {low_stock_count} منتج في مستودع {warehouse.name}:\n{items_text}",
+                        timestamp=datetime.now(),
+                        priority=2,  # عالي
+                        action_label="عرض المستودع",
+                        action_callback=open_warehouse_management
+                    )
+                    notifications.append(notification)
+                
+                # فحص التحويلات المعلقة
+                transfers = warehouse_service.get_transfers(warehouse_id=warehouse.id, status='pending')
+                if transfers:
+                    pending_count = len(transfers)
+                    # إنشاء callback لفتح نافذة نقل المخزون
+                    def open_warehouse_transfers():
+                        try:
+                            mw = getattr(self, 'main_window', None)
+                            if mw and hasattr(mw, 'show_warehouse_transfer_window'):
+                                mw.show_warehouse_transfer_window()
+                        except Exception as e:
+                            self.logger.error(f"خطأ في فتح نافذة نقل المخزون: {e}", exc_info=True)
+                    
+                    notification = Notification(
+                        id=f"warehouse_transfer_pending_{warehouse.id}_{datetime.now().strftime('%Y%m%d')}",
+                        type=NotificationType.WAREHOUSE_TRANSFER_PENDING,
+                        title=f"⏳ تحويلات معلقة في {warehouse.name}",
+                        message=f"يوجد {pending_count} تحويل معلق في مستودع {warehouse.name} يحتاج إلى إكمال",
+                        timestamp=datetime.now(),
+                        priority=1,  # متوسط
+                        action_label="عرض التحويلات",
+                        action_callback=open_warehouse_transfers
+                    )
+                    notifications.append(notification)
+            
+        except Exception as e:
+            self.logger.error(f"خطأ في فحص إشعارات المستودعات: {e}", exc_info=True)
+        
+        return notifications
+    
+    def check_workflow_notifications(self) -> List[Notification]:
+        """فحص إشعارات سير العمل (Workflow)"""
+        notifications = []
+        
+        try:
+            # التحقق من وجود جداول Workflow
+            if not (self._table_exists('workflow_instances') and 
+                    self._table_exists('workflow_approvals') and
+                    self._table_exists('workflow_steps')):
+                return notifications
+            
+            conn = self.db_manager.get_connection()
+            cursor = conn.cursor()
+            
+            # 1. الموافقات المعلقة للمستخدم الحالي
+            # (سنحتاج معرف المستخدم الحالي - سنستخدم None للجميع حالياً)
+            cursor.execute("""
+                SELECT 
+                    wa.id,
+                    wa.instance_id,
+                    wa.step_id,
+                    wa.approver_id,
+                    wa.deadline,
+                    wa.status,
+                    wi.entity_type,
+                    wi.entity_id,
+                    ws.name as step_name,
+                    w.name as workflow_name,
+                    u.username as approver_name
+                FROM workflow_approvals wa
+                JOIN workflow_instances wi ON wa.instance_id = wi.id
+                JOIN workflow_steps ws ON wa.step_id = ws.id
+                JOIN workflows w ON ws.workflow_id = w.id
+                LEFT JOIN users u ON wa.approver_id = u.id
+                WHERE wa.status = 'pending'
+                AND (wa.deadline IS NULL OR wa.deadline > datetime('now'))
+                ORDER BY wa.deadline ASC, wa.created_at ASC
+                LIMIT 10
+            """)
+            
+            for row in cursor.fetchall():
+                approval_id, instance_id, step_id, approver_id, deadline, status, \
+                entity_type, entity_id, step_name, workflow_name, approver_name = row
+                
+                # تحديد نوع الكيان واسمه
+                entity_name = f"{entity_type} #{entity_id}"
+                if entity_type == "purchase_order":
+                    po_query = "SELECT po_number FROM purchase_orders WHERE id = ?"
+                    po_result = cursor.execute(po_query, (entity_id,)).fetchone()
+                    if po_result:
+                        entity_name = f"أمر شراء {po_result[0]}"
+                elif entity_type == "sale":
+                    sale_query = "SELECT invoice_number FROM sales WHERE id = ?"
+                    sale_result = cursor.execute(sale_query, (entity_id,)).fetchone()
+                    if sale_result:
+                        entity_name = f"فاتورة {sale_result[0]}"
+                
+                deadline_text = ""
+                if deadline:
+                    deadline_dt = datetime.fromisoformat(deadline)
+                    now = datetime.now()
+                    if deadline_dt < now:
+                        deadline_text = " (منتهية الصلاحية!)"
+                    else:
+                        hours_left = (deadline_dt - now).total_seconds() / 3600
+                        if hours_left < 24:
+                            deadline_text = f" (متبقي {int(hours_left)} ساعة)"
+                        else:
+                            days_left = int(hours_left / 24)
+                            deadline_text = f" (متبقي {days_left} يوم)"
+                
+                # إنشاء callback لفتح نافذة سير العمل
+                def open_workflow_designer(inst_id=instance_id):
+                    try:
+                        mw = getattr(self, 'main_window', None)
+                        if mw and hasattr(mw, 'show_workflow_designer_window'):
+                            mw.show_workflow_designer_window()
+                    except Exception as e:
+                        self.logger.error(f"خطأ في فتح نافذة سير العمل: {e}", exc_info=True)
+                
+                notification = Notification(
+                    id=f"workflow_pending_{approval_id}_{int(datetime.now().timestamp())}",
+                    type=NotificationType.WORKFLOW_PENDING_APPROVAL,
+                    title=f"⏳ موافقة مطلوبة: {step_name}",
+                    message=f"يحتاج {entity_name} إلى موافقتك في سير العمل '{workflow_name}'{deadline_text}",
+                    timestamp=datetime.now(),
+                    priority=2 if deadline and datetime.fromisoformat(deadline) < datetime.now() + timedelta(hours=24) else 1,
+                    action_label="عرض الموافقات",
+                    action_callback=open_workflow_designer
+                )
+                notifications.append(notification)
+            
+            # 2. الموافقات المنتهية الصلاحية
+            cursor.execute("""
+                SELECT 
+                    wa.id,
+                    wa.instance_id,
+                    wa.step_id,
+                    wa.approver_id,
+                    wa.deadline,
+                    wi.entity_type,
+                    wi.entity_id,
+                    ws.name as step_name,
+                    w.name as workflow_name
+                FROM workflow_approvals wa
+                JOIN workflow_instances wi ON wa.instance_id = wi.id
+                JOIN workflow_steps ws ON wa.step_id = ws.id
+                JOIN workflows w ON ws.workflow_id = w.id
+                WHERE wa.status = 'pending'
+                AND wa.deadline IS NOT NULL
+                AND wa.deadline < datetime('now')
+                AND wa.reminder_sent = 0
+                ORDER BY wa.deadline ASC
+                LIMIT 5
+            """)
+            
+            for row in cursor.fetchall():
+                approval_id, instance_id, step_id, approver_id, deadline, \
+                entity_type, entity_id, step_name, workflow_name = row
+                
+                entity_name = f"{entity_type} #{entity_id}"
+                if entity_type == "purchase_order":
+                    po_query = "SELECT po_number FROM purchase_orders WHERE id = ?"
+                    po_result = cursor.execute(po_query, (entity_id,)).fetchone()
+                    if po_result:
+                        entity_name = f"أمر شراء {po_result[0]}"
+                elif entity_type == "sale":
+                    sale_query = "SELECT invoice_number FROM sales WHERE id = ?"
+                    sale_result = cursor.execute(sale_query, (entity_id,)).fetchone()
+                    if sale_result:
+                        entity_name = f"فاتورة {sale_result[0]}"
+                
+                def open_workflow_designer(inst_id=instance_id):
+                    try:
+                        mw = getattr(self, 'main_window', None)
+                        if mw and hasattr(mw, 'show_workflow_designer_window'):
+                            mw.show_workflow_designer_window()
+                    except Exception as e:
+                        self.logger.error(f"خطأ في فتح نافذة سير العمل: {e}", exc_info=True)
+                
+                notification = Notification(
+                    id=f"workflow_expired_{approval_id}_{int(datetime.now().timestamp())}",
+                    type=NotificationType.WORKFLOW_EXPIRED,
+                    title=f"⚠️ موافقة منتهية الصلاحية: {step_name}",
+                    message=f"انتهت صلاحية الموافقة المطلوبة لـ {entity_name} في سير العمل '{workflow_name}'",
+                    timestamp=datetime.now(),
+                    priority=3,  # عاجل
+                    action_label="عرض الموافقات",
+                    action_callback=open_workflow_designer
+                )
+                notifications.append(notification)
+                
+                # تحديث reminder_sent لتجنب تكرار الإشعار
+                cursor.execute("""
+                    UPDATE workflow_approvals 
+                    SET reminder_sent = 1 
+                    WHERE id = ?
+                """, (approval_id,))
+                conn.commit()
+            
+        except Exception as e:
+            self.logger.error(f"خطأ في فحص إشعارات سير العمل: {e}", exc_info=True)
         
         return notifications
     
@@ -294,6 +626,17 @@ class NotificationWidget(QFrame):
             NotificationType.LOW_STOCK: "#FFF9C4",
             NotificationType.PAYMENT_DUE: "#FFE0B2",
             NotificationType.SYSTEM: "#E0F2F1",
+            # Multi-Warehouse Notifications
+            NotificationType.WAREHOUSE_LOW_STOCK: "#FFF9C4",
+            NotificationType.WAREHOUSE_OUT_OF_STOCK: "#FFCDD2",
+            NotificationType.WAREHOUSE_TRANSFER_COMPLETED: "#C8E6C9",
+            NotificationType.WAREHOUSE_TRANSFER_PENDING: "#FFE0B2",
+            # Workflow Notifications
+            NotificationType.WORKFLOW_PENDING_APPROVAL: "#E1F5FE",
+            NotificationType.WORKFLOW_APPROVED: "#C8E6C9",
+            NotificationType.WORKFLOW_REJECTED: "#FFCDD2",
+            NotificationType.WORKFLOW_EXPIRED: "#FFE0B2",
+            NotificationType.WORKFLOW_COMPLETED: "#C8E6C9",
         }
         
         bg_color = colors.get(self.notification.type, "#F5F5F5")
@@ -466,6 +809,9 @@ class NotificationCenterDialog(QDialog):
             widget.mark_read.connect(self.notifications_manager.mark_as_read)
             widget.dismiss.connect(self.notifications_manager.remove_notification)
             widget.dismiss.connect(lambda: self.load_notifications())
+            # ربط إجراء الإشعار
+            if notification.action_callback:
+                widget.action_clicked.connect(lambda nid=notification.id: self._handle_notification_action(nid))
             self.notifications_layout.addWidget(widget)
     
     def mark_all_read(self):
@@ -494,6 +840,24 @@ class NotificationCenterDialog(QDialog):
         except Exception as e:
             QMessageBox.warning(self, "خطأ", f"تعذر تنفيذ الفحص الآن: {e}")
 
+    def _handle_notification_action(self, notification_id: str):
+        """معالجة إجراء الإشعار"""
+        try:
+            # البحث عن الإشعار
+            notification = None
+            for n in self.notifications_manager.get_all_notifications():
+                if n.id == notification_id:
+                    notification = n
+                    break
+            
+            if notification and notification.action_callback:
+                # استدعاء callback الإجراء
+                notification.action_callback()
+                # تحديد الإشعار كمقروء
+                self.notifications_manager.mark_as_read(notification_id)
+        except Exception as e:
+            self.logger.error(f"خطأ في معالجة إجراء الإشعار: {e}", exc_info=True)
+    
     def open_notifications_settings(self):
         """فتح تبويب الإعدادات والتركيز على إعدادات الإشعارات"""
         try:
@@ -505,7 +869,7 @@ class NotificationCenterDialog(QDialog):
                     mw.notifications_interval_combo.setFocus()
                 self.accept()
         except Exception as e:
-            print(f"خطأ في فتح إعدادات الإشعارات: {e}")
+            self.logger.error(f"خطأ في فتح إعدادات الإشعارات: {e}", exc_info=True)
 
 
 class SmartNotificationsManager:
@@ -527,6 +891,7 @@ class SmartNotificationsManager:
         self.checker: Optional[NotificationChecker] = None
         self.system_tray: Optional[QSystemTrayIcon] = None
         self.last_check_time: Optional[datetime] = None
+        self.logger = setup_logger(__name__)
         
         # تحميل الإشعارات المحفوظة
         self.load_notifications()
@@ -555,7 +920,7 @@ class SmartNotificationsManager:
             pass
 
         # بدء الفحص الدوري
-        self.checker = NotificationChecker(self.db_manager, interval_seconds=interval_seconds)
+        self.checker = NotificationChecker(self.db_manager, interval_seconds=interval_seconds, main_window=self.main_window)
         self.checker.notifications_found.connect(self.on_notifications_found)
         self.checker.check_performed.connect(self._on_check_performed)
         self.checker.start()
@@ -620,7 +985,7 @@ class SmartNotificationsManager:
             self.system_tray.show()
             
         except Exception as e:
-            print(f"خطأ في إعداد System Tray: {e}")
+            self.logger.error(f"خطأ في إعداد System Tray: {e}", exc_info=True)
     
     def on_tray_activated(self, reason):
         """عند النقر على System Tray"""
@@ -705,7 +1070,7 @@ class SmartNotificationsManager:
             data = [n.to_dict() for n in recent]
             settings.setValue('notifications', json.dumps(data))
         except Exception as e:
-            print(f"خطأ في حفظ الإشعارات: {e}")
+            self.logger.error(f"خطأ في حفظ الإشعارات: {e}", exc_info=True)
     
     def load_notifications(self):
         """تحميل الإشعارات"""
@@ -718,7 +1083,7 @@ class SmartNotificationsManager:
             
             self.notifications = [Notification.from_dict(n) for n in notifications_data]
         except Exception as e:
-            print(f"خطأ في تحميل الإشعارات: {e}")
+            self.logger.error(f"خطأ في تحميل الإشعارات: {e}", exc_info=True)
             self.notifications = []
     
     def show_notification_center(self):
@@ -739,14 +1104,14 @@ class SmartNotificationsManager:
         """تنفيذ فحص فوري للإشعارات وتحديث الحالة"""
         try:
             # استخدام نفس منطق الفاحص بدون تشغيل خيط منفصل
-            temp_checker = NotificationChecker(self.db_manager, interval_seconds=0)
+            temp_checker = NotificationChecker(self.db_manager, interval_seconds=0, main_window=self.main_window)
             new_list = temp_checker.check_for_notifications()
             if new_list:
                 self.on_notifications_found(new_list)
             # تحديث وقت آخر فحص
             self._on_check_performed()
         except Exception as e:
-            print(f"خطأ في الفحص الفوري للإشعارات: {e}")
+            self.logger.error(f"خطأ في الفحص الفوري للإشعارات: {e}", exc_info=True)
 
 
 # Global instance

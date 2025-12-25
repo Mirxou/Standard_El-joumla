@@ -24,6 +24,7 @@ import json
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.services.payment_service import PaymentService
+from src.utils.logger import setup_logger
 
 
 class KPIWidget(QFrame):
@@ -192,6 +193,7 @@ class PaymentDashboard(QMainWindow):
         super().__init__(parent)
         self.db_manager = db_manager
         self.payment_service = payment_service or PaymentService(db_manager)
+        self.logger = setup_logger(__name__)
         
         # إعداد النافذة
         self.setWindowTitle("لوحة تحكم المدفوعات - Payment Dashboard")
@@ -213,7 +215,7 @@ class PaymentDashboard(QMainWindow):
         # تحديث البيانات كل 5 دقائق
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.refresh_data)
-        self.update_timer.start(300000)  # 5 دقائق
+        # self.update_timer.start(300000)  # 🔥 معطّل لمنع التجميد
         
         # تحديث أولي
         self.refresh_data()
@@ -516,7 +518,7 @@ class PaymentDashboard(QMainWindow):
             # يمكن إضافة المزيد من التحديثات هنا
             
         except Exception as e:
-            print(f"خطأ في تحديث مؤشرات الأداء: {e}")
+            self.logger.error(f"خطأ في تحديث مؤشرات الأداء: {e}", exc_info=True)
     
     def update_charts(self, data: Dict[str, Any]):
         """تحديث الرسوم البيانية"""
@@ -534,7 +536,7 @@ class PaymentDashboard(QMainWindow):
                 self.update_comparison_chart(data['comparison'])
                 
         except Exception as e:
-            print(f"خطأ في تحديث الرسوم البيانية: {e}")
+            self.logger.error(f"خطأ في تحديث الرسوم البيانية: {e}", exc_info=True)
     
     def update_trends_chart(self, trends_data: Dict[str, Any]):
         """تحديث رسم الاتجاهات"""
@@ -557,7 +559,7 @@ class PaymentDashboard(QMainWindow):
             self.trends_chart.chart_view.setChart(chart)
             
         except Exception as e:
-            print(f"خطأ في تحديث رسم الاتجاهات: {e}")
+            self.logger.error(f"خطأ في تحديث رسم الاتجاهات: {e}", exc_info=True)
     
     def update_forecast_chart(self, forecast_data: Dict[str, Any]):
         """تحديث رسم التوقعات"""
@@ -585,7 +587,7 @@ class PaymentDashboard(QMainWindow):
             self.forecast_chart.chart_view.setChart(chart)
             
         except Exception as e:
-            print(f"خطأ في تحديث رسم التوقعات: {e}")
+            self.logger.error(f"خطأ في تحديث رسم التوقعات: {e}", exc_info=True)
     
     def update_comparison_chart(self, comparison_data: Dict[str, Any]):
         """تحديث رسم المقارنات"""
@@ -613,7 +615,7 @@ class PaymentDashboard(QMainWindow):
             self.comparison_chart.chart_view.setChart(chart)
             
         except Exception as e:
-            print(f"خطأ في تحديث رسم المقارنات: {e}")
+            self.logger.error(f"خطأ في تحديث رسم المقارنات: {e}", exc_info=True)
     
     def update_tables(self, data: Dict[str, Any]):
         """تحديث الجداول"""
@@ -623,7 +625,7 @@ class PaymentDashboard(QMainWindow):
             pass
             
         except Exception as e:
-            print(f"خطأ في تحديث الجداول: {e}")
+            self.logger.error(f"خطأ في تحديث الجداول: {e}", exc_info=True)
     
     def export_dashboard(self):
         """تصدير بيانات اللوحة"""

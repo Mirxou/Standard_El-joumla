@@ -16,6 +16,9 @@ import psutil
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from src.utils.logger import setup_logger
 
 
 class PerformanceMonitor(QThread):
@@ -29,17 +32,19 @@ class PerformanceMonitor(QThread):
         self.running = True
         self.cache_stats = {}
         self.db_stats = {}
+        self.logger = setup_logger(__name__)
     
     def run(self):
         """تشغيل المراقبة"""
-        while self.running:
+        while self.running and not self.isInterruptionRequested():
             try:
                 stats = self.collect_stats()
                 self.stats_updated.emit(stats)
             except Exception as e:
-                print(f"خطأ في جمع الإحصائيات: {e}")
+                self.logger.error(f"خطأ في جمع الإحصائيات: {e}", exc_info=True)
             
-            self.msleep(self.interval_ms)
+            if self.running and not self.isInterruptionRequested():
+                self.msleep(self.interval_ms)
     
     def collect_stats(self) -> dict:
         """جمع إحصائيات الأداء"""
@@ -195,6 +200,7 @@ class PerformanceMonitoringDashboard(QDialog):
         super().__init__(parent)
         self.db_manager = db_manager
         self.cache_manager = cache_manager
+        self.logger = setup_logger(__name__)
         
         self.monitor: Optional[PerformanceMonitor] = None
         self.setup_ui()
@@ -395,7 +401,7 @@ class PerformanceMonitoringDashboard(QDialog):
             stats['avg_query_time_ms'] = 0  # يتطلب تتبع
             
         except Exception as e:
-            print(f"خطأ في جمع إحصائيات قاعدة البيانات: {e}")
+            self.logger.error(f"خطأ في جمع إحصائيات قاعدة البيانات: {e}", exc_info=True)
         
         return stats
     
@@ -514,10 +520,24 @@ class PerformanceMonitoringDashboard(QDialog):
                 self.force_refresh()
     
     def closeEvent(self, event):
-        """عند إغلاق النافذة"""
+        """عند إغلاق النافذة - تنظيف الموارد بشكل صحيح"""
         if self.monitor:
-            self.monitor.stop()
-            self.monitor.wait()
+            try:
+                # إيقاف المراقبة بشكل صحيح
+                self.monitor.running = False
+                if self.monitor.isRunning():
+                    self.monitor.requestInterruption()
+                    # انتظار حتى 500ms للإنهاء الطبيعي
+                    if not self.monitor.wait(500):
+                        # إذا لم ينتهِ، قم بإنهائه قسراً
+                        self.monitor.terminate()
+                        self.monitor.wait(500)
+                # تنظيف الـ thread
+                if not self.monitor.isRunning():
+                    self.monitor.deleteLater()
+                self.monitor = None
+            except Exception as e:
+                self.logger.error(f"خطأ في إيقاف المراقب: {e}", exc_info=True)
         super().closeEvent(event)
 
 
