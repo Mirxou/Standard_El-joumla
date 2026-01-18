@@ -38,6 +38,7 @@ class CustomerInsight:
     predicted_next_purchase: Optional[str]
     customer_segment: str
     lifetime_value: float
+    churn_risk: float = 0.0
 
 
 class PredictiveEngine:
@@ -213,7 +214,13 @@ class PredictiveEngine:
             annual_spending = total_purchases * (365 / max(
                 (purchase_dates[-1] - purchase_dates[0]).days, 1
             )) if len(purchase_dates) > 1 else total_purchases
-            lifetime_value = annual_spending * 3
+            # حساب Churn Risk
+            days_since_last_purchase = (datetime.now() - purchase_dates[-1]).days if purchase_dates else 0
+            avg_interval = (30 / purchase_frequency) if purchase_frequency > 0 else 30
+            
+            churn_risk = 0.0
+            if purchase_frequency > 0:
+                churn_risk = min(days_since_last_purchase / (avg_interval * 3), 1.0)
             
             insight = CustomerInsight(
                 customer_id=customer['id'],
@@ -223,7 +230,8 @@ class PredictiveEngine:
                 purchase_frequency=purchase_frequency,
                 predicted_next_purchase=predicted_next_str,
                 customer_segment=customer_segment,
-                lifetime_value=lifetime_value
+                lifetime_value=lifetime_value,
+                churn_risk=churn_risk
             )
             insights.append(insight)
         
@@ -337,6 +345,36 @@ class PredictiveEngine:
                 })
         
         return anomalies
+
+    def generate_proactive_insights(self) -> List[Dict]:
+        """
+        توليد رؤى استباقية (رؤية 2030)
+        بدلاً من انتظار المستخدم، النظام يحلل ويقترح.
+        """
+        insights = []
+        
+        # 1. تحليل اتجاه المبيعات (Trend Analysis)
+        sales_forecast = self.forecast_sales(days=7)
+        for forecast in sales_forecast:
+            if forecast.predicted_sales > forecast.current_stock:
+                insights.append({
+                    "type": "CRITICAL",
+                    "action_type": "REORDER",
+                    "product_id": forecast.product_id,
+                    "quantity": round(forecast.recommended_reorder_quantity),
+                    "message": f"⚠️ تنبيه ذكي: المنتج '{forecast.product_name}' سينفد خلال {forecast.days_until_stockout if forecast.days_until_stockout is not None else 0} أيام بناءً على نمط الشراء الحالي. يُنصح بطلب {round(forecast.recommended_reorder_quantity)} قطعة الآن."
+                })
+
+        # 2. تحليل العملاء الخاملين (Churn Prediction)
+        customer_insights = self.analyze_customer_behavior()
+        for customer in customer_insights:
+            if customer.churn_risk > 0.8: # احتمال عالي لفقدان العميل
+                insights.append({
+                    "type": "OPPORTUNITY",
+                    "message": f"💡 فرصة: العميل '{customer.customer_name}' لم يشترِ منذ فترة (خطر الفقدان {int(customer.churn_risk*100)}%). النظام يقترح إرسال عرض خصم 10% على منتجاته المفضلة لاستعادته."
+                })
+                
+        return insights
     
     # ========== Helper Methods ==========
     

@@ -215,3 +215,76 @@ class PurchaseService:
         key = payment_value.strip().lower()
         return mapping.get(payment_value, mapping.get(key, payment_value))
 
+    # ===== Agentic AI Capabilities (Vision 2030) =====
+
+    def create_auto_reorder_draft(self, product_id: int, quantity: int = 10) -> Optional[int]:
+        """
+        إنشاء مسودة طلب شراء تلقائياً (Agentic Action)
+        يقوم النظام بتحديد المورد المناسب وإنشاء الفاتورة
+        """
+        try:
+            # 1. جلب المنتج لمعرفة المورد الافتراضي
+            from src.models.product import ProductManager
+            product_manager = ProductManager(self.db_manager, self.logger)
+            product = product_manager.get_product_by_id(product_id)
+            
+            if not product:
+                raise ValueError("المنتج غير موجود")
+                
+            supplier_id = getattr(product, 'supplier_id', None)
+            
+            # 2. إذا لم يوجد مورد، نحاول إيجاد آخر مورد تم الشراء منه
+            if not supplier_id:
+                last_purchase_query = """
+                SELECT supplier_id FROM purchases p
+                JOIN purchase_items pi ON p.id = pi.purchase_id
+                WHERE pi.product_id = ?
+                ORDER BY p.purchase_date DESC LIMIT 1
+                """
+                result = self.db_manager.fetch_one(last_purchase_query, (product_id,))
+                if result:
+                    supplier_id = result[0]
+            
+            if not supplier_id:
+                # Fallback: Pick the first active supplier (Not ideal but "Agentic" attempt for demo)
+                # In production, we should ask user.
+                raise ValueError("لا يوجد مورد محدد للمنتج")
+
+            # 3. حساب السعر (آخر سعر شراء أو سعر التكلفة)
+            cost_price = product.cost_price
+            
+            # 4. إنشاء الفاتورة
+            purchase = Purchase(
+                supplier_id=supplier_id,
+                purchase_date=date.today(),
+                status=PurchaseStatus.PENDING,  # مسودة
+                payment_status=PaymentStatus.UNPAID,
+                total_amount=Decimal(quantity) * cost_price,
+                notes="Created by Vision 2030 Agentic AI (Auto-Reorder)"
+            )
+            
+            purchase_id = self.create_purchase(purchase)
+            if not purchase_id:
+                return None
+                
+            # 5. إضافة البند (نحتاج إلى purchase_items table insertion logic)
+            # بما أن add_purchase_item قد لا يكون موجوداً مباشرة كطريقة عامة هنا، 
+            # سنستخدم purchase_manager.add_item إذا توفر، أو SQL مباشر
+            
+            # للتبسيط، سنفترض وجود purchase_manager.add_item أو ننفذ SQL
+            # سنقوم بإضافة البند يدوياً هنا لضمان العمل
+            
+            item_query = """
+            INSERT INTO purchase_items (purchase_id, product_id, quantity, unit_price, total_price)
+            VALUES (?, ?, ?, ?, ?)
+            """
+            item_total = Decimal(quantity) * cost_price
+            self.db_manager.execute_query(item_query, (purchase_id, product_id, quantity, float(cost_price), float(item_total)))
+            
+            return purchase_id
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Agentic Auto-Reorder Failed: {e}")
+            return None
+

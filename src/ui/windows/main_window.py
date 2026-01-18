@@ -11,9 +11,9 @@ from PySide6.QtWidgets import (
     QLabel, QPushButton, QMessageBox, QSplashScreen, QDialog,
     QLineEdit, QComboBox, QTableWidget, QTableWidgetItem,
     QTableView, QHeaderView, QAbstractItemView, QGroupBox, QFrame,
-    QFileDialog
+    QFileDialog, QGridLayout
 )
-from PySide6.QtCore import Qt, QTimer, QThread, Signal, QDate, QUrl, QModelIndex, QSize, QPoint
+from PySide6.QtCore import Qt, QTimer, QThread, Signal, QDate, QUrl, QModelIndex, QSize, QPoint, QEasingCurve, QPropertyAnimation
 from PySide6.QtGui import QAction, QIcon, QPixmap, QFont, QColor, QDesktopServices, QPainter, QCursor
 from PySide6.QtCharts import QChart, QChartView, QLineSeries, QBarSeries, QBarSet, QBarCategoryAxis, QValueAxis, QCategoryAxis, QPieSeries, QPieSlice
 from typing import Optional, List, Dict, Any
@@ -46,6 +46,25 @@ from src.ui.delegates.action_delegate import ActionDelegate
 from src.ui.delegates.modern_action_delegate import ModernActionDelegate
 from src.utils.i18n_api import I18n
 from src.core.window_manager import WindowManager
+from src.ui.animations.animation_manager import AnimationManager
+from src.ui.effects.visual_effects import VisualEffects
+from src.ui.widgets.custom_title_bar import CustomTitleBar
+from src.ui.widgets.animated_table import AnimatedTableWidget
+from src.ui.components.modern_sidebar import ModernSidebar # System 2.0 Sidebar
+from src.ui.dialogs.command_palette import CommandPalette # System 3.0 Palette
+from src.ui.widgets.quantum_notification import NotificationManager # Quantum Toasts
+from src.ui.views.app_launcher import AppLauncher # System 4.0 Launcher
+from src.ui.views.sales_order_view import SalesOrderView # System 4.0 Demo View
+from src.services.hardware_service import HardwareService # Phase 19: Hardware
+from src.services.fiscal_service import FiscalService # Phase 19: Fiscal
+from src.services.ai_prediction_service import AIPredictionService # Phase 20: AI
+from src.services.workflow_service import WorkflowService # Phase 20: Automation
+from src.services.smart_assistant import SmartAssistant # Phase 20: NLP
+from src.services.carbon_service import CarbonService # Phase 21: Green Ledger
+from src.services.sentiment_service import SentimentService # Phase 21: Emotion AI
+from src.services.system_doctor_service import SystemDoctorService # Phase 21: Self Healing
+from src.services.gamification_service import GamificationService # Phase 22: Gamification
+from PySide6.QtGui import QShortcut, QKeySequence # For Zen Mode Shortcut
 
 # Import pandas for high-performance data handling
 try:
@@ -290,12 +309,20 @@ class MainWindow(QMainWindow):
     def __init__(self, config_manager=None, db_manager=None, logger=None, 
                  inventory_service=None, sales_service=None, reports_service=None,
                  user_service=None, payment_service=None, dashboard_service=None,
-                 notifications_manager=None):
+                 notifications_manager=None, hybrid_service=None):
         super().__init__()
+        
+        # --- Quantum Window Setup ---
+        self.setWindowFlags(Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        
+        # Initialize Notification Manager
+        self.notify = NotificationManager(self)
         
         self.config_manager = config_manager
         self.db_manager = db_manager
         self.logger = logger
+        self.hybrid_service = hybrid_service
         self.app_start_time = datetime.now()
         self._background_threads: List[QThread] = []
         self._managed_windows: List[QWidget] = []
@@ -382,6 +409,10 @@ class MainWindow(QMainWindow):
             self.setMinimumSize(1000, 700)
             self.resize(1200, 800)
         
+        # تهيئة Animation Manager و Visual Effects
+        self.animation_manager = AnimationManager(self)
+        self.visual_effects = VisualEffects()
+        
         # إعداد الواجهة
         self.setup_ui()
         self.setup_menus()
@@ -396,6 +427,9 @@ class MainWindow(QMainWindow):
         
         # تطبيق الإعدادات
         self.apply_settings()
+        
+        # إعداد Opacity للـ fade in
+        self.setWindowOpacity(0.0)
 
         # مؤقت لتحديث مؤشرات الحالة
         try:
@@ -406,6 +440,9 @@ class MainWindow(QMainWindow):
             # self._status_timer.start()  # ← معطّل الآن
         except Exception:
             pass
+        
+        # تهيئة WebSocket Client للتحديثات الفورية (Disabling to fix crash)
+        # self.init_websocket_client()
         
         if self.logger:
             self.logger.info("تم إنشاء النافذة الرئيسية")
@@ -432,6 +469,15 @@ class MainWindow(QMainWindow):
         self.supplier_manager = None
         self.ai_service = None
         self.printing_service = None
+        
+        # Phase 19: New Services
+        self.hardware_service = None
+        self.fiscal_service = None
+        
+        # Phase 20: The Global Standard
+        self.ai_prediction_service = None
+        self.workflow_service = None
+        self.smart_assistant = None
         
         # تهيئة خدمة المخزون إذا لم يتم تمريرها
         if not self.inventory_service:
@@ -502,6 +548,79 @@ class MainWindow(QMainWindow):
                 self.logger.warning(f"تعذر تهيئة خدمة طباعة الفواتير: {e}")
             self.invoice_print_service = None
         
+        # تهيئة خدمة العتاد (Hardware Service)
+        try:
+            self.hardware_service = HardwareService(port='COM3') # Default port
+            if self.logger:
+                self.logger.info("✅ تم تهيئة خدمة العتاد (Customer Display)")
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"تعذر تهيئة خدمة العتاد: {e}")
+
+        # تهيئة الخدمة الجبائية (Fiscal Service)
+        try:
+            self.fiscal_service = FiscalService(self.db_manager)
+            if self.logger:
+                self.logger.info("✅ تم تهيئة الخدمة الجبائية (G50/Etat 104)")
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"تعذر تهيئة الخدمة الجبائية: {e}")
+        
+        # تهيئة خدمات Phase 20 (AI & Automation)
+        try:
+            self.ai_prediction_service = AIPredictionService(self.db_manager)
+            self.workflow_service = WorkflowService(self.db_manager, self.notify)
+            self.smart_assistant = SmartAssistant()
+            if self.logger:
+                self.logger.info("✅ تم تهيئة خدمات الذكاء الاصطناعي والأتمتة (Oracle/Autopilot)")
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"تعذر تهيئة خدمات AI: {e}")
+
+        # تهيئة خدمات Phase 21 (The 2030 Vision)
+        try:
+            self.carbon_service = CarbonService(self.db_manager)
+            self.sentiment_service = SentimentService()
+            self.system_doctor = SystemDoctorService(self.db_manager)
+            
+            # تشغيل الفحص الذاتي عند البدء Startup Check
+            issues = self.system_doctor.diagnose()
+            if issues:
+                self.logger.warning(f"🩺 System Doctor Found Issues: {issues}")
+            else:
+                self.logger.info("🩺 System Doctor: النظام سليم 100%")
+                
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"تعذر تهيئة خدمات Vision 2030: {e}")
+
+        # تهيئة خدمات Phase 22 (Gamification)
+        try:
+            self.gamification_service = GamificationService(self.db_manager)
+            
+            # Zen Mode Shortcut (Alt+Z)
+            self.zen_shortcut = QShortcut(QKeySequence("Alt+Z"), self)
+            self.zen_shortcut.activated.connect(self.toggle_zen_mode)
+            if self.logger:
+                self.logger.info("✅ تم تهيئة خدمات Gamification & Zen Mode")
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"تعذر تهيئة خدمات Gamification: {e}")
+
+        # تهيئة خدمات Phase 23 (The Dragon's Edge)
+        try:
+            from src.services.approval_service import ApprovalService
+            from src.services.qrcode_service import QRCodeService
+            
+            self.approval_service = ApprovalService(self.db_manager, self.notify)
+            self.qrcode_service = QRCodeService()
+            
+            if self.logger:
+                self.logger.info("✅ تم تهيئة خدمات Super App (Shenpi/QR)")
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"تعذر تهيئة خدمات Phase 23: {e}")
+        
         if self.logger:
             self.logger.info("تم تهيئة الخدمات (محسنة/تقليدية) في النافذة الرئيسية")
     
@@ -540,109 +659,147 @@ class MainWindow(QMainWindow):
                 self.finished.emit(False, str(e))
     
     def setup_ui(self):
-        """إعداد واجهة المستخدم - Sidebar Architecture"""
-        # الويدجت المركزي
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
+        """إعداد واجهة المستخدم - Frameless Quantum Architecture"""
+        # الويدجت المركزي (Transparent Container)
+        central_container = QWidget()
+        central_container.setAttribute(Qt.WA_TranslucentBackground)
+        self.setCentralWidget(central_container)
         
-        # التخطيط الرئيسي (أفقي: Sidebar + Content)
-        main_layout = QHBoxLayout(central_widget)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        # التخطيط الجذري
+        root_layout = QVBoxLayout(central_container)
+        root_layout.setContentsMargins(10, 10, 10, 10) # Margin for shadow/border
+        root_layout.setSpacing(0)
         
-        # ---------------------------------------------------------
-        # 1. القائمة الجانبية (Sidebar) - Premium Dark Design
-        # ---------------------------------------------------------
-        self.sidebar = QFrame()
-        self.sidebar.setFixedWidth(250)  # عرض ثابت للقائمة (250px كما طلب Lead Architect)
-        self.sidebar.setStyleSheet("""
-            QFrame {
-                background-color: #1e293b;
-                border: none;
-            }
-        """)
+        # الإطار الرئيسي (The Window Border)
+        self.main_frame = QFrame()
+        self.main_frame.setObjectName("mainFrame")
+        # Removing hardcoded dark style
+        self.main_frame.setStyleSheet("")
+        # إضافة ظل للإطار الرئيسي (Neon Glow)
+        from PySide6.QtWidgets import QGraphicsDropShadowEffect
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor("#00f3ff"))
+        shadow.setOffset(0, 0)
+        self.main_frame.setGraphicsEffect(shadow)
         
-        self.sidebar_layout = QVBoxLayout(self.sidebar)
-        self.sidebar_layout.setContentsMargins(0, 0, 0, 0)
-        self.sidebar_layout.setSpacing(2)
+        root_layout.addWidget(self.main_frame)
         
-        # شريط الترحيب في القائمة الجانبية
-        welcome_label = QLabel(self.i18n.get_message("welcome_title"))
-        welcome_label.setStyleSheet("""
-            QLabel {
-                font-size: 16px;
-                font-weight: bold;
-                color: #ffffff;
-                padding: 20px 15px;
-                background-color: #0f172a;
-                border-bottom: 2px solid #334155;
-            }
-        """)
-        welcome_label.setAlignment(Qt.AlignCenter)
-        self.sidebar_layout.addWidget(welcome_label)
+        # تخطيط الإطار الرئيسي (TitleBar + Content)
+        window_layout = QVBoxLayout(self.main_frame)
+        window_layout.setContentsMargins(0, 0, 0, 0)
+        window_layout.setSpacing(0)
         
-        # إضافة الأزرار للقائمة الجانبية (باستخدام page_name)
-        self.btn_dashboard = self.create_sidebar_btn("🏠 الرئيسية", "dashboard")
-        self.btn_inventory = self.create_sidebar_btn("📦 المخزون", "inventory")
-        self.btn_sales = self.create_sidebar_btn("💰 المبيعات", "sales")
-        self.btn_purchases = self.create_sidebar_btn("🛒 المشتريات", "purchases")
-        self.btn_payments = self.create_sidebar_btn("💳 المدفوعات", "payments")
-        self.btn_reports = self.create_sidebar_btn("📊 التقارير", "reports")
-        self.btn_contacts = self.create_sidebar_btn("👥 العملاء والموردين", "contacts")
-        self.btn_settings = self.create_sidebar_btn("⚙️ الإعدادات", "settings")
-        self.btn_performance = self.create_sidebar_btn("⚡ الأداء", "performance")
+        # 1. شريط العنوان المخصص (Custom Title Bar)
+        self.title_bar = CustomTitleBar(self)
+        window_layout.addWidget(self.title_bar)
         
-        self.sidebar_layout.addStretch()  # دفع الأزرار للأعلى
+        # 2. جسم النافذة (Horizontal: Sidebar + Content)
+        body_widget = QWidget()
+        body_widget.setStyleSheet("background: transparent; border: none;")
+        body_layout = QHBoxLayout(body_widget)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(0)
         
-        # ---------------------------------------------------------
-        # 2. منطقة المحتوى (Content Area) - QStackedWidget
-        # ---------------------------------------------------------
+        # --- Sidebar ---
+        # --- Modern Sidebar (System 2.0) ---
+        self.sidebar = ModernSidebar()
+        self.sidebar.page_changed.connect(self.on_sidebar_navigation)
+        
+        # Initial State: Hidden (Launcher Mode)
+        self.sidebar.hide()
+        
+        # --- Content Area ---
         self.content_area = QStackedWidget()
         self.content_area.setStyleSheet("""
             QStackedWidget {
-                background-color: #f8fafc;
+                background: transparent;
                 border: none;
             }
         """)
         
-        # إضافة القائمة والمحتوى للتخطيط الرئيسي
-        main_layout.addWidget(self.sidebar)
-        main_layout.addWidget(self.content_area, 1)  # stretch factor = 1
+        body_layout.addWidget(self.sidebar)
+        body_layout.addWidget(self.content_area, 1)
+        
+        window_layout.addWidget(body_widget)
+        
+        # 3. Size Grip (Bottom Right)
+        from PySide6.QtWidgets import QSizeGrip
+        grip_frame = QFrame()
+        grip_frame.setFixedHeight(10)
+        grip_frame.setStyleSheet("background: transparent; border: none;")
+        grip_layout = QHBoxLayout(grip_frame)
+        grip_layout.setContentsMargins(0, 0, 0, 0)
+        grip_layout.addStretch()
+        grip = QSizeGrip(self)
+        grip.setStyleSheet("""
+            QSizeGrip {
+                background: transparent;
+                width: 20px;
+                height: 20px;
+            }
+        """)
+        grip_layout.addWidget(grip, 0, Qt.AlignBottom | Qt.AlignRight)
+        window_layout.addWidget(grip_frame)
         
         # ---------------------------------------------------------
-        # 3. تهيئة الصفحات (Lazy Loading Engine)
+        # تهيئة الصفحات (Lazy Loading Engine)
         # ---------------------------------------------------------
-        # Dictionary لتتبع الصفحات المحمّلة (page_name -> widget)
         self.pages: Dict[str, QWidget] = {}
         self.page_names = {
-            'dashboard': 0,
-            'inventory': 1,
-            'sales': 2,
-            'purchases': 3,
-            'payments': 4,
-            'reports': 5,
-            'contacts': 6,
-            'settings': 7,
-            'performance': 8
+            'launcher': 0,
+            'dashboard': 1,
+            'inventory': 2,
+            'sales': 3,
+            'purchases': 4,
+            'payments': 5,
+            'reports': 6,
+            'contacts': 7,
+            'settings': 8,
+            'performance': 9
         }
         
-        # الصفحة الرئيسية فقط (يتم تحميلها فوراً)
+        # الصفحة الرئيسية: App Launcher (System 4.0)
+        self.launcher = AppLauncher()
+        self.launcher.app_selected.connect(lambda app_id: self.switch_page(app_id))
+        self.content_area.addWidget(self.launcher)
+        self.pages['launcher'] = self.launcher
+
+        # Dashboard Tab
         self.dashboard_tab = self.create_dashboard_tab()
         self.content_area.addWidget(self.dashboard_tab)
         self.pages['dashboard'] = self.dashboard_tab
         
+        # Sales V2 (System 4.0 Demo) - Globally Replace 'sales'
+        self.sales_v2 = SalesOrderView()
+        self.content_area.addWidget(self.sales_v2)
+        self.pages['sales'] = self.sales_v2 # 🔥 Override legacy 'sales' page
+        
+        # Start at Launcher
+        # Start at Launcher - handled by QTimer below
+        # self.content_area.setCurrentWidget(self.launcher)
+        
+        # 🔥 LEGENDARY ANIMATION: Slide & Fade In Dashboard on Startup
+        # try:
+        #     self.animation_manager.fade_in(self.dashboard_tab, duration=1000)
+        #     self.animation_manager.slide_in(self.dashboard_tab, direction="up", duration=800)
+        #     if self.logger:
+        #         self.logger.debug("✨ Legendary Animation: Dashboard entrance started")
+        # except Exception as e:
+        #     if self.logger:
+        #         self.logger.warning(f"Failed to start startup animation: {e}")
+        
         # الصفحات الأخرى (يتم تحميلها عند الطلب - Lazy Loading)
         for page_name in ['inventory', 'sales', 'purchases', 'payments', 'reports', 'contacts', 'settings', 'performance']:
             placeholder = QWidget()
-            placeholder.setStyleSheet("background-color: #f8fafc;")
+            placeholder.setStyleSheet("background-color: transparent;")
             self.content_area.addWidget(placeholder)
         
-        # تشغيل الصفحة الأولى
-        self.content_area.setCurrentIndex(0)
-        self.btn_dashboard.setChecked(True)
+        # تشغيل الصفحة الأولى مع ضمان ضبط حالة السايدبار (إخفاءه)
+        QTimer.singleShot(0, lambda: self.switch_page('dashboard'))
         
         if self.logger:
-            self.logger.debug("✅ تم تحويل الواجهة إلى Sidebar Architecture مع Lazy Loading Engine")
+            self.logger.debug(f"✅ تم تحويل الواجهة إلى Sidebar Architecture مع Lazy Loading Engine")
     
     def _center_window(self):
         """توسيط النافذة على الشاشة"""
@@ -660,50 +817,54 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
     
-    def create_sidebar_btn(self, text: str, page_name: str):
-        """
-        إنشاء زر في القائمة الجانبية
+    def on_sidebar_navigation(self, page_id: str, title: str):
+        """Handle ModernSidebar navigation signals"""
+        if page_id == 'home':
+            # Go back to Dashboard
+            self.switch_page('dashboard')
+            return
+
+        # Handle Special Actions (Dialogs/Windows)
+        if page_id == 'users':
+            self.show_user_management()
+            return
+        elif page_id == 'system':
+            self.show_system_management()
+            return
+        elif page_id == 'audit':
+            self.show_audit_viewer()
+            return
+        elif page_id == 'notifications':
+            self.show_notification_center()
+            return
+        elif page_id == 'logout':
+            self.logout()
+            return
+
+        # Map Sidebar IDs to Page IDs
+        mapping = {
+            'dashboard': 'dashboard', # Special case if sidebar has dashboard btn
+            'inventory': 'inventory',
+            'sales': 'sales', # 🔥 Now points to System 4.0 View
+            'purchases': 'purchases',
+            'payments': 'payments',
+            'reports': 'reports',
+            'payments': 'payments',
+            'reports': 'reports',
+            'contacts': 'contacts', # Explicit mapping check
+            'customers': 'contacts', # Map customers to contacts
+            'settings': 'settings'  # Explicit mapping check
+        }
         
-        Args:
-            text: نص الزر
-            page_name: اسم الصفحة ('dashboard', 'inventory', etc.)
-        """
-        btn = QPushButton(text)
-        btn.setCheckable(True)
-        btn.setAutoExclusive(True)  # زر واحد فقط يكون نشطاً
-        btn.setCursor(QCursor(Qt.PointingHandCursor))
-        btn.setStyleSheet("""
-            QPushButton {
-                text-align: right;
-                padding: 15px 20px;
-                border: none;
-                color: #94a3b8;
-                font-size: 14px;
-                font-weight: 600;
-                background-color: transparent;
-                border-radius: 0px;
-            }
-            QPushButton:hover {
-                background-color: #334155;
-                color: #ffffff;
-            }
-            QPushButton:checked {
-                background-color: #3b82f6;
-                color: #ffffff;
-                border-right: 4px solid #ffffff;
-            }
-            QPushButton:pressed {
-                background-color: #2563eb;
-            }
-        """)
-        
-        # ربط الزر بالصفحة (باستخدام page_name)
-        btn.clicked.connect(lambda: self.switch_page(page_name))
-        
-        # إضافة الزر للقائمة
-        self.sidebar_layout.addWidget(btn)
-        
-        return btn
+        if page_id == 'logout':
+            self.close()
+            return
+            
+        if page_id in mapping:
+            target_page = mapping[page_id]
+            self.switch_page(target_page)
+        else:
+            self.logger.warning(f"Unmapped sidebar page: {page_id}")
     
     def switch_page(self, page_name: str):
         """
@@ -815,11 +976,32 @@ class MainWindow(QMainWindow):
                     self.logger.error(f"❌ الصفحة '{page_name}' غير متاحة")
                 return
             
-            self.content_area.setCurrentWidget(self.pages[page_name])
+            # 🔥 System 2.0 Transition: Cross-Fade Animation
+            target_widget = self.pages[page_name]
+            current_widget = self.content_area.currentWidget()
             
-            # 🔥 تحديث إحصائيات Dashboard عند العودة للصفحة الرئيسية
-            if page_name == 'dashboard':
-                QTimer.singleShot(100, self.refresh_dashboard_stats)
+            if current_widget == target_widget:
+                # Still ensure sidebar state is correct even if page is same
+                # return # DON'T RETURN EARLY - Ensure sidebar state update
+                pass
+
+            # 🔥 Perform the Switch
+            self.content_area.setCurrentWidget(target_widget)
+
+            # Always show Sidebar in Professional Mode
+            self.sidebar.show()
+            
+            # Sync sidebar active state
+            self.sidebar.blockSignals(True)
+            try:
+                if page_name == 'dashboard':
+                    self.sidebar.set_active('home')
+                else:
+                    self.sidebar.set_active(page_name)
+            finally:
+                self.sidebar.blockSignals(False)
+
+
                 
         except Exception as e:
             if self.logger:
@@ -1018,20 +1200,64 @@ class MainWindow(QMainWindow):
         
         layout.addWidget(header_frame)
         
-        # ملخص المخزون - KPIs محسّنة
-        summary_group = QGroupBox("📊 مؤشرات الأداء الرئيسية")
-        summary_group.setStyleSheet("")
-        summary_layout = QHBoxLayout(summary_group)
-        summary_layout.setContentsMargins(15, 15, 15, 15)
-        summary_layout.setSpacing(20)
+        # --- Glass KPI Grid (System 2.0) ---
+        kpi_container = QWidget()
+        kpi_layout = QGridLayout(kpi_container)
+        kpi_layout.setContentsMargins(15, 0, 15, 10)
+        kpi_layout.setSpacing(20)
         
-        # KPIs المالية
-        financial_kpis = [
-            ("total_sales", "💰 إجمالي المبيعات", "#27ae60", "↑"),
-            ("total_revenue", "📈 الإيرادات", "#3498db", "↑"),
-            ("total_profit", "💵 صافي الربح", "#2ecc71", "↑"),
-            ("avg_order", "📊 متوسط الطلب", "#9b59b6", "→")
-        ]
+        # Glass KPI Cards are created via self._create_glass_kpi method
+
+        # --- Vision 2030 AI Insights Widget ---
+        from src.ui.widgets.quantum_notification import NotificationManager
+        
+        insights_frame = QFrame()
+        insights_frame.setObjectName("AIInsightsFrame")
+        insights_frame.setStyleSheet("""
+            QFrame#AIInsightsFrame {
+                background: qlineargradient(x1:0, y1:0, x2:1, y1:1, stop:0 rgba(59, 130, 246, 0.1), stop:1 rgba(147, 51, 234, 0.1));
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 12px;
+            }
+        """)
+        insights_layout = QHBoxLayout(insights_frame)
+        
+        ai_icon = QLabel("🤖")
+        ai_icon.setStyleSheet("font-size: 24px;")
+        
+        self.ai_insight_label = QLabel("جاري تحليل البيانات... (Vision 2030 AI)")
+        self.ai_insight_label.setStyleSheet("color: #e2e8f0; font-style: italic; font-size: 14px;")
+        self.ai_insight_label.setWordWrap(True)
+        
+        self.ai_action_btn = QPushButton("تحليلات مفصلة")
+        self.ai_action_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                color: white;
+                border-radius: 6px;
+                padding: 5px 15px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.2);
+            }
+        """)
+        self.ai_action_btn.clicked.connect(self.handle_ai_action)
+        
+        insights_layout.addWidget(ai_icon)
+        insights_layout.addWidget(self.ai_insight_label, 1)
+        insights_layout.addWidget(self.ai_action_btn)
+        
+        layout.addWidget(insights_frame)
+        # --------------------------------------
+
+        # Add Cards to Grid
+        kpi_layout.addWidget(self._create_glass_kpi("total_sales", "المبيعات", "0 ر.س", "#38bdf8", "💰"), 0, 0)
+        kpi_layout.addWidget(self._create_glass_kpi("total_revenue", "الإيرادات", "0 ر.س", "#22d3ee", "📈"), 0, 1)
+        kpi_layout.addWidget(self._create_glass_kpi("total_profit", "الأرباح", "0 ر.س", "#4ade80", "💵"), 0, 2)
+        kpi_layout.addWidget(self._create_glass_kpi("total_orders", "الطلبات", "0", "#a78bfa", "🛍️"), 0, 3)
+
+        layout.addWidget(kpi_container)
         
         # KPIs المخزون
         inventory_kpis = [
@@ -1041,12 +1267,24 @@ class MainWindow(QMainWindow):
             ("out_of_stock_items", "🔴 منتجات نفدت", "#e74c3c", "↓")
         ]
         
-        self.dashboard_summary_labels = {}
-        self.dashboard_trend_labels = {}
+        # تعريف KPIs المالية (تم إضافتها لتجنب خطأ undefined)
+        financial_kpis = [
+            ("daily_revenue", "إيراد اليوم", "#10b981", "↑"),
+            ("daily_expenses", "مصروفات اليوم", "#ef4444", "↓"),
+            ("net_profit", "صافي الربح", "#3b82f6", "↑"),
+            ("avg_basket", "متوسط السلة", "#f59e0b", "-")
+        ]
         
-        # إضافة KPIs المالية
+        # إضافة KPIs المالية (ملخص نصي)
+        summary_group = QGroupBox("💰 الملخص المالي")
+        summary_group.setStyleSheet("QGroupBox { border: 1px solid #333; border-radius: 8px; margin-top: 10px; font-weight: bold; color: white; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; }")
+        summary_layout = QHBoxLayout(summary_group)
+        summary_layout.setContentsMargins(15, 15, 15, 15)
+        summary_layout.setSpacing(20)
+
         for key, title_text, color, trend in financial_kpis:
             container = self._create_kpi_card(key, title_text, color, trend)
+
             summary_layout.addWidget(container)
         
         summary_layout.addStretch()
@@ -1107,8 +1345,7 @@ class MainWindow(QMainWindow):
                     background-color: #2980b9;
                 }
             """)
-            help_btn.clicked.connect(lambda: QMessageBox.information(
-                self,
+            help_btn.clicked.connect(lambda: self.notify.show_info(
                 self.i18n.get_message("chart_load_error_title"),
                 self.i18n.get_message("chart_load_error_details")
             ))
@@ -1182,7 +1419,7 @@ class MainWindow(QMainWindow):
         alerts_layout = QVBoxLayout(alerts_group)
         alerts_layout.setContentsMargins(10, 15, 10, 10)
         
-        self.dashboard_alerts_table = QTableWidget()
+        self.dashboard_alerts_table = AnimatedTableWidget()
         self.dashboard_alerts_table.setColumnCount(4)
         self.dashboard_alerts_table.setHorizontalHeaderLabels(["المنتج", "الحالة", "الكمية", "الرسالة"])
         self.dashboard_alerts_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -1202,7 +1439,7 @@ class MainWindow(QMainWindow):
         activities_layout = QVBoxLayout(activities_group)
         activities_layout.setContentsMargins(10, 15, 10, 10)
         
-        self.dashboard_activities_table = QTableWidget()
+        self.dashboard_activities_table = AnimatedTableWidget()
         self.dashboard_activities_table.setColumnCount(6)
         self.dashboard_activities_table.setHorizontalHeaderLabels(["التاريخ", "الوقت", "النوع", "الوصف", "المستخدم", "الحالة"])
         self.dashboard_activities_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -1244,7 +1481,7 @@ class MainWindow(QMainWindow):
         top_customers_layout = QVBoxLayout(top_customers_group)
         top_customers_layout.setContentsMargins(10, 15, 10, 10)
         
-        self.dashboard_top_customers_table = QTableWidget()
+        self.dashboard_top_customers_table = AnimatedTableWidget()
         self.dashboard_top_customers_table.setColumnCount(4)
         self.dashboard_top_customers_table.setHorizontalHeaderLabels(["الترتيب", "اسم العميل", "عدد المشتريات", "إجمالي الإنفاق"])
         self.dashboard_top_customers_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -1263,7 +1500,7 @@ class MainWindow(QMainWindow):
         top_products_layout = QVBoxLayout(top_products_group)
         top_products_layout.setContentsMargins(10, 15, 10, 10)
         
-        self.dashboard_top_products_table = QTableWidget()
+        self.dashboard_top_products_table = AnimatedTableWidget()
         self.dashboard_top_products_table.setColumnCount(4)
         self.dashboard_top_products_table.setHorizontalHeaderLabels(["الترتيب", "اسم المنتج", "الكمية المباعة", "إجمالي المبيعات"])
         self.dashboard_top_products_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -1317,22 +1554,68 @@ class MainWindow(QMainWindow):
         
         return scroll_area
     
+    class InteractiveCard(QFrame):
+        """
+        بطاقة تفاعلية متطورة (Quantum Card)
+        تتفاعل مع حركة الماوس وتوفر تأثيرات بصرية متقدمة
+        """
+        def __init__(self, parent=None, color="#3498db", animation_manager=None):
+            super().__init__(parent)
+            self.color = color
+            self.animation_manager = animation_manager
+            self.setObjectName("kpiCard")
+            self.setFrameStyle(QFrame.StyledPanel)
+            
+            # تأثير الظل (Glow)
+            from PySide6.QtWidgets import QGraphicsDropShadowEffect
+            self.shadow = QGraphicsDropShadowEffect(self)
+            self.shadow.setBlurRadius(20)
+            self.shadow.setColor(QColor(color))
+            self.shadow.setOffset(0, 0)
+            self.shadow.setEnabled(False) # تفعيل عند التحويم فقط
+            self.setGraphicsEffect(self.shadow)
+            
+        def enterEvent(self, event):
+            # تشغيل تأثير الـ Scale والـ Glow
+            if self.animation_manager:
+                self.animation_manager.scale_animation(self, start_scale=1.0, end_scale=1.05, duration=200)
+            
+            self.shadow.setEnabled(True)
+            self.setStyleSheet(f"""
+                QFrame#kpiCard {{
+                    background: qradialgradient(cx:0.5, cy:0.5, radius:1.5, fx:0.5, fy:0.5,
+                        stop:0 rgba(56, 189, 248, 0.15), stop:1 rgba(15, 23, 42, 0.8));
+                    border: 1px solid {self.color};
+                    border-left: 4px solid {self.color};
+                }}
+            """)
+            super().enterEvent(event)
+            
+        def leaveEvent(self, event):
+            # إعادة الحجم والستايل
+            if self.animation_manager:
+                self.animation_manager.scale_animation(self, start_scale=1.05, end_scale=1.0, duration=200)
+            
+            self.shadow.setEnabled(False)
+            self.setStyleSheet(f"""
+                QFrame#kpiCard {{
+                    border-left: 3px solid {self.color};
+                }}
+            """)
+            super().leaveEvent(event)
+
     def _create_kpi_card(self, key, title_text, color, trend=""):
-        """إنشاء بطاقة KPI احترافية"""
-        container = QFrame()
-        container.setFrameStyle(QFrame.StyledPanel)
+        """إنشاء بطاقة KPI احترافية تفاعلية"""
+        # استخدام الكلاس الداخلي للتفاعل
+        container = self.InteractiveCard(parent=None, color=color, animation_manager=self.animation_manager)
+        
+        # الستايل الأولي
         container.setStyleSheet(f"""
-            QFrame {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {color}, stop:0.3 {color}, stop:1 #ffffff);
-                border: 2px solid {color};
-                border-radius: 12px;
-                padding: 5px;
-            }}
-            QFrame:hover {{
-                border: 3px solid {color};
+            QFrame#kpiCard {{
+                border-left: 3px solid {color};
             }}
         """)
+        
         container_layout = QVBoxLayout(container)
         container_layout.setContentsMargins(18, 15, 18, 15)
         container_layout.setSpacing(10)
@@ -1643,7 +1926,7 @@ class MainWindow(QMainWindow):
         # استخدام DataLoaderWorker لتجنب تجميد الواجهة
         self._dashboard_loader = DataLoaderWorker(load_dashboard_data)
         self._dashboard_loader.data_loaded.connect(self._populate_dashboard_data)
-        self._dashboard_loader.error_occurred.connect(lambda err: QMessageBox.critical(self, "خطأ", f"فشل تحميل بيانات الصفحة الرئيسية: {err}"))
+        self._dashboard_loader.error_occurred.connect(lambda err: self.notify.show_error("خطأ", f"فشل تحميل بيانات الصفحة الرئيسية: {err}"))
         self._start_worker(self._dashboard_loader)
     
     def _populate_dashboard_data(self, data):
@@ -1652,6 +1935,71 @@ class MainWindow(QMainWindow):
             return
         
         try:
+            # --- تحديث رؤى Vision 2030 AI ---
+            try:
+                if hasattr(self, 'ai_insight_label'):
+                    from src.services.ai_prediction_service import AIPredictionService
+                    ai_service = AIPredictionService(self.db_manager)
+                    insights = ai_service.get_proactive_insights()
+                    
+                    if insights:
+                        # عرض أهم رؤية (الأولى)
+                        top_insight = insights[0]
+                        self.current_ai_insight = top_insight
+                        self.ai_insight_label.setText(top_insight['message'])
+                        
+                        if top_insight.get('type') == 'CRITICAL':
+                            self.ai_insight_label.setStyleSheet("color: #f87171; font-weight: bold; font-size: 14px;")
+                            # Agentic UI: تفعيل زر الإجراء الفوري
+                            self.ai_action_btn.setText("⚡ معالجة فورية (Agentic)")
+                            self.ai_action_btn.setStyleSheet("""
+                                QPushButton {
+                                    background-color: rgba(239, 68, 68, 0.2);
+                                    border: 1px solid rgba(248, 113, 113, 0.5);
+                                    color: #fecaca;
+                                    border-radius: 6px;
+                                    padding: 5px 15px;
+                                    font-weight: bold;
+                                }
+                                QPushButton:hover {
+                                    background-color: rgba(239, 68, 68, 0.4);
+                                }
+                            """)
+                        else:
+                            self.ai_insight_label.setStyleSheet("color: #e2e8f0; font-style: italic; font-size: 14px;")
+                            self.ai_action_btn.setText("تحليلات مفصلة")
+                            self.ai_action_btn.setStyleSheet("""
+                                QPushButton {
+                                    background-color: rgba(255, 255, 255, 0.1);
+                                    border: 1px solid rgba(255, 255, 255, 0.2);
+                                    color: white;
+                                    border-radius: 6px;
+                                    padding: 5px 15px;
+                                }
+                                QPushButton:hover {
+                                    background-color: rgba(255, 255, 255, 0.2);
+                                }
+                            """)
+                    else:
+                        self.current_ai_insight = None
+                        self.ai_insight_label.setText("✅ Vision 2030 AI: جميع المؤشرات طبيعية. النظام يعمل بكفاءة.")
+                        self.ai_action_btn.setText("Scan")
+                        self.ai_action_btn.setStyleSheet("""
+                            QPushButton {
+                                background-color: rgba(16, 185, 129, 0.1);
+                                border: 1px solid rgba(52, 211, 153, 0.3);
+                                color: #d1fae5;
+                                border-radius: 6px;
+                                padding: 5px 15px;
+                            }
+                            QPushButton:hover {
+                                background-color: rgba(16, 185, 129, 0.2);
+                            }
+                        """)
+            except Exception as e:
+                pass
+            # --------------------------------
+
             # تحديث ملخص المخزون أولاً
             financial_kpis = data.get("financial_kpis", {})
             
@@ -2257,10 +2605,75 @@ class MainWindow(QMainWindow):
             if hasattr(self, "dashboard_activities_table"):
                 table = self.dashboard_activities_table
                 table.setRowCount(1)
-                info_item = QTableWidgetItem(f"خطأ في تحميل البيانات: {str(e)}")
-                info_item.setTextAlignment(Qt.AlignCenter)
-                table.setSpan(0, 0, 1, table.columnCount())
-                table.setItem(0, 0, info_item)
+                    table.setItem(0, 0, info_item)
+    
+    # ===== Agentic AI Handlers (Vision 2030) =====
+    
+    def handle_ai_action(self):
+        """
+        تنفيذ الإجراء المقترح من الذكاء الاصطناعي (Agentic AI)
+        يقوم هذا المعالج بتنفيذ الأمر (مثل إعادة الطلب) بشكل مستقل أو شبه مستقل.
+        """
+        try:
+            if not hasattr(self, 'current_ai_insight') or not self.current_ai_insight:
+                # Fallback to Command Palette if no specific insight action
+                self.open_command_palette()
+                return
+
+            insight = self.current_ai_insight
+            action_type = insight.get('action_type')
+
+            if action_type == 'REORDER':
+                # 1. استخراج المعلمات
+                product_id = insight.get('product_id')
+                quantity = insight.get('quantity', 10)
+                
+                # 2. تأكيد المستخدم (Semi-Autonomous Mode)
+                # في المستقبل (2030) قد يكون هذا تلقائياً بالكامل للقيم المنخفضة
+                from PySide6.QtWidgets import QMessageBox
+                reply = QMessageBox.question(
+                    self, 
+                    "Agentic AI Action",
+                    f"هل تريد السماح للوكيل الذكي بإنشاء مسودة طلب شراء للمنتج (#{product_id}) بكمية {quantity}؟",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.Yes
+                )
+                
+                if reply == QMessageBox.Yes:
+                    # 3. التنفيذ
+                    from src.services.purchase_service import PurchaseService
+                    # نحتاج لإنشاء خدمة مشتريات جديدة أو استخدام الموجودة إذا كانت متوفرة
+                    # بما أننا في MainWindow، قد لا تكون purchase_service مهيأة كخاصية دائمة، لذا ننشؤها
+                    purchase_service = PurchaseService(self.db_manager, self.logger)
+                    
+                    purchase_id = purchase_service.create_auto_reorder_draft(product_id, quantity)
+                    
+                    if purchase_id:
+                        from src.ui.widgets.quantum_notification import NotificationManager
+                        self.notify.show_success(
+                            "تم التنفيذ بنجاح", 
+                            f"✅ قام الوكيل الذكي بإنشاء فاتورة شراء مسودة #{purchase_id}"
+                        )
+                        # تحديث الداشبورد لإخفاء التنبيه إذا تم حله
+                        self.refresh_dashboard_data()
+                        
+                        # الانتقال لصفحة المشتريات (اختياري)
+                        # self.switch_page('purchases')
+                    else:
+                        self.notify.show_error("فشل التنفيذ", "❌ لم يتمكن الوكيل من إتمام العملية.")
+            
+            elif action_type == 'PROMOTION':
+                # منطق العروض الترويجية (للمرحلة القادمة)
+                self.notify.show_info("قريباً", "سيتم تفعيل وكيل التسويق قريباً.")
+                
+            else:
+                # إجراء افتراضي
+                self.open_command_palette()
+
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Error in handle_ai_action: {e}")
+            self.notify.show_error("خطأ نظمي", "حدث خطأ أثناء تنفيذ الإجراء الذكي.")
     
     def update_dashboard_analytics(self, start_date, end_date):
         """تحديث التحليلات المتقدمة (تم نقلها إلى _populate_dashboard_analytics)"""
@@ -2613,6 +3026,12 @@ class MainWindow(QMainWindow):
         hint.setStyleSheet("color: rgb(127, 140, 141);")
         layout.addWidget(hint)
 
+        # زر فتح لوحة Database Metrics
+        open_db_metrics_btn = QPushButton("📊 Database Metrics - مقاييس قاعدة البيانات")
+        open_db_metrics_btn.setMinimumHeight(36)
+        open_db_metrics_btn.clicked.connect(self.show_database_metrics)
+        layout.addWidget(open_db_metrics_btn)
+        
         # زر فتح اللوحة التفصيلية
         open_perf_btn = QPushButton(self.i18n.get_message("open_detailed_performance"))
         open_perf_btn.setMinimumHeight(36)
@@ -3719,6 +4138,7 @@ class MainWindow(QMainWindow):
                 if self.db_manager:
                     sale_items = self.db_manager.execute_query(
                         """
+
                         SELECT 
                             si.*,
                             p.name as product_name,
@@ -8106,6 +8526,23 @@ class MainWindow(QMainWindow):
         self._status_unread = QLabel("")
         self._status_unread.setStyleSheet("color:#555; padding:0 8px;")
         statusbar.addPermanentWidget(self._status_unread)
+        
+        # مؤشر حالة المزامنة (إذا كان hybrid_service متاحاً)
+        if self.hybrid_service:
+            try:
+                from src.ui.sync_status_indicator import SyncStatusIndicator, SyncStatusWidget
+                self.sync_indicator = SyncStatusIndicator(self.hybrid_service, self)
+                self.sync_status_widget = SyncStatusWidget(self.sync_indicator, self)
+                statusbar.addPermanentWidget(self.sync_status_widget)
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"تعذر إضافة مؤشر حالة المزامنة: {e}")
+        
+        # مؤشر حالة WebSocket للتحديثات الفورية
+        from PySide6.QtWidgets import QLabel
+        self._status_websocket = QLabel("⚪ WebSocket: غير متصل")
+        self._status_websocket.setStyleSheet("color:#888; padding:0 8px; font-size:10px;")
+        statusbar.addPermanentWidget(self._status_websocket)
 
         # رسالة قاعدة البيانات الأولى
         if self.db_manager:
@@ -8121,7 +8558,7 @@ class MainWindow(QMainWindow):
         self.update_statusbar_metrics()
 
     def update_statusbar_metrics(self):
-        """تحديث مؤشرات شريط الحالة (السمة/الإشعارات)"""
+        """تحديث مؤشرات شريط الحالة (السمة/الإشعارات/WebSocket)"""
         try:
             # تحديث السمة
             if hasattr(self, "_status_theme"):
@@ -8142,8 +8579,216 @@ class MainWindow(QMainWindow):
                         pass
                 except Exception:
                     pass
+            
+            # تحديث حالة WebSocket
+            if hasattr(self, "_status_websocket") and hasattr(self, "ws_client") and self.ws_client:
+                if self.ws_client.is_connected:
+                    self._status_websocket.setText("🟢 WebSocket: متصل")
+                    self._status_websocket.setStyleSheet("color:#28a745; padding:0 8px; font-size:10px;")
+                else:
+                    self._status_websocket.setText("🔴 WebSocket: غير متصل")
+                    self._status_websocket.setStyleSheet("color:#dc3545; padding:0 8px; font-size:10px;")
         except Exception:
             pass
+    
+    def init_websocket_client(self):
+        """تهيئة WebSocket Client للتحديثات الفورية"""
+        # #region agent log
+        import json
+        from datetime import datetime
+        with open(r'c:\Users\pc\Desktop\Logical Version trae\.cursor\debug.log', 'a', encoding='utf-8') as f:
+            f.write(json.dumps({
+                "location": "main_window.py:init_websocket_client",
+                "message": "Initializing WebSocket client",
+                "data": {"has_config_manager": bool(self.config_manager)},
+                "timestamp": datetime.now().isoformat(),
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "F"
+            }, ensure_ascii=False) + "\n")
+        # #endregion
+        
+        try:
+            from src.ui.websocket_client import WebSocketClient
+            
+            # الحصول على API URL من config
+            api_url = "http://localhost:8000"
+            if self.config_manager:
+                api_url = self.config_manager.get('api.base_url', 'http://localhost:8000')
+            
+            # #region agent log
+            with open(r'c:\Users\pc\Desktop\Logical Version trae\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                f.write(json.dumps({
+                    "location": "main_window.py:init_websocket_client",
+                    "message": "Creating WebSocket client",
+                    "data": {"api_url": api_url},
+                    "timestamp": datetime.now().isoformat(),
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "F"
+                }, ensure_ascii=False) + "\n")
+            # #endregion
+            
+            # إنشاء WebSocket client
+            self.ws_client = WebSocketClient(
+                api_base_url=api_url,
+                room="data_updates",
+                token=None  # يمكن إضافة token لاحقاً
+            )
+            
+            # ربط الإشارات
+            self.ws_client.data_update_received.connect(self._on_data_update_received)
+            self.ws_client.notification_received.connect(self._on_notification_received)
+            self.ws_client.connection_status_changed.connect(self._on_websocket_status_changed)
+            
+            # #region agent log
+            with open(r'c:\Users\pc\Desktop\Logical Version trae\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                f.write(json.dumps({
+                    "location": "main_window.py:init_websocket_client",
+                    "message": "Signals connected, starting connection",
+                    "data": {"api_url": api_url},
+                    "timestamp": datetime.now().isoformat(),
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "F"
+                }, ensure_ascii=False) + "\n")
+            # #endregion
+            
+            # بدء الاتصال
+            self.ws_client.connect()
+            
+            if self.logger:
+                self.logger.info("✅ تم تهيئة WebSocket Client")
+            
+            # #region agent log
+            with open(r'c:\Users\pc\Desktop\Logical Version trae\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                f.write(json.dumps({
+                    "location": "main_window.py:init_websocket_client",
+                    "message": "WebSocket client initialized successfully",
+                    "data": {"api_url": api_url},
+                    "timestamp": datetime.now().isoformat(),
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "F"
+                }, ensure_ascii=False) + "\n")
+            # #endregion
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"⚠️ تعذر تهيئة WebSocket Client: {e}")
+            
+            # #region agent log
+            with open(r'c:\Users\pc\Desktop\Logical Version trae\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                f.write(json.dumps({
+                    "location": "main_window.py:init_websocket_client",
+                    "message": "WebSocket client initialization failed",
+                    "data": {"error": str(e)},
+                    "timestamp": datetime.now().isoformat(),
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "F"
+                }, ensure_ascii=False) + "\n")
+            # #endregion
+            self.ws_client = None
+    
+    def _on_data_update_received(self, entity_type: str, entity_id: int, action: str, data: dict):
+        """معالجة تحديث البيانات من WebSocket"""
+        try:
+            if self.logger:
+                self.logger.debug(f"📡 تحديث بيانات: {entity_type} {entity_id} {action}")
+            
+            # تحديث UI حسب نوع الكيان
+            if entity_type == "product":
+                self._refresh_inventory_if_open()
+            elif entity_type == "sale":
+                self._refresh_sales_if_open()
+            elif entity_type == "purchase":
+                self._refresh_purchases_if_open()
+            elif entity_type == "customer":
+                self._refresh_customers_if_open()
+            elif entity_type == "supplier":
+                self._refresh_suppliers_if_open()
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في معالجة تحديث البيانات: {e}")
+    
+    def _on_notification_received(self, title: str, message: str, notification_type: str):
+        """معالجة الإشعارات من WebSocket"""
+        try:
+            from PySide6.QtWidgets import QMessageBox
+            icon = QMessageBox.Information
+            if notification_type == "warning":
+                icon = QMessageBox.Warning
+            elif notification_type == "error":
+                icon = QMessageBox.Critical
+            
+            QMessageBox.information(self, title, message)
+            
+            # أيضاً تحديث notifications manager إن وجد
+            if hasattr(self, 'notifications_manager') and self.notifications_manager:
+                self.notifications_manager.add_notification(title, message, notification_type)
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في معالجة الإشعار: {e}")
+    
+    def _on_websocket_status_changed(self, connected: bool, message: str):
+        """معالجة تغيير حالة WebSocket"""
+        try:
+            if hasattr(self, '_status_websocket'):
+                if connected:
+                    self._status_websocket.setText("🟢 WebSocket: متصل")
+                    self._status_websocket.setStyleSheet("color:#28a745; padding:0 8px; font-size:10px;")
+                else:
+                    self._status_websocket.setText(f"🔴 WebSocket: {message}")
+                    self._status_websocket.setStyleSheet("color:#dc3545; padding:0 8px; font-size:10px;")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في تحديث حالة WebSocket: {e}")
+    
+    def _refresh_inventory_if_open(self):
+        """تحديث المخزون إذا كانت الصفحة مفتوحة"""
+        if hasattr(self, 'inventory_model') and self.inventory_model:
+            try:
+                # إعادة تحميل البيانات
+                if hasattr(self, 'load_inventory_data'):
+                    self.load_inventory_data()
+            except Exception:
+                pass
+    
+    def _refresh_sales_if_open(self):
+        """تحديث المبيعات إذا كانت الصفحة مفتوحة"""
+        if hasattr(self, 'sales_model') and self.sales_model:
+            try:
+                if hasattr(self, 'load_sales_data'):
+                    self.load_sales_data()
+            except Exception:
+                pass
+    
+    def _refresh_purchases_if_open(self):
+        """تحديث المشتريات إذا كانت الصفحة مفتوحة"""
+        pass  # يمكن إضافته لاحقاً
+    
+    def _refresh_customers_if_open(self):
+        """تحديث العملاء إذا كانت الصفحة مفتوحة"""
+        pass  # يمكن إضافته لاحقاً
+    
+    def _refresh_suppliers_if_open(self):
+        """تحديث الموردين إذا كانت الصفحة مفتوحة"""
+        pass  # يمكن إضافته لاحقاً
+    
+    def showEvent(self, event):
+        """عند عرض النافذة - تطبيق حركة fade in"""
+        super().showEvent(event)
+        if hasattr(self, 'animation_manager'):
+            self.animation_manager.fade_in(self, duration=400)
+    
+    def paintEvent(self, event):
+        """رسم التأثيرات البصرية"""
+        super().paintEvent(event)
+        if hasattr(self, 'visual_effects'):
+            painter = QPainter(self)
+            # يمكن إضافة تأثيرات بصرية هنا
+            painter.end()
+    
     def apply_settings(self):
         """تطبيق الإعدادات مع تحسينات التنسيق"""
         if not self.config_manager:
@@ -8222,8 +8867,29 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
     def show_success_message(self, message: str):
-        """عرض رسالة نجاح"""
-        self.statusBar().showMessage(message, 3000)  # عرض لمدة 3 ثوان
+        """عرض رسالة نجاح (Toast Notification)"""
+        from src.ui.widgets.quantum_notification import NotificationManager
+        if self.notify:
+            NotificationManager.show_success("تم بنجاح", message)
+        else:
+            self.statusBar().showMessage(message, 3000)
+
+    def show_error_message(self, title: str, message: str):
+        """عرض رسالة خطأ (Toast Notification)"""
+        from src.ui.widgets.quantum_notification import NotificationManager
+        from PySide6.QtWidgets import QMessageBox
+        if self.notify:
+            NotificationManager.show_error(title, message)
+        else:
+            QMessageBox.critical(self, title, message)
+
+    def show_info_message(self, title: str, message: str):
+         from src.ui.widgets.quantum_notification import NotificationManager
+         from PySide6.QtWidgets import QMessageBox
+         if self.notify:
+             NotificationManager.show_info(title, message)
+         else:
+             QMessageBox.information(self, title, message)
     
     def manage_categories(self):
         """إدارة الفئات"""
@@ -8861,11 +9527,142 @@ class MainWindow(QMainWindow):
     
     def setup_keyboard_shortcuts(self):
         """إعداد اختصارات لوحة المفاتيح"""
+        from PySide6.QtGui import QShortcut, QKeySequence
+        from src.ui.dialogs.command_palette import CommandPalette
+        from src.ui.widgets.quantum_notification import NotificationManager
+        
+        # Command Palette (Ctrl+K)
+        self.cmd_shortcut = QShortcut(QKeySequence("Ctrl+K"), self)
+        self.cmd_shortcut.activated.connect(self.open_command_palette)
+        
+        # Refresh (F5)
+        self.refresh_shortcut = QShortcut(QKeySequence("F5"), self)
+        self.refresh_shortcut.activated.connect(self.refresh_current_page)
+        
         try:
             if self.logger:
-                self.logger.info("تم إعداد اختصارات لوحة المفاتيح")
+                self.logger.info("تم إعداد اختصارات لوحة المفاتيح (Ctrl+K Global Palette)")
         except Exception:
             pass
+
+    def open_command_palette(self):
+        """فتح لوحة الأوامر العالمية (Vision 2030 Smart Palette)"""
+        from src.ui.widgets.command_palette import SmartCommandPalette
+        dlg = SmartCommandPalette(self)
+        dlg.command_selected.connect(self.handle_smart_command)
+        dlg.show()
+    
+    def handle_smart_command(self, action: str):
+        """تنفيذ أوامر اللوحة الذكية"""
+        from src.ui.theme_manager import get_theme_manager
+        from src.ui.widgets.quantum_notification import NotificationManager
+        if action == "new_invoice":
+            self.switch_page("sales") 
+            NotificationManager.show_info("أمر ذكي", "تم الانتقال إلى صفحة المبيعات لإنشاء فاتورة جديدة.")
+            # Logic to trigger new invoice if possible
+        elif action == "add_product":
+            self.switch_page("inventory") 
+            NotificationManager.show_info("أمر ذكي", "تم الانتقال إلى صفحة المخزون لإضافة منتج.")
+            # Logic to open add product dialog
+        elif action == "daily_report":
+            self.switch_page("reports") 
+            NotificationManager.show_info("أمر ذكي", "تم الانتقال إلى صفحة التقارير لعرض التقرير اليومي.")
+        elif action == "toggle_theme":
+            tm = get_theme_manager()
+            tm.toggle_theme()
+            NotificationManager.show_success("أمر ذكي", "تم تبديل السمة.")
+        elif action == "ai_analyze":
+            if self.logger:
+                self.logger.info("Starting AI Analysis via Command Palette...")
+            NotificationManager.show_info("أمر ذكي", "بدء تحليل الذكاء الاصطناعي...")
+            # Trigger AI analysis
+        elif action == "settings":
+            self.switch_page("settings") 
+            NotificationManager.show_info("أمر ذكي", "تم الانتقال إلى صفحة الإعدادات.")
+        elif action == "exit":
+            self.close()
+            NotificationManager.show_info("أمر ذكي", "إغلاق التطبيق.")
+
+    def save_layout_state(self):
+        """حفظ تخطيط الواجهة"""
+        from PySide6.QtCore import QSettings
+        settings = QSettings("LogicalVersion", "ERP")
+        settings.setValue("geometry", self.saveGeometry())
+        settings.setValue("windowState", self.saveState())
+
+    def restore_layout_state(self):
+        """استعادة تخطيط الواجهة"""
+        from PySide6.QtCore import QSettings
+        settings = QSettings("LogicalVersion", "ERP")
+        if settings.value("geometry"):
+            self.restoreGeometry(settings.value("geometry"))
+        if settings.value("windowState"):
+            self.restoreState(settings.value("windowState"))
+
+    def closeEvent(self, event):
+        """Ensure layout is saved on close"""
+        self.save_layout_state()
+        
+        reply = QMessageBox.question(
+            self, 
+            "تأكيد الخروج",
+            "هل تريد إغلاق البرنامج؟",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            if self.logger:
+                self.logger.info("تم إغلاق التطبيق بواسطة المستخدم")
+            
+            # 🔥 إدارة الموارد الاحترافية: إيقاف العمليات الخلفية قبل الإغلاق
+            self._stop_background_threads()
+            
+            # إغلاق WebSocket connection
+            if hasattr(self, 'ws_client') and self.ws_client:
+                try:
+                    self.ws_client.disconnect()
+                except Exception:
+                    pass
+            
+            # إغلاق جميع النوافذ الفرعية المدارة
+            if hasattr(self, '_managed_windows'):
+                for window in list(self._managed_windows):
+                    try:
+                        if window and window.isVisible():
+                            window.close()
+                    except Exception:
+                        pass
+            
+            event.accept()
+            # إشارة للتطبيق للإنهاء النظيف
+            from PySide6.QtWidgets import QApplication
+            app_instance = QApplication.instance()
+            if app_instance:
+                app_instance.quit()
+        else:
+            event.ignore() # Ensure the window doesn't close if user cancels
+    
+    def handle_global_command(self, cmd_id: str):
+        """تنفيذ الأوامر من لوحة الأوامر"""
+        from src.ui.widgets.quantum_notification import NotificationManager
+        if cmd_id.startswith("nav:"):
+            page = cmd_id.split(":")[1]
+            self.sidebar.set_active(page)
+            NotificationManager.show_info("التنقل السريع", f"تم الانتقال إلى {page}")
+        elif cmd_id == "act:refresh":
+            self.refresh_current_page()
+            NotificationManager.show_success("تحديث", "تم تحديث البيانات")
+        elif cmd_id == "sys:logout":
+            self.close()
+        elif cmd_id == "sys:exit":
+            self.close()
+        
+    def refresh_current_page(self):
+        """تحديث الصفحة الحالية"""
+        if hasattr(self, 'refresh_dashboard_data'): # If dashboard
+             self.refresh_dashboard_data()
+    pass
     def show_shortcuts_help(self):
         """عرض نافذة مساعدة الاختصارات"""
         if hasattr(self, 'shortcuts_manager'):
@@ -8988,6 +9785,23 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "خطأ", f"فشل في فتح لوحة إحصائيات الذاكرة المؤقتة:\n{str(e)}")
     
+    def show_database_metrics(self):
+        """فتح نافذة Database Performance Metrics"""
+        try:
+            from src.ui.windows.database_metrics_window import DatabaseMetricsWindow
+            if not hasattr(self, "_db_metrics_window") or self._db_metrics_window is None:
+                self._db_metrics_window = DatabaseMetricsWindow(parent=self)
+            self._db_metrics_window.show()
+            self._db_metrics_window.raise_()
+            self._db_metrics_window.activateWindow()
+            if self.logger:
+                self.logger.info("تم فتح نافذة Database Metrics")
+        except Exception as e:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة Database Metrics:\n{str(e)}")
+            if self.logger:
+                self.logger.error(f"خطأ في فتح Database Metrics: {e}")
+    
     def closeEvent(self, event):
         """Close window event"""
         reply = QMessageBox.question(
@@ -9004,6 +9818,13 @@ class MainWindow(QMainWindow):
             
             # 🔥 إدارة الموارد الاحترافية: إيقاف العمليات الخلفية قبل الإغلاق
             self._stop_background_threads()
+            
+            # إغلاق WebSocket connection
+            if hasattr(self, 'ws_client') and self.ws_client:
+                try:
+                    self.ws_client.disconnect()
+                except Exception:
+                    pass
             
             # إغلاق جميع النوافذ الفرعية المدارة
             if hasattr(self, '_managed_windows'):
@@ -9022,3 +9843,65 @@ class MainWindow(QMainWindow):
                 app_instance.quit()
         else:
             event.ignore()
+
+    def _create_glass_kpi(self, id, title, value, color, icon_char):
+        """Card Creator for Dashboard"""
+        card = QFrame()
+        card.setObjectName("kpiCard")
+        card.setStyleSheet(f"""
+            QFrame#kpiCard {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 rgba(30, 41, 59, 0.8), stop:1 rgba(15, 23, 42, 0.9));
+                border: 1px solid rgba(56, 189, 248, 0.1);
+                border-radius: 16px;
+            }}
+            QFrame#kpiCard:hover {{
+                border: 1px solid {color};
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 rgba(30, 41, 59, 1), stop:1 rgba(15, 23, 42, 1));
+            }}
+        """)
+        
+        l = QVBoxLayout(card)
+        l.setContentsMargins(20, 20, 20, 20)
+        
+        # Header
+        h = QHBoxLayout()
+        icon = QLabel(icon_char)
+        icon.setStyleSheet(f"color: {color}; font-size: 24px; background: transparent;")
+        lbl = QLabel(title)
+        lbl.setStyleSheet("color: #94a3b8; font-size: 14px; font-weight: 600; background: transparent;")
+        h.addWidget(icon)
+        h.addWidget(lbl)
+        h.addStretch()
+        l.addLayout(h)
+        
+        # Value
+        val = QLabel(value)
+        val.setObjectName(f"kpi_{id}")
+        val.setStyleSheet("color: #f8fafc; font-size: 28px; font-weight: 800; background: transparent;")
+        l.addWidget(val)
+        
+        return card
+
+    def toggle_zen_mode(self):
+        """
+        تبديل وضع التركيز (Zen Mode) - إخفاء كل العناصر المشتتة.
+        """
+        is_zen = getattr(self, "is_zen_mode", False)
+        self.is_zen_mode = not is_zen
+
+        if self.is_zen_mode:
+            # Hide distractors
+            if hasattr(self, 'sidebar'): self.sidebar.hide()
+            if hasattr(self, 'custom_title_bar'): self.custom_title_bar.hide()
+            self.statusBar().hide()
+            # if hasattr(self, 'notification_btn'): self.notification_btn.hide()
+            self.showFullScreen()
+            NotificationManager.show_info("Zen Mode 🧘", "تم تفعيل وضع التركيز (اضغط Alt+Z للخروج)")
+        else:
+            # Show distractors
+            if hasattr(self, 'sidebar'): self.sidebar.show()
+            if hasattr(self, 'custom_title_bar'): self.custom_title_bar.show()
+            self.statusBar().show()
+            # if hasattr(self, 'notification_btn'): self.notification_btn.show()
+            self.showMaximized()
+            NotificationManager.show_info("Zen Mode 🧘", "تم تعطيل وضع التركيز")

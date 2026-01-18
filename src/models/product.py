@@ -28,6 +28,9 @@ class Product:
     unit: str = "قطعة"
     cost_price: Decimal = Decimal('0.00')
     selling_price: Decimal = Decimal('0.00')
+    wholesale_price: Decimal = Decimal('0.00') # سعر الجملة
+    vip_price: Decimal = Decimal('0.00') # سعر كبار العملاء
+    min_wholesale_qty: int = 10 # أقل كمية للجملة
     min_stock: int = 0
     current_stock: int = 0
     description: Optional[str] = None
@@ -40,8 +43,11 @@ class Product:
         """تحويل القيم بعد الإنشاء"""
         if isinstance(self.cost_price, (int, float, str)):
             self.cost_price = Decimal(str(self.cost_price))
-        if isinstance(self.selling_price, (int, float, str)):
             self.selling_price = Decimal(str(self.selling_price))
+        if isinstance(self.wholesale_price, (int, float, str)):
+            self.wholesale_price = Decimal(str(self.wholesale_price))
+        if isinstance(self.vip_price, (int, float, str)):
+            self.vip_price = Decimal(str(self.vip_price))
     
     @property
     def profit_margin(self) -> Decimal:
@@ -77,6 +83,9 @@ class Product:
             'unit': self.unit,
             'cost_price': float(self.cost_price),
             'selling_price': float(self.selling_price),
+            'wholesale_price': float(self.wholesale_price),
+            'vip_price': float(self.vip_price),
+            'min_wholesale_qty': self.min_wholesale_qty,
             'min_stock': self.min_stock,
             'current_stock': self.current_stock,
             'description': self.description,
@@ -137,9 +146,11 @@ class ProductManager:
             query = """
             INSERT INTO products (
                 name, name_en, barcode, category_id, unit,
-                cost_price, selling_price, min_stock, current_stock,
+                cost_price, selling_price,
+                wholesale_price, vip_price, min_wholesale_qty,
+                min_stock, current_stock,
                 description, image_path, is_active, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
             
             now = datetime.now()
@@ -151,6 +162,9 @@ class ProductManager:
                 product.unit,
                 float(product.cost_price),
                 float(product.selling_price),
+                float(product.wholesale_price),
+                float(product.vip_price),
+                product.min_wholesale_qty,
                 product.min_stock,
                 product.current_stock,
                 product.description,
@@ -314,8 +328,9 @@ class ProductManager:
             query = """
             UPDATE products SET
                 name = ?, name_en = ?, barcode = ?, category_id = ?,
-                unit = ?, cost_price = ?, selling_price = ?, min_stock = ?,
-                current_stock = ?, description = ?, image_path = ?,
+                unit = ?, cost_price = ?, selling_price = ?,
+                wholesale_price = ?, vip_price = ?, min_wholesale_qty = ?,
+                min_stock = ?, current_stock = ?, description = ?, image_path = ?,
                 is_active = ?, updated_at = ?
             WHERE id = ?
             """
@@ -327,7 +342,11 @@ class ProductManager:
                 product.category_id,
                 product.unit,
                 float(product.cost_price),
+                float(product.cost_price),
                 float(product.selling_price),
+                float(product.wholesale_price),
+                float(product.vip_price),
+                product.min_wholesale_qty,
                 product.min_stock,
                 product.current_stock,
                 product.description,
@@ -490,6 +509,11 @@ class ProductManager:
             selling_price=Decimal(str(row[7])),
             min_stock=row[8],
             current_stock=row[9],
+            # Note: Adding new fields support needs schema update, falling back to defaults if not in row
+            wholesale_price=Decimal(str(row[15])) if len(row) > 17 else Decimal('0.00'),
+            vip_price=Decimal(str(row[16])) if len(row) > 17 else Decimal('0.00'),
+            min_wholesale_qty=row[17] if len(row) > 17 else 10,
+            
             description=row[10],
             image_path=row[11],
             is_active=bool(row[12]),

@@ -240,9 +240,18 @@ class SalesService:
                     self.logger.warning(f"كمية غير كافية للمنتج {product.name}")
                 return False
             
-            # استخدام سعر البيع الافتراضي إذا لم يتم تحديد سعر
+            # منطق التسعير المتدرج (Smart Pricing Engine)
             if unit_price is None:
-                unit_price = product.selling_price
+                # 1. تحديد نوع المشتر (إذا توفرت معلومات العميل عبر sale_id - يتطلب استعلام إضافي، سنعتمد على الكمية حالياً)
+                # للتبسيط في add_sale_item المباشر، نعتمد على الكمية
+                
+                # Check for Wholesale Quantity
+                if hasattr(product, 'min_wholesale_qty') and quantity >= product.min_wholesale_qty and product.min_wholesale_qty > 0:
+                    unit_price = getattr(product, 'wholesale_price', product.selling_price)
+                    if self.logger:
+                        self.logger.info(f"تطبيق سعر الجملة للمنتج {product.name}: {unit_price}")
+                else:
+                    unit_price = product.selling_price
             
             # إنشاء عنصر المبيعات
             sale_item = SaleItem(

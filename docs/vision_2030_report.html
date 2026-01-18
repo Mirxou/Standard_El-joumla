@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مستقبل التجزئة 2030: أنظمة الإدارة الذكية</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Cairo', sans-serif; background-color: #fafaf9; color: #44403c; }
+        .chart-container { position: relative; width: 100%; max-width: 600px; margin: 0 auto; height: 300px; max-height: 400px; }
+        @media (min-width: 768px) { .chart-container { height: 350px; } }
+        .nav-item.active { border-bottom: 3px solid #d97706; color: #d97706; font-weight: 700; }
+        .glass-panel { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border: 1px solid #e7e5e4; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+        .feature-card:hover { transform: translateY(-5px); transition: all 0.3s ease; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+        .timeline-dot { width: 16px; height: 16px; border-radius: 50%; background-color: #d97706; border: 3px solid #fff; box-shadow: 0 0 0 2px #d97706; }
+    </style>
+    <!-- Chosen Palette: Warm Stone & Amber (Neutral background #fafaf9, Primary Text #44403c, Accent #d97706, Secondary #78716c) to convey stability and warmth -->
+    <!-- Application Structure Plan: Dashboard-style SPA with top navigation tabs. 1. 'Overview': Executive summary & core pillars. 2. 'UX & Design': Interactive visual principles explanation. 3. 'AI & Future': Timeline 2025-2030 and AI impact chart. 4. 'System Comparison': Interactive grid to filter and view details of Shopify, Odoo, etc. Designed to mimic a modern POS interface. -->
+    <!-- Visualization & Content Choices: 1. Overview: Radar Chart to show the balance of key success factors (UX, AI, Control). 2. AI: Bar Chart comparing traditional vs AI-driven efficiency. 3. Comparison: Dynamic DOM manipulation to switch system details without page reload. Justification: Chart.js handles the data visualization responsively; Tailwind grid handles the layout. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+</head>
+<body class="bg-stone-50 min-h-screen flex flex-col">
+
+    <nav class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="container mx-auto px-4">
+            <div class="flex flex-col md:flex-row justify-between items-center py-4">
+                <div class="flex items-center gap-2 mb-4 md:mb-0">
+                    <span class="text-3xl text-amber-600">❖</span>
+                    <h1 class="text-2xl font-bold text-stone-800 tracking-wide">ريتيل فيوجن 2030</h1>
+                </div>
+                <div class="flex gap-6 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 justify-center text-sm md:text-base">
+                    <button onclick="navigate('overview')" id="nav-overview" class="nav-item active px-2 pb-1 transition-colors whitespace-nowrap">نظرة عامة</button>
+                    <button onclick="navigate('ux')" id="nav-ux" class="nav-item px-2 pb-1 transition-colors whitespace-nowrap">التصميم والتجربة</button>
+                    <button onclick="navigate('ai')" id="nav-ai" class="nav-item px-2 pb-1 transition-colors whitespace-nowrap">الذكاء والتحكم</button>
+                    <button onclick="navigate('comparison')" id="nav-comparison" class="nav-item px-2 pb-1 transition-colors whitespace-nowrap">مقارنة الأنظمة</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="flex-grow container mx-auto px-4 py-8">
+        
+        <section id="view-overview" class="fade-in block space-y-8">
+            <div class="text-center max-w-3xl mx-auto mb-12">
+                <h2 class="text-3xl md:text-4xl font-bold text-stone-800 mb-4">مستقبل إدارة الجملة والتجزئة</h2>
+                <p class="text-lg text-stone-600 leading-relaxed">
+                    تحليل شامل لأفضل الأنظمة العالمية، يركز على تكامل الراحة البصرية، والتحكم الشامل، وقوة الذكاء الاصطناعي لإنشاء بيئة عمل متكاملة وشاملة حتى عام 2030.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="glass-panel p-6 rounded-xl border-t-4 border-amber-500 feature-card cursor-pointer">
+                    <div class="text-4xl mb-4 text-amber-600">👁️</div>
+                    <h3 class="text-xl font-bold mb-2">الراحة البصرية</h3>
+                    <p class="text-stone-600 text-sm leading-relaxed">تصميمات تعتمد المساحات البيضاء، الألوان الهادئة، والوضع الليلي لتقليل الإجهاد البصري وزيادة التركيز.</p>
+                </div>
+                <div class="glass-panel p-6 rounded-xl border-t-4 border-stone-500 feature-card cursor-pointer">
+                    <div class="text-4xl mb-4 text-stone-600">🎮</div>
+                    <h3 class="text-xl font-bold mb-2">التحكم الشامل</h3>
+                    <p class="text-stone-600 text-sm leading-relaxed">إدارة مركزية للمخزون والفروع، مع دعم العمل دون اتصال (Offline) لضمان استمرارية الأعمال.</p>
+                </div>
+                <div class="glass-panel p-6 rounded-xl border-t-4 border-teal-500 feature-card cursor-pointer">
+                    <div class="text-4xl mb-4 text-teal-600">🧠</div>
+                    <h3 class="text-xl font-bold mb-2">الذكاء الاصطناعي 2030</h3>
+                    <p class="text-stone-600 text-sm leading-relaxed">تنبؤ بالطلب، تحكم صوتي وحركي، وتخصيص تجربة المستخدم آلياً بناءً على السلوك.</p>
+                </div>
+            </div>
+
+            <div class="mt-12 bg-white p-6 rounded-2xl shadow-sm">
+                <div class="flex flex-col md:flex-row items-center gap-8">
+                    <div class="w-full md:w-1/2">
+                        <h3 class="text-2xl font-bold mb-4 text-stone-800 border-r-4 border-amber-500 pr-3">ركائز النظام المثالي</h3>
+                        <p class="text-stone-600 mb-4 leading-relaxed">
+                            يوضح الرسم البياني التوازن المطلوب في أنظمة المستقبل. لا يكفي التصميم الجميل وحده؛ بل يجب أن يتكامل مع ذكاء البيانات والقدرة على التوسع التقني.
+                        </p>
+                        <ul class="space-y-2 text-sm text-stone-500">
+                            <li class="flex items-center gap-2"><span>●</span> تجربة المستخدم: سهولة التعلم والتنقل.</li>
+                            <li class="flex items-center gap-2"><span>●</span> الابتكار: تبني تقنيات AR/AI.</li>
+                            <li class="flex items-center gap-2"><span>●</span> الموثوقية: العمل المستقر والآمن.</li>
+                        </ul>
+                    </div>
+                    <div class="w-full md:w-1/2">
+                        <div class="chart-container">
+                            <canvas id="overviewChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="view-ux" class="hidden space-y-8 fade-in">
+            <div class="bg-white rounded-2xl shadow-sm p-8">
+                <h2 class="text-2xl font-bold text-stone-800 mb-2">فلسفة التصميم والراحة البصرية</h2>
+                <p class="text-stone-500 mb-8">كيف تساهم واجهة المستخدم المدروسة في تحسين الإنتاجية وتقليل الأخطاء.</p>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                    <div class="space-y-6">
+                        <div class="flex gap-4 p-4 rounded-lg bg-stone-50 hover:bg-amber-50 transition-colors">
+                            <div class="text-3xl">🎨</div>
+                            <div>
+                                <h4 class="font-bold text-lg mb-1">الألوان والتباين</h4>
+                                <p class="text-sm text-stone-600">استخدام ألوان محايدة (رمادي/أبيض) للخلفيات لتقليل التشتت، مع ألوان زاهية (Accent Colors) للأزرار الهامة فقط (مثل "الدفع" أو "إضافة").</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-4 p-4 rounded-lg bg-stone-50 hover:bg-amber-50 transition-colors">
+                            <div class="text-3xl">📱</div>
+                            <div>
+                                <h4 class="font-bold text-lg mb-1">الشبكة الذكية (Smart Grid)</h4>
+                                <p class="text-sm text-stone-600">نظام بلاطات منظم (كما في Shopify) يحافظ على ثبات المعلومات الأساسية ويسهل الوصول السريع للعناصر الأكثر استخداماً.</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-4 p-4 rounded-lg bg-stone-50 hover:bg-amber-50 transition-colors">
+                            <div class="text-3xl">🌑</div>
+                            <div>
+                                <h4 class="font-bold text-lg mb-1">الوضع الليلي وراحة العين</h4>
+                                <p class="text-sm text-stone-600">دعم أنظمة مثل Odoo للوضع الداكن لتقليل إجهاد العين في بيئات العمل ذات الإضاءة المنخفضة.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Simulated UI Component using CSS Grid -->
+                    <div class="border-2 border-stone-200 rounded-xl p-4 bg-stone-100 flex flex-col gap-4 shadow-inner">
+                        <div class="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm">
+                            <div class="font-bold text-stone-700">لوحة المبيعات</div>
+                            <div class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">متصل ●</div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3 flex-grow">
+                            <div class="bg-white p-4 rounded-lg shadow-sm flex flex-col justify-between hover:border-amber-400 border border-transparent cursor-pointer">
+                                <span class="text-2xl">📦</span>
+                                <span class="text-sm font-bold text-stone-600">المخزون</span>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-sm flex flex-col justify-between hover:border-amber-400 border border-transparent cursor-pointer">
+                                <span class="text-2xl">👥</span>
+                                <span class="text-sm font-bold text-stone-600">العملاء</span>
+                            </div>
+                            <div class="bg-amber-500 p-4 rounded-lg shadow-md flex flex-col justify-center items-center col-span-2 text-white cursor-pointer hover:bg-amber-600 transition">
+                                <span class="font-bold text-lg">عملية بيع جديدة +</span>
+                            </div>
+                        </div>
+                        <div class="bg-white p-3 rounded-lg shadow-sm text-center text-xs text-stone-400">
+                            محاكاة لواجهة مستخدم بسيطة ومركزة
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="view-ai" class="hidden space-y-8 fade-in">
+            <div class="bg-white rounded-2xl shadow-sm p-8">
+                <h2 class="text-2xl font-bold text-stone-800 mb-2">الذكاء الاصطناعي وتقنيات 2030</h2>
+                <p class="text-stone-500 mb-8">كيف تحول التكنولوجيا البيانات الجامدة إلى قرارات استراتيجية ذكية.</p>
+
+                <div class="flex flex-col lg:flex-row gap-8">
+                    <!-- Timeline -->
+                    <div class="w-full lg:w-1/3 relative border-l-2 border-stone-200 mr-4">
+                        <div class="mb-8 relative pr-6">
+                            <div class="absolute -right-[9px] top-1 timeline-dot"></div>
+                            <h4 class="font-bold text-amber-600">اليوم</h4>
+                            <p class="text-sm font-semibold">تنبؤ الطلب والمخزون</p>
+                            <p class="text-xs text-stone-500 mt-1">تحليل البيانات التاريخية لتوقع النقص والفائض.</p>
+                        </div>
+                        <div class="mb-8 relative pr-6">
+                            <div class="absolute -right-[9px] top-1 timeline-dot bg-teal-500 border-teal-500"></div>
+                            <h4 class="font-bold text-stone-700">2026-2027</h4>
+                            <p class="text-sm font-semibold">المساعد المحادثاتي (Conversational AI)</p>
+                            <p class="text-xs text-stone-500 mt-1">طرح أسئلة طبيعية للنظام: "ما هي أكثر السلع ربحاً؟"</p>
+                        </div>
+                        <div class="mb-8 relative pr-6">
+                            <div class="absolute -right-[9px] top-1 timeline-dot bg-stone-700 border-stone-700"></div>
+                            <h4 class="font-bold text-stone-700">2028</h4>
+                            <p class="text-sm font-semibold">الواقع المعزز (AR)</p>
+                            <p class="text-xs text-stone-500 mt-1">تدريب الموظفين وتجربة منتجات افتراضية داخل المتجر.</p>
+                        </div>
+                        <div class="relative pr-6">
+                            <div class="absolute -right-[9px] top-1 timeline-dot bg-purple-600 border-purple-600"></div>
+                            <h4 class="font-bold text-purple-700">2030</h4>
+                            <p class="text-sm font-semibold">التحكم الكلي بالإيماءات والصوت</p>
+                            <p class="text-xs text-stone-500 mt-1">إدارة المتجر بالكامل دون لمس الشاشات، مع تخصيص فوري.</p>
+                        </div>
+                    </div>
+
+                    <!-- Chart -->
+                    <div class="w-full lg:w-2/3">
+                        <div class="bg-stone-50 p-6 rounded-xl h-full">
+                            <h3 class="text-lg font-bold mb-4 text-center">تأثير الذكاء الاصطناعي على كفاءة المخزون</h3>
+                            <div class="chart-container">
+                                <canvas id="aiImpactChart"></canvas>
+                            </div>
+                            <p class="text-xs text-center mt-4 text-stone-500">
+                                بيانات تقديرية توضح الفارق بين الإدارة اليدوية والإدارة المدعومة بالذكاء الاصطناعي في تقليل الهدر وزيادة المبيعات.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+                     <div class="p-4 border border-stone-200 rounded-lg">
+                        <h4 class="font-bold text-amber-600 mb-2">⚡ التخصيص الآلي</h4>
+                        <p class="text-sm text-stone-600">يتعلم النظام سلوك المستخدم ويقوم بضبط الواجهة تلقائياً، مقترحاً الأدوات الأكثر أهمية في الوقت المناسب.</p>
+                     </div>
+                     <div class="p-4 border border-stone-200 rounded-lg">
+                        <h4 class="font-bold text-teal-600 mb-2">🔄 الترابط الشامل</h4>
+                        <p class="text-sm text-stone-600">بدء المهمة على الحاسوب وإكمالها على الهاتف بسلاسة تامة، مع مزامنة فورية لكل الإجراءات.</p>
+                     </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="view-comparison" class="hidden space-y-8 fade-in">
+            <div class="bg-white rounded-2xl shadow-sm p-8">
+                <h2 class="text-2xl font-bold text-stone-800 mb-6">مقارنة الأنظمة الرائدة</h2>
+                <p class="text-stone-500 mb-6">اختر نظاماً من القائمة لعرض تفاصيل التميز في التصميم والذكاء الاصطناعي.</p>
+
+                <div class="flex flex-col md:flex-row gap-6">
+                    <!-- Selector -->
+                    <div class="w-full md:w-1/4 flex flex-col gap-2">
+                        <button onclick="showSystem('shopify')" id="btn-shopify" class="system-btn active p-4 text-right rounded-lg border border-stone-200 hover:bg-stone-50 transition-all font-bold text-stone-700">Shopify POS</button>
+                        <button onclick="showSystem('odoo')" id="btn-odoo" class="system-btn p-4 text-right rounded-lg border border-transparent hover:bg-stone-50 transition-all text-stone-500">Odoo POS</button>
+                        <button onclick="showSystem('zoho')" id="btn-zoho" class="system-btn p-4 text-right rounded-lg border border-transparent hover:bg-stone-50 transition-all text-stone-500">Zoho Inventory</button>
+                        <button onclick="showSystem('lightspeed')" id="btn-lightspeed" class="system-btn p-4 text-right rounded-lg border border-transparent hover:bg-stone-50 transition-all text-stone-500">Lightspeed</button>
+                    </div>
+
+                    <!-- Details Pane -->
+                    <div class="w-full md:w-3/4 bg-stone-50 rounded-xl p-6 border border-stone-200 relative overflow-hidden">
+                        <div id="system-content">
+                            <!-- Content injected via JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="bg-stone-800 text-stone-400 py-8 mt-auto">
+        <div class="container mx-auto px-4 text-center">
+            <p class="mb-2">© 2030 تقرير مستقبل التجزئة</p>
+            <p class="text-xs">تم إعداد هذا التقرير التفاعلي بناءً على أحدث المصادر العالمية في أنظمة الإدارة والتصميم والذكاء الاصطناعي.</p>
+        </div>
+    </footer>
+
+    <script>
+        // Data for Comparisons
+        const systemsData = {
+            shopify: {
+                name: "Shopify POS",
+                color: "text-green-600",
+                icon: "🛍️",
+                ux: "واجهة بسيطة جداً تعتمد على 'الشبكة الذكية' (Smart Grid)، تصميم متسق عبر جميع الأجهزة.",
+                control: "مخزون موحد في الوقت الفعلي، تقارير مدمجة، وتزامن كامل بين المتجر الفعلي والإلكتروني.",
+                ai: "بحث ذكي، تطبيقات للتنبؤ بالطلب (مثل Monocle)، ومقترحات آلية للمنتجات.",
+                verdict: "الأفضل للشركات التي تبحث عن السرعة والبساطة والتكامل المباشر مع التجارة الإلكترونية."
+            },
+            odoo: {
+                name: "Odoo POS",
+                color: "text-purple-600",
+                icon: "⚙️",
+                ux: "واجهة حديثة تدعم الوضع الليلي (Dark Mode)، أزرار كبيرة وواضحة، إعدادات مسبقة للعمليات.",
+                control: "إدارة شاملة للمطاعم (طاولات/وجبات)، جدولة، وإدارة مالية مدمجة.",
+                ai: "تحليل ذكي للمبيعات وتكامل معياري قوي مع باقي تطبيقات تخطيط الموارد (ERP).",
+                verdict: "الخيار الأمثل للأنشطة التي تحتاج تخصيصاً عالياً (مثل المطاعم) وإدارة موارد شاملة."
+            },
+            zoho: {
+                name: "Zoho Inventory",
+                color: "text-blue-600",
+                icon: "📊",
+                ux: "تصميم موحد عبر جميع منتجات Zoho، بديهي ويركز على تدفق العمليات.",
+                control: "ربط كامل بين المخزون والطلبات والمالية في منصة واحدة.",
+                ai: "تنبؤ ذكي للطلب (Zia AI) لاكتشاف الاتجاهات وتحسين عمليات الشراء المستقبلية.",
+                verdict: "مثالي للشركات التي تستخدم بالفعل بيئة عمل Zoho وتريد تحليلات عميقة."
+            },
+            lightspeed: {
+                name: "Lightspeed POS",
+                color: "text-red-600",
+                icon: "🚀",
+                ux: "تصميم أنيق وعصري، يركز على السرعة وسهولة الاستخدام للفروع المتعددة.",
+                control: "إدارة متقدمة للفروع المتعددة، دعم العمل دون اتصال (Offline Mode).",
+                ai: "مساعد محادثة ذكي للاستعلام الفوري، وتحرير صور المنتجات تلقائياً بالذكاء الاصطناعي.",
+                verdict: "الأفضل للتجارة المعقدة ومتعددة الفروع التي تحتاج إلى تقنيات مستقبلية الآن."
+            }
+        };
+
+        // Navigation Logic
+        function navigate(viewId) {
+            // Update Tab Styles
+            document.querySelectorAll('.nav-item').forEach(el => {
+                el.classList.remove('active', 'text-amber-600', 'font-bold');
+                el.classList.add('text-stone-500'); 
+            });
+            const activeBtn = document.getElementById(`nav-${viewId}`);
+            activeBtn.classList.add('active', 'text-amber-600', 'font-bold');
+            activeBtn.classList.remove('text-stone-500');
+
+            // Hide/Show Sections
+            ['overview', 'ux', 'ai', 'comparison'].forEach(id => {
+                document.getElementById(`view-${id}`).classList.add('hidden');
+            });
+            document.getElementById(`view-${viewId}`).classList.remove('hidden');
+
+            // Resize charts if becoming visible
+            if (viewId === 'overview' && overviewChartInstance) overviewChartInstance.resize();
+            if (viewId === 'ai' && aiChartInstance) aiChartInstance.resize();
+        }
+
+        // Comparison Logic
+        function showSystem(systemKey) {
+            const data = systemsData[systemKey];
+            const contentDiv = document.getElementById('system-content');
+            
+            // Update Buttons
+            document.querySelectorAll('.system-btn').forEach(btn => {
+                btn.classList.remove('active', 'bg-white', 'shadow-md', 'text-stone-800', 'border-stone-200');
+                btn.classList.add('text-stone-500', 'border-transparent');
+            });
+            const activeBtn = document.getElementById(`btn-${systemKey}`);
+            activeBtn.classList.add('active', 'bg-white', 'shadow-md', 'text-stone-800', 'border-stone-200');
+            activeBtn.classList.remove('text-stone-500', 'border-transparent');
+
+            // Inject Content with Animation
+            contentDiv.innerHTML = `
+                <div class="animate-fade-in">
+                    <div class="flex items-center gap-4 mb-6">
+                        <span class="text-4xl">${data.icon}</span>
+                        <h3 class="text-3xl font-bold ${data.color}">${data.name}</h3>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 gap-6">
+                        <div class="bg-white p-4 rounded-lg shadow-sm border-r-4 border-amber-400">
+                            <h4 class="font-bold text-stone-700 mb-2">التصميم وتجربة المستخدم</h4>
+                            <p class="text-stone-600 text-sm leading-relaxed">${data.ux}</p>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg shadow-sm border-r-4 border-stone-400">
+                            <h4 class="font-bold text-stone-700 mb-2">التحكم والإدارة</h4>
+                            <p class="text-stone-600 text-sm leading-relaxed">${data.control}</p>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg shadow-sm border-r-4 border-teal-400">
+                            <h4 class="font-bold text-stone-700 mb-2">الذكاء الاصطناعي</h4>
+                            <p class="text-stone-600 text-sm leading-relaxed">${data.ai}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-6 p-4 bg-stone-100 rounded-lg text-center">
+                        <span class="font-bold text-stone-800">الخلاصة: </span>
+                        <span class="text-stone-600">${data.verdict}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Initialize Charts
+        let overviewChartInstance;
+        let aiChartInstance;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Show initial system
+            showSystem('shopify');
+
+            // Chart 1: Overview Radar
+            const ctxOverview = document.getElementById('overviewChart').getContext('2d');
+            overviewChartInstance = new Chart(ctxOverview, {
+                type: 'radar',
+                data: {
+                    labels: ['سهولة الاستخدام', 'الذكاء الاصطناعي', 'التصميم البصري', 'التحكم المركزي', 'الابتكار المستقبلي', 'السرعة'],
+                    datasets: [{
+                        label: 'النظام المثالي 2030',
+                        data: [95, 90, 95, 100, 85, 95],
+                        fill: true,
+                        backgroundColor: 'rgba(217, 119, 6, 0.2)',
+                        borderColor: 'rgb(217, 119, 6)',
+                        pointBackgroundColor: 'rgb(217, 119, 6)',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: 'rgb(217, 119, 6)'
+                    }, {
+                        label: 'الأنظمة التقليدية',
+                        data: [60, 20, 50, 70, 10, 55],
+                        fill: true,
+                        backgroundColor: 'rgba(120, 113, 108, 0.2)',
+                        borderColor: 'rgb(120, 113, 108)',
+                        pointBackgroundColor: 'rgb(120, 113, 108)',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: 'rgb(120, 113, 108)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            angleLines: { color: 'rgba(0,0,0,0.1)' },
+                            grid: { color: 'rgba(0,0,0,0.05)' },
+                            pointLabels: {
+                                font: { family: 'Cairo', size: 12 },
+                                color: '#44403c'
+                            },
+                            suggestedMin: 0,
+                            suggestedMax: 100
+                        }
+                    },
+                    plugins: {
+                        legend: { labels: { font: { family: 'Cairo' } } },
+                        tooltip: { titleFont: { family: 'Cairo' }, bodyFont: { family: 'Cairo' } }
+                    }
+                }
+            });
+
+            // Chart 2: AI Impact Bar
+            const ctxAi = document.getElementById('aiImpactChart').getContext('2d');
+            aiChartInstance = new Chart(ctxAi, {
+                type: 'bar',
+                data: {
+                    labels: ['دقة المخزون', 'سرعة الطلب', 'رضا العملاء', 'تقليل الهدر'],
+                    datasets: [{
+                        label: 'بدون AI',
+                        data: [75, 60, 70, 50],
+                        backgroundColor: 'rgba(168, 162, 158, 0.6)',
+                        borderColor: 'rgba(168, 162, 158, 1)',
+                        borderWidth: 1
+                    },
+                    {
+                        label: 'مع AI وتوقع الطلب',
+                        data: [98, 95, 92, 90],
+                        backgroundColor: 'rgba(20, 184, 166, 0.6)',
+                        borderColor: 'rgba(20, 184, 166, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true, max: 100 },
+                        x: { ticks: { font: { family: 'Cairo' } } }
+                    },
+                    plugins: {
+                        legend: { labels: { font: { family: 'Cairo' } } },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + context.raw + '%';
+                                }
+                            },
+                            titleFont: { family: 'Cairo' },
+                            bodyFont: { family: 'Cairo' }
+                        }
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>
