@@ -8,16 +8,12 @@
 from typing import List, Dict, Any, Optional
 from datetime import date
 from decimal import Decimal
-import sys
-from pathlib import Path
 
-# إضافة مسار src
-sys.path.insert(0, str(Path(__file__).parent.parent))
+from src.models.purchase import Purchase, PurchaseManager
+from src.models.purchase import PurchaseStatus, PaymentStatus
+from src.models.supplier import SupplierManager
+from src.services.exchange_rate_service import ExchangeRateService
 
-from models.purchase import Purchase, PurchaseManager
-from models.purchase import PurchaseStatus, PaymentStatus
-from models.supplier import SupplierManager
-from services.exchange_rate_service import ExchangeRateService
 
 
 class PurchaseService:

@@ -20,15 +20,16 @@ from ..models.sale import Sale
 class AccountingService:
     """خدمة إدارة المحاسبة"""
     
-    def __init__(self, db_manager):
+    def __init__(self, db_manager, logger=None):
         """
         تهيئة خدمة المحاسبة
         
         Args:
             db_manager: مدير قاعدة البيانات
+            logger: (اختياري) مسجل الأحداث
         """
         self.db = db_manager
-        self.logger = logging.getLogger(__name__)
+        self.logger = logger or logging.getLogger(__name__)
         self.coa = ChartOfAccounts()  # دليل الحسابات
         self._initialize_chart_of_accounts()
     
@@ -233,23 +234,46 @@ class AccountingService:
                 return None
 
             # الطرف المدين: حسابات العملاء (بكامل قيمة الفاتورة)
+            from decimal import Decimal
+            total_amt = Decimal(str(sale.total_amount)) if not isinstance(sale.total_amount, Decimal) else sale.total_amount
+            
+            if self.logger:
+                self.logger.debug(f"DEBUG ACCOUNTING: total_amt={total_amt}, type={type(total_amt)}")
+            
             entry.add_line(JournalLine(
                 account_id=accounts_receivable_acc.id,
-                debit_amount=sale.grand_total
+                debit_amount=total_amt
             ))
+
+            # حساب المبالغ (إذا لم تكن موجودة)
+            subtotal_raw = getattr(sale, 'subtotal', None)
+            tax_raw = getattr(sale, 'tax_amount', None)
+            
+            subtotal = Decimal(str(subtotal_raw)) if subtotal_raw else total_amt
+            tax_amount = Decimal(str(tax_raw)) if tax_raw else Decimal('0')
+            
+            # إذا كان هناك ضريبة، نحسب قيمة المبيعات قبل الضريبة
+            if tax_amount > 0:
+                subtotal = total_amt - tax_amount
+
+            if self.logger:
+                self.logger.debug(f"DEBUG ACCOUNTING: subtotal={subtotal}, tax={tax_amount}")
 
             # الطرف الدائن: إيرادات المبيعات (قيمة الفاتورة قبل الضريبة)
             entry.add_line(JournalLine(
                 account_id=sales_revenue_acc.id,
-                credit_amount=sale.subtotal
+                credit_amount=subtotal
             ))
 
             # الطرف الدائن: ضريبة القيمة المضافة (إذا وجدت)
-            if sale.tax_amount > 0:
+            if tax_amount > 0:
                 entry.add_line(JournalLine(
                     account_id=vat_payable_acc.id,
-                    credit_amount=sale.tax_amount
+                    credit_amount=tax_amount
                 ))
+            
+            if self.logger:
+                self.logger.debug(f"DEBUG ACCOUNTING: lines={len(entry.lines)}, balanced={entry.is_balanced()}")
 
             return self.create_journal_entry(entry)
         except Exception as e:

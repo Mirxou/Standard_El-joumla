@@ -258,6 +258,25 @@ class WebhookDispatcher:
                     "oldest_request": None
                 }
     
+    def _should_retry(self, status_code: Optional[int] = None, exception: Optional[Exception] = None) -> bool:
+        """
+        تحديد ما إذا كان يجب إعادة المحاولة
+        """
+        if status_code:
+            # إعادة المحاولة للأخطاء 5xx
+            return 500 <= status_code < 600
+        
+        if exception:
+            try:
+                import requests
+                # إعادة المحاولة لأخطاء الاتصال
+                return isinstance(exception, (requests.exceptions.ConnectionError, requests.exceptions.Timeout))
+            except ImportError:
+                return False
+            
+        return False
+
+    
     def _deliver_webhook_sync(
         self,
         url: str,
@@ -270,7 +289,8 @@ class WebhookDispatcher:
         webhook_id: Optional[int] = None,
         event_type: Optional[str] = None,
         entity_id: Optional[int] = None,
-        callback: Optional[callable] = None
+        callback: Optional[callable] = None,
+        **kwargs
     ) -> WebhookDeliveryResult:
         """
         إرسال Webhook (Sync - مع Retry Logic)
@@ -290,6 +310,11 @@ class WebhookDispatcher:
                 attempt_number=0
             )
             if callback:
+                # محاولة تحويل Payload إلى نص عادي في حالة الفشل
+                try:
+                    payload_json = str(payload)
+                except:
+                    payload_json = "{}"
                 callback(result, webhook_id, event_type, entity_id, payload_json)
             return result
         
@@ -393,17 +418,22 @@ class WebhookDispatcher:
                 time.sleep(backoff_seconds)
         
         # فشل جميع المحاولات
+        # فشل جميع المحاولات
+        final_error = last_error
+        if not final_error and last_status_code and 400 <= last_status_code < 500:
+             final_error = f"Client Error: {last_status_code}"
+
         result = WebhookDeliveryResult(
             success=False,
             status_code=last_status_code,
             response_body=last_response_body,
-            error_message=last_error or "Unknown Error",
-            attempt_number=retry_count
+            error_message=final_error or "Unknown Error",
+            attempt_number=attempt
         )
         
         self.logger.error(
-            f"❌ فشل إرسال Webhook بعد {retry_count} محاولات: {url} "
-            f"(Error: {last_error})"
+            f"❌ فشل إرسال Webhook بعد {attempt} محاولات: {url} "
+            f"(Error: {final_error})"
         )
         
         # استدعاء Callback

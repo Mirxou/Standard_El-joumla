@@ -12,8 +12,6 @@ from decimal import Decimal
 import sys
 from pathlib import Path
 
-# إضافة مسار src
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.core.database_manager import DatabaseManager
 
@@ -110,8 +108,9 @@ class ExchangeRate:
 class CurrencyManager:
     """مدير العملات"""
     
-    def __init__(self, db_manager: DatabaseManager):
+    def __init__(self, db_manager: DatabaseManager, logger=None):
         self.db_manager = db_manager
+        self.logger = logger
     
     def get_base_currency(self) -> Optional[Currency]:
         """الحصول على العملة الأساسية"""

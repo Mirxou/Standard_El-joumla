@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 نافذة تقارير العملاء والموردين
@@ -6,11 +6,15 @@
 
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QMessageBox, QTabWidget, QWidget, QTextEdit, QComboBox
+    QTabWidget, QWidget, QTextEdit, QComboBox,
+    QFrame, QGraphicsDropShadowEffect
 )
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QTextDocument, QTextCursor
+from PySide6.QtGui import QTextDocument, QTextCursor, QColor
 from datetime import datetime, timedelta
+
+from src.ui.widgets.custom_title_bar import CustomTitleBar
+from src.ui.widgets.quantum_notification import NotificationManager
 
 
 class ContactsReportDialog(QDialog):
@@ -21,15 +25,67 @@ class ContactsReportDialog(QDialog):
         self.db_manager = db_manager
         self.logger = logger
         
-        self.setWindowTitle("تقارير العملاء والموردين")
-        self.setGeometry(100, 100, 900, 600)
+        # self.setWindowTitle("تقارير العملاء والموردين")
+        # self.setGeometry(100, 100, 900, 600)
+        
+        # --- Quantum Window Setup ---
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground)
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         
-        self.init_ui()
+        # Notifications
+        self.notify = NotificationManager(self)
+        
+        self.resize(900, 650)
+        self.title_text = "تقارير العملاء والموردين"
+        
+        self.setup_ui()
     
-    def init_ui(self):
+    def setup_ui(self):
         """تهيئة واجهة المستخدم"""
-        layout = QVBoxLayout(self)
+        # تخطيط جذري شفاف
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(10, 10, 10, 10)
+        root_layout.setSpacing(0)
+        
+        # الإطار الرئيسي
+        self.main_frame = QFrame()
+        self.main_frame.setStyleSheet("""
+            QFrame#MainFrame {
+                background-color: #f5f5f5;
+                border: 1px solid #3498db;
+                border-radius: 10px;
+            }
+        """)
+        self.main_frame.setObjectName("MainFrame")
+        
+        # Shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor("#3498db"))
+        shadow.setOffset(0, 0)
+        self.main_frame.setGraphicsEffect(shadow)
+        
+        root_layout.addWidget(self.main_frame)
+        
+        # تخطيط النافذة الداخلية
+        main_layout = QVBoxLayout(self.main_frame)
+        main_layout.setContentsMargins(0, 0, 0, 10)
+        main_layout.setSpacing(10)
+        
+        # 1. Custom Title Bar
+        self.title_bar = CustomTitleBar(self, title=self.title_text, is_dialog=True)
+        main_layout.addWidget(self.title_bar)
+        
+        # Container for content
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setSpacing(10)
+        content_layout.setContentsMargins(15, 5, 15, 15)
+        main_layout.addWidget(content_widget)
+        
+        # Re-assign layout to content_layout for the existing widget helpers
+        layout = content_layout
         
         title = QLabel("تقارير العملاء والموردين")
         title.setStyleSheet("font-size: 16px; font-weight: bold; color: #2c3e50;")
@@ -445,11 +501,11 @@ class ContactsReportDialog(QDialog):
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(content)
             
-            QMessageBox.information(self, "نجاح", f"تم تصدير التقرير إلى {filename}")
+            self.notify.show_info("نجاح", f"تم تصدير التقرير إلى {filename}")
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في تصدير التقرير: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في تصدير التقرير: {str(e)}")
+            self.notify.show_error("خطأ", f"فشل في تصدير التقرير: {str(e)}")
     
     def print_report(self):
         """طباعة التقرير"""
@@ -463,8 +519,8 @@ class ContactsReportDialog(QDialog):
             else:
                 content = self.comparison_report_text.toPlainText()
             
-            QMessageBox.information(self, "طباعة", "سيتم إرسال التقرير للطابعة الافتراضية")
+            self.notify.show_info("طباعة", "سيتم إرسال التقرير للطابعة الافتراضية")
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في طباعة التقرير: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في طباعة التقرير: {str(e)}")
+            self.notify.show_error("خطأ", f"فشل في طباعة التقرير: {str(e)}")

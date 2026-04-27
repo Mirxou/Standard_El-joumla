@@ -1,32 +1,84 @@
 /**
  * عميل API مركزي موحد
  * يتعامل مع:
- * - Token management
+ * - Token management (supports both cookies and localStorage)
  * - Error handling
  * - Retry logic
  * - Request interceptors
+ * - Global error toast notifications
  */
 
 import { API_CONFIG, getDefaultHeaders, getFullURL } from '@/lib/config/api';
 import { APIError } from '@/lib/types';
+import { toast } from 'sonner';
+
+/**
+ * Helper function to get a cookie value by name
+ */
+function getCookie(name: string): string | null {
+  if (typeof window === 'undefined') return null;
+  
+  const matches = document.cookie.match(new RegExp(
+    '(?:^|;)\\s*' + name + '=([^;]*)(?:;|$)'
+  ));
+  
+  return matches ? decodeURIComponent(matches[1]) : null;
+}
+
+/**
+ * Helper function to set a cookie
+ */
+function setCookie(name: string, value: string, days: number = 1): void {
+  if (typeof window === 'undefined') return;
+  
+  const expires = new Date();
+  expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000);
+  
+  document.cookie = `${name}=${encodeURIComponent(value)};expires=${expires.toUTCString()};path=/`;
+}
+
+/**
+ * Helper function to delete a cookie
+ */
+function deleteCookie(name: string): void {
+  if (typeof window === 'undefined') return;
+  document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+}
 
 export class APIClient {
   private token: string | null = null;
   private companyId: string | null = null;
   private refreshTokenPromise: Promise<string | null> | null = null;
+  private useCookies: boolean = false;
 
   constructor() {
+    // Check backend environment to decide token storage method
+    this.useCookies = process.env.NODE_ENV === 'production';
     this.loadCredentials();
   }
 
   /**
-   * تحميل بيانات الاعتماد من localStorage
+   * تحميل بيانات الاعتماد (من cookies أو localStorage)
    */
   private loadCredentials(): void {
-    if (typeof window !== 'undefined') {
-      this.token = localStorage.getItem('access_token');
-      this.companyId = localStorage.getItem('company_id');
+    if (typeof window === 'undefined') return;
+    
+    // Try reading from HTTP-only cookie first in production
+    // Note: We can't read HttpOnly cookies from JS, so fall back to localStorage for development
+    // In production, the HttpOnly cookie is set by the server, not accessible to JS
+    // So we use localStorage as fallback for the token value for API requests
+    // The actual HttpOnly cookie is sent automatically by the browser with requests
+    
+    // Try localStorage first (works in both dev and prod as fallback)
+    let token = localStorage.getItem('access_token');
+    
+    // If not in localStorage and we have a cookie (non-httpOnly), try to read it
+    if (!token) {
+      token = getCookie('access_token');
     }
+    
+    this.token = token;
+    this.companyId = localStorage.getItem('company_id');
   }
 
   /**
@@ -35,6 +87,8 @@ export class APIClient {
   setToken(token: string): void {
     this.token = token;
     if (typeof window !== 'undefined') {
+      // في التطوير، نخزن في localStorage للتوافق
+      // في الإنتاج، الـ HttpOnly cookie يُعيَّن من الـ Backend
       localStorage.setItem('access_token', token);
     }
   }
@@ -59,6 +113,9 @@ export class APIClient {
       localStorage.removeItem('access_token');
       localStorage.removeItem('refresh_token');
       localStorage.removeItem('company_id');
+      // Also clear cookies if they exist
+      deleteCookie('access_token');
+      deleteCookie('refresh_token');
     }
   }
 
@@ -182,6 +239,10 @@ export class APIClient {
       }
 
       console.error(`❌ Request failed: ${url}`, error);
+      
+      // عرض toast notification للخطأ
+      this._showErrorToast(error, endpoint);
+      
       throw error;
     }
   }
@@ -257,6 +318,80 @@ export class APIClient {
       return true;
     }
     return false;
+  }
+
+  /**
+   * عرض toast notification للخطأ
+   */
+  private _showErrorToast(error: any, endpoint: string): void {
+    // تجاهل أخطاء المصادقة (401) - يتم التعامل معها بشكل خاص
+    if (error?.status === 401) {
+      return;
+    }
+
+    let errorMessage = 'حدث خطأ أثناء معالجة الطلب';
+    let errorTitle = 'خطأ في الاتصال';
+
+    // تحديد نوع الخطأ ورسالة مناسبة
+    if (error?.status) {
+      switch (error.status) {
+        case 400:
+          errorTitle = 'طلب غير صحيح';
+          errorMessage = error?.data?.detail || error?.message || 'البيانات المرسلة غير صحيحة';
+          break;
+        case 403:
+          errorTitle = 'غير مصرح';
+          errorMessage = 'ليس لديك صلاحية للوصول إلى هذا المورد';
+          break;
+        case 404:
+          errorTitle = 'غير موجود';
+          errorMessage = 'المورد المطلوب غير موجود';
+          break;
+        case 408:
+          errorTitle = 'انتهت مهلة الاتصال';
+          errorMessage = 'انتهت مهلة الاتصال بالخادم. يرجى المحاولة مرة أخرى';
+          break;
+        case 409:
+          errorTitle = 'تعارض';
+          errorMessage = error?.data?.detail || error?.message || 'يوجد تعارض في البيانات';
+          break;
+        case 422:
+          errorTitle = 'بيانات غير صحيحة';
+          errorMessage = error?.data?.detail || error?.message || 'البيانات المرسلة غير صالحة';
+          break;
+        case 429:
+          errorTitle = 'كثرة الطلبات';
+          errorMessage = 'تم إرسال طلبات كثيرة جداً. يرجى الانتظار قليلاً';
+          break;
+        case 500:
+          errorTitle = 'خطأ في الخادم';
+          errorMessage = 'حدث خطأ داخلي في الخادم. يرجى المحاولة لاحقاً';
+          break;
+        case 502:
+        case 503:
+        case 504:
+          errorTitle = 'الخادم غير متاح';
+          errorMessage = 'الخادم غير متاح حالياً. يرجى المحاولة لاحقاً';
+          break;
+        default:
+          errorTitle = `خطأ ${error.status}`;
+          errorMessage = error?.data?.detail || error?.message || 'حدث خطأ غير متوقع';
+      }
+    } else if (error instanceof TypeError || error?.message?.includes('fetch') || error?.message?.includes('Failed to fetch')) {
+      errorTitle = 'خطأ في الاتصال';
+      errorMessage = 'لا يمكن الاتصال بالخادم. تأكد من اتصالك بالإنترنت';
+    } else if (error?.name === 'AbortError') {
+      errorTitle = 'انتهت مهلة الاتصال';
+      errorMessage = 'انتهت مهلة الاتصال. يرجى المحاولة مرة أخرى';
+    } else if (error?.message) {
+      errorMessage = error.message;
+    }
+
+    // عرض toast notification
+    toast.error(errorTitle, {
+      description: errorMessage,
+      duration: 5000,
+    });
   }
 }
 

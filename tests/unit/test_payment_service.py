@@ -5,9 +5,11 @@ from datetime import date
 import sys
 from pathlib import Path
 
-# إضافة مسار src
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
+import sys
+import os
+from pathlib import Path
+# الوصول إلى جذر المشروع
+project_root = str(Path(__file__).resolve().parents[2])
 from src.services.payment_service import PaymentService
 from src.models.payment import Payment
 
@@ -122,3 +124,7 @@ class TestPaymentService:
         assert isinstance(summary, dict)
         # قد يحتوي على أي من هذه المفاتيح حسب التنفيذ
         assert len(summary) > 0
+
+
+
+

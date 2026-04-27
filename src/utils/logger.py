@@ -14,6 +14,23 @@ from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from typing import Optional
 
+class NonClosingStreamHandler(logging.StreamHandler):
+    def close(self):
+        """
+        Override close to never close the underlying stream.
+        This prevents issues with pytest capturing and sys.stdout/stderr.
+        """
+        self.acquire()
+        try:
+            if self.stream:
+                try:
+                    self.flush()
+                except Exception:
+                    pass
+        finally:
+            self.stream = None  # Detach without closing
+            self.release()
+
 def setup_logger(
     name: str = "logical_release",
     log_level: str = "INFO",
@@ -40,44 +57,40 @@ def setup_logger(
     
     # إعداد السجل في ملف
     if log_to_file:
-        # إنشاء مجلد السجلات
-        project_root = Path(__file__).parent.parent.parent
-        logs_dir = project_root / "logs"
-        logs_dir.mkdir(exist_ok=True)
-        
-        # ملف السجل الرئيسي
-        log_file = logs_dir / f"{name}.log"
-        
-        # إعداد RotatingFileHandler
-        file_handler = RotatingFileHandler(
-            log_file,
-            maxBytes=max_file_size,
-            backupCount=backup_count,
-            encoding='utf-8'
-        )
-        file_handler.setLevel(getattr(logging, log_level.upper()))
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
+        try:
+            # إنشاء مجلد السجلات
+            project_root = Path(__file__).parent.parent.parent
+            logs_dir = project_root / "logs"
+            logs_dir.mkdir(exist_ok=True)
+            
+            # ملف السجل الرئيسي
+            log_file = logs_dir / f"{name}.log"
+            
+            # إعداد RotatingFileHandler
+            file_handler = RotatingFileHandler(
+                log_file,
+                maxBytes=max_file_size,
+                backupCount=backup_count,
+                encoding='utf-8'
+            )
+            file_handler.setLevel(getattr(logging, log_level.upper()))
+            file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
+        except Exception:
+            # Fallback if file logging fails (e.g. permission issues)
+            pass
     
     # إعداد السجل في وحدة التحكم
     if log_to_console:
-        stream = sys.stdout
-        try:
-            # على Windows: إجبار الترميز إلى UTF-8 لتجنب UnicodeEncodeError
-            if os.name == "nt" and hasattr(stream, "reconfigure"):
-                stream.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
+        # Check if stdout is available and open
+        if sys.stdout and not (hasattr(sys.stdout, 'closed') and sys.stdout.closed):
             try:
-                # كحل احتياطي: لفّ التدفق بمغلّف UTF-8
-                stream = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+                console_handler = NonClosingStreamHandler(sys.stdout)
+                console_handler.setLevel(getattr(logging, log_level.upper()))
+                console_handler.setFormatter(formatter)
+                logger.addHandler(console_handler)
             except Exception:
-                # كحل نهائي: تجاهل الإخراج إلى وحدة التحكم إذا تعذّر الترميز
-                stream = io.StringIO()
-
-        console_handler = logging.StreamHandler(stream)
-        console_handler.setLevel(getattr(logging, log_level.upper()))
-        console_handler.setFormatter(formatter)
-        logger.addHandler(console_handler)
+                pass
     
     return logger
 
@@ -95,47 +108,39 @@ class DatabaseLogger:
         table_name: str,
         record_id: Optional[int] = None,
         old_values: Optional[dict] = None,
-        new_values: Optional[dict] = None
+        new_values: Optional[dict] = None,
+        user_id: Optional[int] = None
     ):
         """تسجيل عملية في قاعدة البيانات"""
         try:
             import json
             
-            # التحقق من وجود user_id في قاعدة البيانات (إذا كان محدداً)
-            if self.user_id is not None:
-                try:
-                    check_query = "SELECT id FROM users WHERE id = ?"
-                    result = self.db_manager.execute_scalar(check_query, (self.user_id,))
-                    if result is None:
-                        # المستخدم غير موجود، استخدام NULL بدلاً من user_id
-                        user_id_to_log = None
-                        self.logger.warning(
-                            f"المستخدم {self.user_id} غير موجود في قاعدة البيانات. سيتم تسجيل العملية بدون user_id."
-                        )
-                    else:
-                        user_id_to_log = self.user_id
-                except Exception as check_error:
-                    # في حالة فشل التحقق، استخدام NULL
-                    user_id_to_log = None
-                    self.logger.warning(
-                        f"فشل التحقق من وجود المستخدم {self.user_id}: {check_error}. سيتم تسجيل العملية بدون user_id."
-                    )
-            else:
-                user_id_to_log = None
-            
             # تحويل القيم إلى JSON
             old_values_json = json.dumps(old_values, ensure_ascii=False) if old_values else None
             new_values_json = json.dumps(new_values, ensure_ascii=False) if new_values else None
             
-            # إدراج في جدول audit_log
+            # تحديد المستخدم
+            user_id_to_log = user_id if user_id else self.user_id
+            username = "System"
+            if user_id_to_log:
+                try:
+                    res = self.db_manager.execute_scalar("SELECT username FROM users WHERE id = ?", (user_id_to_log,))
+                    if res:
+                        username = res
+                except Exception:
+                    pass
+
+            # تسجيل في قاعدة البيانات (New Schema)
+            # module maps to table_name, entity_type maps to table_name
             query = """
-                INSERT INTO audit_log (user_id, action, table_name, record_id, old_values, new_values)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO audit_log (
+                    user_id, username, action, module, entity_type, entity_id, old_values, new_values
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """
             
             self.db_manager.execute_non_query(
                 query,
-                (user_id_to_log, action, table_name, record_id, old_values_json, new_values_json)
+                (user_id_to_log, username, action, table_name, table_name, record_id, old_values_json, new_values_json)
             )
             
             # تسجيل في ملف السجل أيضاً

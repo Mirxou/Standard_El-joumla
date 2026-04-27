@@ -12,9 +12,11 @@ from decimal import Decimal
 import sys
 from pathlib import Path
 
-# إضافة مسار المشروع
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
+import sys
+import os
+from pathlib import Path
+# الوصول إلى جذر المشروع
+project_root = str(Path(__file__).resolve().parents[2])
 from src.core.database_manager import DatabaseManager
 from src.models.sale import Sale, SaleItem, SaleManager, SaleStatus, PaymentMethod
 from src.models.purchase import Purchase, PurchaseItem, PurchaseManager, PurchaseStatus
@@ -72,32 +74,55 @@ class TestWebhookTriggers:
             )
         """)
         
+        db.execute_query("DROP TABLE IF EXISTS purchases")
         db.execute_query("""
-            CREATE TABLE IF NOT EXISTS purchases (
+            CREATE TABLE purchases (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 invoice_number TEXT UNIQUE NOT NULL,
+                supplier_invoice_number TEXT,
                 supplier_id INTEGER,
-                total_amount REAL DEFAULT 0,
+                purchase_date DATE,
+                expected_delivery_date DATE,
                 status TEXT DEFAULT 'pending',
                 payment_status TEXT DEFAULT 'pending',
+                payment_terms TEXT,
+                subtotal_amount REAL DEFAULT 0,
+                discount_amount REAL DEFAULT 0,
+                tax_amount REAL DEFAULT 0,
+                shipping_cost REAL DEFAULT 0,
+                total_amount REAL DEFAULT 0,
+                paid_amount REAL DEFAULT 0,
+                remaining_amount REAL DEFAULT 0,
                 currency_id INTEGER,
                 exchange_rate REAL DEFAULT 1.0,
                 base_amount REAL,
                 converted_amount REAL,
+                notes TEXT,
+                created_by INTEGER,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
         
+        db.execute_query("DROP TABLE IF EXISTS purchase_items")
         db.execute_query("""
-            CREATE TABLE IF NOT EXISTS purchase_items (
+            CREATE TABLE purchase_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 purchase_id INTEGER NOT NULL,
                 product_id INTEGER NOT NULL,
                 quantity_ordered REAL NOT NULL,
+                quantity_received REAL DEFAULT 0,
                 unit_cost REAL NOT NULL,
+                discount_percent REAL DEFAULT 0,
+                discount_amount REAL DEFAULT 0,
+                tax_percent REAL DEFAULT 0,
+                tax_amount REAL DEFAULT 0,
                 total_amount REAL NOT NULL,
-                FOREIGN KEY (purchase_id) REFERENCES purchases(id) ON DELETE CASCADE
+                expiry_date DATE,
+                batch_number TEXT,
+                notes TEXT,
+                FOREIGN KEY (purchase_id) REFERENCES purchases(id) ON DELETE CASCADE,
+                FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
             )
         """)
         
@@ -125,24 +150,27 @@ class TestWebhookTriggers:
             )
         """)
         
+        db.execute_query("DROP TABLE IF EXISTS customers")
         db.execute_query("""
-            CREATE TABLE IF NOT EXISTS customers (
+            CREATE TABLE customers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 company_id INTEGER
             )
         """)
         
+        db.execute_query("DROP TABLE IF EXISTS suppliers")
         db.execute_query("""
-            CREATE TABLE IF NOT EXISTS suppliers (
+            CREATE TABLE suppliers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 company_id INTEGER
             )
         """)
         
+        db.execute_query("DROP TABLE IF EXISTS products")
         db.execute_query("""
-            CREATE TABLE IF NOT EXISTS products (
+            CREATE TABLE products (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 current_stock REAL DEFAULT 0,
@@ -150,10 +178,12 @@ class TestWebhookTriggers:
             )
         """)
         
+        db.execute_query("DROP TABLE IF EXISTS companies")
         db.execute_query("""
-            CREATE TABLE IF NOT EXISTS companies (
+            CREATE TABLE companies (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL
+                name TEXT NOT NULL,
+                code TEXT
             )
         """)
         
@@ -188,25 +218,56 @@ class TestWebhookTriggers:
             )
         """)
         
-        # بيانات تجريبية
-        db.execute_query("INSERT INTO companies (id, name) VALUES (1, 'Test Company')")
-        db.execute_query("INSERT INTO customers (id, name, company_id) VALUES (1, 'Test Customer', 1)")
-        db.execute_query("INSERT INTO suppliers (id, name, company_id) VALUES (1, 'Test Supplier', 1)")
-        db.execute_query("INSERT INTO products (id, name, current_stock, company_id) VALUES (1, 'Test Product', 100, 1)")
+        # بيانات تجريبية (استخدم INSERT OR IGNORE لتفادي الأخطاء عند إعادة تشغيل الاختبارات)
+        db.execute_query("INSERT OR IGNORE INTO companies (id, name, code) VALUES (1, 'Test Company', 'TC')")
+        db.execute_query("INSERT OR IGNORE INTO customers (id, name, company_id) VALUES (1, 'Test Customer', 1)")
+        db.execute_query("INSERT OR IGNORE INTO suppliers (id, name, company_id) VALUES (1, 'Test Supplier', 1)")
+        db.execute_query("INSERT OR IGNORE INTO products (id, name, current_stock, company_id) VALUES (1, 'Test Product', 100, 1)")
         
-        return db
+        yield db
+        
+        # تنظيف
+        try:
+            db.close()
+        except:
+            pass
     
     @pytest.fixture
     def webhook_service(self, db_manager):
         """إنشاء WebhookService للاختبارات"""
         return WebhookService(db_manager, logger=Mock())
     
-    @patch('src.core.webhook_dispatcher.get_webhook_dispatcher')
-    def test_sale_created_webhook_trigger(self, mock_get_dispatcher, db_manager, webhook_service):
+    @patch('src.core.tenant_isolation.TenantIsolationManager.get_current_company_id')
+    @patch('src.services.webhook_service.get_webhook_dispatcher')
+    def test_sale_created_webhook_trigger(self, mock_get_dispatcher, mock_get_company_id, db_manager, webhook_service):
         """اختبار إطلاق Webhook عند إنشاء فاتورة مبيعات"""
+        from src.core.webhook_dispatcher import WebhookDeliveryResult
+        
         # Mock Dispatcher
         mock_dispatcher = Mock()
         mock_get_dispatcher.return_value = mock_dispatcher
+        
+        # Mock deliver_webhook side effect to call the callback
+        def deliver_side_effect(*args, **kwargs):
+            callback = kwargs.get('callback')
+            if callback:
+                result = WebhookDeliveryResult(success=True, status_code=200, execution_time_ms=100)
+                # Ensure payload is a JSON string as expected by callback
+                import json
+                payload_json = json.dumps(kwargs.get('payload', {}))
+                callback(
+                    result=result,
+                    webhook_id=kwargs.get('webhook_id'),
+                    event_type=kwargs.get('event_type'),
+                    entity_id=kwargs.get('entity_id'),
+                    payload_json=payload_json
+                )
+            return True
+            
+        mock_dispatcher.deliver_webhook.side_effect = deliver_side_effect
+        
+        # Mock Company ID
+        mock_get_company_id.return_value = 1
         
         # إنشاء Webhook نشط
         webhook_service.create_webhook(
@@ -235,15 +296,47 @@ class TestWebhookTriggers:
         
         # التحقق من إطلاق Webhook
         assert sale_id is not None
-        # Note: في الواقع، Webhook يتم إطلاقه داخل create_sale
-        # لكن للاختبار، يمكن التحقق من وجود Webhook Logs
+        
+        # 1. التحقق من استدعاء الـ Dispatcher
+        assert mock_dispatcher.deliver_webhook.called, "لم يتم استدعاء الـ dispatcher لإرسال الـ webhook"
+        args, kwargs = mock_dispatcher.deliver_webhook.call_args
+        assert kwargs['url'] == "https://example.com/sale"
+        assert kwargs['payload']['invoice_number'] == "INV-001"
+        
+        # 2. التحقق من وجود سجل في webhook_logs
+        logs = db_manager.fetch_all("SELECT * FROM webhook_logs WHERE event_type = 'sale_created'")
+        assert len(logs) > 0, "لم يتم العثور على سجل في webhook_logs"
     
-    @patch('src.core.webhook_dispatcher.get_webhook_dispatcher')
-    def test_payment_received_webhook_trigger(self, mock_get_dispatcher, db_manager, webhook_service):
+    @patch('src.core.tenant_isolation.TenantIsolationManager.get_current_company_id')
+    @patch('src.services.webhook_service.get_webhook_dispatcher')
+    def test_payment_received_webhook_trigger(self, mock_get_dispatcher, mock_get_company_id, db_manager, webhook_service):
         """اختبار إطلاق Webhook عند استلام دفعة"""
+        from src.core.webhook_dispatcher import WebhookDeliveryResult
+        
         # Mock Dispatcher
         mock_dispatcher = Mock()
         mock_get_dispatcher.return_value = mock_dispatcher
+        
+        # Mock deliver_webhook side effect to call the callback
+        def deliver_side_effect(*args, **kwargs):
+            callback = kwargs.get('callback')
+            if callback:
+                result = WebhookDeliveryResult(success=True, status_code=200, execution_time_ms=100)
+                import json
+                payload_json = json.dumps(kwargs.get('payload', {}))
+                callback(
+                    result=result,
+                    webhook_id=kwargs.get('webhook_id'),
+                    event_type=kwargs.get('event_type'),
+                    entity_id=kwargs.get('entity_id'),
+                    payload_json=payload_json
+                )
+            return True
+            
+        mock_dispatcher.deliver_webhook.side_effect = deliver_side_effect
+        
+        # Mock Company ID
+        mock_get_company_id.return_value = 1
         
         # إنشاء Webhook نشط
         webhook_service.create_webhook(
@@ -256,21 +349,53 @@ class TestWebhookTriggers:
         
         # إنشاء دفعة
         payment_service = PaymentService(db_manager, logger=Mock())
-        payment = payment_service.create_customer_payment(
+        
+        payment_id = payment_service.create_customer_payment(
             customer_id=1,
             amount=Decimal("50.00"),
             payment_method=PM.CASH.value
         )
         
-        # التحقق من إنشاء الدفعة
-        assert payment is not None
+        # التحقق من إنشاء الدفعة وإطلاق الـ Webhook
+        assert payment_id is not None
+        
+        # 1. التحقق من الـ Dispatcher
+        assert mock_dispatcher.deliver_webhook.called, "لم يتم استدعاء الـ dispatcher للدفعة"
+        
+        # 2. التحقق من السجلات
+        logs = db_manager.fetch_all("SELECT * FROM webhook_logs WHERE event_type = 'payment_received'")
+        assert len(logs) > 0, "لم يتم العثور على سجل دفعة في webhook_logs"
     
-    @patch('src.core.webhook_dispatcher.get_webhook_dispatcher')
-    def test_purchase_created_webhook_trigger(self, mock_get_dispatcher, db_manager, webhook_service):
+    @patch('src.core.tenant_isolation.TenantIsolationManager.get_current_company_id')
+    @patch('src.services.webhook_service.get_webhook_dispatcher')
+    def test_purchase_created_webhook_trigger(self, mock_get_dispatcher, mock_get_company_id, db_manager, webhook_service):
         """اختبار إطلاق Webhook عند إنشاء فاتورة شراء"""
+        from src.core.webhook_dispatcher import WebhookDeliveryResult
+        
         # Mock Dispatcher
         mock_dispatcher = Mock()
         mock_get_dispatcher.return_value = mock_dispatcher
+        
+        # Mock deliver_webhook side effect to call the callback
+        def deliver_side_effect(*args, **kwargs):
+            callback = kwargs.get('callback')
+            if callback:
+                result = WebhookDeliveryResult(success=True, status_code=200, execution_time_ms=100)
+                import json
+                payload_json = json.dumps(kwargs.get('payload', {}))
+                callback(
+                    result=result,
+                    webhook_id=kwargs.get('webhook_id'),
+                    event_type=kwargs.get('event_type'),
+                    entity_id=kwargs.get('entity_id'),
+                    payload_json=payload_json
+                )
+            return True
+            
+        mock_dispatcher.deliver_webhook.side_effect = deliver_side_effect
+        
+        # Mock Company ID
+        mock_get_company_id.return_value = 1
         
         # إنشاء Webhook نشط
         webhook_service.create_webhook(
@@ -287,15 +412,22 @@ class TestWebhookTriggers:
             invoice_number="PO-001",
             supplier_id=1,
             purchase_date=date.today(),
-            status=PurchaseStatus.PENDING,
+            status=PurchaseStatus.PENDING.value,
             payment_status="pending"
         )
         purchase.items = []
         
         purchase_id = purchase_manager.create_purchase(purchase)
         
-        # التحقق من إنشاء الفاتورة
+        # التحقق من إنشاء الفاتورة وإطلاق الـ Webhook
         assert purchase_id is not None
+        
+        # 1. التحقق من الـ Dispatcher
+        assert mock_dispatcher.deliver_webhook.called, "لم يتم استدعاء الـ dispatcher للمشتريات"
+        
+        # 2. التحقق من السجلات
+        logs = db_manager.fetch_all("SELECT * FROM webhook_logs WHERE event_type = 'purchase_created'")
+        assert len(logs) > 0, "لم يتم العثور على سجل مشتريات في webhook_logs"
     
     def test_webhook_not_triggered_when_inactive(self, db_manager, webhook_service):
         """اختبار عدم إطلاق Webhook غير نشط"""
@@ -344,4 +476,8 @@ class TestWebhookTriggers:
         )
         
         assert len(webhooks) == 2
+
+
+
+
 

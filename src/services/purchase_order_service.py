@@ -9,21 +9,18 @@ import sqlite3
 from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime, date
 from decimal import Decimal
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from models.purchase_order import (
+from src.models.purchase_order import (
     PurchaseOrder, PurchaseOrderItem, POStatus, 
     POPriority, DeliveryTerms, PaymentTerms
 )
-from models.receiving_note import (
+from src.models.receiving_note import (
     ReceivingNote, ReceivingItem, SupplierEvaluation,
     ReceivingStatus, InspectionStatus, QualityRating
 )
-from core.database_manager import DatabaseManager
-from services.workflow_service import WorkflowService
+from src.core.database_manager import DatabaseManager
+from src.services.workflow_service import WorkflowService
+
 
 
 class PurchaseOrderService:

@@ -4,11 +4,16 @@
 سكريبت سريع للتحقق من تفعيل WAL mode
 """
 
-import sqlite3
 import sys
 from pathlib import Path
 
-def check_wal_mode(db_path: str = "database.db"):
+# Add src to path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
+from src.core.database_manager import DatabaseManager
+
+def check_wal_mode(db_path: str = "data/logical_release.db"):
     """التحقق من وضع WAL"""
     db_file = Path(db_path)
     wal_file = db_file.parent / f"{db_file.name}-wal"
@@ -29,8 +34,9 @@ def check_wal_mode(db_path: str = "database.db"):
     
     try:
         # الاتصال بقاعدة البيانات
-        conn = sqlite3.connect(str(db_file), timeout=10.0)
-        cursor = conn.cursor()
+        db_manager = DatabaseManager(str(db_file))
+        db_manager.initialize()
+        cursor = db_manager.connection.cursor()
         
         # التحقق من وضع Journal
         cursor.execute("PRAGMA journal_mode")
@@ -50,7 +56,7 @@ def check_wal_mode(db_path: str = "database.db"):
                 print("✅ ممتاز! WAL mode مفعّل ويعمل بشكل صحيح")
                 print("   - SQLite في وضع تعدد الخيوط")
                 print("   - لا يوجد قفل قاعدة البيانات")
-                conn.close()
+                db_manager.connection.close()
                 return True
             else:
                 print("⚠️  WAL mode مفعّل لكن ملف WAL غير موجود")
@@ -61,7 +67,7 @@ def check_wal_mode(db_path: str = "database.db"):
             print("   - يجب تفعيل WAL mode للأداء الأمثل")
             print("   - تحقق من إعدادات Connection Pool")
         
-        conn.close()
+        db_manager.connection.close()
         
     except Exception as e:
         print(f"❌ خطأ في التحقق: {e}")
@@ -71,7 +77,7 @@ def check_wal_mode(db_path: str = "database.db"):
     return False
 
 if __name__ == '__main__':
-    db_path = sys.argv[1] if len(sys.argv) > 1 else "database.db"
+    db_path = sys.argv[1] if len(sys.argv) > 1 else "data/logical_release.db"
     success = check_wal_mode(db_path)
     sys.exit(0 if success else 1)
 

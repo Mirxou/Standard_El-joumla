@@ -79,7 +79,9 @@
 
 ---
 
-### 3. UI Tests (اختبارات الواجهة) - 5 ملفات
+### 3. UI Tests (اختبارات الواجهة) - 6 ملفات
+ 
+ - `test_ui_comprehensive.py` - اختبارات "Smart Smoke Test" لـ 50+ نافذة (جديد)
 
 - `test_main_window.py` - اختبارات النافذة الرئيسية
 - `test_windows.py` - اختبارات النوافذ
@@ -89,7 +91,9 @@
 
 ---
 
-### 4. Integration Tests (اختبارات التكامل) - 6 ملفات
+### 4. Integration & Experimental Tests - 8 ملفات
+ 
+ - `test_experimental.py` - اختبارات الخدمات التجريبية والمهملة (جديد)
 
 - `test_database_manager_advanced.py` - اختبارات متقدمة لمدير قاعدة البيانات
 - `test_product_manager_advanced.py` - اختبارات متقدمة لمدير المنتجات

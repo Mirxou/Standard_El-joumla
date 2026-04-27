@@ -5,16 +5,22 @@
 Add Currency Columns to Financial Tables Script
 """
 
-import sqlite3
 import sys
 from pathlib import Path
+
+# Add src to path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
+from src.core.database_manager import DatabaseManager
 
 def add_currency_columns(db_path: str):
     """إضافة أعمدة العملة إلى الجداول المالية"""
     
-    conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA foreign_keys = ON")
-    cursor = conn.cursor()
+    db_manager = DatabaseManager(db_path)
+    db_manager.initialize()
+    db_manager.connection.execute("PRAGMA foreign_keys = ON")
+    cursor = db_manager.connection.cursor()
     
     try:
         # الحصول على قائمة الأعمدة الموجودة في كل جدول
@@ -184,15 +190,15 @@ def add_currency_columns(db_path: str):
             
             print("✅ تم تحديث البيانات الموجودة بالعملة الأساسية")
         
-        conn.commit()
+        db_manager.connection.commit()
         print("\n✅ تم إضافة جميع أعمدة العملة بنجاح!")
         
     except Exception as e:
-        conn.rollback()
+        db_manager.connection.rollback()
         print(f"❌ خطأ: {e}")
         raise
     finally:
-        conn.close()
+        db_manager.connection.close()
 
 if __name__ == "__main__":
     # تحديد مسار قاعدة البيانات

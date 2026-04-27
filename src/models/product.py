@@ -13,8 +13,6 @@ import sqlite3
 import sys
 from pathlib import Path
 
-# إضافة مسار src
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 @dataclass
 class Product:
@@ -184,7 +182,7 @@ class ProductManager:
                 
                 # 🔔 إطلاق Webhook: إرسال Webhook عند إنشاء منتج
                 try:
-                    from ...services.webhook_service import WebhookService
+                    from src.services.webhook_service import WebhookService
                     webhook_service = WebhookService(self.db_manager, self.logger)
                     
                     # بناء Payload للـ Webhook
@@ -342,7 +340,6 @@ class ProductManager:
                 product.category_id,
                 product.unit,
                 float(product.cost_price),
-                float(product.cost_price),
                 float(product.selling_price),
                 float(product.wholesale_price),
                 float(product.vip_price),
@@ -402,7 +399,8 @@ class ProductManager:
             if not current_product:
                 return False
             
-            new_stock = current_product.current_stock + quantity_change
+            # هذا المسار يتعامل مع الكمية النهائية المطلوبة، لا مع delta.
+            new_stock = quantity_change
             
             # التأكد من عدم السماح بمخزون سالب
             if new_stock < 0:
@@ -416,7 +414,7 @@ class ProductManager:
             result = self.db_manager.execute_query(query, params)
             if result and result.rowcount > 0:
                 if self.logger:
-                    self.logger.info(f"تم تحديث مخزون المنتج {product_id}: {quantity_change:+d} ({operation_type})")
+                    self.logger.info(f"تم تحديث مخزون المنتج {product_id} إلى {float(new_stock):.2f} ({operation_type})")
                 return True
             
         except Exception as e:
@@ -485,47 +483,50 @@ class ProductManager:
     
     def _row_to_product(self, row) -> Product:
         """تحويل صف قاعدة البيانات إلى كائن منتج"""
-        # إذا كان هناك company_id في الجدول، سيزيد عدد الأعمدة
-        # p.* تعيد جميع الأعمدة، و category_name هو العمود الأخير المضاف يدوياً في الاستعلام
+        # ترتيب الأعمدة المتوقع بعد التعديل (مع إضافة أعمدة الأسعار الجديدة في المنتصف):
+        # 0: id, 1: name, 2: name_en, 3: barcode, 4: category_id, 5: unit,
+        # 6: cost_price, 7: selling_price, 
+        # 8: wholesale_price, 9: vip_price, 10: min_wholesale_qty (New Columns)
+        # 11: min_stock, 12: current_stock, 13: description, 14: image_path,
+        # 15: is_active, 16: created_at, 17: updated_at
         
-        # الأساسي (قبل company_id): 15 عمود للمنتج + 1 category_name = 16 (index 0-15)
-        # مع company_id: 16 عمود للمنتج + 1 category_name = 17 (index 0-16)
+        # category_name هو العمود الأخير المضاف يدوياً في الاستعلام (index 18)
+        # p.* تعيد 18 عموداً
         
-        category_name = row[-1] if len(row) > 15 else None
+        expected_cols = 18
+        category_name = row[-1] if len(row) > expected_cols else None
         
-        # التأكد من أن category_name هو نص أو None (لتجنب الخطأ إذا كان رقم في حال اختلاف الترتيب)
+        # التأكد من أن category_name هو نص
         if category_name is not None and not isinstance(category_name, str):
-            # إذا لم يكن نصاً، ربما نحن نقرأ عموداً خطأ، نجعله None
             category_name = None
             
-        product = Product(
-            id=row[0],
-            name=row[1],
-            name_en=row[2],
-            barcode=row[3],
-            category_id=row[4],
-            unit=row[5],
-            cost_price=Decimal(str(row[6])),
-            selling_price=Decimal(str(row[7])),
-            min_stock=row[8],
-            current_stock=row[9],
-            # Note: Adding new fields support needs schema update, falling back to defaults if not in row
-            wholesale_price=Decimal(str(row[15])) if len(row) > 17 else Decimal('0.00'),
-            vip_price=Decimal(str(row[16])) if len(row) > 17 else Decimal('0.00'),
-            min_wholesale_qty=row[17] if len(row) > 17 else 10,
+        try:
+            product = Product(
+                id=row[0],
+                name=row[1],
+                name_en=row[2],
+                barcode=row[3],
+                category_id=row[4],
+                unit=row[5],
+                cost_price=Decimal(str(row[6])),
+                selling_price=Decimal(str(row[7])),
+                wholesale_price=Decimal(str(row[8])) if row[8] is not None else Decimal('0.00'),
+                vip_price=Decimal(str(row[9])) if row[9] is not None else Decimal('0.00'),
+                min_wholesale_qty=row[10] if row[10] is not None else 10,
+                min_stock=row[11],
+                current_stock=row[12],
+                description=row[13],
+                image_path=row[14],
+                is_active=bool(row[15]),
+                created_at=datetime.fromisoformat(row[16]) if row[16] else None,
+                updated_at=datetime.fromisoformat(row[17]) if row[17] else None,
+                category_name=category_name
+            )
             
-            description=row[10],
-            image_path=row[11],
-            is_active=bool(row[12]),
-            created_at=datetime.fromisoformat(row[13]) if row[13] else None,
-            updated_at=datetime.fromisoformat(row[14]) if row[14] else None,
-            category_name=category_name
-        )
-        
-        # محاولة تعيين company_id إذا كان موجوداً (عادة في index 15 إذا كان الجدول 16 عمود)
-        # لكن Product dataclass لا يحتوي على company_id حالياً بشكل صريح في التعريف أعلاه (إلا إذا تم تعديله)
-        # ولكن يمكن إضافته ديناميكياً
-        if len(row) > 16:
-             setattr(product, 'company_id', row[15])
-             
-        return product
+            # TODO: دعم company_id إذا تم إضافته للجدول مستقبلاً
+            
+            return product
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في تحويل الصف إلى منتج: {e} - Row: {row}")
+            raise e

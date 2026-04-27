@@ -5,7 +5,7 @@ Hybrid Mode: يعمل محليًا أو عبر API حسب توفر الاتصا�
 """
 import requests
 from typing import Optional, Dict, Any, List, Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import time
 import logging
@@ -25,8 +25,8 @@ class APIClient:
         self,
         base_url: str = "http://127.0.0.1:8000",
         timeout: int = 5,
-        max_retries: int = 3,
-        retry_backoff_factor: float = 0.5,
+        max_retries: int = 1,
+        retry_backoff_factor: float = 0.25,
         retry_status_codes: Optional[List[int]] = None,
         enable_logging: bool = True
     ):
@@ -54,6 +54,9 @@ class APIClient:
         self._is_online: Optional[bool] = None
         self._last_check: Optional[datetime] = None
         
+        # Server Time Sync
+        self.time_offset: Optional[timedelta] = None  # الفرق بين Server Time و Client Time
+        
         # Logger
         self.logger = setup_logger(__name__) if enable_logging else logging.getLogger(__name__)
     
@@ -72,15 +75,17 @@ class APIClient:
             elapsed = (datetime.now() - self._last_check).total_seconds()
             if elapsed < 10 and self._is_online is not None:
                 return self._is_online
-        
+
         try:
+            health_timeout = min(self.timeout, 1)
             response = requests.get(
                 f"{self.base_url}/health",
-                timeout=self.timeout
+                timeout=health_timeout
             )
             self._is_online = response.status_code == 200
-        except Exception:
+        except Exception as e:
             self._is_online = False
+            self.logger.debug(f"Health check failed: {e}")
         
         self._last_check = datetime.now()
         return self._is_online
@@ -97,6 +102,7 @@ class APIClient:
             True في حالة النجاح
         """
         if not self.is_online():
+            self.logger.debug("API offline, login failed")
             return False
         
         # تسجيل الدخول لا يحتاج retry (أخطاء المصادقة لا يجب إعادة المحاولة)
@@ -371,6 +377,44 @@ class APIClient:
                 return None
         
         return None
+    
+    def get_server_time(self) -> Optional[datetime]:
+        """
+        الحصول على Server Time من API
+        
+        Returns:
+            Server Time أو None إذا فشل
+        """
+        response = self.get("api/v1/time")
+        if response and 'time' in response:
+            try:
+                server_time = datetime.fromisoformat(response['time'])
+                # حساب Time Offset
+                client_time = datetime.now()
+                self.time_offset = server_time - client_time
+                self.logger.info(f"✅ تم مزامنة الوقت - Offset: {self.time_offset.total_seconds():.2f} ثانية")
+                return server_time
+            except (ValueError, KeyError) as e:
+                self.logger.error(f"❌ فشل تحليل Server Time: {str(e)}")
+                return None
+        return None
+    
+    def get_synced_time(self) -> datetime:
+        """
+        الحصول على الوقت المتزامن (Client Time + Offset)
+        
+        Returns:
+            الوقت المتزامن مع Server
+        """
+        if self.time_offset is None:
+            # محاولة مزامنة الوقت أولاً
+            self.get_server_time()
+        
+        if self.time_offset is not None:
+            return datetime.now() + self.time_offset
+        else:
+            # Fallback إلى Client Time
+            return datetime.now()
     
     def delete(self, endpoint: str) -> bool:
         """

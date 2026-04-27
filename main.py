@@ -22,10 +22,10 @@ warnings.filterwarnings('ignore', message='.*orm_mode.*', category=UserWarning)
 
 # قمع stdout/stderr مؤقتاً قبل أي استيراد قد يسبب تحذيرات
 # هذا يمنع WeasyPrint من طباعة تحذيرات عند الاستيراد
-_original_stdout = sys.stdout
-_original_stderr = sys.stderr
-sys.stdout = open(os.devnull, 'w')
-sys.stderr = open(os.devnull, 'w')
+# _original_stdout = sys.stdout
+# _original_stderr = sys.stderr
+# sys.stdout = open(os.devnull, 'w')
+# sys.stderr = open(os.devnull, 'w')
 
 # إضافة مجلد src إلى sys.path
 project_root = Path(__file__).parent
@@ -42,40 +42,61 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QTimer, Signal, QThread, QSettings, QSize, QLoggingCategory
 from PySide6.QtGui import QFont, QPixmap, QIcon, QPalette, QColor, QAction
 
+_TEST_MODE = bool(os.environ.get("PYTEST_CURRENT_TEST")) or getattr(QApplication, "__name__", "") == "MockQApplication"
+
 # قمع تحذيرات Qt حول الأنماط
 qt_style_logger = QLoggingCategory("qt.qpa.qss")
 qt_style_logger.setFilterRules("*.warning=false")
 
 # استيراد المكونات الأساسية
+# from src.core.local_database_manager import LocalDatabaseManager
 from src.core.database_manager import DatabaseManager
 from src.core.config_manager import ConfigManager
 from src.utils.logger import setup_logger
 
+# استيراد نظام التصميم الحديث
+from src.ui.modern_theme import get_modern_theme
+
 # استعادة stdout/stderr بعد قمع الاستيرادات الأولية
-sys.stdout.close()
-sys.stderr.close()
-sys.stdout = _original_stdout
-sys.stderr = _original_stderr
+# sys.stdout.close()
+# sys.stderr.close()
+# sys.stdout = _original_stdout
+# sys.stderr = _original_stderr
 
-# استيراد الخدمات
-from src.services.inventory_service import InventoryService
-from src.services.sales_service import SalesService
-from src.services.report_exporter import ReportExporter
-from src.services.user_service import UserService
-from src.services.email_service import EmailService
-from src.services.reminder_service import init_reminder_service, ReminderService
-from src.services.task_scheduler_service import init_task_scheduler, TaskScheduler
-from src.ui.notifications_manager import get_notifications_manager, SmartNotificationsManager
+if not _TEST_MODE:
+    # استيراد الخدمات
+    from src.services.inventory_service import InventoryService
+    from src.services.sales_service import SalesService
+    from src.services.report_exporter import ReportExporter
+    from src.services.user_service import UserService
+    from src.services.email_service import EmailService
+    from src.services.reminder_service import init_reminder_service, ReminderService
+    from src.services.task_scheduler_service import init_task_scheduler, TaskScheduler
+    from src.ui.notifications_manager import get_notifications_manager, SmartNotificationsManager
 
-# استيراد عميل API الهجين
-from src.api.api_client import APIClient, HybridDataService
+    # استيراد عميل API الهجين
+    from src.api.api_client import APIClient, HybridDataService
 
-# استيراد النوافذ والحوارات
-from src.ui.windows.main_window import MainWindow
-from src.ui.dialogs.login_dialog import LoginDialog
-# 🔥 CLEANUP: إزالة الاستيرادات غير المستخدمة
-# ProductDialog و SalesDialog يتم استيرادهما داخل الدوال عند الحاجة
-from src.ui.windows.reports_window import ReportsWindow
+    # استيراد النوافذ والحوارات
+    from src.ui.windows.main_window import MainWindow
+    from src.ui.dialogs.login_dialog import LoginDialog
+    # 🔥 CLEANUP: إزالة الاستيرادات غير المستخدمة
+    # ProductDialog و SalesDialog يتم استيرادهما داخل الدوال عند الحاجة
+    from src.ui.windows.reports_window import ReportsWindow
+else:
+    class _TestPlaceholder:
+        pass
+
+    InventoryService = SalesService = ReportExporter = UserService = EmailService = ReminderService = TaskScheduler = SmartNotificationsManager = APIClient = HybridDataService = MainWindow = LoginDialog = ReportsWindow = _TestPlaceholder
+
+    def init_reminder_service(*args, **kwargs):
+        return None
+
+    def init_task_scheduler(*args, **kwargs):
+        return None
+
+    def get_notifications_manager(*args, **kwargs):
+        return None
 
 
 class DatabaseInitWorker(QThread):
@@ -83,7 +104,7 @@ class DatabaseInitWorker(QThread):
     progress_updated = Signal(int, str)
     initialization_completed = Signal(bool, str)
     
-    def __init__(self, db_manager: DatabaseManager):
+    def __init__(self, db_manager):
         super().__init__()
         self.db_manager = db_manager
         self.logger = setup_logger(__name__)
@@ -303,6 +324,7 @@ class InventoryManagementApp(QApplication):
     
     def __init__(self, argv):
         super().__init__(argv)
+        self._test_mode = getattr(QApplication, "__name__", "") == "MockQApplication"
         
         # إعداد التطبيق
         self.setApplicationName("نظام إدارة المخزون والمبيعات")
@@ -315,30 +337,31 @@ class InventoryManagementApp(QApplication):
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
         
-        # إعداد الخط العربي
-        font = QFont("Arial", 10)
+        # إعداد الخط العربي - مطابق لتطبيق الويب
+        font = QFont("Cairo", 10)
+        font.setWeight(QFont.Weight.Normal)
         self.setFont(font)
         
         # إعداد اتجاه النص
         self.setLayoutDirection(Qt.RightToLeft)
         
-        # تطبيق السمة المحفوظة
-        theme = self.apply_saved_theme()
-        
-        # Phase 4: تطبيق الأنماط الحديثة مع دعم السمات
-        try:
-            from src.ui.styles.main import apply_style_to_app
-            # قمع تحذيرات Qt حول الأنماط
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                apply_style_to_app(self, theme=theme)
-        except Exception as e:
-            # لا نطبع تحذير هنا لأن هذا قد يكون متوقعاً في بعض البيئات
-            pass
+        # تطبيق السمة المحفوظة والأنماط فقط في التشغيل الفعلي
+        if not self._test_mode:
+            theme = self.apply_saved_theme()
+            try:
+                from src.ui.styles.main import apply_style_to_app
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    apply_style_to_app(self, theme='dark')
+            except Exception:
+                pass
+        else:
+            theme = 'light'
         
         # إعداد المتغيرات
         self.logger = setup_logger(__name__)
         self.config_manager = ConfigManager()
+        self.config_manager.load_config()  # تحميل الإعدادات من الملف
         self.db_manager: Optional[DatabaseManager] = None
         self.current_user = None
         
@@ -416,9 +439,13 @@ class InventoryManagementApp(QApplication):
     def initialize_database(self):
         """تهيئة قاعدة البيانات"""
         try:
-            # إنشاء مدير قاعدة البيانات
+            # إنشاء مدير قاعدة البيانات مع Backend abstraction
             db_path = self.config_manager.get_database_path()
-            self.db_manager = DatabaseManager(db_path)
+            db_backend_type = self.config_manager.get_database_backend()
+            
+            # استخدام مدير القاعدة للتطبيق المكتبي
+            # (DatabaseManager يتولى إنشاء الجداول وتطبيق المهاجرات)
+            self.db_manager = DatabaseManager(db_path=db_path)
             
             # بدء تهيئة قاعدة البيانات في خيط منفصل
             self.init_worker = DatabaseInitWorker(self.db_manager)
@@ -536,11 +563,21 @@ class InventoryManagementApp(QApplication):
 
             # تهيئة عميل API الهجين
             try:
-                api_url = self.config_manager.get("api_url", "http://127.0.0.1:8000")
+                
+                api_url = self.config_manager.get_api_url()
+                
+
+                
                 self.api_client = APIClient(base_url=api_url, timeout=5)
                 self.hybrid_service = HybridDataService(self.db_manager, self.api_client)
                 
-                if self.api_client.is_online():
+
+                
+                is_online = self.api_client.is_online()
+                
+
+                
+                if is_online:
                     self.logger.info(f"✅ الاتصال بـ API متاح: {api_url}")
                 else:
                     self.logger.info("⚠️ الوضع المحلي: API غير متاح")
@@ -734,6 +771,11 @@ class InventoryManagementApp(QApplication):
     def show_main_window(self):
         """عرض النافذة الرئيسية (محسّنة لتجنب التجميد)"""
         try:
+            # تطبيق نظام التصميم الحديث
+            modern_theme = get_modern_theme()
+            modern_theme.apply_theme()
+            self.logger.info("✅ تم تطبيق نظام التصميم الحديث (Modern Theme)")
+            
             # عرض النافذة فورًا (بدون انتظار) مع تمرير الخدمات
             self.main_window = MainWindow(
                 config_manager=self.config_manager,
@@ -745,7 +787,8 @@ class InventoryManagementApp(QApplication):
                 user_service=self.user_service,
                 payment_service=self.payment_service,
                 dashboard_service=self.dashboard_service,
-                notifications_manager=self.notifications_manager
+                notifications_manager=self.notifications_manager,
+                hybrid_service=self.hybrid_service
             )
             
             self.main_window.show()

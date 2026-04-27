@@ -13,8 +13,6 @@ from enum import Enum
 import sys
 from pathlib import Path
 
-# إضافة مسار src
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 class PurchaseStatus(Enum):
     """حالات المشتريات"""
@@ -404,7 +402,7 @@ class PurchaseManager:
                 
                 # 🔥 إطلاق الإشارات: إعلام النظام بالتغييرات
                 try:
-                    from ...core.signals import signals
+                    from src.core.signals import signals
                     signals.purchases_updated.emit()
                     signals.purchase_created.emit(purchase_id)
                     if self.logger:
@@ -415,7 +413,7 @@ class PurchaseManager:
                 
                 # 🔔 إطلاق Webhook: إرسال Webhook عند إنشاء فاتورة شراء
                 try:
-                    from ...services.webhook_service import WebhookService
+                    from src.services.webhook_service import WebhookService
                     webhook_service = WebhookService(self.db_manager, self.logger)
                     
                     # بناء Payload للـ Webhook

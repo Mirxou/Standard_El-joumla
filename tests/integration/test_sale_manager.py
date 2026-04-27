@@ -117,3 +117,6 @@ class TestSaleManager:
         results = sale_manager.search_sales(start_date=date.today())
         assert isinstance(results, list)
 
+
+
+

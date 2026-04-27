@@ -12,9 +12,11 @@ import json
 import sys
 from pathlib import Path
 
-# إضافة مسار المشروع
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
+import sys
+import os
+from pathlib import Path
+# الوصول إلى جذر المشروع
+project_root = str(Path(__file__).resolve().parents[2])
 from src.core.webhook_dispatcher import WebhookDispatcher, WebhookDeliveryResult
 
 
@@ -278,4 +280,157 @@ class TestWebhookDispatcher:
         assert result_fail.success == False
         assert result_fail.error_message == "Connection Error"
         assert result_fail.attempt_number == 3
+
+
+class TestWebhookRateLimiting:
+    """اختبارات Rate Limiting للـ Webhook"""
+    
+    @pytest.fixture
+    def dispatcher(self):
+        return WebhookDispatcher(logger=Mock())
+    
+    def test_check_rate_limit_allowed(self, dispatcher):
+        """اختبار السماح بالإرسال ضمن الحد"""
+        webhook_id = 1
+        rate_limit = 10
+        
+        # أول 10 طلبات يجب أن تكون مسموحة
+        for i in range(10):
+            result = dispatcher._check_rate_limit(webhook_id, rate_limit)
+            assert result is True, f"Request {i+1} should be allowed"
+    
+    def test_check_rate_limit_blocked(self, dispatcher):
+        """اختبار تجاوز الحد"""
+        webhook_id = 1
+        rate_limit = 5
+        
+        # إرسال 5 طلبات
+        for i in range(5):
+            dispatcher._check_rate_limit(webhook_id, rate_limit)
+        
+        # الطلب السادس يجب أن يتم رفضه
+        result = dispatcher._check_rate_limit(webhook_id, rate_limit)
+        assert result is False
+    
+    def test_rate_limit_different_webhooks(self, dispatcher):
+        """اختبار Rate Limit لـ Webhooks مختلفة"""
+        # كل Webhook يجب أن يكون له Rate Limit مستقل
+        webhook_id_1 = 1
+        webhook_id_2 = 2
+        
+        # إرسال 5 طلبات لـ webhook 1
+        for i in range(5):
+            dispatcher._check_rate_limit(webhook_id_1, 5)
+        
+        # webhook 1 يجب أن يتم حظره
+        assert dispatcher._check_rate_limit(webhook_id_1, 5) is False
+        
+        # webhook 2 يجب أن يكون مسموحاً
+        assert dispatcher._check_rate_limit(webhook_id_2, 5) is True
+    
+    def test_get_rate_limit_status(self, dispatcher):
+        """اختبار الحصول على حالة Rate Limit"""
+        webhook_id = 1
+        
+        # إرسال 3 طلبات
+        for i in range(3):
+            dispatcher._check_rate_limit(webhook_id, 10)
+        
+        status = dispatcher.get_rate_limit_status(webhook_id)
+        
+        assert status['webhook_id'] == webhook_id
+        assert status['requests_in_last_minute'] == 3
+    
+    def test_get_rate_limit_status_empty(self, dispatcher):
+        """اختبار حالة Rate Limit فارغة"""
+        webhook_id = 999
+        
+        status = dispatcher.get_rate_limit_status(webhook_id)
+        
+        assert status['webhook_id'] == webhook_id
+        assert status['requests_in_last_minute'] == 0
+
+
+class TestWebhookQueue:
+    """اختبارات Queue الإرسال"""
+    
+    @pytest.fixture
+    def dispatcher(self):
+        return WebhookDispatcher(logger=Mock())
+    
+    def test_get_queue_size_empty(self, dispatcher):
+        """اختبار حجم Queue فارغ"""
+        size = dispatcher.get_queue_size()
+        assert size == 0
+    
+    def test_deliver_webhook_adds_to_queue(self, dispatcher):
+        """اختبار إضافة Webhook إلى Queue"""
+        payload = {"event": "test"}
+        
+        dispatcher.deliver_webhook(
+            url="https://example.com/webhook",
+            payload=payload,
+            priority=5
+        )
+        
+        assert dispatcher.get_queue_size() == 1
+        
+        # Cleanup
+        dispatcher.shutdown()
+    
+    def test_deliver_webhook_rate_limit_exceeded(self, dispatcher):
+        """اختبار الرفض عند تجاوز Rate Limit"""
+        webhook_id = 1
+        rate_limit = 3
+        
+        # إرسال 3 طلبات
+        for i in range(3):
+            dispatcher.deliver_webhook(
+                url="https://example.com/webhook",
+                payload={"event": "test"},
+                webhook_id=webhook_id,
+                rate_limit_per_minute=rate_limit
+            )
+        
+        # الطلب الرابع يجب أن يرفض
+        result = dispatcher.deliver_webhook(
+            url="https://example.com/webhook",
+            payload={"event": "test"},
+            webhook_id=webhook_id,
+            rate_limit_per_minute=rate_limit
+        )
+        
+        assert result is False
+        
+        # Cleanup
+        dispatcher.shutdown()
+
+
+class TestWebhookShutdown:
+    """اختبارات إيقاف Webhook Dispatcher"""
+    
+    @pytest.fixture
+    def dispatcher(self):
+        return WebhookDispatcher(logger=Mock())
+    
+    def test_shutdown_dispatcher(self, dispatcher):
+        """اختبار إيقاف Dispatcher"""
+        # إضافة بعض Webhooks
+        for i in range(3):
+            dispatcher.deliver_webhook(
+                url=f"https://example.com/webhook{i}",
+                payload={"event": "test"}
+            )
+        
+        # إيقاف Dispatcher
+        dispatcher.shutdown()
+        
+        assert dispatcher._stop_worker is True
+
+
+if __name__ == '__main__':
+    pytest.main([__file__, '-v'])
+
+
+
 

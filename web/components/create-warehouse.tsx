@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Plus, Warehouse, MapPin, Users, Package } from "lucide-react"
 import { toast } from "sonner"
-import { fetchFromAPI } from "@/lib/db/client"
+import { warehousesService } from "@/lib/api/services/warehouses"
 
 interface CreateWarehouseProps {
   onSaved?: () => void;
@@ -103,12 +103,11 @@ export default function CreateWarehouse({ onSaved }: CreateWarehouseProps) {
 
     try {
       setIsSubmitting(true)
-      const result = await fetchFromAPI('/warehouses', {
-        method: 'POST',
-        body: payload
-      });
+      const result = await warehousesService.create(payload)
 
-      if (result.error) throw new Error(result.error);
+      if (!result) {
+        throw new Error("فشل إنشاء المستودع")
+      }
 
       toast.success("تم إضافة المستودع بنجاح!")
 

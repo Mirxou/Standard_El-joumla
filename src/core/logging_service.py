@@ -165,7 +165,28 @@ class AdvancedLoggingService:
     
     def _add_console_handler(self) -> None:
         """إضافة handler للطرفية مع ألوان"""
-        console_handler = logging.StreamHandler(sys.stdout)
+        # استخدام NonClosingStreamHandler لمنع إغلاق sys.stdout
+        try:
+            from ..utils.logger import NonClosingStreamHandler
+            console_handler = NonClosingStreamHandler(sys.stdout)
+        except ImportError:
+            # Fallback في حالة عدم القدرة على الاستيراد
+            # إعادة تعريف Class محلياً لتجنب التبعيات الدائرية
+            class NonClosingStreamHandler(logging.StreamHandler):
+                def close(self):
+                    self.acquire()
+                    try:
+                        if self.stream:
+                            try:
+                                self.flush()
+                            except Exception:
+                                pass
+                    finally:
+                        self.stream = None
+                        self.release()
+            
+            console_handler = NonClosingStreamHandler(sys.stdout)
+
         console_handler.setLevel(self.log_level)
         
         # تنسيق ملون

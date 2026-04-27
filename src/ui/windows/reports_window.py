@@ -179,15 +179,6 @@ class ReportsWindow(QMainWindow):
         main_splitter = QSplitter(Qt.Horizontal)
         main_splitter.setChildrenCollapsible(False)
         main_splitter.setHandleWidth(8)
-        main_splitter.setStyleSheet("""
-            QSplitter::handle {
-                background-color: #bdc3c7;
-                border: 1px solid #95a5a6;
-            }
-            QSplitter::handle:hover {
-                background-color: #95a5a6;
-            }
-        """)
         
         # الجانب الأيسر - فلاتر التقارير مع ScrollArea
         left_scroll = QScrollArea()
@@ -195,28 +186,7 @@ class ReportsWindow(QMainWindow):
         left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         left_scroll.setFrameShape(QFrame.NoFrame)
-        left_scroll.setStyleSheet("""
-            QScrollArea {
-                border: none;
-                background-color: #f8f9fa;
-            }
-            QScrollBar:vertical {
-                background-color: #ecf0f1;
-                width: 12px;
-                border-radius: 6px;
-            }
-            QScrollBar::handle:vertical {
-                background-color: #95a5a6;
-                border-radius: 6px;
-                min-height: 30px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background-color: #7f8c8d;
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                height: 0px;
-            }
-        """)
+        # تمت إزالة الستايل المباشر للاعتماد على الثيم العام
         
         left_panel = self.create_filters_panel()
         left_scroll.setWidget(left_panel)
@@ -651,45 +621,62 @@ class ReportsWindow(QMainWindow):
         instructions_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(instructions_label)
         
-        # إحصائيات سريعة
+        # إحصائيات سريعة (Bento Grid Glassmorphism)
         stats_frame = QFrame()
         stats_frame.setStyleSheet("""
             QFrame {
-                background-color: #f8f9fa;
-                border: 1px solid #dee2e6;
-                border-radius: 8px;
-                padding: 20px;
+                background-color: transparent;
+                border: none;
                 margin: 20px;
             }
         """)
         stats_layout = QGridLayout(stats_frame)
+        stats_layout.setSpacing(15)
         
-        # إجمالي المبيعات اليوم
-        today_sales_label = QLabel("مبيعات اليوم")
-        today_sales_label.setStyleSheet("font-weight: bold; color: #495057;")
-        stats_layout.addWidget(today_sales_label, 0, 0)
-        
+        def create_bento_card(title, widget, icon, color):
+            card = QFrame()
+            card.setStyleSheet(f"""
+                QFrame {{
+                    background-color: rgba(255, 255, 255, 0.95);
+                    border: 1px solid rgba(226, 232, 240, 0.8);
+                    border-left: 4px solid {color};
+                    border-radius: 16px;
+                    padding: 15px;
+                }}
+                QFrame:hover {{
+                    background-color: #FFFFFF;
+                    border: 1px solid {color};
+                    border-left: 4px solid {color};
+                }}
+            """)
+            ly = QVBoxLayout(card)
+            
+            header = QHBoxLayout()
+            icon_lbl = QLabel(icon)
+            icon_lbl.setStyleSheet(f"color: {color}; font-size: 24px; background: transparent; border: none;")
+            header.addWidget(icon_lbl)
+            
+            t = QLabel(title)
+            t.setStyleSheet("color: #64748B; font-weight: bold; font-size: 14px; background: transparent; border: none;")
+            header.addWidget(t, 1)
+            ly.addLayout(header)
+            
+            widget.setStyleSheet("color: #1E293B; font-size: 24px; font-weight: 800; background: transparent; border: none;")
+            ly.addWidget(widget)
+            return card
+
         self.today_sales_value = QLabel("0.00 دج")
-        self.today_sales_value.setStyleSheet("font-size: 18px; color: #28a745; font-weight: bold;")
-        stats_layout.addWidget(self.today_sales_value, 0, 1)
-        
-        # عدد الفواتير اليوم
-        today_invoices_label = QLabel("فواتير اليوم")
-        today_invoices_label.setStyleSheet("font-weight: bold; color: #495057;")
-        stats_layout.addWidget(today_invoices_label, 1, 0)
-        
         self.today_invoices_value = QLabel("0")
-        self.today_invoices_value.setStyleSheet("font-size: 18px; color: #007bff; font-weight: bold;")
-        stats_layout.addWidget(self.today_invoices_value, 1, 1)
-        
-        # المنتجات منخفضة المخزون
-        low_stock_label = QLabel("منتجات منخفضة المخزون")
-        low_stock_label.setStyleSheet("font-weight: bold; color: #495057;")
-        stats_layout.addWidget(low_stock_label, 2, 0)
-        
         self.low_stock_value = QLabel("0")
-        self.low_stock_value.setStyleSheet("font-size: 18px; color: #dc3545; font-weight: bold;")
-        stats_layout.addWidget(self.low_stock_value, 2, 1)
+        
+        # ترتيب الكروت في شبكة Bento
+        card1 = create_bento_card("مبيعات اليوم", self.today_sales_value, "💰", "#28A745")
+        card2 = create_bento_card("فواتير اليوم", self.today_invoices_value, "🧾", "#007BFF")
+        card3 = create_bento_card("نواقص المخزون", self.low_stock_value, "⚠️", "#DC3545")
+        
+        stats_layout.addWidget(card1, 0, 0, 1, 2) # كبير
+        stats_layout.addWidget(card2, 1, 0, 1, 1)
+        stats_layout.addWidget(card3, 1, 1, 1, 1)
         
         layout.addWidget(stats_frame)
         
@@ -1353,6 +1340,28 @@ class ReportsWindow(QMainWindow):
             import traceback
             self.logger.error(traceback.format_exc())
     
+    def load_warehouses(self):
+        """تحميل قائمة المستودعات"""
+        try:
+            if hasattr(self, 'warehouse_combo'):
+                self.warehouse_combo.clear()
+                self.warehouse_combo.addItem("الكل", None)
+                
+                # تحميل المستودعات من قاعدة البيانات
+                if hasattr(self, 'db_manager'):
+                    query = "SELECT id, name FROM warehouses ORDER BY name"
+                    try:
+                        warehouses = self.db_manager.fetch_all(query)
+                        if warehouses:
+                            for w in warehouses:
+                                self.warehouse_combo.addItem(str(w['name']), w['id'])
+                    except Exception:
+                        pass # الجدول قد لا يكون موجوداً
+                        
+        except Exception as e:
+            if hasattr(self, 'logger'):
+                self.logger.warning(f"فشل تحميل المستودعات: {e}")
+
     def display_charts(self, report_data):
         """عرض الرسوم البيانية"""
         try:

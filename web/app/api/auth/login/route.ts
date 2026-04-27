@@ -1,40 +1,43 @@
 import { NextResponse } from "next/server"
+import { API_CONFIG, getFullURL } from "@/lib/config/api"
 
 export async function POST(request: Request) {
   try {
-    const { email, password } = await request.json()
+    const payload = await request.json()
+    const username = payload.username || payload.email
+    const password = payload.password
 
-    // في التطبيق الحقيقي، ستكون هنا عملية المصادقة مع قاعدة البيانات
-    // const { data, error } = await supabase.auth.signInWithPassword({
-    //   email,
-    //   password,
-    // })
+    const backendResponse = await fetch(getFullURL(API_CONFIG.ENDPOINTS.AUTH.LOGIN), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ username, password }),
+    })
 
-    // التحقق من البيانات (Demo)
-    if (email === "admin@standard.com" && password === "123456") {
-      const user = {
-        id: 1,
-        email,
-        name: "أحمد محمد",
-        role: "مدير النظام",
-        avatar: null,
-        token: "demo-token-" + Date.now(),
-      }
+    const data = await backendResponse.json().catch(() => null)
 
-      return NextResponse.json({
-        success: true,
-        data: user,
-        message: "تم تسجيل الدخول بنجاح",
-      })
+    if (!backendResponse.ok) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: data?.detail || data?.error || "البريد الإلكتروني أو كلمة المرور غير صحيحة",
+        },
+        { status: backendResponse.status }
+      )
     }
 
-    return NextResponse.json(
-      {
-        success: false,
-        error: "البريد الإلكتروني أو كلمة المرور غير صحيحة",
-      },
-      { status: 401 }
-    )
+    const response = NextResponse.json(data, { status: 200 })
+    if (data?.access_token) {
+      response.cookies.set("auth-token", data.access_token, {
+        path: "/",
+        httpOnly: false,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        maxAge: data?.expires_in || 86400,
+      })
+    }
+    return response
   } catch (error) {
     console.error("Login error:", error)
     return NextResponse.json(

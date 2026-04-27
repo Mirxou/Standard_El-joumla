@@ -424,7 +424,69 @@ rate_limiter.reset(identifier)
 
 ---
 
+## التحديثات الأمنية الأخيرة (2026)
+
+### PBKDF2Iterations
+
+تم تحديث عدد التكرارات لتحقيق مستوى أمان أعلى:
+
+```python
+# التقدير الجديد (480,000 iteration)
+PBKDF2_ITERATIONS = 480000
+
+# الاستخدام
+derived_key = hashlib.pbkdf2_hmac(
+    'sha512',
+    password.encode('utf-8'),
+    salt,
+    PBKDF2_ITERATIONS,
+    dklen=32
+)
+```
+
+### التحقق من قوة كلمة المرور
+
+```python
+def validate_password_strength(password: str) -> tuple[bool, str]:
+    """
+    التحقق من قوة كلمة المرور according to OWASP guidelines
+    Returns: (is_valid, message)
+    """
+    if len(password) < 8:
+        return False, "يجب أن تكون 8 أحرف على الأقل"
+    if not re.search(r'[A-Z]', password):
+        return False, "يجب أن تحتوي على حرف كبير"
+    if not re.search(r'[a-z]', password):
+        return False, "يجب أن تحتوي على حرف صغير"
+    if not re.search(r'\d', password):
+        return False, "يجب أن تحتوي على رقم"
+    if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
+        return False, "يجب أن تحتوي على رمز خاص"
+    return True, "صالحة"
+```
+
+### httpOnly Cookies
+
+تم التحديث لاستخدام httpOnly cookies بدلاً من localStorage:
+
+```python
+# Backend - تعيين الكوكي
+response.set_cookie(
+    'auth_token',
+    token,
+    httponly=True,
+    samesite='Lax',
+    secure=True,
+    max_age=3600
+)
+
+# Frontend - قراءة من الكوكي
+# لا يمكن الوصول عبر JavaScript (أمان أفضل)
+```
+
+---
+
 **تم إنشاء هذا الدليل بواسطة:** Logical Version Team  
-**التاريخ:** 2025-01-15  
-**الإصدار:** 5.3.0
+**التاريخ:** 2026-04-07  
+**الإصدار:** 6.0.0
 

@@ -291,6 +291,10 @@ class PermissionService:
             roles.append(role)
         
         return roles
+
+    def get_all_roles(self, active_only: bool = False) -> List[Role]:
+        """الحصول على جميع الأدوار (Public API)"""
+        return self.list_roles(active_only)
     
     # ==================== Users Management ====================
     
@@ -418,6 +422,20 @@ class PermissionService:
             )
         
         return [self._user_from_row(row) for row in result]
+
+    def get_all_users(self, active_only: bool = False) -> List[User]:
+        """الحصول على جميع المستخدمين (Public API)"""
+        return self.list_users(active_only)
+
+    def count_users_in_role(self, role_id: int) -> int:
+        """عدد المستخدمين في دور معين"""
+        result = self.db.execute_query(
+            "SELECT COUNT(*) as count FROM users WHERE role_id = ?",
+            [role_id]
+        )
+        if isinstance(result, list) and len(result) > 0:
+            return result[0].get('count', 0)
+        return 0
     
     # ==================== Helper Methods ====================
     

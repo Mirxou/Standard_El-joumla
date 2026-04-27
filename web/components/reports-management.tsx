@@ -6,9 +6,15 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Progress } from "@/components/ui/progress"
-import { TrendingUp, TrendingDown, DollarSign, BarChart3, Target, Download, Package } from "lucide-react"
-import { fetchFromAPI } from "@/lib/db/client"
+import { TrendingUp, TrendingDown, DollarSign, BarChart3, Target, Download, Package, FileText, Calendar, Settings, Plus } from "lucide-react"
+import { apiClient } from "@/lib/api/client"
+import { API_CONFIG } from "@/lib/config/api"
 import { toast } from "sonner"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
     LineChart,
     Line,
@@ -28,6 +34,11 @@ export default function ReportsManagement() {
     const [topProducts, setTopProducts] = useState<any[]>([])
     const [inventoryStats, setInventoryStats] = useState<any>(null)
     const [period, setPeriod] = useState("30")
+    const [reportTemplates, setReportTemplates] = useState<any[]>([])
+    const [scheduledReports, setScheduledReports] = useState<any[]>([])
+    const [showTemplateDialog, setShowTemplateDialog] = useState(false)
+    const [showExportDialog, setShowExportDialog] = useState(false)
+    const [exportFormat, setExportFormat] = useState("pdf")
 
     useEffect(() => {
         loadReports()
@@ -38,23 +49,53 @@ export default function ReportsManagement() {
             setLoading(true)
 
             // Fetch all reports in parallel
-            const [financial, trends, products, inventory] = await Promise.all([
-                fetchFromAPI(`/reports/financial`), // Can add ?start_date=... based on period
-                fetchFromAPI(`/reports/charts/sales?days=${period}`),
-                fetchFromAPI(`/reports/charts/top-products`),
-                fetchFromAPI(`/reports/analytics/inventory`)
+            const [financial, trends, products, inventory, templates, scheduled] = await Promise.all([
+                apiClient.get(`/api/v1/reports/financial?period=${period}`).catch(() => null),
+                apiClient.get(`/api/v1/reports/charts/sales?days=${period}`).catch(() => []),
+                apiClient.get(`/api/v1/reports/charts/top-products?period=${period}`).catch(() => []),
+                apiClient.get(`/api/v1/reports/analytics/inventory`).catch(() => null),
+                apiClient.get(`/api/v1/reports/templates`).catch(() => []),
+                apiClient.get(`/api/v1/reports/scheduled`).catch(() => [])
             ])
 
             setFinancialData(financial)
             setSalesTrends(trends)
             setTopProducts(products)
             setInventoryStats(inventory)
+            setReportTemplates(Array.isArray(templates) ? templates : [])
+            setScheduledReports(Array.isArray(scheduled) ? scheduled : [])
 
         } catch (e) {
             console.error("Failed to load reports", e)
             toast.error("فشل تحميل التقارير")
         } finally {
             setLoading(false)
+        }
+    }
+
+    const handleExport = async (format: string) => {
+        try {
+            const response = await fetch(`${API_CONFIG.BASE_URL}/api/v1/reports/export?format=${format}&period=${period}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
+                },
+            })
+            const blob = await response.blob()
+            const url = window.URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `report_${new Date().toISOString().split('T')[0]}.${format === 'excel' ? 'xlsx' : format}`
+            document.body.appendChild(a)
+            a.click()
+            window.URL.revokeObjectURL(url)
+            document.body.removeChild(a)
+            
+            toast.success(`تم تصدير التقرير بنجاح`)
+            setShowExportDialog(false)
+        } catch (error) {
+            console.error("Failed to export report", error)
+            toast.error("فشل تصدير التقرير")
         }
     }
 
@@ -78,12 +119,111 @@ export default function ReportsManagement() {
                             <SelectItem value="7">آخر 7 أيام</SelectItem>
                             <SelectItem value="30">آخر 30 يوم</SelectItem>
                             <SelectItem value="90">آخر 3 أشهر</SelectItem>
+                            <SelectItem value="365">آخر سنة</SelectItem>
                         </SelectContent>
                     </Select>
-                    <Button variant="outline" className="gap-2">
-                        <Download className="h-4 w-4" />
-                        تصدير
-                    </Button>
+                    <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+                        <DialogTrigger asChild>
+                            <Button variant="outline" className="gap-2">
+                                <Download className="h-4 w-4" />
+                                تصدير
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>تصدير التقرير</DialogTitle>
+                            </DialogHeader>
+                            <div className="space-y-4">
+                                <div>
+                                    <Label>اختر الصيغة</Label>
+                                    <Select value={exportFormat} onValueChange={setExportFormat}>
+                                        <SelectTrigger>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="pdf">PDF</SelectItem>
+                                            <SelectItem value="excel">Excel (XLSX)</SelectItem>
+                                            <SelectItem value="csv">CSV</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <Button onClick={() => handleExport(exportFormat)} className="w-full">
+                                    <Download className="h-4 w-4 ml-2" />
+                                    تصدير الآن
+                                </Button>
+                            </div>
+                        </DialogContent>
+                    </Dialog>
+                    <Dialog open={showTemplateDialog} onOpenChange={setShowTemplateDialog}>
+                        <DialogTrigger asChild>
+                            <Button variant="outline" className="gap-2">
+                                <FileText className="h-4 w-4" />
+                                قوالب
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-2xl">
+                            <DialogHeader>
+                                <DialogTitle>قوالب التقارير</DialogTitle>
+                            </DialogHeader>
+                            <Tabs defaultValue="templates">
+                                <TabsList>
+                                    <TabsTrigger value="templates">القوالب</TabsTrigger>
+                                    <TabsTrigger value="scheduled">المجدولة</TabsTrigger>
+                                </TabsList>
+                                <TabsContent value="templates" className="space-y-2">
+                                    {reportTemplates.length === 0 ? (
+                                        <div className="text-center py-8 text-gray-500">
+                                            <FileText className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                                            <p>لا توجد قوالب</p>
+                                        </div>
+                                    ) : (
+                                        reportTemplates.map((template) => (
+                                            <Card key={template.id} className="cursor-pointer hover:shadow-md">
+                                                <CardContent className="p-4">
+                                                    <div className="flex items-center justify-between">
+                                                        <div>
+                                                            <h4 className="font-semibold">{template.name}</h4>
+                                                            <p className="text-sm text-gray-500">{template.description}</p>
+                                                        </div>
+                                                        <Button size="sm" onClick={() => {
+                                                            // تطبيق القالب
+                                                            toast.success(`تم تطبيق قالب ${template.name}`)
+                                                        }}>
+                                                            استخدام
+                                                        </Button>
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        ))
+                                    )}
+                                </TabsContent>
+                                <TabsContent value="scheduled" className="space-y-2">
+                                    {scheduledReports.length === 0 ? (
+                                        <div className="text-center py-8 text-gray-500">
+                                            <Calendar className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                                            <p>لا توجد تقارير مجدولة</p>
+                                        </div>
+                                    ) : (
+                                        scheduledReports.map((scheduled) => (
+                                            <Card key={scheduled.id}>
+                                                <CardContent className="p-4">
+                                                    <div className="flex items-center justify-between">
+                                                        <div>
+                                                            <h4 className="font-semibold">{scheduled.name}</h4>
+                                                            <p className="text-sm text-gray-500">
+                                                                {scheduled.frequency} - {scheduled.next_run}
+                                                            </p>
+                                                        </div>
+                                                        <Badge>{scheduled.status}</Badge>
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        ))
+                                    )}
+                                </TabsContent>
+                            </Tabs>
+                        </DialogContent>
+                    </Dialog>
                 </div>
             </div>
 

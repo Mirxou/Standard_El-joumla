@@ -15,8 +15,12 @@ from PySide6.QtWidgets import (
     QComboBox, QFrame, QMessageBox, QCompleter, QAbstractItemView, QWidget,
     QApplication, QDoubleSpinBox, QInputDialog
 )
-from PySide6.QtCore import Qt, QSize, QTimer, QDate, Signal, QObject, QEvent
+from PySide6.QtCore import Qt, QSize, QTimer, QDate, Signal, QObject, QEvent, QTime
 from PySide6.QtGui import QIcon, QFont, QColor, QPainter, QKeySequence, QShortcut
+from PySide6.QtWidgets import QGraphicsDropShadowEffect
+
+from ...ui.widgets.custom_title_bar import CustomTitleBar
+from ...ui.widgets.quantum_notification import NotificationManager
 
 # --- استيراد العقل والأدوات (The Core Dependencies) ---
 from ...core.database_manager import DatabaseManager
@@ -62,87 +66,101 @@ class SalesDialog(QDialog):
         self.sale = sale  # الفاتورة للتعديل (None للإنشاء الجديد)
         self.is_edit_mode = sale is not None
         
-        # إعدادات النافذة
         if self.is_edit_mode:
-            self.setWindowTitle(self.i18n.get_message("invoice_edit_title", invoice_number=sale.invoice_number))
+            # self.setWindowTitle(...) # Handled by CustomTitleBar
+            pass
         else:
-            self.setWindowTitle(self.i18n.get_message("invoice_new_title"))
+            # self.setWindowTitle(...)
+            pass
+        
+        # --- Quantum Window Setup ---
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        
+        # Notifications
+        self.notify = NotificationManager(self)
+        
         self.setModal(True)
         
-        # حساب الأبعاد بشكل responsive
+        # حساب الأبعاد
         app = QApplication.instance()
+        # [Existing Geometry Logic Kept Simplified]
         if app:
             screen = app.primaryScreen()
             if screen:
                 screen_geometry = screen.geometry()
-                screen_width = screen_geometry.width()
-                screen_height = screen_geometry.height()
-                
-                optimal_width = min(1400, int(screen_width * 0.85))
-                optimal_height = min(900, int(screen_height * 0.85))
-                
-                self.setMinimumSize(max(1000, int(screen_width * 0.60)), max(700, int(screen_height * 0.65)))
-                self.setMaximumSize(min(1800, screen_width - 50), min(1200, screen_height - 50))
-                self.resize(optimal_width, optimal_height)
-                
-                # مركز النافذة
-                if self.parent():
-                    parent_geometry = self.parent().geometry()
-                    x = parent_geometry.x() + (parent_geometry.width() - optimal_width) // 2
-                    y = parent_geometry.y() + (parent_geometry.height() - optimal_height) // 2
-                    self.move(x, y)
-                else:
-                    x = (screen_width - optimal_width) // 2
-                    y = (screen_height - optimal_height) // 2
-                    self.move(x, y)
-            else:
-                self.setMinimumSize(1000, 700)
-                self.setMaximumSize(1800, 1200)
-                self.resize(1366, 800)
-        else:
-            self.setMinimumSize(1000, 700)
-            self.setMaximumSize(1800, 1200)
-            self.resize(1366, 800)
+                self.resize(int(screen_geometry.width() * 0.85), int(screen_geometry.height() * 0.85))
         
         # --- متغيرات الحالة (State Management) ---
-        # هذه القائمة هي "الموديل" الحقيقي في الذاكرة (🚫 القاعدة 1: لا نحسب من النصوص)
-        self.cart_items: List[Dict[str, Any]] = []  # قائمة المنتجات في السلة
+        self.cart_items: List[Dict[str, Any]] = []
         self.current_customer_id = None
-        # ملاحظة: sale و is_edit_mode تم تهيئتهما أعلاه قبل إعدادات النافذة
-        self.tax_rate = Decimal('0')  # نسبة الضريبة الحالية (قابلة للتعديل)
-        self.paid_amount = Decimal('0')  # المبلغ المدفوع
+        self.tax_rate = Decimal('0')
+        self.paid_amount = Decimal('0')
         
         # 1. بناء الواجهة
         self.setup_ui()
         self.setup_styles()
         self.setup_shortcuts()
         
-        # 2. تحميل البيانات الأولية (العملاء والمنتجات)
+        # 2. تحميل البيانات الأولية
         self.load_initial_data()
         self.setup_smart_search()
         
-        # الإصلاح 1: تحديث بطاقات العميل عند التحميل الأولي
         if self.combo_customer.count() > 0:
             self.on_customer_changed(0)
         
-        # 3. التركيز على البحث فوراً (⚡ القاعدة 3: سرعة الكاشير)
         QTimer.singleShot(100, lambda: self.search_input.setFocus())
-        # سيتم التعامل مع returnPressed مباشرة في on_search_enter
         
-        # 4. إذا كان في وضع التعديل، تحميل البيانات
         if self.is_edit_mode:
-            if self.logger:
-                self.logger.info(f"فتح نافذة التعديل للفاتورة {self.sale.id if self.sale else 'None'}")
             self.populate_form()
         else:
             self.create_new_sale()
     
     def setup_ui(self):
-        """بناء تخطيط المناطق الثلاث (3-Zone Enterprise Layout)"""
-        main_layout = QVBoxLayout(self)
+        """بناء تخطيط المناطق الثلاث (3-Zone Enterprise Layout) - Quantum Frameless Version"""
+        # تخطيط جذري شفاف
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(10, 10, 10, 10)
+        root_layout.setSpacing(0)
+        
+        # الإطار الرئيسي
+        self.main_frame = QFrame()
+        self.main_frame.setStyleSheet("""
+            QFrame#MainFrame {
+                background-color: transparent;
+                /* Handled globally by setup_styles() */
+            }
+        """)
+        self.main_frame.setObjectName("MainFrame")
+        
+        # Shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor("#3b82f6"))
+        shadow.setOffset(0, 0)
+        self.main_frame.setGraphicsEffect(shadow)
+        
+        root_layout.addWidget(self.main_frame)
+        
+        # تخطيط النافذة الداخلية
+        main_layout = QVBoxLayout(self.main_frame)
         main_layout.setSpacing(0)
-        # الإصلاح 3: توسيع المساحة السفلية لتجنب قطع الأزرار
-        main_layout.setContentsMargins(0, 0, 0, 20)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # 0. Custom Title Bar
+        title = self.i18n.get_message("invoice_edit_title", invoice_number=self.sale.invoice_number) if self.is_edit_mode else self.i18n.get_message("invoice_new_title")
+        self.title_bar = CustomTitleBar(self, title=title, is_dialog=True)
+        main_layout.addWidget(self.title_bar)
+        
+        # Container for content with margins
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(0, 0, 0, 20)
+        content_layout.setSpacing(0)
+        main_layout.addWidget(content_widget, stretch=1)
+        
+        # Use content_layout as the main layout for the rest of the generated code
+        main_layout = content_layout
         
         # ============================================================
         # ZONE 1: سياق العميل (Customer Header)
@@ -188,20 +206,26 @@ class SalesDialog(QDialog):
         header_layout.addLayout(meta_layout)
         main_layout.addWidget(header_frame)
         
+        # حاوية القسمين (المنتجات + اللوجستيات) - تصميم POS الحديث
+        pos_split_layout = QHBoxLayout()
+        pos_split_layout.setSpacing(15)
+        pos_split_layout.setContentsMargins(20, 10, 20, 20)
+        main_layout.addLayout(pos_split_layout, stretch=1)
+        
         # ============================================================
         # ZONE 2: جدول المنتجات (Product Grid)
         # ============================================================
         body_frame = QFrame()
         body_frame.setObjectName("Zone2")
         body_layout = QVBoxLayout(body_frame)
-        body_layout.setContentsMargins(20, 20, 20, 10)
+        body_layout.setContentsMargins(15, 15, 15, 10)
         
         # شريط البحث الذكي
         search_layout = QHBoxLayout()
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText(self.i18n.get_message("search_product"))
         self.search_input.setFixedHeight(45)
-        self.search_input.setStyleSheet("font-size: 16px; padding: 0 15px; border: 2px solid #3b82f6; border-radius: 8px;")
+        self.search_input.setStyleSheet("font-size: 16px; padding: 0 15px; border-radius: 8px;")
         # الإصلاح 1: منع Enter من إغلاق النافذة - جعل البحث هو الافتراضي
         self.search_input.setFocusPolicy(Qt.StrongFocus)
         
@@ -271,18 +295,20 @@ class SalesDialog(QDialog):
         self.table.itemChanged.connect(self.on_table_change)
         
         body_layout.addWidget(self.table)
-        main_layout.addWidget(body_frame, stretch=1)
+        pos_split_layout.addWidget(body_frame, stretch=7)
         
         # ============================================================
-        # ZONE 3: الفوتر واللوجستيات (Footer)
+        # ZONE 3: اللوحة الجانبية للمبيعات (POS Sidebar)
         # ============================================================
         footer_frame = QFrame()
         footer_frame.setObjectName("Zone3")
-        footer_layout = QHBoxLayout(footer_frame)
+        footer_layout = QVBoxLayout(footer_frame) # Changed to Vertical
         footer_layout.setContentsMargins(20, 20, 20, 20)
+        footer_layout.setSpacing(15)
         
-        # 3.1 اللوجستيات (يسار)
+        # 3.1 اللوجستيات (أعلى اللوحة الجانبية)
         logistics_layout = QVBoxLayout()
+        logistics_layout.setSpacing(10)
         
         # حالة الفاتورة
         logistics_layout.addWidget(QLabel(self.i18n.get_message("invoice_status") + ":"))
@@ -317,17 +343,7 @@ class SalesDialog(QDialog):
         currency_symbol = self.i18n.get_message("currency_symbol")
         self.paid_amount_spin.setSuffix(f" {currency_symbol}")
         self.paid_amount_spin.setDecimals(2)
-        self.paid_amount_spin.setStyleSheet("""
-            QDoubleSpinBox {
-                border: 2px solid #e2e8f0;
-                border-radius: 6px;
-                padding: 5px;
-                font-size: 14px;
-            }
-            QDoubleSpinBox:focus {
-                border: 2px solid #3b82f6;
-            }
-        """)
+        # Stylesheet handled globally by setup_styles()
         self.paid_amount_spin.valueChanged.connect(self.on_paid_amount_changed)
         logistics_layout.addWidget(self.paid_amount_spin)
         
@@ -362,18 +378,7 @@ class SalesDialog(QDialog):
         self.tax_rate_spin.setValue(0.0)
         self.tax_rate_spin.setSuffix(" %")
         self.tax_rate_spin.setDecimals(2)
-        self.tax_rate_spin.setStyleSheet("""
-            QDoubleSpinBox {
-                border: 2px solid #e2e8f0;
-                border-radius: 6px;
-                padding: 5px;
-                font-size: 14px;
-                min-width: 80px;
-            }
-            QDoubleSpinBox:focus {
-                border: 2px solid #3b82f6;
-            }
-        """)
+        # Stylesheet handled globally by setup_styles()
         self.tax_rate_spin.valueChanged.connect(self.on_tax_rate_changed)
         tax_row.addWidget(tax_label)
         tax_row.addWidget(self.tax_rate_spin)
@@ -396,63 +401,95 @@ class SalesDialog(QDialog):
         self.lbl_grand_total.setAlignment(Qt.AlignRight)
         totals_layout.addWidget(self.lbl_grand_total)
         
-        # 3.3 أزرار الإجراءات
-        actions_layout = QHBoxLayout()
+        # 3.3 أزرار الإجراءات - تحسين Fitts Law وWCAG 2.2
+        actions_layout = QVBoxLayout() # Stacked vertically in sidebar
+        actions_layout.setSpacing(12)
+        # زر إلغاء - تحسين لـ Fitts Law (44x44px minimum) وWCAG 2.2
         self.btn_cancel = QPushButton(self.i18n.get_message("cancel_button"))
-        # الإصلاح 1: منع Enter من إغلاق النافذة
+        self.btn_cancel.setMinimumSize(120, 44)  # Fitts Law: minimum 44px height
+        self.btn_cancel.setCursor(Qt.PointingHandCursor)
         self.btn_cancel.setDefault(False)
         self.btn_cancel.setAutoDefault(False)
-        
-        # زر إلغاء الفاتورة (يظهر فقط في وضع التعديل)
-        self.btn_cancel_invoice = QPushButton("❌ إلغاء الفاتورة")
-        self.btn_cancel_invoice.setObjectName("BtnDanger")
-        self.btn_cancel_invoice.setMinimumHeight(50)
-        self.btn_cancel_invoice.setCursor(Qt.PointingHandCursor)
-        self.btn_cancel_invoice.setDefault(False)
-        self.btn_cancel_invoice.setAutoDefault(False)
-        self.btn_cancel_invoice.setVisible(self.is_edit_mode)  # يظهر فقط في وضع التعديل
-        self.btn_cancel_invoice.setStyleSheet("""
-            QPushButton#BtnDanger {
-                background-color: #dc2626;
-                color: white;
-                border: none;
+        self.btn_cancel.setStyleSheet("""
+            QPushButton {
+                background-color: #f1f5f9;
+                color: #475569;
+                border: 1px solid #cbd5e1;
                 border-radius: 8px;
-                padding: 10px 20px;
-                font-weight: bold;
+                padding: 12px 24px;
+                font-weight: 700;
                 font-size: 14px;
+                min-height: 44px;
             }
-            QPushButton#BtnDanger:hover {
-                background-color: #b91c1c;
+            QPushButton:hover {
+                background-color: #e2e8f0;
+                color: #0f172a;
             }
-            QPushButton#BtnDanger:pressed {
-                background-color: #991b1b;
+            QPushButton:pressed {
+                background-color: #cbd5e1;
+            }
+            QPushButton:focus {
+                outline: 2px solid #4f46e5;
+                outline-offset: 2px;
             }
         """)
         
+        # زر إلغاء الفاتورة (يظهر فقط في وضع التعديل) - تحسين لـ Fitts Law
+        self.btn_cancel_invoice = QPushButton("❌ إلغاء الفاتورة")
+        self.btn_cancel_invoice.setObjectName("BtnDanger")
+        self.btn_cancel_invoice.setMinimumSize(140, 44)  # Fitts Law: minimum 44px height
+        self.btn_cancel_invoice.setCursor(Qt.PointingHandCursor)
+        self.btn_cancel_invoice.setDefault(False)
+        self.btn_cancel_invoice.setAutoDefault(False)
+        self.btn_cancel_invoice.setVisible(self.is_edit_mode)
+        self.btn_cancel_invoice.setStyleSheet("""
+            QPushButton#BtnDanger {
+                background-color: #fef2f2;
+                color: #ef4444;
+                border: 1px solid #fecaca;
+                border-radius: 8px;
+                padding: 12px 24px;
+                font-weight: 700;
+                font-size: 14px;
+                min-height: 44px;
+            }
+            QPushButton#BtnDanger:hover {
+                background-color: #fee2e2;
+                color: #dc2626;
+                border-color: #fca5a5;
+            }
+            QPushButton#BtnDanger:pressed {
+                background-color: #fca5a5;
+            }
+            QPushButton#BtnDanger:focus {
+                outline: 2px solid #ef4444;
+                outline-offset: 2px;
+            }
+        """)
+        
+        # زر حفظ وطباعة - تحسين لـ Fitts Law وWCAG 2.2
         self.btn_save = QPushButton(self.i18n.get_message("save_print_button"))
         self.btn_save.setObjectName("BtnPrimary")
-        self.btn_save.setMinimumHeight(50)
+        self.btn_save.setMinimumSize(140, 44)  # Fitts Law: minimum 44px height
         self.btn_save.setCursor(Qt.PointingHandCursor)
-        # الإصلاح 1: منع Enter من إغلاق النافذة
         self.btn_save.setDefault(False)
         self.btn_save.setAutoDefault(False)
+        # Styles handled globally by setup_styles via #BtnPrimary selector
         
-        actions_layout.addWidget(self.btn_cancel)
+        # تحسين التباعد بين الأزرار لـ Fitts Law (minimum 8px spacing)
+        actions_layout.addWidget(self.btn_save) # Primary Action First
         if self.is_edit_mode:
             actions_layout.addWidget(self.btn_cancel_invoice)
-        actions_layout.addWidget(self.btn_save)
+        actions_layout.addWidget(self.btn_cancel)
         
-        # تجميع الفوتر
-        footer_layout.addLayout(logistics_layout, stretch=1)
-        footer_layout.addSpacing(50)
+        # تجميع اللوحة الجانبية
+        footer_layout.addLayout(logistics_layout)
+        footer_layout.addStretch(1) # Push totals to bottom
+        footer_layout.addLayout(totals_layout)
+        footer_layout.addSpacing(20)
+        footer_layout.addLayout(actions_layout)
         
-        right_panel = QVBoxLayout()
-        right_panel.addLayout(totals_layout)
-        right_panel.addSpacing(20)
-        right_panel.addLayout(actions_layout)
-        
-        footer_layout.addLayout(right_panel, stretch=1)
-        main_layout.addWidget(footer_frame)
+        pos_split_layout.addWidget(footer_frame, stretch=3)
         
         # ربط الأزرار
         self.btn_cancel.clicked.connect(self.reject)
@@ -505,26 +542,200 @@ class SalesDialog(QDialog):
         return v
     
     def setup_styles(self):
-        """إعداد الأنماط - تصميم احترافي Modern Business Theme"""
-        self.setStyleSheet("""
-            QDialog { background-color: #f1f5f9; font-family: 'Segoe UI', sans-serif; }
-            #Zone1, #Zone2, #Zone3 { background-color: white; border-bottom: 1px solid #e2e8f0; }
-            #Zone2 { margin: 15px; border-radius: 10px; border: 1px solid #e2e8f0; }
-            #Zone3 { border-top: 1px solid #e2e8f0; }
-            QTableWidget { border: none; gridline-color: #f1f5f9; font-size: 14px; }
-            QHeaderView::section { background: #f8fafc; border: none; padding: 10px; color: #475569; font-weight: bold; }
-            #BtnPrimary { 
-                background-color: #3b82f6; color: white; border-radius: 6px; 
-                font-size: 16px; font-weight: bold; border: none;
-            }
-            #BtnPrimary:hover { background-color: #2563eb; }
-            #GrandTotal { font-size: 32px; font-weight: 800; color: #059669; }
-            #LabelDim { color: #64748b; }
-            #InvoiceNo { font-size: 18px; font-weight: bold; color: #3b82f6; }
-        """)
+        """إعداد الأنماط - تصميم احترافي Modern Business Theme مع Dark Mode Ergonomics"""
+        # تحديد درجة حرارة اللون التلقائية (Dark Mode Ergonomics)
+        current_time = QTime.currentTime()
+        is_night_time = current_time.hour() >= 18 or current_time.hour() <= 6
+        
+        if is_night_time:
+            # Dark Mode للعمل الليلي - ألوان دافئة لتقليل الإرهاق
+            self.setStyleSheet("""
+                QDialog { 
+                    background-color: #0f172a; 
+                    font-family: 'Cairo', 'Inter', sans-serif; 
+                    color: #f8fafc;
+                }
+                QFrame#MainFrame {
+                    background-color: #1e293b;
+                    border: 1px solid #334155;
+                    border-radius: 12px;
+                }
+                #Zone1, #Zone2, #Zone3 { 
+                    background-color: transparent; 
+                    border-bottom: 1px solid rgba(255, 255, 255, 0.05); 
+                }
+                #Zone2 { 
+                    margin: 15px; 
+                    border-radius: 12px; 
+                    background-color: rgba(30, 41, 59, 0.5);
+                    border: 1px solid rgba(255, 255, 255, 0.08); 
+                }
+                #Zone3 { 
+                    border-top: 1px solid rgba(255, 255, 255, 0.05); 
+                }
+                QTableWidget { 
+                    border: none; 
+                    gridline-color: transparent; 
+                    font-size: 14px; 
+                    background-color: transparent;
+                    color: #f8fafc;
+                }
+                QHeaderView::section { 
+                    background: transparent; 
+                    border: none; 
+                    border-bottom: 2px solid #334155;
+                    padding: 12px; 
+                    color: #94a3b8; 
+                    font-weight: 600; 
+                    text-transform: uppercase;
+                }
+                QTableWidget::item {
+                    color: #f1f5f9;
+                    background-color: transparent;
+                    border-bottom: 1px solid #334155;
+                }
+                QTableWidget::item:selected {
+                    background-color: rgba(79, 70, 229, 0.2); /* Indigo tint */
+                    color: #818cf8;
+                    border-radius: 6px;
+                }
+                #BtnPrimary { 
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4f46e5, stop:1 #6366f1);
+                    color: white; 
+                    border-radius: 8px; 
+                    font-size: 16px; 
+                    font-weight: 700; 
+                    border: none;
+                }
+                #BtnPrimary:hover { 
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4338ca, stop:1 #4f46e5);
+                }
+                #GrandTotal { 
+                    font-size: 34px; 
+                    font-weight: 800; 
+                    color: #34d399; 
+                    letter-spacing: -1px;
+                }
+                #LabelDim { 
+                    color: #64748b; 
+                    font-weight: 600;
+                }
+                #InvoiceNo { 
+                    font-size: 18px; 
+                    font-weight: 800; 
+                    color: #818cf8; 
+                }
+                QLabel { color: #e2e8f0; }
+                QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { 
+                    background-color: #0f172a;
+                    color: #f8fafc;
+                    border: 1px solid #334155;
+                    border-radius: 8px;
+                    padding: 10px;
+                    font-weight: 500;
+                }
+                QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
+                    border: 1px solid #6366f1;
+                    background-color: #1e293b;
+                }
+                QComboBox::drop-down { border: none; }
+            """)
+        else:
+            # Light Mode - ألوان باردة للنهار
+            self.setStyleSheet("""
+                QDialog { 
+                    background-color: #f8fafc; 
+                    font-family: 'Cairo', 'Inter', sans-serif; 
+                }
+                QFrame#MainFrame {
+                    background-color: #ffffff;
+                    border: 1px solid #e2e8f0;
+                    border-radius: 12px;
+                }
+                #Zone1, #Zone2, #Zone3 { 
+                    background-color: transparent; 
+                    border-bottom: 1px solid #f1f5f9; 
+                }
+                #Zone2 { 
+                    margin: 15px; 
+                    border-radius: 12px; 
+                    background-color: #ffffff;
+                    border: 1px solid #e2e8f0;
+                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+                }
+                #Zone3 { 
+                    border-top: 1px solid #f1f5f9; 
+                }
+                QTableWidget { 
+                    border: none; 
+                    gridline-color: transparent; 
+                    font-size: 14px; 
+                    background-color: transparent;
+                }
+                QHeaderView::section { 
+                    background: transparent; 
+                    border: none; 
+                    border-bottom: 2px solid #e2e8f0;
+                    padding: 12px; 
+                    color: #64748b; 
+                    font-weight: 600; 
+                    text-transform: uppercase;
+                }
+                QTableWidget::item {
+                    border-bottom: 1px solid #f8fafc;
+                    padding: 12px 8px;
+                }
+                QTableWidget::item:selected {
+                    background-color: #eff6ff;
+                    color: #1d4ed8;
+                    border-radius: 6px;
+                }
+                #BtnPrimary { 
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4f46e5, stop:1 #6366f1);
+                    color: white; 
+                    border-radius: 8px; 
+                    font-size: 16px; 
+                    font-weight: 700; 
+                    border: none;
+                    box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2);
+                }
+                #BtnPrimary:hover { 
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4338ca, stop:1 #4f46e5);
+                }
+                #GrandTotal { 
+                    font-size: 34px; 
+                    font-weight: 800; 
+                    color: #10b981; 
+                    letter-spacing: -1px;
+                }
+                #LabelDim { 
+                    color: #64748b; 
+                    font-weight: 600;
+                }
+                #InvoiceNo { 
+                    font-size: 18px; 
+                    font-weight: 800; 
+                    color: #4f46e5; 
+                }
+                QLabel { color: #1e293b; }
+                QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { 
+                    background-color: #f8fafc;
+                    color: #0f172a;
+                    border: 1px solid #cbd5e1;
+                    border-radius: 8px;
+                    padding: 10px;
+                    font-weight: 500;
+                    transition: border-color 0.2s ease;
+                }
+                QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
+                    border: 1px solid #4f46e5;
+                    background-color: #ffffff;
+                }
+                QComboBox::drop-down { border: none; }
+            """)
     
     def setup_shortcuts(self):
-        """إعداد اختصارات لوحة المفاتيح"""
+        """إعداد اختصارات لوحة المفاتيح - تحسين WCAG 2.2 Keyboard Navigation"""
         # F10 - حفظ وطباعة
         save_shortcut = QShortcut(QKeySequence("F10"), self)
         save_shortcut.activated.connect(self.save_invoice)
@@ -532,6 +743,23 @@ class SalesDialog(QDialog):
         # Escape - إلغاء
         cancel_shortcut = QShortcut(QKeySequence("Escape"), self)
         cancel_shortcut.activated.connect(self.reject)
+        
+        # Ctrl+S - حفظ (بديل لـ F10)
+        save_alt_shortcut = QShortcut(QKeySequence("Ctrl+S"), self)
+        save_alt_shortcut.activated.connect(self.save_invoice)
+        
+        # تحسين Tab Order للأزرار الرئيسية
+        self.btn_cancel.setFocusPolicy(Qt.StrongFocus)
+        self.btn_save.setFocusPolicy(Qt.StrongFocus)
+        if self.is_edit_mode:
+            self.btn_cancel_invoice.setFocusPolicy(Qt.StrongFocus)
+        
+        # إعداد Tab Order
+        if self.is_edit_mode:
+            self.setTabOrder(self.btn_cancel, self.btn_cancel_invoice)
+            self.setTabOrder(self.btn_cancel_invoice, self.btn_save)
+        else:
+            self.setTabOrder(self.btn_cancel, self.btn_save)
     
     # ============================================================
     # 🧠 الجزء الثاني: المنطق والعقل (The Logic Engine)
@@ -782,22 +1010,32 @@ class SalesDialog(QDialog):
         total_item.setFont(QFont("Segoe UI", 10, QFont.Bold))
         self.table.setItem(row_idx, 7, total_item)
         
-        # 8. زر الحذف (أيقونة) - الإصلاح 4: تحسين المحاذاة والتنسيق
+        # 8. زر الحذف (أيقونة) - تحسين Fitts Law وWCAG 2.2
         btn_del = QPushButton("❌")
         btn_del.setFlat(True)
         btn_del.setCursor(Qt.PointingHandCursor)
-        btn_del.setFixedSize(30, 30)  # حجم ثابت للزر
+        btn_del.setMinimumSize(44, 44)  # Fitts Law: minimum 44x44px
         btn_del.setStyleSheet("""
             QPushButton {
                 background: transparent;
                 border: none;
-                font-size: 18px;
+                font-size: 20px;
                 color: #ef4444;
                 padding: 0px;
+                min-width: 44px;
+                min-height: 44px;
             }
             QPushButton:hover {
                 background-color: #fee2e2;
-                border-radius: 4px;
+                border-radius: 6px;
+            }
+            QPushButton:pressed {
+                background-color: #fecaca;
+            }
+            QPushButton:focus {
+                outline: 2px solid #ef4444;
+                outline-offset: 2px;
+                border-radius: 6px;
             }
         """)
         # الإصلاح 2: استخدام functools.partial لتجنب مشكلة closure في lambda
@@ -805,8 +1043,8 @@ class SalesDialog(QDialog):
         btn_del.clicked.connect(partial(self.remove_item, row_idx))
         self.table.setCellWidget(row_idx, 8, btn_del)
         
-        # الإصلاح 4: محاذاة الزر في المنتصف
-        self.table.setRowHeight(row_idx, 50)  # ارتفاع ثابت للصف
+        # الإصلاح 4: محاذاة الزر في المنتصف مع ارتفاع مناسب لـ Fitts Law
+        self.table.setRowHeight(row_idx, 60)  # ارتفاع أكبر للصف لدعم Fitts Law
     
     def on_table_change(self, item):
         """معالجة تعديل الكمية أو الخصم من الجدول"""
@@ -1553,7 +1791,6 @@ if __name__ == "__main__":
     import sys
     from pathlib import Path
     project_root = Path(__file__).parent.parent.parent.parent
-    sys.path.insert(0, str(project_root))
     from src.core.database_manager import DatabaseManager
     
     db = DatabaseManager(":memory:")

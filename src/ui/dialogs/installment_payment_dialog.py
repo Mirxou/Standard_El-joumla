@@ -1,4 +1,4 @@
-﻿"""
+"""
 Payment Plan Payment Dialog - نافذة تسجيل الدفعات على خطط التقسيط
 """
 
@@ -6,8 +6,11 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
     QLabel, QLineEdit, QComboBox, QDoubleSpinBox,
     QDateEdit, QGroupBox, QGridLayout, QMessageBox,
-    QTableWidget, QTableWidgetItem, QHeaderView, QTextEdit
+    QTableWidget, QTableWidgetItem, QHeaderView, QTextEdit,
+    QFrame, QGraphicsDropShadowEffect, QWidget
 )
+from src.ui.widgets.custom_title_bar import CustomTitleBar
+from src.ui.widgets.quantum_notification import NotificationManager
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QFont, QColor
 from typing import Optional
@@ -30,9 +33,20 @@ class InstallmentPaymentDialog(QDialog):
         self.service = PaymentPlanService(db_manager)
         self.selected_installment = installment
         
-        self.setWindowTitle("تسجيل دفعة على القسط")
-        self.setMinimumWidth(700)
-        self.setMinimumHeight(600)
+        # self.setWindowTitle("تسجيل دفعة على القسط")
+        # self.setMinimumWidth(700)
+        # self.setMinimumHeight(600)
+        
+        # --- Quantum Window Setup ---
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        
+        # Notifications
+        self.notify = NotificationManager(self)
+        
+        self.resize(750, 650) # Slightly larger
+        
+        self.title_text = "تسجيل دفعة على القسط"
         
         self.setup_ui()
         self.load_installments()
@@ -42,7 +56,49 @@ class InstallmentPaymentDialog(QDialog):
             
     def setup_ui(self):
         """إعداد واجهة المستخدم"""
-        layout = QVBoxLayout(self)
+        # تخطيط جذري شفاف
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(10, 10, 10, 10)
+        root_layout.setSpacing(0)
+        
+        # الإطار الرئيسي
+        self.main_frame = QFrame()
+        self.main_frame.setStyleSheet("""
+            QFrame#MainFrame {
+                background-color: #f5f5f5;
+                border: 1px solid #3498db;
+                border-radius: 10px;
+            }
+        """)
+        self.main_frame.setObjectName("MainFrame")
+        
+        # Shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor("#3498db"))
+        shadow.setOffset(0, 0)
+        self.main_frame.setGraphicsEffect(shadow)
+        
+        root_layout.addWidget(self.main_frame)
+        
+        # تخطيط النافذة الداخلية
+        main_layout = QVBoxLayout(self.main_frame)
+        main_layout.setContentsMargins(0, 0, 0, 10)
+        main_layout.setSpacing(0)
+        
+        # 1. Custom Title Bar
+        self.title_bar = CustomTitleBar(self, title=self.title_text, is_dialog=True)
+        main_layout.addWidget(self.title_bar)
+        
+        # Container for content
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setSpacing(10)
+        content_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.addWidget(content_widget)
+        
+        # Re-assign layout to content_layout for the existing widget helpers
+        layout = content_layout
         
         # العنوان
         title = QLabel("تسجيل دفعة على خطة الدفع")
@@ -286,13 +342,13 @@ class InstallmentPaymentDialog(QDialog):
     def save_payment(self):
         """حفظ الدفعة"""
         if not self.selected_installment:
-            QMessageBox.warning(self, "تحذير", "يرجى اختيار قسط للدفع")
+            self.notify.show_warning("تحذير", "يرجى اختيار قسط للدفع")
             return
             
         payment_amount = Decimal(str(self.payment_amount_spin.value()))
         
         if payment_amount <= 0:
-            QMessageBox.warning(self, "تحذير", "يرجى إدخال مبلغ صحيح")
+            self.notify.show_warning("تحذير", "يرجى إدخال مبلغ صحيح")
             return
             
         if payment_amount > self.selected_installment.remaining_amount:
@@ -323,8 +379,7 @@ class InstallmentPaymentDialog(QDialog):
                 notes=notes
             )
             
-            QMessageBox.information(
-                self,
+            self.notify.show_success(
                 "نجح",
                 f"تم تسجيل دفعة بمبلغ {payment_amount:,.2f} دج بنجاح"
             )
@@ -332,7 +387,7 @@ class InstallmentPaymentDialog(QDialog):
             self.accept()
             
         except Exception as e:
-            QMessageBox.critical(self, "خطأ", f"فشل تسجيل الدفعة:\n{str(e)}")
+            self.notify.show_error("خطأ", f"فشل تسجيل الدفعة:\n{str(e)}")
             
     def pay_full_installment(self):
         """دفع القسط كاملاً"""
@@ -375,15 +430,68 @@ class PaymentPlanDetailsDialog(QDialog):
         self.plan = plan
         self.db_manager = db_manager
         
-        self.setWindowTitle(f"تفاصيل خطة الدفع - {plan.plan_number}")
-        self.setMinimumWidth(900)
-        self.setMinimumHeight(600)
+        # self.setWindowTitle(f"تفاصيل خطة الدفع - {plan.plan_number}")
+        # self.setMinimumWidth(900)
+        # self.setMinimumHeight(600)
+        
+        # --- Quantum Window Setup ---
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        
+        # Notifications
+        self.notify = NotificationManager(self)
+        
+        self.resize(950, 650)
+        
+        self.title_text = f"تفاصيل خطة الدفع - {plan.plan_number}"
         
         self.setup_ui()
         
     def setup_ui(self):
         """إعداد واجهة المستخدم"""
-        layout = QVBoxLayout(self)
+        # تخطيط جذري شفاف
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(10, 10, 10, 10)
+        root_layout.setSpacing(0)
+        
+        # الإطار الرئيسي
+        self.main_frame = QFrame()
+        self.main_frame.setStyleSheet("""
+            QFrame#MainFrame {
+                background-color: #f5f5f5;
+                border: 1px solid #3498db;
+                border-radius: 10px;
+            }
+        """)
+        self.main_frame.setObjectName("MainFrame")
+        
+        # Shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor("#3498db"))
+        shadow.setOffset(0, 0)
+        self.main_frame.setGraphicsEffect(shadow)
+        
+        root_layout.addWidget(self.main_frame)
+        
+        # تخطيط النافذة الداخلية
+        main_layout = QVBoxLayout(self.main_frame)
+        main_layout.setContentsMargins(0, 0, 0, 10)
+        main_layout.setSpacing(0)
+        
+        # 1. Custom Title Bar
+        self.title_bar = CustomTitleBar(self, title=self.title_text, is_dialog=True)
+        main_layout.addWidget(self.title_bar)
+        
+        # Container for content
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setSpacing(10)
+        content_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.addWidget(content_widget)
+        
+        # Re-assign layout to content_layout for the existing widget helpers
+        layout = content_layout
         
         # العنوان
         title = QLabel(f"تفاصيل خطة الدفع: {self.plan.plan_number}")

@@ -156,7 +156,7 @@ export default function InventoryManagement() {
 
     // فلترة الفئة
     if (categoryFilter !== "all") {
-      filtered = filtered.filter(p => p.category_id === categoryFilter)
+      filtered = filtered.filter(p => p.category_id !== undefined && String(p.category_id) === categoryFilter)
     }
 
     return filtered
@@ -445,7 +445,7 @@ export default function InventoryManagement() {
                   </thead>
                   <tbody>
                     {paginatedProducts.map((product) => {
-                      const category = categories.find(c => c.id === product.category_id)
+                      const category = categories.find(c => c.id !== undefined && product.category_id !== undefined && String(c.id) === String(product.category_id))
                       return (
                         <tr key={product.id} className="border-b">
                           <td className="px-3 py-2 font-medium text-gray-900">{product.name_ar || product.name}</td>

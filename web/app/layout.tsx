@@ -2,13 +2,14 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Toaster } from "@/components/ui/sonner"
 import { AuthProvider } from "@/lib/auth-context"
+import { NotificationProvider } from "@/lib/notifications/notification-context"
 import ErrorBoundary from "@/components/error-boundary"
 import "./globals.css"
 
 export const metadata: Metadata = {
   title: "Standard - نظام إدارة المخزون المتكامل",
   description: "نظام إدارة مخزون متكامل لتجارة المواد الغذائية والصحة والنظافة والجمال والإلكترونيات",
-    generator: 'v0.app'
+  generator: 'v0.app'
 }
 
 export default function RootLayout({
@@ -24,10 +25,12 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="arabic-text">
+      <body className="arabic-text" suppressHydrationWarning>
         <ErrorBoundary>
           <AuthProvider>
-            {children}
+            <NotificationProvider>
+              {children}
+            </NotificationProvider>
           </AuthProvider>
         </ErrorBoundary>
         <Toaster position="top-center" richColors />

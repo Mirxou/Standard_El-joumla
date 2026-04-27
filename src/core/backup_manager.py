@@ -67,6 +67,11 @@ class BackupInfo:
         self.size = os.path.getsize(filepath) if os.path.exists(filepath) else 0
         self.created_at = datetime.fromtimestamp(os.path.getctime(filepath)) if os.path.exists(filepath) else None
         self.is_compressed = filepath.endswith('.gz')
+
+    @property
+    def size_mb(self) -> float:
+        """توفير حجم الملف بالميجابايت كخاصية جاهزة للاستخدام في الاختبارات"""
+        return round(self.size / (1024 * 1024), 2)
         
     def to_dict(self) -> Dict[str, Any]:
         """تحويل إلى قاموس"""

@@ -2,13 +2,13 @@ import { NextResponse } from "next/server"
 
 export async function POST(request: Request) {
   try {
-    // في التطبيق الحقيقي، ستكون هنا عملية تسجيل الخروج
-    // await supabase.auth.signOut()
-
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       message: "تم تسجيل الخروج بنجاح",
     })
+
+    response.cookies.set("auth-token", "", { path: "/", maxAge: 0 })
+    return response
   } catch (error) {
     console.error("Logout error:", error)
     return NextResponse.json(

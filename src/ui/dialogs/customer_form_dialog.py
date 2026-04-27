@@ -6,8 +6,13 @@
 
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QTextEdit, QCheckBox, QPushButton, QMessageBox, QDoubleSpinBox
+    QTextEdit, QCheckBox, QPushButton, QMessageBox, QDoubleSpinBox,
+    QFrame, QGraphicsDropShadowEffect, QWidget
 )
+from PySide6.QtGui import QColor
+
+from src.ui.widgets.custom_title_bar import CustomTitleBar
+from src.ui.widgets.quantum_notification import NotificationManager
 from PySide6.QtCore import Qt
 from pathlib import Path
 from ...utils.i18n_api import I18n
@@ -26,12 +31,23 @@ class CustomerFormDialog(QDialog):
         self.i18n = I18n(locales_dir=str(Path(__file__).parent.parent.parent.parent / "locales"))
         
         if customer_id:
-            self.setWindowTitle(self.i18n.get_message("customer_edit_title"))
+            title = self.i18n.get_message("customer_edit_title")
         else:
-            self.setWindowTitle(self.i18n.get_message("customer_new_title"))
+            title = self.i18n.get_message("customer_new_title")
+            
+        # self.setWindowTitle(title)
         
-        self.setGeometry(150, 150, 450, 500)
+        # --- Quantum Window Setup ---
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        
+        # Notifications
+        self.notify = NotificationManager(self)
+        
+        self.resize(450, 550) # Slightly larger
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        
+        self.title_text = title
         
         self.init_ui()
         
@@ -40,7 +56,49 @@ class CustomerFormDialog(QDialog):
     
     def init_ui(self):
         """تهيئة واجهة المستخدم"""
-        layout = QVBoxLayout(self)
+        # تخطيط جذري شفاف
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(10, 10, 10, 10)
+        root_layout.setSpacing(0)
+        
+        # الإطار الرئيسي
+        self.main_frame = QFrame()
+        self.main_frame.setStyleSheet("""
+            QFrame#MainFrame {
+                background-color: #f5f5f5;
+                border: 1px solid #3498db;
+                border-radius: 10px;
+            }
+        """)
+        self.main_frame.setObjectName("MainFrame")
+        
+        # Shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor("#3498db"))
+        shadow.setOffset(0, 0)
+        self.main_frame.setGraphicsEffect(shadow)
+        
+        root_layout.addWidget(self.main_frame)
+        
+        # تخطيط النافذة الداخلية
+        main_layout = QVBoxLayout(self.main_frame)
+        main_layout.setContentsMargins(0, 0, 0, 10)
+        main_layout.setSpacing(0)
+        
+        # 1. Custom Title Bar
+        self.title_bar = CustomTitleBar(self, title=self.title_text, is_dialog=True)
+        main_layout.addWidget(self.title_bar)
+        
+        # Container for content
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setSpacing(10)
+        content_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.addWidget(content_widget)
+        
+        # Re-assign layout to content_layout for the existing widget helpers
+        layout = content_layout
         
         # الاسم
         self.name_input = QLineEdit()
@@ -141,7 +199,7 @@ class CustomerFormDialog(QDialog):
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في تحميل العميل: {str(e)}")
-            QMessageBox.warning(self, self.i18n.get_message("error"), f"{self.i18n.get_message('customer_load_failed')}: {str(e)}")
+            self.notify.show_error(self.i18n.get_message("error"), f"{self.i18n.get_message('customer_load_failed')}: {str(e)}")
     
     def save_customer(self):
         """حفظ العميل"""
@@ -150,11 +208,11 @@ class CustomerFormDialog(QDialog):
         email = self.email_input.text().strip()
         
         if not name:
-            QMessageBox.warning(self, self.i18n.get_message("warning"), self.i18n.get_message("customer_name_required"))
+            self.notify.show_warning(self.i18n.get_message("warning"), self.i18n.get_message("customer_name_required"))
             return
         
         if not phone:
-            QMessageBox.warning(self, self.i18n.get_message("warning"), self.i18n.get_message("phone_required"))
+            self.notify.show_warning(self.i18n.get_message("warning"), self.i18n.get_message("phone_required"))
             return
         
         try:
@@ -202,7 +260,7 @@ class CustomerFormDialog(QDialog):
                     )
                 
                 self.db_manager.execute_query(query, params)
-                QMessageBox.information(self, self.i18n.get_message("success"), self.i18n.get_message("customer_updated"))
+                self.notify.show_success(self.i18n.get_message("success"), self.i18n.get_message("customer_updated"))
             else:
                 # إضافة جديد
                 if has_phone2:
@@ -238,10 +296,10 @@ class CustomerFormDialog(QDialog):
                     )
                 
                 self.db_manager.execute_query(query, params)
-                QMessageBox.information(self, self.i18n.get_message("success"), self.i18n.get_message("customer_added"))
+                self.notify.show_success(self.i18n.get_message("success"), self.i18n.get_message("customer_added"))
             
             self.accept()
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في حفظ العميل: {str(e)}")
-            QMessageBox.critical(self, self.i18n.get_message("error"), f"{self.i18n.get_message('customer_save_failed')}: {str(e)}")
+            self.notify.show_error(self.i18n.get_message("error"), f"{self.i18n.get_message('customer_save_failed')}: {str(e)}")

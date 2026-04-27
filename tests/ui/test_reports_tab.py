@@ -76,12 +76,24 @@ def main_window(qapp, db_manager, mock_services):
          patch('src.services.dashboard_service.DashboardService', return_value=mock_services["dashboard"]), \
          patch('src.services.purchase_service.PurchaseService', return_value=mock_services["purchase"]), \
          patch('src.services.payment_service.PaymentService', return_value=mock_services["payment"]), \
-         patch('src.services.report_exporter.ReportExporter', return_value=mock_services["exporter"]):
+         patch('src.services.report_exporter.ReportExporter', return_value=mock_services["exporter"]), \
+         patch('src.services.hardware_service.HardwareService'), \
+         patch('src.services.system_doctor_service.SystemDoctorService'), \
+         patch('src.services.fiscal_service.FiscalService'), \
+         patch('src.services.ai_prediction_service.AIPredictionService'), \
+         patch('src.services.workflow_service.WorkflowService'), \
+         patch('src.services.smart_assistant.SmartAssistantService'), \
+         patch('src.ui.widgets.smart_assistant_widget.SmartAssistantWidget'), \
+         patch('src.services.carbon_service.CarbonService'), \
+         patch('src.services.sentiment_service.SentimentService'), \
+         patch('src.services.gamification_service.GamificationService'), \
+         patch('src.services.approval_service.ApprovalService'), \
+         patch('src.services.qrcode_service.QRCodeService'):
         
         mock_config.return_value.get.return_value = {}
         
         try:
-            window = MainWindow()
+            window = MainWindow(db_manager=db_manager)
             # تهيئة تبويب التقارير
             if hasattr(window, 'create_reports_tab'):
                 window.reports_tab = window.create_reports_tab()
@@ -299,10 +311,19 @@ class TestReportsTables:
         main_window.revenue_vs_expense_table = QTableWidget()
         main_window.revenue_vs_expense_table.setColumnCount(3)
         
-        revenue_data = [
-            {"date": date.today(), "revenue": 10000.0, "expense": 7000.0},
-            {"date": date.today() - timedelta(days=1), "revenue": 8000.0, "expense": 6000.0}
-        ]
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+        
+        revenue_data = {
+            "revenue": [
+                {"day": str(today), "total": 10000.0},
+                {"day": str(yesterday), "total": 8000.0}
+            ],
+            "expenses": [
+                {"day": str(today), "total": 7000.0},
+                {"day": str(yesterday), "total": 6000.0}
+            ]
+        }
         
         try:
             main_window.update_revenue_vs_expense_table(revenue_data)
@@ -393,4 +414,7 @@ class TestReportsTabIntegration:
                 assert True
             except Exception as e:
                 pytest.fail(f"Full workflow failed: {e}")
+
+
+
 

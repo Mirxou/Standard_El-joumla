@@ -3,6 +3,7 @@ import 'jspdf-autotable'
 
 interface InvoiceData {
   id: string
+  invoiceNumber?: string
   customerName: string
   customerPhone: string
   date: string
@@ -50,7 +51,7 @@ export const generateInvoicePDF = (invoice: InvoiceData) => {
   doc.text('فاتورة ضريبية', 105, 50, { align: 'center' })
 
   doc.setFontSize(10)
-  doc.text(`رقم الفاتورة: ${invoice.id}`, 20, 60)
+  doc.text(`رقم الفاتورة: ${invoice.invoiceNumber || invoice.id}`, 20, 60)
   doc.text(`التاريخ: ${invoice.date}`, 20, 67)
   doc.text(`الوقت: ${invoice.time}`, 20, 74)
 
@@ -152,10 +153,10 @@ export const generateInvoicePDF = (invoice: InvoiceData) => {
   doc.text('للاستفسارات: info@standard.com | 0500000000', 105, 287, { align: 'center' })
 
   // حفظ PDF
-  doc.save(`Invoice_${invoice.id}.pdf`)
+  doc.save(`Invoice_${invoice.invoiceNumber || invoice.id}.pdf`)
 }
 
-// دالة لطباعة الفاتورة مباشرة
+// دالة لطباعة الفاتورة مباشرة (deprecated - use generateInvoicePDF instead)
 export const printInvoice = (invoice: InvoiceData) => {
   const doc = new jsPDF({
     orientation: 'portrait',
@@ -185,7 +186,7 @@ export const printInvoice = (invoice: InvoiceData) => {
   doc.text('فاتورة ضريبية', 105, 50, { align: 'center' })
 
   doc.setFontSize(10)
-  doc.text(`رقم الفاتورة: ${invoice.id}`, 20, 60)
+  doc.text(`رقم الفاتورة: ${invoice.invoiceNumber || invoice.id}`, 20, 60)
   doc.text(`التاريخ: ${invoice.date}`, 20, 67)
   doc.text(`الوقت: ${invoice.time}`, 20, 74)
 

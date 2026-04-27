@@ -4,8 +4,11 @@ Count Details Dialog
 """
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget, 
-    QTableWidgetItem, QSpinBox, QMessageBox, QHeaderView
+    QTableWidgetItem, QSpinBox, QMessageBox, QHeaderView,
+    QFrame, QGraphicsDropShadowEffect, QWidget
 )
+from src.ui.widgets.custom_title_bar import CustomTitleBar
+from src.ui.widgets.quantum_notification import NotificationManager
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QColor
 
@@ -19,8 +22,20 @@ class CountDetailsDialog(QDialog):
         self.count_data = None
         self.count_items = []
         
-        self.setWindowTitle("تفاصيل الجرد")
-        self.setGeometry(100, 100, 900, 600)
+        # self.setWindowTitle("تفاصيل الجرد")
+        # self.setGeometry(100, 100, 900, 600)
+        
+        # --- Quantum Window Setup ---
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        
+        # Notifications
+        self.notify = NotificationManager(self)
+        
+        self.resize(950, 650)
+        
+        self.title_text = "تفاصيل الجرد"
+        
         self.setup_ui()
         
         if count_id:
@@ -28,7 +43,49 @@ class CountDetailsDialog(QDialog):
     
     def setup_ui(self):
         """إعداد واجهة المستخدم"""
-        layout = QVBoxLayout()
+        # تخطيط جذري شفاف
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(10, 10, 10, 10)
+        root_layout.setSpacing(0)
+        
+        # الإطار الرئيسي
+        self.main_frame = QFrame()
+        self.main_frame.setStyleSheet("""
+            QFrame#MainFrame {
+                background-color: #f5f5f5;
+                border: 1px solid #3498db;
+                border-radius: 10px;
+            }
+        """)
+        self.main_frame.setObjectName("MainFrame")
+        
+        # Shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor("#3498db"))
+        shadow.setOffset(0, 0)
+        self.main_frame.setGraphicsEffect(shadow)
+        
+        root_layout.addWidget(self.main_frame)
+        
+        # تخطيط النافذة الداخلية
+        main_layout = QVBoxLayout(self.main_frame)
+        main_layout.setContentsMargins(0, 0, 0, 10)
+        main_layout.setSpacing(0)
+        
+        # 1. Custom Title Bar
+        self.title_bar = CustomTitleBar(self, title=self.title_text, is_dialog=True)
+        main_layout.addWidget(self.title_bar)
+        
+        # Container for content
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setSpacing(10)
+        content_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.addWidget(content_widget)
+        
+        # Re-assign layout to content_layout for the existing widget helpers
+        layout = content_layout
         
         # معلومات الجرد
         info_layout = QHBoxLayout()
@@ -86,7 +143,7 @@ class CountDetailsDialog(QDialog):
                 self.count_number_label.setText(str(row[1]))
                 self.load_products()
         except Exception as e:
-            QMessageBox.critical(self, "خطأ", f"خطأ في تحميل بيانات الجرد: {str(e)}")
+            self.notify.show_error("خطأ", f"خطأ في تحميل بيانات الجرد: {str(e)}")
     
     def load_products(self):
         """تحميل المنتجات المرتبطة بالجرد"""
@@ -132,7 +189,7 @@ class CountDetailsDialog(QDialog):
                 
                 self.count_items.append(row[0])
         except Exception as e:
-            QMessageBox.warning(self, "تحذير", f"خطأ في تحميل المنتجات: {str(e)}")
+            self.notify.show_warning("تحذير", f"خطأ في تحميل المنتجات: {str(e)}")
     
     def save_count(self):
         """حفظ بيانات الجرد"""
@@ -154,7 +211,7 @@ class CountDetailsDialog(QDialog):
                         """, (counted_qty, notes, self.count_items[row_idx]))
             
             self.db.commit()
-            QMessageBox.information(self, "نجاح", "تم حفظ بيانات الجرد بنجاح")
+            self.notify.show_success("نجاح", "تم حفظ بيانات الجرد بنجاح")
             self.accept()
         except Exception as e:
-            QMessageBox.critical(self, "خطأ", f"خطأ في حفظ البيانات: {str(e)}")
+            self.notify.show_error("خطأ", f"خطأ في حفظ البيانات: {str(e)}")

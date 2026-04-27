@@ -211,9 +211,16 @@ class PredictiveEngine:
             
             # حساب القيمة الدائمة للعميل (LTV)
             # تقدير بسيط: الإنفاق السنوي × 3 سنوات
-            annual_spending = total_purchases * (365 / max(
-                (purchase_dates[-1] - purchase_dates[0]).days, 1
-            )) if len(purchase_dates) > 1 else total_purchases
+            if len(purchase_dates) > 1:
+                annual_spending = total_purchases * (365 / max(
+                    (purchase_dates[-1] - purchase_dates[0]).days, 1
+                ))
+            else:
+                annual_spending = total_purchases
+            
+            # حساب lifetime_value (القيمة الدائمة)
+            lifetime_value = annual_spending * 3 if annual_spending > 0 else 0
+            
             # حساب Churn Risk
             days_since_last_purchase = (datetime.now() - purchase_dates[-1]).days if purchase_dates else 0
             avg_interval = (30 / purchase_frequency) if purchase_frequency > 0 else 30

@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 نافذة إدارة المدفوعات - Payment Dialog
 واجهة شاملة لإدارة المدفوعات والحسابات المدينة والدائنة
@@ -20,7 +20,11 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QTimer, Signal, QThread, QDate, QStringListModel
 from PySide6.QtGui import QFont, QPixmap, QIcon, QPalette, QColor, QValidator, QDoubleValidator
+from PySide6.QtWidgets import QGraphicsDropShadowEffect
 from pathlib import Path
+
+from ...ui.widgets.custom_title_bar import CustomTitleBar
+from ...ui.widgets.quantum_notification import NotificationManager
 
 from ...core.database_manager import DatabaseManager
 from ...models.payment import Payment, PaymentManager, PaymentType, PaymentMethod, PaymentStatus, AccountBalance
@@ -109,16 +113,54 @@ class PaymentDialog(QDialog):
         # تهيئة نظام الترجمة
         self.i18n = I18n(locales_dir=str(Path(__file__).parent.parent.parent.parent / "locales"))
         
+        
         # إعداد النافذة
-        self.setWindowTitle(self.i18n.get_message("payment_management"))
+        # self.setWindowTitle(self.i18n.get_message("payment_management")) # Handled by CustomTitleBar
+        
+        # --- Quantum Window Setup ---
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        
+        # Notifications
+        self.notify = NotificationManager(self)
+        
         self.setModal(True)
         self.resize(800, 600)
         
     def setup_ui(self):
         """إعداد واجهة المستخدم"""
-        layout = QVBoxLayout(self)
+        # تخطيط جذري شفاف
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(10, 10, 10, 10)
+        root_layout.setSpacing(0)
         
-        # شريط العنوان
+        # الإطار الرئيسي
+        self.main_frame = QFrame()
+        self.main_frame.setStyleSheet("""
+            QFrame {
+                background-color: #f5f5f5;
+                border: 1px solid #3498db;
+                border-radius: 10px;
+            }
+        """)
+        # Shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor("#3498db"))
+        shadow.setOffset(0, 0)
+        self.main_frame.setGraphicsEffect(shadow)
+        
+        root_layout.addWidget(self.main_frame)
+        
+        # تخطيط النافذة الداخلية
+        layout = QVBoxLayout(self.main_frame)
+        
+        # 1. Custom Title Bar
+        title = self.i18n.get_message("payment_management")
+        self.title_bar = CustomTitleBar(self, title=title, is_dialog=True)
+        layout.addWidget(self.title_bar)
+        
+        # شريط العنوان (KEEPING IT as a header, but changing title handling)
         self.setup_header(layout)
         
         # التبويبات الرئيسية
@@ -552,7 +594,7 @@ class PaymentDialog(QDialog):
             
         except Exception as e:
             self.logger.error(f"خطأ في تحميل البيانات: {str(e)}")
-            QMessageBox.critical(self, self.i18n.get_message("error"), f"{self.i18n.get_message('load_data_failed')}: {str(e)}")
+            self.notify.show_error(self.i18n.get_message("error"), f"{self.i18n.get_message('load_data_failed')}: {str(e)}")
             self.status_label.setText(self.i18n.get_message("load_data_error"))
             
     def update_entity_combo(self):
@@ -603,20 +645,20 @@ class PaymentDialog(QDialog):
             
         except Exception as e:
             self.logger.error(f"خطأ في حفظ المدفوعات: {str(e)}")
-            QMessageBox.critical(self, self.i18n.get_message("error"), f"{self.i18n.get_message('save_payment_failed')}: {str(e)}")
+            self.notify.show_error(self.i18n.get_message("error"), f"{self.i18n.get_message('save_payment_failed')}: {str(e)}")
             
     def validate_payment_form(self) -> bool:
         """التحقق من صحة نموذج المدفوعات"""
         if not (self.customer_payment_radio.isChecked() or self.supplier_payment_radio.isChecked()):
-            QMessageBox.warning(self, self.i18n.get_message("warning"), self.i18n.get_message("select_payment_type_warning"))
+            self.notify.show_warning(self.i18n.get_message("warning"), self.i18n.get_message("select_payment_type_warning"))
             return False
             
         if self.entity_combo.currentIndex() == -1:
-            QMessageBox.warning(self, self.i18n.get_message("warning"), self.i18n.get_message("select_customer_supplier_warning"))
+            self.notify.show_warning(self.i18n.get_message("warning"), self.i18n.get_message("select_customer_supplier_warning"))
             return False
             
         if self.amount_spinbox.value() <= 0:
-            QMessageBox.warning(self, self.i18n.get_message("warning"), self.i18n.get_message("enter_valid_amount"))
+            self.notify.show_warning(self.i18n.get_message("warning"), self.i18n.get_message("enter_valid_amount"))
             return False
             
         return True
@@ -647,13 +689,13 @@ class PaymentDialog(QDialog):
         self.save_payment_btn.setEnabled(True)
         
         if success:
-            QMessageBox.information(self, self.i18n.get_message("success"), message)
+            self.notify.show_success(self.i18n.get_message("success"), message)
             self.clear_payment_form()
             self.load_recent_payments()
             self.load_accounts()
             self.payment_created.emit(data)
         else:
-            QMessageBox.critical(self, self.i18n.get_message("error"), message)
+            self.notify.show_error(self.i18n.get_message("error"), message)
             
     def clear_payment_form(self):
         """مسح نموذج المدفوعات"""
@@ -781,7 +823,7 @@ class PaymentDialog(QDialog):
             
         except Exception as e:
             self.logger.error(f"خطأ في إنشاء التقرير: {str(e)}")
-            QMessageBox.critical(self, self.i18n.get_message("error"), f"{self.i18n.get_message('generate_report_failed')}: {str(e)}")
+            self.notify.show_error(self.i18n.get_message("error"), f"{self.i18n.get_message('generate_report_failed')}: {str(e)}")
             self.status_label.setText(self.i18n.get_message("generate_report_error"))
             
     def display_report(self, data: List[Dict], report_type: str):

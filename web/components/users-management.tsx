@@ -26,7 +26,8 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { useEffect } from "react"
-import { fetchFromAPI } from "@/lib/db/client"
+import { apiClient } from "@/lib/api/client"
+import { API_CONFIG } from "@/lib/config/api"
 
 export default function UsersManagement() {
   const [searchTerm, setSearchTerm] = useState("")
@@ -36,24 +37,25 @@ export default function UsersManagement() {
 
   const loadUsers = async () => {
     try {
-      const response = await fetchFromAPI('/users');
-      if (response && Array.isArray(response.users)) {
-        const mapped = response.users.map((u: any) => ({
-          id: u.user_id,
-          name: u.full_name || u.username,
-          email: u.username, // using username as email representation for now if email missing
-          phone: "-", // Not in UserInfo response
-          role: "مستخدم", // Placeholder, role_id mapping needed
-          status: u.is_active ? "نشط" : "غير نشط",
-          lastLogin: "-",
-          createdAt: "-",
-          permissions: [],
-        }));
-        setUsers(mapped);
-      }
-    } catch (e) {
-      console.error(e);
-      toast.error("فشل تحميل المستخدمين");
+      const response = await apiClient.get<any>(API_CONFIG.ENDPOINTS.USERS)
+      const usersArray = Array.isArray(response) ? response : (response as any)?.users || (response as any)?.items || []
+      
+      const mapped = usersArray.map((u: any) => ({
+        id: u.user_id || u.id,
+        name: u.full_name || u.username,
+        email: u.username, // using username as email representation for now if email missing
+        phone: "-", // Not in UserInfo response
+        role: "مستخدم", // Placeholder, role_id mapping needed
+        status: u.is_active ? "نشط" : "غير نشط",
+        lastLogin: "-",
+        createdAt: "-",
+        permissions: [],
+      }))
+      setUsers(mapped)
+    } catch (error: any) {
+      console.error("Error loading users:", error)
+      toast.error("فشل تحميل المستخدمين")
+      setUsers([])
     }
   }
 

@@ -12,10 +12,12 @@ import json
 from decimal import Decimal
 from datetime import datetime
 
-# إضافة مسار المشروع
 project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root))
-
+import sys
+import os
+from pathlib import Path
+# الوصول إلى جذر المشروع
+project_root = str(Path(__file__).resolve().parents[2])
 from src.utils.logger import DatabaseLogger
 from src.core.database_manager import DatabaseManager
 
@@ -26,7 +28,12 @@ def db_manager():
     db_path = ":memory:"
     db = DatabaseManager(db_path)
     db.initialize()
-    return db
+    
+    yield db
+    
+    # تنظيف
+    if db.connection:
+        db.connection.close()
 
 
 @pytest.fixture
@@ -277,7 +284,7 @@ class TestDatabaseLoggerExtended:
         
         # التحقق من وجود السجل في audit_log
         result = db_manager.execute_query(
-            "SELECT user_id, action, table_name, record_id FROM audit_log WHERE table_name = ? AND record_id = ?",
+            "SELECT user_id, action, module, entity_id FROM audit_log WHERE module = ? AND entity_id = ?",
             ("audit_table", 1)
         )
         
@@ -316,7 +323,7 @@ class TestDatabaseLoggerExtended:
         
         # التحقق من أن البيانات تم حفظها بشكل صحيح
         result = db_manager.execute_scalar(
-            "SELECT new_values FROM audit_log WHERE table_name = ?",
+            "SELECT new_values FROM audit_log WHERE module = ?",
             ("json_table",)
         )
         
@@ -416,7 +423,7 @@ class TestDatabaseLoggerEdgeCasesExtended:
         
         # التحقق من أن كل عملية مرتبطة بالمستخدم الصحيح
         results = db_manager.execute_query(
-            "SELECT user_id, record_id FROM audit_log WHERE table_name = ? ORDER BY record_id",
+            "SELECT user_id, entity_id FROM audit_log WHERE module = ? ORDER BY entity_id",
             ("multi_table",)
         )
         
@@ -429,4 +436,7 @@ class TestDatabaseLoggerEdgeCasesExtended:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+
 

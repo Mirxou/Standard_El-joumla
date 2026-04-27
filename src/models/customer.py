@@ -12,12 +12,10 @@ from decimal import Decimal
 import sys
 from pathlib import Path
 
-# إضافة مسار src
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 @dataclass
 class Customer:
-    """نموذج بيانات العميل"""
+    """نموذج بيانات العميل - محسّن للـ Unified Commerce"""
     id: Optional[int] = None
     name: str = ""
     name_en: Optional[str] = None
@@ -38,11 +36,31 @@ class Customer:
     total_purchases: Decimal = Decimal('0.00')
     purchases_count: int = 0
     
+    # Unified Commerce Fields - Customer Type & Segmentation
+    customer_type: Optional[str] = None  # 'retail', 'wholesale', 'vip', 'mixed'
+    customer_group_id: Optional[int] = None  # Group membership
+    customer_segment: Optional[str] = None  # 'enterprise', 'distributor', 'retailer', 'small_business'
+    
+    # Pricing & Contracts (B2B specific)
+    pricing_tier: Optional[int] = None  # 1-5 للمستويات المختلفة
+    price_list_id: Optional[int] = None  # Custom price list
+    contract_id: Optional[int] = None  # Contract-based pricing
+    volume_discount_threshold: Optional[Decimal] = None  # Auto-tier promotion
+    
+    # Account Hierarchy (B2B)
+    parent_account_id: Optional[int] = None  # Parent company
+    account_hierarchy_level: int = 0  # 0 = top level
+    is_headquarter: bool = False
+    
+    # Payment Terms (B2B specific)
+    payment_terms: Optional[str] = None  # 'net_30', 'net_60', 'due_on_receipt'
+    credit_rating: Optional[str] = None  # 'A', 'B', 'C'
+    
     def __post_init__(self):
         """تحويل القيم بعد الإنشاء"""
-        for field in ['credit_limit', 'current_balance', 'total_purchases']:
+        for field in ['credit_limit', 'current_balance', 'total_purchases', 'volume_discount_threshold']:
             value = getattr(self, field)
-            if isinstance(value, (int, float, str)):
+            if isinstance(value, (int, float, str)) and value is not None:
                 setattr(self, field, Decimal(str(value)))
     
     @property
@@ -56,11 +74,51 @@ class Customer:
         return self.current_balance > self.credit_limit
     
     @property
-    def full_address(self) -> str:
-        """العنوان الكامل"""
-        parts = [self.address, self.city, self.country]
-        return ", ".join([part for part in parts if part])
+    def is_b2b_customer(self) -> bool:
+        """هل العميل من نوع B2B؟"""
+        return self.customer_type in ['wholesale', 'vip', 'mixed']
     
+    @property
+    def is_enterprise_customer(self) -> bool:
+        """هل العميل من نوع Enterprise؟"""
+        return self.customer_segment == 'enterprise'
+    
+    @property
+    def has_contract_pricing(self) -> bool:
+        """هل لدى العميل تسعير تعاقدي؟"""
+        return self.contract_id is not None
+    
+    @property
+    def hierarchy_display_name(self) -> str:
+        """اسم العرض مع المستوى الهرمي"""
+        if self.account_hierarchy_level > 0:
+            return f"{'  ' * self.account_hierarchy_level}↳ {self.name}"
+        return self.name
+    
+    @property
+    def customer_type_display(self) -> str:
+        """عرض نوع العميل بالعربية"""
+        type_map = {
+            'retail': 'تجزئة',
+            'wholesale': 'جملة',
+            'vip': 'مميز',
+            'mixed': 'مختلط'
+        }
+        return type_map.get(self.customer_type, 'غير محدد')
+    
+    @property
+    def pricing_tier_display(self) -> str:
+        """عرض مستوى التسعير"""
+        if self.pricing_tier:
+            return f"المستوى {self.pricing_tier}"
+        return "افتراضي"
+
+    @property
+    def full_address(self) -> str:
+        """العنوان الكامل بصيغة قابلة للعرض"""
+        parts = [part for part in [self.address, self.city, self.country] if part]
+        return ", ".join(parts)
+
     def to_dict(self) -> Dict[str, Any]:
         """تحويل إلى قاموس"""
         return {
@@ -85,7 +143,20 @@ class Customer:
             'purchases_count': self.purchases_count,
             'available_credit': float(self.available_credit),
             'is_credit_exceeded': self.is_credit_exceeded,
-            'full_address': self.full_address
+            'full_address': self.full_address,
+            # Unified Commerce Fields
+            'customer_type': self.customer_type,
+            'customer_group_id': self.customer_group_id,
+            'customer_segment': self.customer_segment,
+            'pricing_tier': self.pricing_tier,
+            'price_list_id': self.price_list_id,
+            'contract_id': self.contract_id,
+            'volume_discount_threshold': float(self.volume_discount_threshold) if self.volume_discount_threshold else None,
+            'parent_account_id': self.parent_account_id,
+            'account_hierarchy_level': self.account_hierarchy_level,
+            'is_headquarter': self.is_headquarter,
+            'payment_terms': self.payment_terms,
+            'credit_rating': self.credit_rating
         }
 
 class CustomerManager:
@@ -96,7 +167,12 @@ class CustomerManager:
         'id', 'name', 'name_en', 'phone', 'phone2', 'email', 
         'address', 'city', 'country', 'tax_number', 
         'credit_limit', 'current_balance', 'notes', 'is_active', 
-        'created_at', 'updated_at'
+        'created_at', 'updated_at',
+        # Unified Commerce Columns
+        'customer_type', 'customer_group_id', 'customer_segment',
+        'pricing_tier', 'price_list_id', 'contract_id', 'volume_discount_threshold',
+        'parent_account_id', 'account_hierarchy_level', 'is_headquarter',
+        'payment_terms', 'credit_rating'
     ]
     
     def __init__(self, db_manager, logger=None):
@@ -211,7 +287,7 @@ class CustomerManager:
                 
                 # 🔔 إطلاق Webhook: إرسال Webhook عند إنشاء عميل
                 try:
-                    from ...services.webhook_service import WebhookService
+                    from src.services.webhook_service import WebhookService
                     webhook_service = WebhookService(self.db_manager, self.logger)
                     
                     # بناء Payload للـ Webhook
@@ -401,6 +477,49 @@ class CustomerManager:
             if self.logger:
                 self.logger.error(f"خطأ في تحديث العميل {customer.id}: {str(e)}")
             return False
+
+    def update_balance(self, customer_id: int, amount: float, operation: str = "increase") -> bool:
+        """
+        تحديث رصيد العميل
+        
+        Args:
+            customer_id: معرف العميل
+            amount: المبلغ
+            operation: نوع العملية 'increase' (زيادة دين) أو 'decrease' (سداد)
+        """
+        try:
+            current_customer = self.get_customer_by_id(customer_id)
+            if not current_customer:
+                return False
+            
+            # حساب الرصيد الجديد
+            amount_decimal = Decimal(str(amount))
+            if operation == "increase":
+                new_balance = current_customer.current_balance + amount_decimal
+            elif operation == "decrease":
+                new_balance = current_customer.current_balance - amount_decimal
+            else:
+                if self.logger:
+                    self.logger.warning(f"عملية غير معروفة لتحديث الرصيد: {operation}")
+                return False
+                
+            # تحديث الرصيد في قاعدة البيانات
+            query = "UPDATE customers SET current_balance = ?, updated_at = ? WHERE id = ?"
+            params = (float(new_balance), datetime.now(), customer_id)
+            
+            result = self.db_manager.execute_non_query(query, params)
+            
+            if result > 0:
+                if self.logger:
+                    self.logger.info(f"تم تحديث رصيد العميل {customer_id}: {current_customer.current_balance} -> {new_balance} ({operation})")
+                return True
+                
+            return False
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في تحديث رصيد العميل {customer_id}: {str(e)}")
+            return False
     
     def delete_customer(self, customer_id: int) -> bool:
         """حذف عميل (soft delete)"""
@@ -581,16 +700,16 @@ class CustomerManager:
             city=data.get('city'),
             country=data.get('country', 'الجزائر'),
             tax_number=data.get('tax_number'),
-            credit_limit=Decimal(str(data.get('credit_limit', 0))),
-            current_balance=Decimal(str(data.get('current_balance', 0))),
+            credit_limit=Decimal(str(data.get('credit_limit') or 0)),
+            current_balance=Decimal(str(data.get('current_balance') or 0)),
             notes=data.get('notes'),
             is_active=bool(data.get('is_active', True)),
             # تحويل آمن للتواريخ
             created_at=self._parse_datetime(data.get('created_at')),
             updated_at=self._parse_datetime(data.get('updated_at')),
             last_purchase_date=self._parse_date(data.get('last_purchase_date')),
-            total_purchases=Decimal(str(data.get('total_purchases', 0))),
-            purchases_count=int(data.get('purchases_count', 0))
+            total_purchases=Decimal(str(data.get('total_purchases') or 0)),
+            purchases_count=int(data.get('purchases_count') or 0)
         )
     
     def _parse_datetime(self, val):

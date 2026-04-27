@@ -3,11 +3,36 @@
  * منع تكرار URLs وتوحيد جميع الإعدادات
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+/**
+ * الحصول على API Base URL مع دعم الكشف التلقائي
+ */
+function getApiBaseUrl(): string {
+  // 1. من environment variables (الأولوية القصوى)
+  if (process.env.NEXT_PUBLIC_API_BASE_URL) {
+    return process.env.NEXT_PUBLIC_API_BASE_URL;
+  }
+
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+
+  // 2. في بيئة التطوير على localhost
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:8001';
+    }
+  }
+
+  // 3. افتراضي للتطوير
+  return 'http://localhost:8001';
+}
+
+const API_BASE_URL = getApiBaseUrl();
 
 export const API_CONFIG = {
   BASE_URL: API_BASE_URL,
-  
+
   ENDPOINTS: {
     // Authentication
     AUTH: {
@@ -16,32 +41,52 @@ export const API_CONFIG = {
       REFRESH: '/api/v1/auth/refresh',
       COMPANIES: '/api/v1/auth/companies',
     },
-    
+
     // Products
     PRODUCTS: '/api/v1/products',
     CATEGORIES: '/api/v1/categories',
-    
+
     // Sales
     SALES: '/api/v1/sales',
     SALES_INVOICE: '/api/v1/sales/invoice',
-    
+
+    // Purchases
+    PURCHASES: '/api/v1/purchases',
+
+    // Returns
+    RETURNS: '/api/v1/returns',
+
     // Inventory
     INVENTORY: '/api/v1/inventory',
-    
+
     // Warehouse
     WAREHOUSE: '/api/v1/warehouses',
-    
+
     // Dashboard
     DASHBOARD: {
       STATS: '/api/v1/dashboard/stats',
       SALES: '/api/v1/dashboard/sales',
     },
-    
+
     // Suppliers
     SUPPLIERS: '/api/v1/suppliers',
-    
+
     // Users
     USERS: '/api/v1/users',
+
+    // AI & Analytics
+    AI: {
+      FORECAST: '/api/v1/ai/forecast',
+      RECOMMENDATIONS: '/api/v1/ai/recommendations',
+      ANOMALY_DETECTION: '/api/v1/ai/anomalies',
+      INSIGHTS: '/api/v1/ai/insights',
+    },
+
+    // WebSocket
+    WEBSOCKET: {
+      MAIN: '/ws',
+      DATA_UPDATES: '/ws/data-updates',
+    },
   },
 
   TIMEOUTS: {
@@ -68,7 +113,8 @@ export const API_CONFIG = {
  */
 export const getFullURL = (endpoint: string): string => {
   if (endpoint.startsWith('http')) return endpoint;
-  return `${API_CONFIG.BASE_URL}${endpoint}`;
+  const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  return `${API_CONFIG.BASE_URL}${normalizedEndpoint}`;
 };
 
 /**

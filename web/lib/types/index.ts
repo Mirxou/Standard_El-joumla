@@ -38,9 +38,15 @@ export interface LoginResponse {
   access_token: string;
   refresh_token: string;
   expires_in: number;
-  user: User;
+  token_type?: string;
+  user?: User;
+  user_id?: number;
+  username?: string;
   full_name?: string;
+  company_id?: number | null;
+  role_id?: number | null;
   role?: string;
+  is_active?: boolean;
 }
 
 export interface AuthContextType {

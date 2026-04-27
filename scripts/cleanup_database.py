@@ -5,10 +5,15 @@
 يقوم بـ VACUUM لضغط قاعدة البيانات وإزالة البيانات المؤقتة
 """
 
-import sqlite3
-import os
+import sys
 from pathlib import Path
 from datetime import datetime
+
+# Add src to path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
+from src.core.database_manager import DatabaseManager
 
 def cleanup_database(db_path: str = "data/logical_release.db"):
     """تنظيف قاعدة البيانات"""
@@ -25,8 +30,9 @@ def cleanup_database(db_path: str = "data/logical_release.db"):
         print(f"📊 حجم قاعدة البيانات قبل التنظيف: {size_before:.2f} MB")
         
         # الاتصال بقاعدة البيانات
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
+        db_manager = DatabaseManager(db_path)
+        db_manager.initialize()
+        cursor = db_manager.connection.cursor()
         
         # تنفيذ VACUUM
         print("🧹 جاري تنظيف قاعدة البيانات (VACUUM)...")
@@ -36,7 +42,7 @@ def cleanup_database(db_path: str = "data/logical_release.db"):
         print("📈 جاري تحليل الجداول لتحسين الأداء...")
         cursor.execute("ANALYZE")
         
-        conn.close()
+        db_manager.connection.close()
         
         # الحصول على الحجم بعد التنظيف
         size_after = db_file.stat().st_size / (1024 * 1024)

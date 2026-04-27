@@ -21,11 +21,26 @@ import {
     Trash2,
     FileText,
     User,
-    Truck
+    Truck,
+    CheckCircle,
+    XCircle,
+    RefreshCw
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { fetchFromAPI } from "@/lib/db/client"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { apiClient } from "@/lib/api/client"
+import { API_CONFIG } from "@/lib/config/api"
 import { toast } from "sonner"
 import CreatePurchase from "./create-purchase"
 
@@ -34,19 +49,68 @@ export default function PurchasesManagement() {
     const [selectedStatus, setSelectedStatus] = useState("all")
     const [purchases, setPurchases] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
+    const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
+    const [selectedPurchase, setSelectedPurchase] = useState<any | null>(null)
+    const [approvalDialogOpen, setApprovalDialogOpen] = useState(false)
+    const [purchaseToApprove, setPurchaseToApprove] = useState<any | null>(null)
 
     const loadPurchases = async () => {
         try {
             setLoading(true)
-            const data = await fetchFromAPI('/purchases')
-            if (Array.isArray(data)) {
-                setPurchases(data)
-            }
-        } catch (e) {
-            console.error("Failed to load purchases", e)
+            const data = await apiClient.get<any>(API_CONFIG.ENDPOINTS.PURCHASES)
+            const purchasesArray = Array.isArray(data) ? data : (data as any)?.purchases || (data as any)?.items || []
+            setPurchases(purchasesArray)
+        } catch (error: any) {
+            console.error("Failed to load purchases", error)
             toast.error("فشل تحميل المشتريات")
+            setPurchases([])
         } finally {
             setLoading(false)
+        }
+    }
+
+    const loadPurchaseDetails = async (purchaseId: number) => {
+        try {
+            const purchase = await apiClient.get<any>(`/api/v1/purchases/${purchaseId}`)
+            setSelectedPurchase(purchase)
+            setDetailsDialogOpen(true)
+        } catch (error: any) {
+            console.error("Failed to load purchase details", error)
+            toast.error("فشل تحميل تفاصيل المشتريات")
+        }
+    }
+
+    const handleApprovePurchase = async (purchase: any) => {
+        setPurchaseToApprove(purchase)
+        setApprovalDialogOpen(true)
+    }
+
+    const confirmApprovePurchase = async () => {
+        if (!purchaseToApprove) return
+        
+        try {
+            await apiClient.put(`/api/v1/purchases/${purchaseToApprove.id}`, {
+                status: 'received',
+                payment_status: 'paid'
+            })
+            toast.success("تم الموافقة على المشتريات بنجاح")
+            setApprovalDialogOpen(false)
+            setPurchaseToApprove(null)
+            await loadPurchases()
+        } catch (error: any) {
+            console.error("Failed to approve purchase", error)
+            toast.error("فشل الموافقة على المشتريات")
+        }
+    }
+
+    const handleUpdateStatus = async (purchaseId: number, newStatus: string) => {
+        try {
+            await apiClient.put(`/api/v1/purchases/${purchaseId}`, { status: newStatus })
+            toast.success("تم تحديث حالة المشتريات")
+            await loadPurchases()
+        } catch (error: any) {
+            console.error("Failed to update purchase status", error)
+            toast.error("فشل تحديث حالة المشتريات")
         }
     }
 
@@ -159,9 +223,9 @@ export default function PurchasesManagement() {
                         <SelectItem value="ملغية">ملغية</SelectItem>
                     </SelectContent>
                 </Select>
-                <Button variant="outline">
-                    <Filter className="h-4 w-4 ml-2" />
-                    تصفية متقدمة
+                <Button variant="outline" onClick={loadPurchases}>
+                    <RefreshCw className="h-4 w-4 ml-2" />
+                    تحديث
                 </Button>
             </div>
 
@@ -222,9 +286,22 @@ export default function PurchasesManagement() {
                                             </Button>
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent align="end">
-                                            <DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => loadPurchaseDetails(purchase.id)}>
                                                 <Eye className="h-4 w-4 ml-2" />
                                                 عرض التفاصيل
+                                            </DropdownMenuItem>
+                                            {purchase.status === "معلقة" && (
+                                                <DropdownMenuItem onClick={() => handleApprovePurchase(purchase)}>
+                                                    <CheckCircle className="h-4 w-4 ml-2" />
+                                                    الموافقة
+                                                </DropdownMenuItem>
+                                            )}
+                                            <DropdownMenuItem 
+                                                onClick={() => handleUpdateStatus(purchase.id, "ملغية")}
+                                                className="text-red-600"
+                                            >
+                                                <XCircle className="h-4 w-4 ml-2" />
+                                                إلغاء
                                             </DropdownMenuItem>
                                             <DropdownMenuItem className="text-blue-600">
                                                 <Download className="h-4 w-4 ml-2" />
@@ -238,6 +315,91 @@ export default function PurchasesManagement() {
                     )}
                 </CardContent>
             </Card>
+
+            {/* Dialog لعرض تفاصيل المشتريات */}
+            <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
+                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>تفاصيل المشتريات</DialogTitle>
+                    </DialogHeader>
+                    {selectedPurchase && (
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <p className="text-sm text-gray-500">رقم الفاتورة</p>
+                                    <p className="font-semibold">{selectedPurchase.invoice_number}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-500">التاريخ</p>
+                                    <p className="font-semibold">{selectedPurchase.purchase_date}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-500">المورد</p>
+                                    <p className="font-semibold">{selectedPurchase.supplier_name || "غير محدد"}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-500">الحالة</p>
+                                    <Badge className={getStatusColor(selectedPurchase.status)}>
+                                        {selectedPurchase.status}
+                                    </Badge>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-500">حالة الدفع</p>
+                                    <Badge className={getPaymentStatusColor(selectedPurchase.payment_status)}>
+                                        {selectedPurchase.payment_status}
+                                    </Badge>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-500">المجموع</p>
+                                    <p className="font-semibold text-lg">{selectedPurchase.total_amount?.toLocaleString()} ر.س</p>
+                                </div>
+                            </div>
+                            
+                            {selectedPurchase.items && selectedPurchase.items.length > 0 && (
+                                <div className="border-t pt-4">
+                                    <h3 className="font-semibold mb-3">المنتجات</h3>
+                                    <div className="space-y-2">
+                                        {selectedPurchase.items.map((item: any, index: number) => (
+                                            <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                                                <div>
+                                                    <p className="font-medium">{item.product_name || `منتج #${item.product_id}`}</p>
+                                                    <p className="text-sm text-gray-500">الكمية: {item.quantity} × {item.unit_cost} ر.س</p>
+                                                </div>
+                                                <p className="font-semibold">{(item.quantity * item.unit_cost).toLocaleString()} ر.س</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {selectedPurchase.notes && (
+                                <div className="border-t pt-4">
+                                    <p className="text-sm text-gray-500 mb-1">ملاحظات</p>
+                                    <p className="bg-blue-50 p-3 rounded">{selectedPurchase.notes}</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
+
+            {/* Dialog للموافقة على المشتريات */}
+            <AlertDialog open={approvalDialogOpen} onOpenChange={setApprovalDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>الموافقة على المشتريات</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            هل أنت متأكد من الموافقة على هذه المشتريات؟ سيتم تحديث حالة الطلب إلى "مستلمة" وحالة الدفع إلى "مدفوعة".
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setPurchaseToApprove(null)}>إلغاء</AlertDialogCancel>
+                        <AlertDialogAction onClick={confirmApprovePurchase} className="bg-green-600 hover:bg-green-700">
+                            الموافقة
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     )
 }

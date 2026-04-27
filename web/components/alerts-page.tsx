@@ -20,8 +20,11 @@ import {
   TrendingDown,
   XCircle
 } from 'lucide-react'
+import { useNotifications } from "@/lib/notifications/notification-context"
+import NotificationCenter from "@/components/notification-center"
 
 export default function AlertsPage() {
+  const { notifications, unreadCount } = useNotifications()
   const [searchTerm, setSearchTerm] = useState("")
   const [activeTab, setActiveTab] = useState("all")
 
@@ -176,17 +179,10 @@ export default function AlertsPage() {
           <h1 className="text-2xl font-bold text-gray-900">التنبيهات والإشعارات</h1>
           <p className="text-gray-600">مركز إدارة جميع التنبيهات والإشعارات</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline">
-            <CheckCircle className="h-4 w-4 ml-2" />
-            تعليم الكل كمقروء
-          </Button>
-          <Button variant="outline" className="text-red-600">
-            <XCircle className="h-4 w-4 ml-2" />
-            مسح الكل
-          </Button>
-        </div>
       </div>
+
+      {/* Notification Center */}
+      <NotificationCenter />
 
       {/* الإحصائيات */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

@@ -1,13 +1,15 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, ANY
 from decimal import Decimal
 from datetime import date
 import sys
 from pathlib import Path
 
-# إضافة مسار src
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
+import sys
+import os
+from pathlib import Path
+# الوصول إلى جذر المشروع
+project_root = str(Path(__file__).resolve().parents[2])
 from src.services.accounting_service import AccountingService
 from src.models.account import Account, ChartOfAccounts
 from src.models.journal_entry import JournalEntry, JournalLine
@@ -77,18 +79,20 @@ class TestAccountingService:
 
             assert success is True
             # التحقق من تحديث حالة القيد في قاعدة البيانات
-            mock_db_manager.execute.assert_called_with(
-                pytest.string_containing("UPDATE general_journal SET is_posted = 1"),
-                pytest.anything()
-            )
+            # التحقق من أن execute تم استدعاؤه مع query يحتوي على UPDATE
+            execute_calls = [call for call in mock_db_manager.execute.call_args_list 
+                           if call and len(call[0]) > 0 and "UPDATE" in str(call[0][0]) and "is_posted" in str(call[0][0])]
+            assert len(execute_calls) > 0, "لم يتم استدعاء UPDATE للترحيل"
             # التحقق من استدعاء دالة تحديث الأرصدة
             mock_update_balances.assert_called_once_with(journal_id)
 
     def test_get_trial_balance(self, service):
         """اختبار حساب ميزان المراجعة"""
         # إعداد حسابات وهمية
-        account1 = Account(id=1, account_code="1001", account_name="Cash", normal_side="DEBIT")
-        account2 = Account(id=2, account_code="3001", account_name="Capital", normal_side="CREDIT")
+        account1 = Account(id=1, account_code="1001", account_name="Cash", 
+                          account_type="Asset", normal_side="DEBIT")
+        account2 = Account(id=2, account_code="3001", account_name="Capital", 
+                          account_type="Equity", normal_side="CREDIT")
         
         # محاكاة أن هذه الحسابات موجودة في دليل الحسابات
         service.coa.accounts = {1: account1, 2: account2}
@@ -105,3 +109,7 @@ class TestAccountingService:
             assert len(trial_balance["accounts"]) == 2
             assert trial_balance["accounts"][0]["debit"] == 1000.00
             assert trial_balance["accounts"][1]["credit"] == 1000.00
+
+
+
+

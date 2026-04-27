@@ -6,23 +6,45 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { BarChart3, TrendingUp, DollarSign, Package, Download, Loader2 } from 'lucide-react'
+import { BarChart3, TrendingUp, DollarSign, Package, Download, Loader2, Filter, GitCompare, ArrowLeft } from 'lucide-react'
 import { getSalesAnalytics, getInventoryAnalytics } from "@/lib/actions/dashboard"
+import { apiClient } from "@/lib/api/client"
+import { API_CONFIG } from "@/lib/config/api"
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts"
 
 export default function AdvancedAnalytics() {
   const [period, setPeriod] = useState<'week' | 'month' | 'year'>('month')
   const [salesData, setSalesData] = useState<any>(null)
   const [inventoryData, setInventoryData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [comparisonMode, setComparisonMode] = useState(false)
+  const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [drillDownData, setDrillDownData] = useState<any>(null)
+  const [drillDownLevel, setDrillDownLevel] = useState(0)
 
   const loadAnalytics = async () => {
     setLoading(true)
     try {
-      const [sales, inventory] = await Promise.all([
+      const [sales, inventory, comparison] = await Promise.all([
         getSalesAnalytics(period),
-        getInventoryAnalytics()
+        getInventoryAnalytics(),
+        comparisonMode ? apiClient.get(`${API_CONFIG.ENDPOINTS.DASHBOARD.SALES}?compare=true&period=${period}`).catch(() => null) : Promise.resolve(null)
       ])
-      setSalesData(sales)
+      setSalesData({ ...sales, comparison })
       setInventoryData(inventory)
     } catch (error) {
       console.error('[v0] Error loading analytics:', error)
@@ -30,9 +52,41 @@ export default function AdvancedAnalytics() {
     setLoading(false)
   }
 
+  const handleDrillDown = async (data: any, level: number) => {
+    try {
+      const drillData = await apiClient.get(`${API_CONFIG.ENDPOINTS.DASHBOARD.SALES}?drill_down=${level}&filter=${JSON.stringify(data)}`).catch(() => null)
+      setDrillDownData(drillData)
+      setDrillDownLevel(level)
+    } catch (error) {
+      console.error('Failed to load drill-down data', error)
+    }
+  }
+
   useEffect(() => {
     loadAnalytics()
-  }, [period])
+  }, [period, comparisonMode])
+
+  const handleExport = async (format: string) => {
+    try {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/api/v1/analytics/export?format=${format}&period=${period}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
+        },
+      })
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `analytics_${new Date().toISOString().split('T')[0]}.${format === 'pdf' ? 'pdf' : 'xlsx'}`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (error) {
+      console.error('Failed to export', error)
+    }
+  }
 
   if (loading) {
     return (

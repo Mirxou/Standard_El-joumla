@@ -7,8 +7,9 @@ Quick Application Test
 
 import sys
 import os
-sys.path.insert(0, '.')
-
+from pathlib import Path
+# الوصول إلى جذر المشروع
+project_root = str(Path(__file__).resolve().parents[2])
 def test_imports():
     """اختبار الاستيرادات الأساسية"""
     print("1️⃣ اختبار الاستيرادات الأساسية...")
@@ -147,3 +148,6 @@ def main():
 if __name__ == "__main__":
     exit_code = main()
     sys.exit(exit_code)
+
+
+

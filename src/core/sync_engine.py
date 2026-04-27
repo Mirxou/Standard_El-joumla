@@ -113,17 +113,19 @@ class SyncEngine:
             bool: True إذا كان هناك تعارض
         """
         try:
+            # إذا كانت إحدى البيانات مفقودة، فلا يوجد تعارض (ربما إضافة جديدة)
+            if local_data is None or remote_data is None:
+                return False
+            
             # حساب Hash
             local_hash = self.calculate_hash(local_data)
             remote_hash = self.calculate_hash(remote_data)
             
-            # إذا كانت Hashes مختلفة والإصدارات مختلفة، هناك تعارض
+            # إذا كانت Hashes مختلفة، نتحقق من الإصدارات
             if local_hash != remote_hash:
                 version_comparison = self.compare_versions(local_version, remote_version)
-                if version_comparison == "CONFLICT":
+                if version_comparison == "SAME" or version_comparison == "CONFLICT":
                     return True
-                # إذا كان أحد الإصدارات أحدث من الآخر، لا يوجد تعارض حقيقي
-                # التعارض الحقيقي عندما يكون كلا الإصدارين محدثين بشكل مستقل
             
             return False
             

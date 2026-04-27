@@ -1,4 +1,4 @@
-﻿"""
+"""
 Payment Plan Dialog - نافذة إنشاء/تعديل خطة الدفع
 """
 
@@ -6,8 +6,13 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
     QLabel, QLineEdit, QTextEdit, QComboBox, QSpinBox,
     QDoubleSpinBox, QDateEdit, QGroupBox, QGridLayout,
-    QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView
+    QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView,
+    QFrame, QGraphicsDropShadowEffect, QWidget
 )
+from PySide6.QtGui import QColor
+
+from src.ui.widgets.custom_title_bar import CustomTitleBar
+from src.ui.widgets.quantum_notification import NotificationManager
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QFont
 from typing import Optional
@@ -31,9 +36,20 @@ class PaymentPlanDialog(QDialog):
         self.plan = plan
         self.is_edit_mode = plan is not None
         
-        self.setWindowTitle("تعديل خطة الدفع" if self.is_edit_mode else "خطة دفع جديدة")
-        self.setMinimumWidth(900)
-        self.setMinimumHeight(700)
+        # self.setWindowTitle("تعديل خطة الدفع" if self.is_edit_mode else "خطة دفع جديدة")
+        # self.setMinimumWidth(900)
+        # self.setMinimumHeight(700)
+        
+        # --- Quantum Window Setup ---
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        
+        # Notifications
+        self.notify = NotificationManager(self)
+        
+        self.resize(950, 750) # Slightly larger
+        
+        self.title_text = "تعديل خطة الدفع" if self.is_edit_mode else "خطة دفع جديدة"
         
         self.setup_ui()
         
@@ -42,7 +58,49 @@ class PaymentPlanDialog(QDialog):
             
     def setup_ui(self):
         """إعداد واجهة المستخدم"""
-        layout = QVBoxLayout(self)
+        # تخطيط جذري شفاف
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(10, 10, 10, 10)
+        root_layout.setSpacing(0)
+        
+        # الإطار الرئيسي
+        self.main_frame = QFrame()
+        self.main_frame.setStyleSheet("""
+            QFrame#MainFrame {
+                background-color: #f5f5f5;
+                border: 1px solid #3498db;
+                border-radius: 10px;
+            }
+        """)
+        self.main_frame.setObjectName("MainFrame")
+        
+        # Shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor("#3498db"))
+        shadow.setOffset(0, 0)
+        self.main_frame.setGraphicsEffect(shadow)
+        
+        root_layout.addWidget(self.main_frame)
+        
+        # تخطيط النافذة الداخلية
+        main_layout = QVBoxLayout(self.main_frame)
+        main_layout.setContentsMargins(0, 0, 0, 10)
+        main_layout.setSpacing(0)
+        
+        # 1. Custom Title Bar
+        self.title_bar = CustomTitleBar(self, title=self.title_text, is_dialog=True)
+        main_layout.addWidget(self.title_bar)
+        
+        # Container for content
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setSpacing(10)
+        content_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.addWidget(content_widget)
+        
+        # Re-assign layout to content_layout for the existing widget helpers
+        layout = content_layout
         
         # العنوان
         title = QLabel("تعديل خطة الدفع" if self.is_edit_mode else "إنشاء خطة دفع جديدة")
@@ -360,10 +418,10 @@ class PaymentPlanDialog(QDialog):
             if plan.end_date:
                 self.end_date_label.setText(plan.end_date.strftime("%Y-%m-%d"))
                 
-            QMessageBox.information(self, "نجح", f"تم إنشاء {len(plan.installments)} قسط")
+            self.notify.show_success("نجح", f"تم إنشاء {len(plan.installments)} قسط")
             
         except Exception as e:
-            QMessageBox.critical(self, "خطأ", f"فشل إنشاء جدول الأقساط:\n{str(e)}")
+            self.notify.show_error("خطأ", f"فشل إنشاء جدول الأقساط:\n{str(e)}")
             
     def create_plan_from_inputs(self) -> PaymentPlan:
         """إنشاء خطة من المدخلات"""
@@ -397,15 +455,15 @@ class PaymentPlanDialog(QDialog):
             
             if self.is_edit_mode:
                 self.service.update_payment_plan(plan)
-                QMessageBox.information(self, "نجح", "تم تحديث الخطة بنجاح")
+                self.notify.show_success("نجح", "تم تحديث الخطة بنجاح")
             else:
                 self.service.create_payment_plan(plan)
-                QMessageBox.information(self, "نجح", "تم إنشاء الخطة بنجاح")
+                self.notify.show_success("نجح", "تم إنشاء الخطة بنجاح")
                 
             self.accept()
             
         except Exception as e:
-            QMessageBox.critical(self, "خطأ", f"فشل حفظ الخطة:\n{str(e)}")
+            self.notify.show_error("خطأ", f"فشل حفظ الخطة:\n{str(e)}")
             
     def save_and_activate(self):
         """حفظ وتفعيل الخطة"""
@@ -421,11 +479,11 @@ class PaymentPlanDialog(QDialog):
             plan.activate()
             self.service.update_payment_plan(plan)
             
-            QMessageBox.information(self, "نجح", "تم حفظ وتفعيل الخطة بنجاح")
+            self.notify.show_success("نجح", "تم حفظ وتفعيل الخطة بنجاح")
             self.accept()
             
         except Exception as e:
-            QMessageBox.critical(self, "خطأ", f"فشل حفظ وتفعيل الخطة:\n{str(e)}")
+            self.notify.show_error("خطأ", f"فشل حفظ وتفعيل الخطة:\n{str(e)}")
             
     def load_plan_data(self):
         """تحميل بيانات الخطة للتعديل"""

@@ -1,0 +1,120 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Unified Commerce ERP - Business Metrics",
+    "tags": ["erp", "business", "metrics"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Daily Sales Revenue",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate(sales_revenue_total[1d]))",
+            "legendFormat": "Revenue"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": 2,
+        "title": "Inventory Turnover",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "inventory_turnover_ratio",
+            "legendFormat": "Turnover Ratio"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        }
+      },
+      {
+        "id": 3,
+        "title": "Customer Acquisition Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(customer_acquisition_total[7d])",
+            "legendFormat": "New Customers"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        }
+      },
+      {
+        "id": 4,
+        "title": "Order Fulfillment Time",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(order_fulfillment_duration_seconds_bucket[1d]))",
+            "legendFormat": "95th percentile"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        }
+      },
+      {
+        "id": 5,
+        "title": "Top Selling Products",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "topk(10, product_sales_quantity)",
+            "legendFormat": "{{product_name}}"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 16
+        }
+      }
+    ],
+    "time": {
+      "from": "now-7d",
+      "to": "now"
+    },
+    "timepicker": {},
+    "templating": {
+      "list": []
+    },
+    "annotations": {
+      "list": []
+    },
+    "refresh": "1m",
+    "schemaVersion": 27,
+    "version": 0,
+    "links": []
+  }
+}

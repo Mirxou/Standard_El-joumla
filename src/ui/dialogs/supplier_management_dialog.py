@@ -6,9 +6,14 @@
 
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
-    QPushButton, QLineEdit, QLabel, QMessageBox, QHeaderView
+    QPushButton, QLineEdit, QLabel, QMessageBox, QHeaderView, QFrame,
+    QGraphicsDropShadowEffect, QWidget
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
+
+from src.ui.widgets.custom_title_bar import CustomTitleBar
+from src.ui.widgets.quantum_notification import NotificationManager
 
 
 class SupplierManagementDialog(QDialog):
@@ -20,8 +25,17 @@ class SupplierManagementDialog(QDialog):
         self.logger = logger
         self.suppliers = []
         
-        self.setWindowTitle("إدارة الموردين")
-        self.setGeometry(100, 100, 800, 500)
+        # self.setWindowTitle("إدارة الموردين") # Handled by CustomTitleBar
+        # self.setGeometry(100, 100, 800, 500)
+        
+        # --- Quantum Window Setup ---
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        
+        # Notifications
+        self.notify = NotificationManager(self)
+        
+        self.resize(800, 600)
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         
         self.init_ui()
@@ -29,7 +43,47 @@ class SupplierManagementDialog(QDialog):
     
     def init_ui(self):
         """تهيئة واجهة المستخدم"""
-        layout = QVBoxLayout(self)
+        # تخطيط جذري شفاف
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(10, 10, 10, 10)
+        root_layout.setSpacing(0)
+        
+        # الإطار الرئيسي
+        self.main_frame = QFrame()
+        self.main_frame.setStyleSheet("""
+            QFrame#MainFrame {
+                background-color: #f5f5f5;
+                border: 1px solid #3498db;
+                border-radius: 10px;
+            }
+        """)
+        self.main_frame.setObjectName("MainFrame")
+        
+        # Shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor("#3498db"))
+        shadow.setOffset(0, 0)
+        self.main_frame.setGraphicsEffect(shadow)
+        
+        root_layout.addWidget(self.main_frame)
+        
+        # تخطيط النافذة الداخلية
+        layout = QVBoxLayout(self.main_frame)
+        layout.setContentsMargins(0, 0, 0, 10) # Bottom margin for content
+        layout.setSpacing(10)
+        
+        # 1. Custom Title Bar
+        self.title_bar = CustomTitleBar(self, title="إدارة الموردين", is_dialog=True)
+        layout.addWidget(self.title_bar)
+        
+        # Container for content
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        layout.addWidget(content_widget)
+        
+        # Re-assign layout to content_layout for the rest of the elements
+        layout = content_layout
         
         # شريط البحث والإضافة
         search_layout = QHBoxLayout()
@@ -102,7 +156,7 @@ class SupplierManagementDialog(QDialog):
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في تحميل الموردين: {str(e)}")
-            QMessageBox.warning(self, "خطأ", f"فشل في تحميل الموردين: {str(e)}")
+            self.notify.show_error("خطأ", f"فشل في تحميل الموردين: {str(e)}")
     
     def display_suppliers(self, suppliers):
         """عرض الموردين في الجدول"""
@@ -185,8 +239,7 @@ class SupplierManagementDialog(QDialog):
             count = count_result[0] if count_result else 0
             
             if count > 0:
-                QMessageBox.warning(
-                    self,
+                self.notify.show_warning(
                     "تحذير",
                     f"لا يمكن حذف هذا المورد. هناك {count} منتج مرتبط به."
                 )
@@ -202,8 +255,8 @@ class SupplierManagementDialog(QDialog):
             if reply == QMessageBox.StandardButton.Yes:
                 self.db_manager.execute_query("DELETE FROM suppliers WHERE id = ?", (supplier_id,))
                 self.load_suppliers()
-                QMessageBox.information(self, "نجاح", "تم حذف المورد بنجاح")
+                self.notify.show_success("نجاح", "تم حذف المورد بنجاح")
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في حذف المورد: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في حذف المورد: {str(e)}")
+            self.notify.show_error("خطأ", f"فشل في حذف المورد: {str(e)}")

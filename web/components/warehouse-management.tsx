@@ -20,7 +20,8 @@ import {
   BarChart3,
 } from "lucide-react"
 import CreateWarehouse from "./create-warehouse"
-import { fetchFromAPI } from "@/lib/db/client"
+import { apiClient } from "@/lib/api/client"
+import { API_CONFIG } from "@/lib/config/api"
 import { useEffect } from "react"
 
 export default function WarehouseManagement() {
@@ -30,10 +31,12 @@ export default function WarehouseManagement() {
 
   const loadWarehouses = async () => {
     setLoading(true)
-    const data = await fetchFromAPI('/warehouses')
-    if (Array.isArray(data)) {
+    try {
+      const data = await apiClient.get<any[]>(API_CONFIG.ENDPOINTS.WAREHOUSE)
+      const warehousesArray = Array.isArray(data) ? data : (data as any)?.items || (data as any)?.warehouses || []
+      
       // Map Backend API to UI Model
-      const mapped = data.map((w: any) => ({
+      const mapped = warehousesArray.map((w: any) => ({
         id: w.id,
         name: w.name,
         location: w.city || w.address || "غير محدد",
@@ -49,8 +52,12 @@ export default function WarehouseManagement() {
         lastInventory: w.updated_at ? new Date(w.updated_at).toLocaleDateString('en-US') : "-",
       }))
       setWarehouses(mapped)
+    } catch (error: any) {
+      console.error("Error loading warehouses:", error)
+      setWarehouses([])
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   useEffect(() => {

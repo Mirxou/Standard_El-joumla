@@ -13,11 +13,20 @@ from starlette.types import ASGIApp
 from starlette.responses import Response
 import logging
 
-from src.api.metrics import (
-    record_http_request,
-    record_api_error,
-    set_active_requests
-)
+# جعل import metrics optional
+try:
+    from src.api.metrics import (
+        record_http_request,
+        record_api_error,
+        set_active_requests,
+        PROMETHEUS_AVAILABLE
+    )
+except ImportError:
+    PROMETHEUS_AVAILABLE = False
+    # Stub functions
+    def record_http_request(*args, **kwargs): pass
+    def record_api_error(*args, **kwargs): pass
+    def set_active_requests(*args, **kwargs): pass
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +61,8 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
         
         # زيادة عدد الطلبات النشطة
         self._active_requests += 1
-        set_active_requests(self._active_requests)
+        if PROMETHEUS_AVAILABLE:
+            set_active_requests(self._active_requests)
         
         # تسجيل وقت البداية
         start_time = time.time()
@@ -70,12 +80,13 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
             
             # تسجيل Metrics
             status_code = response.status_code
-            record_http_request(method=method, endpoint=endpoint, status_code=status_code, duration=duration)
-            
-            # تسجيل الأخطاء
-            if status_code >= 400:
-                error_type = str(status_code)
-                record_api_error(error_type=error_type, endpoint=endpoint)
+            if PROMETHEUS_AVAILABLE:
+                record_http_request(method=method, endpoint=endpoint, status_code=status_code, duration=duration)
+                
+                # تسجيل الأخطاء
+                if status_code >= 400:
+                    error_type = str(status_code)
+                    record_api_error(error_type=error_type, endpoint=endpoint)
             
             return response
             
@@ -84,9 +95,10 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
             duration = time.time() - start_time
             
             # تسجيل الخطأ
-            error_type = "500"
-            record_api_error(error_type=error_type, endpoint=endpoint)
-            record_http_request(method=method, endpoint=endpoint, status_code=500, duration=duration)
+            if PROMETHEUS_AVAILABLE:
+                error_type = "500"
+                record_api_error(error_type=error_type, endpoint=endpoint)
+                record_http_request(method=method, endpoint=endpoint, status_code=500, duration=duration)
             
             logger.error(f"API Error in PrometheusMiddleware: {e}")
             raise
@@ -94,7 +106,8 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
         finally:
             # تقليل عدد الطلبات النشطة
             self._active_requests -= 1
-            set_active_requests(max(0, self._active_requests))
+            if PROMETHEUS_AVAILABLE:
+                set_active_requests(max(0, self._active_requests))
     
     def _normalize_endpoint(self, path: str) -> str:
         """

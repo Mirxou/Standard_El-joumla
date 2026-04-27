@@ -12,8 +12,11 @@ import sys
 from pathlib import Path
 
 # إضافة المسار
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
+import sys
+import os
+from pathlib import Path
+# الوصول إلى جذر المشروع
+project_root = str(Path(__file__).resolve().parents[2])
 # استيراد التطبيق
 try:
     from src.api.app import app
@@ -25,13 +28,13 @@ try:
     from src.models.user import UserManager, User, UserRole
 except ImportError:
     # محاولة استيراد بديلة
-    from api.app import app
-    from api.routes import get_db_manager
-    from core.database_manager import DatabaseManager
-    from models.product import ProductManager, Product
-    from models.customer import CustomerManager, Customer
-    from models.sale import SaleManager, Sale, SaleItem, SaleStatus
-    from models.user import UserManager, User, UserRole
+    from src.api.app import app
+    from src.api.routes import get_db_manager
+    from src.core.database_manager import DatabaseManager
+    from src.models.product import ProductManager, Product
+    from src.models.customer import CustomerManager, Customer
+    from src.models.sale import SaleManager, Sale, SaleItem, SaleStatus
+    from src.models.user import UserManager, User, UserRole
 
 
 @pytest.mark.integration
@@ -478,4 +481,8 @@ class TestAPIEndToEndWorkflows:
             data = response.json()
             # يجب أن تحتوي على نتائج
             assert isinstance(data, (dict, list))
+
+
+
+
 

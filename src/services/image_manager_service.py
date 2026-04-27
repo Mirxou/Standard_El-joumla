@@ -18,8 +18,6 @@ except ImportError:
     Image = None
 import sys
 
-# إضافة مسار src
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from ..utils.logger import setup_logger
 

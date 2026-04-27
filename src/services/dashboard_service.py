@@ -186,11 +186,11 @@ class DashboardService:
             AND status NOT IN ('cancelled', 'ملغية')
         """
         rows = self.db.execute_query(q, [start, end])
-        if not rows or rows[0]["order_count"] == 0:
+        if not isinstance(rows, list) or not rows or rows[0].get("order_count", 0) == 0:
             return KPI(key="aov", title="متوسط قيمة الطلب", value=0, unit="ر.س", color="#3F51B5")
         
-        total = float(rows[0]["total_sales"])
-        count = int(rows[0]["order_count"])
+        total = float(rows[0].get("total_sales", 0))
+        count = int(rows[0].get("order_count", 0))
         aov = total / count
         
         # Previous period AOV
@@ -199,8 +199,8 @@ class DashboardService:
         prev_start = prev_end - timedelta(days=period_len)
         prev_rows = self.db.execute_query(q, [prev_start, prev_end])
         prev_aov = 0.0
-        if prev_rows and prev_rows[0]["order_count"] > 0:
-            prev_aov = float(prev_rows[0]["total_sales"]) / int(prev_rows[0]["order_count"])
+        if isinstance(prev_rows, list) and prev_rows and prev_rows[0].get("order_count", 0) > 0:
+            prev_aov = float(prev_rows[0].get("total_sales", 0)) / int(prev_rows[0].get("order_count", 1))
         
         change = self._change_pct(prev_aov, aov)
         
@@ -488,10 +488,19 @@ class DashboardService:
         repeat_rows = self.db.execute_query(q_repeat, [start, end])
         avg_rows = self.db.execute_query(q_avg_value, [start, end])
         
-        total = int(total_rows[0]["total_customers"]) if total_rows else 0
-        repeat = int(repeat_rows[0]["repeat_customers"]) if repeat_rows else 0
+        total = 0
+        if isinstance(total_rows, list) and total_rows:
+            total = int(total_rows[0].get("total_customers", 0))
+            
+        repeat = 0
+        if isinstance(repeat_rows, list) and repeat_rows:
+            repeat = int(repeat_rows[0].get("repeat_customers", 0))
+            
         new = total - repeat
-        avg_val = float(avg_rows[0]["avg_customer_value"] or 0) if avg_rows else 0.0
+        
+        avg_val = 0.0
+        if isinstance(avg_rows, list) and avg_rows:
+            avg_val = float(avg_rows[0].get("avg_customer_value", 0) or 0)
         
         return {
             "total_customers": total,

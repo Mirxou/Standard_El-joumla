@@ -12,9 +12,11 @@ from starlette.responses import JSONResponse
 import sys
 from pathlib import Path
 
-# إضافة مسار المشروع
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
+import sys
+import os
+from pathlib import Path
+# الوصول إلى جذر المشروع
+project_root = str(Path(__file__).resolve().parents[2])
 from src.api.middleware import AuthMiddleware, RateLimitMiddleware, LoggingMiddleware
 from src.api.auth import JWTAuthManager
 from src.api.rate_limiter import APIRateLimiter
@@ -219,5 +221,9 @@ class TestLoggingMiddleware:
             assert "API Request" in log_message
             assert "/api/v1/products" in log_message
             assert "GET" in log_message
+
+
+
+
 
 

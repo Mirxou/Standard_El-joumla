@@ -98,3 +98,6 @@ class TestPrintManager:
         except Exception:
             # قد يفشل لأسباب أخرى
             pass
+
+
+

@@ -6,9 +6,14 @@
 
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QTextEdit, QCheckBox, QPushButton, QMessageBox
+    QTextEdit, QCheckBox, QPushButton, QMessageBox, QFrame,
+    QGraphicsDropShadowEffect, QWidget
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
+
+from src.ui.widgets.custom_title_bar import CustomTitleBar
+from src.ui.widgets.quantum_notification import NotificationManager
 
 
 class CategoryFormDialog(QDialog):
@@ -20,12 +25,19 @@ class CategoryFormDialog(QDialog):
         self.category_id = category_id
         self.logger = logger
         
-        if category_id:
-            self.setWindowTitle("تعديل الفئة")
-        else:
-            self.setWindowTitle("إضافة فئة جديدة")
+        # if category_id:
+        #     self.setWindowTitle("تعديل الفئة")
+        # else:
+        #     self.setWindowTitle("إضافة فئة جديدة")
         
-        self.setGeometry(150, 150, 400, 300)
+        # --- Quantum Window Setup ---
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        
+        # Notifications
+        self.notify = NotificationManager(self)
+        
+        self.resize(400, 350) # Slightly larger for padding
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         
         self.init_ui()
@@ -35,7 +47,48 @@ class CategoryFormDialog(QDialog):
     
     def init_ui(self):
         """تهيئة واجهة المستخدم"""
-        layout = QVBoxLayout(self)
+        # تخطيط جذري شفاف
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(10, 10, 10, 10)
+        root_layout.setSpacing(0)
+        
+        # الإطار الرئيسي
+        self.main_frame = QFrame()
+        self.main_frame.setStyleSheet("""
+            QFrame#MainFrame {
+                background-color: #f5f5f5;
+                border: 1px solid #3498db;
+                border-radius: 10px;
+            }
+        """)
+        self.main_frame.setObjectName("MainFrame")
+        
+        # Shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor("#3498db"))
+        shadow.setOffset(0, 0)
+        self.main_frame.setGraphicsEffect(shadow)
+        
+        root_layout.addWidget(self.main_frame)
+        
+        # تخطيط النافذة الداخلية
+        layout = QVBoxLayout(self.main_frame)
+        layout.setContentsMargins(0, 0, 0, 10) # Bottom margin for content
+        layout.setSpacing(10)
+        
+        # 1. Custom Title Bar
+        title = "تعديل الفئة" if self.category_id else "إضافة فئة جديدة"
+        self.title_bar = CustomTitleBar(self, title=title, is_dialog=True)
+        layout.addWidget(self.title_bar)
+        
+        # Container for content
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        layout.addWidget(content_widget)
+        
+        # Re-assign layout to content_layout for the rest of the elements
+        layout = content_layout
         
         # اسم الفئة
         name_layout = QHBoxLayout()
@@ -94,7 +147,7 @@ class CategoryFormDialog(QDialog):
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في تحميل الفئة: {str(e)}")
-            QMessageBox.warning(self, "خطأ", f"فشل في تحميل الفئة: {str(e)}")
+            self.notify.show_error("خطأ", f"فشل في تحميل الفئة: {str(e)}")
     
     def save_category(self):
         """حفظ الفئة"""
@@ -103,7 +156,7 @@ class CategoryFormDialog(QDialog):
         is_active = self.active_checkbox.isChecked()
         
         if not name:
-            QMessageBox.warning(self, "تنبيه", "يجب إدخال اسم الفئة")
+            self.notify.show_warning("تنبيه", "يجب إدخال اسم الفئة")
             return
         
         try:
@@ -115,7 +168,7 @@ class CategoryFormDialog(QDialog):
                 WHERE id = ?
                 """
                 self.db_manager.execute_query(query, (name, description, is_active, self.category_id))
-                QMessageBox.information(self, "نجاح", "تم تحديث الفئة بنجاح")
+                self.notify.show_success("نجاح", "تم تحديث الفئة بنجاح")
             else:
                 # إضافة جديدة
                 query = """
@@ -123,10 +176,10 @@ class CategoryFormDialog(QDialog):
                 VALUES (?, ?, ?, datetime('now'), datetime('now'))
                 """
                 self.db_manager.execute_query(query, (name, description, is_active))
-                QMessageBox.information(self, "نجاح", "تم إضافة الفئة بنجاح")
+                self.notify.show_success("نجاح", "تم إضافة الفئة بنجاح")
             
             self.accept()
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في حفظ الفئة: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في حفظ الفئة: {str(e)}")
+            self.notify.show_error("خطأ", f"فشل في حفظ الفئة: {str(e)}")

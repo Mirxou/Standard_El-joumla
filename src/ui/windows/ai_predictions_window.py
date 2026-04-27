@@ -14,14 +14,12 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QPushButton, QLabel, QComboBox, QTableWidget, QTableWidgetItem,
     QHeaderView, QMessageBox, QGroupBox, QTabWidget, QToolBar,
-    QStatusBar, QSpinBox, QAbstractItemView, QTextEdit
+    QStatusBar, QSpinBox, QAbstractItemView, QTextEdit, QFrame
 )
 from PySide6.QtCore import Qt, Signal, QThread, QTimer
 from PySide6.QtGui import QAction, QColor, QBrush
 
-# إضافة مسار src
 project_root = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(project_root))
 
 from src.core.database_manager import DatabaseManager
 from src.services.ai_prediction_service import AIPredictionService
@@ -77,6 +75,7 @@ class AIPredictionsWindow(QMainWindow):
         self.prediction_worker = None
         
         self.setup_ui()
+        self._setup_status_bar()
     
     def setup_ui(self):
         """إعداد الواجهة"""
@@ -122,6 +121,14 @@ class AIPredictionsWindow(QMainWindow):
         form_group.setLayout(form_layout)
         sales_layout.addWidget(form_group)
         
+        # Bento Summary for Sales
+        self.sales_summary_layout = QHBoxLayout()
+        self.predicted_total_card = self._create_bento_card("المجموع المتوقع", "0.00 دج", "#F0F9FF", "#0369A1")
+        self.confidence_card = self._create_bento_card("متوسط الثقة", "0%", "#F0FDF4", "#15803D")
+        self.sales_summary_layout.addWidget(self.predicted_total_card)
+        self.sales_summary_layout.addWidget(self.confidence_card)
+        sales_layout.addLayout(self.sales_summary_layout)
+
         self.sales_table = QTableWidget()
         self.sales_table.setColumnCount(4)
         self.sales_table.setHorizontalHeaderLabels([
@@ -158,6 +165,12 @@ class AIPredictionsWindow(QMainWindow):
         demand_form_group.setLayout(demand_form_layout)
         demand_layout.addWidget(demand_form_group)
         
+        # Bento Summary for Demand
+        self.demand_summary_layout = QHBoxLayout()
+        self.total_demand_card = self._create_bento_card("إجمالي الطلب المتوقع", "0 وحدة", "#FFF7ED", "#9A3412")
+        self.demand_summary_layout.addWidget(self.total_demand_card)
+        demand_layout.addLayout(self.demand_summary_layout)
+
         self.demand_table = QTableWidget()
         self.demand_table.setColumnCount(3)
         self.demand_table.setHorizontalHeaderLabels([
@@ -229,7 +242,34 @@ class AIPredictionsWindow(QMainWindow):
         
         tab_widget.addTab(recommendations_tab, "💡 التوصيات")
         
-        # Status Bar
+        # Helper to create Bento Cards
+    def _create_bento_card(self, title, value, bg_color, text_color):
+        card = QFrame()
+        card.setStyleSheet(f"""
+            QFrame {{
+                background-color: {bg_color};
+                border: 1px solid {text_color}33;
+                border-radius: 12px;
+                padding: 10px;
+            }}
+        """)
+        layout = QVBoxLayout(card)
+        t_label = QLabel(title)
+        t_label.setStyleSheet(f"color: {text_color}; font-size: 12px;")
+        v_label = QLabel(value)
+        v_label.setStyleSheet(f"color: {text_color}; font-size: 18px; font-weight: bold;")
+        v_label.setObjectName("ValueLabel")
+        layout.addWidget(t_label)
+        layout.addWidget(v_label)
+        return card
+
+    def _update_card_value(self, card, value):
+        label = card.findChild(QLabel, "ValueLabel")
+        if label:
+            label.setText(value)
+    
+    def _setup_status_bar(self):
+        """إعداد شريط الحالة"""
         self.statusBar().showMessage("جاهز")
     
     def forecast_sales(self):
@@ -275,6 +315,13 @@ class AIPredictionsWindow(QMainWindow):
             self.sales_table.setItem(row, 3, status_item)
         
         total = result.get("total_predicted", 0)
+        self._update_card_value(self.predicted_total_card, f"{total:,.2f} دج")
+        
+        # Calculate average confidence
+        if forecast:
+            avg_conf = sum(item.get('confidence', 0) for item in forecast) / len(forecast)
+            self._update_card_value(self.confidence_card, f"{avg_conf:.1f}%")
+        
         self.statusBar().showMessage(f"تم التنبؤ: المجموع المتوقع = {total:.2f}")
     
     def forecast_demand(self):
@@ -315,6 +362,7 @@ class AIPredictionsWindow(QMainWindow):
         
         summary = result.get("summary", {})
         total = summary.get("total_demand", 0)
+        self._update_card_value(self.total_demand_card, f"{total:,.0f} وحدة")
         self.statusBar().showMessage(f"تم التنبؤ: الطلب الإجمالي = {total:.0f}")
     
     def predict_churn(self):

@@ -199,7 +199,17 @@ class AccountsWindow(QMainWindow):
         
         # إجمالي الحسابات المدينة
         self.receivables_total_label = QLabel("إجمالي الحسابات المدينة: 0.00 ج.م")
-        self.receivables_total_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #e74c3c;")
+        self.receivables_total_label.setStyleSheet("""
+            QLabel {
+                font-size: 18px;
+                font-weight: bold;
+                color: #1E40AF;
+                background-color: #DBEAFE;
+                border: 1px solid #BFDBFE;
+                border-radius: 12px;
+                padding: 15px;
+            }
+        """)
         layout.addWidget(self.receivables_total_label)
         
         self.tab_widget.addTab(receivables_widget, "الحسابات المدينة")
@@ -264,7 +274,17 @@ class AccountsWindow(QMainWindow):
         
         # إجمالي الحسابات الدائنة
         self.payables_total_label = QLabel("إجمالي الحسابات الدائنة: 0.00 ج.م")
-        self.payables_total_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #27ae60;")
+        self.payables_total_label.setStyleSheet("""
+            QLabel {
+                font-size: 18px;
+                font-weight: bold;
+                color: #991B1B;
+                background-color: #FEE2E2;
+                border: 1px solid #FECACA;
+                border-radius: 12px;
+                padding: 15px;
+            }
+        """)
         layout.addWidget(self.payables_total_label)
         
         self.tab_widget.addTab(payables_widget, "الحسابات الدائنة")
@@ -732,19 +752,19 @@ class AccountsWindow(QMainWindow):
     
     def add_payment(self):
         """إضافة دفعة جديدة"""
-        dialog = PaymentDialog(self.db_manager, self)
+        dialog = PaymentDialog(self.payment_service, self)
         if dialog.exec() == QDialog.Accepted:
             self.refresh_data()
     
     def make_customer_payment(self, customer_id):
         """إجراء دفعة من عميل"""
-        dialog = PaymentDialog(self.db_manager, self, payment_type=PaymentType.CUSTOMER_PAYMENT, entity_id=customer_id)
+        dialog = PaymentDialog(self.payment_service, self, payment_type=PaymentType.CUSTOMER_PAYMENT, entity_id=customer_id)
         if dialog.exec() == QDialog.Accepted:
             self.refresh_data()
     
     def make_supplier_payment(self, supplier_id):
         """إجراء دفعة لمورد"""
-        dialog = PaymentDialog(self.db_manager, self, payment_type=PaymentType.SUPPLIER_PAYMENT, entity_id=supplier_id)
+        dialog = PaymentDialog(self.payment_service, self, payment_type=PaymentType.SUPPLIER_PAYMENT, entity_id=supplier_id)
         if dialog.exec() == QDialog.Accepted:
             self.refresh_data()
     

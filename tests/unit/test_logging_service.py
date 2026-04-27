@@ -111,3 +111,6 @@ class TestAdvancedLoggingService:
         except Exception:
             # يجب ألا يرفع استثناء
             logger.exception("Test exception message")
+
+
+

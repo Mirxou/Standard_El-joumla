@@ -1,5 +1,6 @@
 // web/lib/actions/dashboard.ts
-import { fetchFromAPI } from "@/lib/db/client";
+import { apiClient } from '@/lib/api/client'
+import { API_CONFIG } from '@/lib/config/api'
 
 export async function getDashboardStats() {
   // محاولة جلب البيانات الحقيقية من الـ API
@@ -23,7 +24,7 @@ export async function getSalesAnalytics(period: string = 'month') {
 
 export async function getInventoryAnalytics() {
   // هنا نجلب المنتجات الحقيقية من البايثون!
-  const products = await fetchFromAPI('/products');
+  const products = await apiClient.get<any>(API_CONFIG.ENDPOINTS.PRODUCTS);
 
   // إذا لم تكن هناك منتجات، نرجع مصفوفة فارغة
   if (!products || !Array.isArray(products)) return [];

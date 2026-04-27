@@ -5,12 +5,13 @@ Theme Selector Dialog - نافذة اختيار السمة
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
     QPushButton, QRadioButton, QButtonGroup, QGroupBox,
-    QWidget, QFrame
+    QWidget, QFrame, QGraphicsDropShadowEffect
 )
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QIcon, QColor
 
 from src.ui.theme_manager import get_theme_manager
+from src.ui.widgets.custom_title_bar import CustomTitleBar
 
 
 class ThemePreview(QFrame):
@@ -62,17 +63,63 @@ class ThemeSelectorDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.theme_manager = get_theme_manager()
+        
+        # --- Quantum Window Setup ---
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        
+        self.resize(550, 600)
+        
+        self.title_text = "اختيار السمة - Theme Selector"
+        
         self.setup_ui()
         self.load_current_theme()
         
     def setup_ui(self):
         """إعداد واجهة المستخدم"""
-        self.setWindowTitle("اختيار السمة - Theme Selector")
-        self.setMinimumWidth(500)
-        self.setModal(True)
+        # تخطيط جذري شفاف
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(10, 10, 10, 10)
+        root_layout.setSpacing(0)
         
-        layout = QVBoxLayout(self)
-        layout.setSpacing(16)
+        # الإطار الرئيسي
+        self.main_frame = QFrame()
+        self.main_frame.setStyleSheet("""
+            QFrame#MainFrame {
+                background-color: #f5f5f5;
+                border: 1px solid #3498db;
+                border-radius: 10px;
+            }
+        """)
+        self.main_frame.setObjectName("MainFrame")
+        
+        # Shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor("#3498db"))
+        shadow.setOffset(0, 0)
+        self.main_frame.setGraphicsEffect(shadow)
+        
+        root_layout.addWidget(self.main_frame)
+        
+        # تخطيط النافذة الداخلية
+        main_layout = QVBoxLayout(self.main_frame)
+        main_layout.setContentsMargins(0, 0, 0, 10)
+        main_layout.setSpacing(0)
+        
+        # 1. Custom Title Bar
+        self.title_bar = CustomTitleBar(self, title=self.title_text, is_dialog=True)
+        main_layout.addWidget(self.title_bar)
+        
+        # Container for content
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setSpacing(16)
+        content_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.addWidget(content_widget)
+        
+        # Re-assign layout to content_layout for the existing widget helpers
+        layout = content_layout
         
         # عنوان
         title = QLabel("<h2>⚙️ اختيار سمة النظام</h2>")

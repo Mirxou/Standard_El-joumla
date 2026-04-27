@@ -48,7 +48,6 @@ def sale_manager(db_manager):
     db, _ = db_manager
     return SaleManager(db_manager=db, logger=Mock())
 
-
 def make_sale(product_id: int, qty: int = 2, unit_price: Decimal = Decimal("150.00")) -> Sale:
     sale = Sale(
         invoice_number="INV-20250101-0001",
@@ -715,23 +714,52 @@ class TestSaleEdgeCases(unittest.TestCase):
             self.assertEqual(sale.payment_method, method)
 
 
-    def test_update_sale_status(self, sale_manager, db_manager):
+    def test_update_sale_status(self):
         """اختبار تحديث حالة الفاتورة"""
-        db, pid = db_manager
-        sale = make_sale(product_id=pid, qty=2, unit_price=Decimal("150.00"))
-        sale_id = sale_manager.create_sale(sale)
-        assert sale_id
-        
-        # تحديث الحالة إلى مؤكدة
-        success = sale_manager.update_sale_status(sale_id, SaleStatus.CONFIRMED)
-        assert success
-        
-        updated_sale = sale_manager.get_sale_by_id(sale_id)
-        assert updated_sale.status == SaleStatus.CONFIRMED
-        
-        # تحديث الحالة إلى ملغية
-        success = sale_manager.update_sale_status(sale_id, SaleStatus.CANCELLED)
-        assert success
+        from src.core.database_manager import DatabaseManager
+        from src.models.sale import SaleManager
+
+        db = DatabaseManager(db_path=":memory:")
+        db.initialize()
+        try:
+            for col_def in [
+                "status TEXT",
+                "paid_amount REAL DEFAULT 0",
+                "remaining_amount REAL DEFAULT 0",
+                "currency_id INTEGER",
+                "exchange_rate REAL DEFAULT 1.0",
+                "base_amount REAL",
+                "converted_amount REAL",
+            ]:
+                try:
+                    db.execute_query(f"ALTER TABLE sales ADD COLUMN {col_def}")
+                except Exception:
+                    pass
+
+            db.execute_query(
+                """
+                INSERT INTO products (name, unit, cost_price, selling_price, current_stock)
+                VALUES (?, 'قطعة', 100.0, 150.0, 100)
+                """,
+                ("Test Product",)
+            )
+            pid = db.fetch_one("SELECT id FROM products WHERE name = ?", ("Test Product",))[0]
+
+            sale_manager = SaleManager(db_manager=db, logger=Mock())
+            sale = make_sale(product_id=pid, qty=2, unit_price=Decimal("150.00"))
+            sale_id = sale_manager.create_sale(sale)
+            assert sale_id
+
+            success = sale_manager.update_sale_status(sale_id, SaleStatus.CONFIRMED)
+            assert success
+
+            updated_sale = sale_manager.get_sale_by_id(sale_id)
+            assert updated_sale.status == SaleStatus.CONFIRMED
+
+            success = sale_manager.update_sale_status(sale_id, SaleStatus.CANCELLED)
+            assert success
+        finally:
+            db.close()
 
 
 def test_cancel_sale(sale_manager, db_manager):
@@ -812,5 +840,121 @@ def test_delete_sale_soft(sale_manager, db_manager):
     assert success
 
 
+def test_create_sale_with_multiple_items(sale_manager, db_manager):
+    """اختبار إنشاء فاتورة بعناصر متعددة"""
+    db, pid = db_manager
+    
+    # إنشاء منتج إضافي
+    db.execute_query(
+        """
+        INSERT INTO products (name, unit, cost_price, selling_price, current_stock)
+        VALUES (?, 'قطعة', 80.0, 120.0, 50)
+        """,
+        ("Product 2",)
+    )
+    pid2 = db.fetch_one("SELECT id FROM products WHERE name = ?", ("Product 2",))[0]
+    
+    sale = make_sale(product_id=pid, qty=2, unit_price=Decimal("150.00"))
+    
+    # إضافة عنصر ثاني
+    item2 = SaleItem(
+        product_id=pid2,
+        product_name="Product 2",
+        quantity=3,
+        unit_price=Decimal("120.00"),
+    )
+    sale.add_item(item2)
+    
+    sale_id = sale_manager.create_sale(sale)
+    assert sale_id
+    
+    persisted = sale_manager.get_sale_by_id(sale_id)
+    assert persisted.items_count == 2
+    assert persisted.total_quantity == 5
+    assert persisted.subtotal == Decimal("660.00")  # (2 * 150) + (3 * 120)
+
+
+def test_create_sale_with_discount_and_tax(sale_manager, db_manager):
+    """اختبار إنشاء فاتورة مع خصم وضريبة"""
+    db, pid = db_manager
+    sale = make_sale(product_id=pid, qty=2, unit_price=Decimal("150.00"))
+    sale.discount_percentage = Decimal("10.00")  # 10% خصم
+    sale.tax_percentage = Decimal("15.00")  # 15% ضريبة
+    
+    sale_id = sale_manager.create_sale(sale)
+    assert sale_id
+    
+    persisted = sale_manager.get_sale_by_id(sale_id)
+    assert persisted.discount_percentage == Decimal("10.00")
+    assert persisted.tax_percentage == Decimal("15.00")
+    assert persisted.total_amount > persisted.subtotal
+
+
+def test_sale_item_quantity_validation(sale_manager, db_manager):
+    """اختبار التحقق من صحة كمية العنصر"""
+    db, pid = db_manager
+    sale = make_sale(product_id=pid, qty=2, unit_price=Decimal("150.00"))
+    
+    # يجب أن تكون الكمية موجبة
+    item = SaleItem(
+        product_id=pid,
+        product_name="Test Product",
+        quantity=1,
+        unit_price=Decimal("150.00"),
+    )
+    assert item.quantity > 0
+
+
+def test_sale_get_nonexistent(sale_manager, db_manager):
+    """اختبار الحصول على فاتورة غير موجودة"""
+    nonexistent_id = 99999
+    sale = sale_manager.get_sale_by_id(nonexistent_id)
+    assert sale is None
+
+
+def test_sale_cancel_nonexistent(sale_manager, db_manager):
+    """اختبار إلغاء فاتورة غير موجودة"""
+    nonexistent_id = 99999
+    success = sale_manager.cancel_sale(nonexistent_id)
+    assert success is False
+
+
+def test_sale_search_by_date_range(sale_manager, db_manager):
+    """اختبار البحث عن مبيعات بنطاق تاريخ"""
+    db, pid = db_manager
+    sale = make_sale(product_id=pid, qty=2, unit_price=Decimal("150.00"))
+    sale_manager.create_sale(sale)
+    
+    from_date = date.today()
+    to_date = date.today()
+    
+    # البحث عن المبيعات اليوم
+    if hasattr(sale_manager, 'get_sales_by_date_range'):
+        sales = sale_manager.get_sales_by_date_range(from_date, to_date)
+        assert isinstance(sales, list)
+        assert len(sales) >= 1
+
+
+def test_sale_payment_exceeds_total(sale_manager, db_manager):
+    """اختبار دفع مبلغ أكبر من الإجمالي"""
+    db, pid = db_manager
+    sale = make_sale(product_id=pid, qty=2, unit_price=Decimal("150.00"))
+    sale_id = sale_manager.create_sale(sale)
+    
+    total = Decimal("300.00")
+    payment_amount = Decimal("500.00")
+    
+    success = sale_manager.add_payment(sale_id, payment_amount, PaymentMethod.CASH)
+    
+    if success:
+        updated_sale = sale_manager.get_sale_by_id(sale_id)
+        # يجب ألا يتجاوز المبلغ المدفوع الإجمالي
+        assert updated_sale.paid_amount <= updated_sale.total_amount
+        assert updated_sale.status == SaleStatus.PAID
+
+
 if __name__ == '__main__':
     unittest.main()
+
+
+

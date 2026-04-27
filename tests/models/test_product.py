@@ -4,6 +4,7 @@ Comprehensive tests for Product model
 """
 
 import unittest
+import pytest
 from decimal import Decimal
 from datetime import datetime
 from src.models.product import Product, ProductManager
@@ -282,203 +283,270 @@ class DummyProductDB:
         return self.last_insert_id
 
 
-class TestProductManager(unittest.TestCase):
-    def test_update_stock_blocks_negative_inventory(self):
-        db = DummyProductDB()
-        row = (
-            1,
-            "Product",
-            None,
-            None,
-            None,
-            "قطعة",
-            10.0,
-            15.0,
-            0,
-            1,
-            None,
-            None,
-            1,
-            None,
-            None,
-            "Category",
-        )
-        db.fetch_one_results.append(row)
-        manager = ProductManager(db)
+class TestProductManager:
+    """اختبارات ProductManager باستخدام pytest"""
+    
+    @pytest.mark.usefixtures("db_manager")
+    def test_update_stock_blocks_negative_inventory(self, db_manager):
+        """اختبار منع تحديث المخزون بقيمة سالبة"""
+        # إنشاء منتج بمخزون 0
+        cursor = db_manager.connection.cursor()
+        cursor.execute("INSERT OR IGNORE INTO categories (id, name, is_active) VALUES (1, 'General', 1)")
+        cursor.execute("""
+            INSERT INTO products (name, unit, cost_price, selling_price, current_stock, is_active, category_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, ("Product", "قطعة", 10.0, 15.0, 0, 1, 1))
+        product_id = cursor.lastrowid
+        db_manager.connection.commit()
+        cursor.close()
+        
+        manager = ProductManager(db_manager)
+        result = manager.update_stock(product_id, -5)  # محاولة طرح 5
+        
+        assert result is False
+        # التحقق من عدم تغيير المخزون
+        product = manager.get_product_by_id(product_id)
+        assert product.current_stock == 0
 
-        result = manager.update_stock(1, -5)
-
-        self.assertFalse(result)
-        updates = [c for c in db.execute_query_calls if "UPDATE" in c[0]]
-        self.assertEqual(len(updates), 0)
-
-    def test_get_low_stock_products_parses_rows(self):
-        db = DummyProductDB()
-        low_row = (
-            2,
-            "Low",
-            None,
-            None,
-            None,
-            "قطعة",
-            2.0,
-            5.0,
-            10,
-            2,
-            None,
-            None,
-            1,
-            None,
-            None,
-            "Cat",
-        )
-        db.fetch_all_results.append([low_row])
-        manager = ProductManager(db)
-
+    @pytest.mark.usefixtures("db_manager")
+    def test_get_low_stock_products_parses_rows(self, db_manager):
+        """اختبار الحصول على منتجات المخزون المنخفض"""
+        # إنشاء منتج بمخزون منخفض (current_stock <= min_stock)
+        cursor = db_manager.connection.cursor()
+        cursor.execute("INSERT OR IGNORE INTO categories (id, name, is_active) VALUES (1, 'General', 1)")
+        cursor.execute("""
+            INSERT INTO products (name, unit, cost_price, selling_price, current_stock, min_stock, is_active, category_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, ("Low Stock Test", "قطعة", 2.0, 5.0, 2, 10, 1, 1))
+        db_manager.connection.commit()
+        cursor.close()
+        
+        manager = ProductManager(db_manager)
         products = manager.get_low_stock_products()
+        
+        # التحقق من وجود منتج واحد على الأقل
+        assert len(products) >= 1
+        # التحقق من وجود منتجنا في النتائج
+        low_stock_product = next((p for p in products if p.name == "Low Stock Test"), None)
+        assert low_stock_product is not None
+        assert low_stock_product.is_low_stock is True
 
-        self.assertEqual(len(products), 1)
-        self.assertTrue(products[0].is_low_stock)
+    @pytest.mark.usefixtures("db_manager")
+    def test_search_products_respects_filters_and_limits(self, db_manager):
+        """اختبار البحث مع الفلاتر والحدود"""
+        # إنشاء فئة جديدة للاختبار
+        cursor = db_manager.connection.cursor()
+        cursor.execute("INSERT INTO categories (name, is_active) VALUES (?, ?)", ("SearchCat", 1))
+        search_cat_id = cursor.lastrowid
+        
+        # إنشاء منتج للبحث
+        cursor.execute("""
+            INSERT INTO products (name, name_en, barcode, unit, cost_price, selling_price, 
+                                current_stock, category_id, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, ("Search Hit", "Hit", "BC123", "قطعة", 4.0, 8.0, 5, search_cat_id, 1))
+        db_manager.connection.commit()
+        cursor.close()
+        
+        manager = ProductManager(db_manager)
+        products = manager.search_products(search_term="Hit", category_id=search_cat_id, active_only=True, limit=1, offset=0)
+        
+        assert len(products) == 1
+        assert products[0].category_id == search_cat_id
 
-    def test_search_products_respects_filters_and_limits(self):
-        db = DummyProductDB()
-        row = (
-            3,
-            "Search Hit",
-            "Hit",
-            "BC",
-            5,
-            "قطعة",
-            4.0,
-            8.0,
-            1,
-            2,
-            None,
-            None,
-            1,
-            None,
-            None,
-            "Cat",
-        )
-        db.fetch_all_results.append([row])
-        manager = ProductManager(db)
-
-        products = manager.search_products(search_term="Hit", category_id=5, active_only=True, limit=1, offset=0)
-
-        self.assertEqual(len(products), 1)
-        self.assertEqual(products[0].category_id, 5)
-        self.assertIn("LIMIT 1", db.last_fetch_all[0])
-        self.assertTrue(all("Hit" in p.name or "Hit" in (p.name_en or "") for p in products))
-
-    def test_get_stock_report_maps_tuple(self):
-        db = DummyProductDB()
-        db.fetch_one_results.append((10, 8, 2, 1234.5, 6.5))
-        manager = ProductManager(db)
-
+    @pytest.mark.usefixtures("db_manager")
+    def test_get_stock_report_maps_tuple(self, db_manager):
+        """اختبار تقرير المخزون"""
+        # الحصول على التقرير الحالي أولاً
+        manager = ProductManager(db_manager)
+        initial_report = manager.get_stock_report()
+        initial_count = initial_report["total_products"]
+        
+        # إنشاء منتجات للتقرير
+        cursor = db_manager.connection.cursor()
+        cursor.execute("INSERT OR IGNORE INTO categories (id, name, is_active) VALUES (1, 'General', 1)")
+        cursor.execute("""
+            INSERT INTO products (name, unit, cost_price, selling_price, current_stock, is_active, category_id)
+            VALUES 
+                (?, ?, ?, ?, ?, ?, ?),
+                (?, ?, ?, ?, ?, ?, ?)
+        """, ("Product1", "قطعة", 10.0, 15.0, 50, 1, 1,
+              "Product2", "قطعة", 20.0, 30.0, 100, 1, 1))
+        db_manager.connection.commit()
+        cursor.close()
+        
         report = manager.get_stock_report()
 
-        self.assertEqual(report["total_products"], 10)
-        self.assertEqual(report["active_products"], 8)
-        self.assertEqual(report["low_stock_products"], 2)
-        self.assertAlmostEqual(report["total_stock_value"], 1234.5)
-        self.assertAlmostEqual(report["avg_stock_level"], 6.5)
+        # التحقق من زيادة عدد المنتجات
+        assert report["total_products"] == initial_count + 2
+        assert report["active_products"] >= 2
+        assert report["total_stock_value"] > 0
     
-    def test_update_product_success(self):
+    @pytest.mark.usefixtures("db_manager")
+    def test_update_product_success(self, db_manager):
         """اختبار تحديث منتج بنجاح"""
-        db = DummyProductDB()
-        db.rowcount = 1
-        manager = ProductManager(db)
+        # إنشاء منتج أولاً
+        cursor = db_manager.connection.cursor()
+        cursor.execute("INSERT OR IGNORE INTO categories (id, name, is_active) VALUES (1, 'General', 1)")
+        cursor.execute("""
+            INSERT INTO products (name, unit, cost_price, selling_price, current_stock, is_active, category_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, ("Original", "قطعة", 100.0, 150.0, 50, 1, 1))
+        product_id = cursor.lastrowid
+        db_manager.connection.commit()
+        cursor.close()
+        
+        manager = ProductManager(db_manager)
         
         product = Product(
-            id=1,
+            id=product_id,
             name="منتج محدث",
+            unit="قطعة",
             cost_price=Decimal('120.00'),
             selling_price=Decimal('180.00')
         )
         
         result = manager.update_product(product)
-        self.assertTrue(result)
-        self.assertIn("UPDATE products", db.execute_query_calls[-1][0])
+        assert result is True
+        
+        # التحقق من التحديث
+        updated = manager.get_product_by_id(product_id)
+        assert updated.name == "منتج محدث"
+        assert updated.selling_price == Decimal('180.00')
     
-    def test_delete_product_soft(self):
+    @pytest.mark.usefixtures("db_manager")
+    def test_delete_product_soft(self, db_manager):
         """اختبار حذف منتج بشكل ناعم"""
-        db = DummyProductDB()
-        db.rowcount = 1
-        manager = ProductManager(db)
+        # إنشاء منتج
+        cursor = db_manager.connection.cursor()
+        cursor.execute("INSERT OR IGNORE INTO categories (id, name, is_active) VALUES (1, 'General', 1)")
+        cursor.execute("""
+            INSERT INTO products (name, unit, cost_price, selling_price, current_stock, is_active, category_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, ("To Delete", "قطعة", 10.0, 15.0, 50, 1, 1))
+        product_id = cursor.lastrowid
+        db_manager.connection.commit()
+        cursor.close()
         
-        result = manager.delete_product(1, soft_delete=True)
-        self.assertTrue(result)
-        self.assertIn("UPDATE", db.execute_query_calls[-1][0])
-        self.assertIn("is_active", db.execute_query_calls[-1][0])
+        manager = ProductManager(db_manager)
+        result = manager.delete_product(product_id, soft_delete=True)
+        
+        assert result is True
+        # التحقق من الحذف الناعم
+        product = manager.get_product_by_id(product_id)
+        assert product.is_active is False
     
-    def test_delete_product_hard(self):
+    @pytest.mark.usefixtures("db_manager")
+    def test_delete_product_hard(self, db_manager):
         """اختبار حذف منتج بشكل صلب"""
-        db = DummyProductDB()
-        db.rowcount = 1
-        manager = ProductManager(db)
+        # إنشاء منتج
+        cursor = db_manager.connection.cursor()
+        cursor.execute("INSERT OR IGNORE INTO categories (id, name, is_active) VALUES (1, 'General', 1)")
+        cursor.execute("""
+            INSERT INTO products (name, unit, cost_price, selling_price, current_stock, is_active, category_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, ("To Delete", "قطعة", 10.0, 15.0, 50, 1, 1))
+        product_id = cursor.lastrowid
+        db_manager.connection.commit()
+        cursor.close()
         
-        result = manager.delete_product(1, soft_delete=False)
-        self.assertTrue(result)
-        self.assertIn("DELETE", db.execute_query_calls[-1][0])
+        manager = ProductManager(db_manager)
+        result = manager.delete_product(product_id, soft_delete=False)
+        
+        assert result is True
+        # التحقق من الحذف الصلب
+        product = manager.get_product_by_id(product_id)
+        assert product is None
     
-    def test_get_product_by_barcode(self):
+    @pytest.mark.usefixtures("db_manager")
+    def test_get_product_by_barcode(self, db_manager):
         """اختبار الحصول على منتج بالباركود"""
-        db = DummyProductDB()
-        row = (
-            5, "Product Barcode", None, "BC123", None, "قطعة",
-            10.0, 15.0, 50, 10, None, None, 1, None, None, "Category"
-        )
-        db.fetch_one_results.append(row)
-        manager = ProductManager(db)
+        # استخدام باركود فريد
+        import uuid
+        barcode = f"BC_{uuid.uuid4().hex[:8]}"
         
-        product = manager.get_product_by_barcode("BC123")
-        self.assertIsNotNone(product)
-        self.assertEqual(product.id, 5)
-        self.assertEqual(product.barcode, "BC123")
+        cursor = db_manager.connection.cursor()
+        cursor.execute("INSERT OR IGNORE INTO categories (id, name, is_active) VALUES (1, 'General', 1)")
+        cursor.execute("""
+            INSERT INTO products (name, barcode, unit, cost_price, selling_price, current_stock, is_active, category_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, ("Product Barcode", barcode, "قطعة", 10.0, 15.0, 50, 1, 1))
+        db_manager.connection.commit()
+        cursor.close()
+        
+        manager = ProductManager(db_manager)
+        product = manager.get_product_by_barcode(barcode)
+        
+        assert product is not None
+        assert product.barcode == barcode
     
-    def test_get_products_by_category(self):
+    @pytest.mark.usefixtures("db_manager")
+    def test_get_products_by_category(self, db_manager):
         """اختبار الحصول على منتجات فئة معينة"""
-        db = DummyProductDB()
-        row = (
-            6, "Category Product", None, None, 3, "قطعة",
-            20.0, 30.0, 100, 20, None, None, 1, None, None, "Electronics"
-        )
-        db.fetch_all_results.append([row])
-        manager = ProductManager(db)
+        # إنشاء فئة جديدة
+        cursor = db_manager.connection.cursor()
+        cursor.execute("INSERT INTO categories (name, is_active) VALUES (?, ?)", ("Electronics", 1))
+        cat_id = cursor.lastrowid
         
-        products = manager.get_products_by_category(3)
-        self.assertEqual(len(products), 1)
-        self.assertEqual(products[0].category_id, 3)
+        # إنشاء منتج في الفئة
+        cursor.execute("""
+            INSERT INTO products (name, unit, cost_price, selling_price, current_stock, category_id, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, ("Category Product", "قطعة", 20.0, 30.0, 100, cat_id, 1))
+        db_manager.connection.commit()
+        cursor.close()
+        
+        manager = ProductManager(db_manager)
+        products = manager.get_products_by_category(cat_id)
+        
+        assert len(products) == 1
+        assert products[0].category_id == cat_id
     
-    def test_get_all_products(self):
+    @pytest.mark.usefixtures("db_manager")
+    def test_get_all_products(self, db_manager):
         """اختبار الحصول على جميع المنتجات"""
-        db = DummyProductDB()
-        row = (
-            7, "All Product", None, None, None, "قطعة",
-            25.0, 35.0, 75, 15, None, None, 1, None, None, "Category"
-        )
-        db.fetch_all_results.append([row])
-        manager = ProductManager(db)
+        # إنشاء منتج أولاً
+        cursor = db_manager.connection.cursor()
+        cursor.execute("INSERT OR IGNORE INTO categories (id, name, is_active) VALUES (1, 'General', 1)")
+        cursor.execute("""
+            INSERT INTO products (name, unit, cost_price, selling_price, current_stock, is_active, category_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, ("All Product", "قطعة", 25.0, 35.0, 75, 1, 1))
+        db_manager.connection.commit()
+        cursor.close()
         
+        manager = ProductManager(db_manager)
         products = manager.get_all_products(active_only=True)
-        self.assertIsInstance(products, list)
-        self.assertGreaterEqual(len(products), 1)
-    
-    def test_update_stock_positive(self):
-        """اختبار تحديث المخزون بقيمة إيجابية"""
-        db = DummyProductDB()
-        row = (
-            8, "Stock Product", None, None, None, "قطعة",
-            15.0, 20.0, 50, 10, None, None, 1, None, None, "Category"
-        )
-        db.fetch_one_results.append(row)
-        db.rowcount = 1
-        manager = ProductManager(db)
         
-        result = manager.update_stock(8, 10)
-        self.assertTrue(result)
-        self.assertIn("UPDATE products", db.execute_query_calls[-1][0])
+        assert isinstance(products, list)
+        assert len(products) >= 1
+    
+    @pytest.mark.usefixtures("db_manager")
+    def test_update_stock_positive(self, db_manager):
+        """اختبار تحديث المخزون بقيمة إيجابية"""
+        # إنشاء منتج بمخزون 50
+        cursor = db_manager.connection.cursor()
+        cursor.execute("INSERT OR IGNORE INTO categories (id, name, is_active) VALUES (1, 'General', 1)")
+        cursor.execute("""
+            INSERT INTO products (name, unit, cost_price, selling_price, current_stock, is_active, category_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, ("Stock Product", "قطعة", 15.0, 20.0, 50, 1, 1))
+        product_id = cursor.lastrowid
+        db_manager.connection.commit()
+        cursor.close()
+        
+        manager = ProductManager(db_manager)
+        # Note: update_stock يعين القيمة الجديدة وليس يضيف إليها
+        result = manager.update_stock(product_id, 60)  # تعيين إلى 60
+        
+        assert result is True
+        # التحقق من تحديث المخزون
+        updated = manager.get_product_by_id(product_id)
+        assert updated.current_stock == 60
 
 
 if __name__ == '__main__':
     unittest.main()
+
+
+

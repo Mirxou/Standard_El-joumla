@@ -13,29 +13,22 @@ export default function AIForecastDashboard() {
   const [forecastData, setForecastData] = useState<any>(null)
   const [loading, setLoading] = useState(false)
 
-  // بيانات تجريبية للتنبؤ
-  const mockForecastData = [
-    { day: 'الاثنين', actual: 45, forecast: 48, lower: 40, upper: 56 },
-    { day: 'الثلاثاء', actual: 52, forecast: 55, lower: 47, upper: 63 },
-    { day: 'الأربعاء', actual: 48, forecast: 51, lower: 43, upper: 59 },
-    { day: 'الخميس', actual: 61, forecast: 58, lower: 50, upper: 66 },
-    { day: 'الجمعة', actual: null, forecast: 62, lower: 54, upper: 70 },
-    { day: 'السبت', actual: null, forecast: 65, lower: 57, upper: 73 },
-    { day: 'الأحد', actual: null, forecast: 59, lower: 51, upper: 67 },
-  ]
-
-  const stockOptimization = [
-    { product: 'منتج 1', current: 45, optimal: 65, status: 'low', eoq: 100, reorder: 55 },
-    { product: 'منتج 2', current: 120, optimal: 100, status: 'high', eoq: 150, reorder: 80 },
-    { product: 'منتج 3', current: 85, optimal: 80, status: 'ok', eoq: 120, reorder: 70 },
-    { product: 'منتج 4', current: 25, optimal: 60, status: 'critical', eoq: 90, reorder: 50 },
-  ]
-
-  const abcAnalysis = {
-    A: { count: 15, revenue: 820000, percent: 80 },
-    B: { count: 30, revenue: 154000, percent: 15 },
-    C: { count: 55, revenue: 51000, percent: 5 },
-  }
+  // Fetch forecast data from API
+  useEffect(() => {
+    const fetchForecastData = async () => {
+      try {
+        setLoading(true)
+        const response = await apiClient.get(API_CONFIG.ENDPOINTS.AI.FORECAST)
+        setForecastData(response)
+      } catch (e) {
+        console.error("Error fetching forecast data:", e)
+        setForecastData(null)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchForecastData()
+  }, [selectedProduct])
 
   return (
     <div className="space-y-6" dir="rtl">

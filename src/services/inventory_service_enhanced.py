@@ -13,7 +13,6 @@ from dataclasses import dataclass
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 class MovementType(Enum):
     """أنواع حركات المخزون"""
@@ -110,8 +109,8 @@ class InventoryService:
         self.db_manager = db_manager
         self.logger = logger
         # إضافة المدراء المتوافقين
-        from models.category import CategoryManager
-        from models.product import ProductManager
+        from src.models.category import CategoryManager
+        from src.models.product import ProductManager
         self.category_manager = CategoryManager(db_manager)
         self.product_manager = ProductManager(db_manager, logger)
     

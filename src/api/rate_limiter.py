@@ -31,8 +31,8 @@ class APIRateLimiter:
             default_window_seconds: النافذة الزمنية الافتراضية بالثواني
             per_endpoint_limits: حدود مخصصة لكل endpoint
                 مثال: {
-                    "/api/auth/login": {"max_requests": 5, "window_seconds": 60},
-                    "/api/products": {"max_requests": 200, "window_seconds": 60}
+                    "/api/v1/auth/login": {"max_requests": 5, "window_seconds": 60},
+                    "/api/v1/products": {"max_requests": 200, "window_seconds": 60}
                 }
         """
         self.default_max_requests = default_max_requests
@@ -135,7 +135,7 @@ class APIRateLimiter:
             
             remaining = max_requests - current_count - 1
             
-            return True, remaining, None
+            return True, remaining, 0
     
     def reset(self, ip_address: str, endpoint: Optional[str] = None, user_id: Optional[int] = None):
         """
@@ -177,21 +177,29 @@ class APIRateLimiter:
         with self._lock:
             if endpoint:
                 key = f"{identifier}:{endpoint}"
-                current_count = len(self._requests.get(key, []))
+                endpoint_requests = len(self._requests.get(key, []))
+                endpoints = {endpoint: endpoint_requests}
+                total_requests = endpoint_requests
             else:
                 # عدد الطلبات لجميع الـ endpoints
-                current_count = sum(
-                    len(requests) for key, requests in self._requests.items()
-                    if key.startswith(f"{identifier}:")
-                )
-            
+                endpoints = {}
+                total_requests = 0
+                for key, requests_list in self._requests.items():
+                    if key.startswith(f"{identifier}:"):
+                        endpoint_name = key.split(":", 1)[1]
+                        count = len(requests_list)
+                        endpoints[endpoint_name] = count
+                        total_requests += count
+
             return {
                 "identifier": identifier,
                 "endpoint": endpoint or "all",
-                "current_requests": current_count,
+                "current_requests": total_requests,
+                "total_requests": total_requests,
+                "endpoints": endpoints,
                 "max_requests": max_requests,
                 "window_seconds": window_seconds,
-                "remaining_requests": max(0, max_requests - current_count)
+                "remaining_requests": max(0, max_requests - total_requests),
             }
     
     def cleanup_old_entries(self, max_age_hours: int = 24):

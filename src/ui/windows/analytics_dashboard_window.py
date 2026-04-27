@@ -19,9 +19,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QAction
 
-# إضافة مسار src
 project_root = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(project_root))
 
 from src.core.database_manager import DatabaseManager
 from src.services.analytics_service import AnalyticsService

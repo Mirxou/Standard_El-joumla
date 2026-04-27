@@ -41,9 +41,9 @@ class SalesChartWidget(QFrame):
         # تنسيق الإطار الخارجي
         self.setStyleSheet("""
             SalesChartWidget {
-                background-color: #ffffff;
-                border-radius: 10px;
-                border: 1px solid #e5e7eb;
+                background-color: rgba(30, 41, 59, 0.4);
+                border-radius: 12px;
+                border: 1px solid rgba(148, 163, 184, 0.1);
                 padding: 10px;
             }
         """)
@@ -58,27 +58,27 @@ class SalesChartWidget(QFrame):
         title_label.setStyleSheet("""
             font-size: 16px;
             font-weight: bold;
-            color: #1e293b;
+            color: #f1f5f9;
             padding: 5px;
         """)
         layout.addWidget(title_label)
         
-        # إعداد PyQtGraph
-        pg.setConfigOption('background', 'w')      # خلفية بيضاء
-        pg.setConfigOption('foreground', 'k')       # خطوط سوداء
-        pg.setConfigOptions(antialias=True)         # تنعيم الحواف
+        # إعداد PyQtGraph - Quantum Theme
+        pg.setConfigOption('background', '#020617')  # Deep Void Background
+        pg.setConfigOption('foreground', '#cbd5e1')  # Slate Text
+        pg.setConfigOptions(antialias=True)         # High Quality
         
         # إنشاء عنصر الرسم
         self.plot_widget = pg.PlotWidget()
         self.plot_widget.setTitle('')
-        self.plot_widget.setLabel('left', 'المبلغ (د.ج)', color='#475569', **{'font-size': '11pt'})
-        self.plot_widget.setLabel('bottom', 'الأيام السابقة', color='#475569', **{'font-size': '11pt'})
-        self.plot_widget.showGrid(x=True, y=True, alpha=0.3)
+        self.plot_widget.setLabel('left', 'المبلغ (د.ج)', color='#38bdf8', **{'font-size': '11pt'})
+        self.plot_widget.setLabel('bottom', 'الأيام السابقة', color='#38bdf8', **{'font-size': '11pt'})
+        self.plot_widget.showGrid(x=True, y=True, alpha=0.15) # Faint grid
         self.plot_widget.setMinimumHeight(300)
         
         # تنسيق المحور Y (الأرقام)
-        self.plot_widget.getAxis('left').setTextPen(pg.mkPen(color='#64748b', width=1))
-        self.plot_widget.getAxis('bottom').setTextPen(pg.mkPen(color='#64748b', width=1))
+        self.plot_widget.getAxis('left').setTextPen(pg.mkPen(color='#94a3b8', width=1))
+        self.plot_widget.getAxis('bottom').setTextPen(pg.mkPen(color='#94a3b8', width=1))
         
         layout.addWidget(self.plot_widget)
         
@@ -90,8 +90,8 @@ class SalesChartWidget(QFrame):
         تحديث الرسم البياني ببيانات جديدة
         
         Args:
-            days: قائمة الأيام (مثلاً [1, 2, 3, 4, 5, 6, 7] أو ['السبت', 'الأحد', ...])
-            amounts: قائمة المبالغ المالية (قائمة أرقام)
+            days: قائمة الأيام
+            amounts: قائمة المبالغ المالية
         """
         if not PYQTGRAPH_AVAILABLE:
             return
@@ -99,7 +99,6 @@ class SalesChartWidget(QFrame):
         self.plot_widget.clear()
         
         if not days or not amounts or len(days) == 0 or len(amounts) == 0:
-            # عرض رسالة "لا توجد بيانات"
             self.plot_widget.addItem(
                 pg.TextItem(
                     "لا توجد بيانات للعرض",
@@ -111,7 +110,6 @@ class SalesChartWidget(QFrame):
         
         # التأكد من أن الأطوال متساوية
         if len(days) != len(amounts):
-            logger.warning(f"طول days ({len(days)}) لا يطابق طول amounts ({len(amounts)})")
             min_len = min(len(days), len(amounts))
             days = days[:min_len]
             amounts = amounts[:min_len]
@@ -122,18 +120,16 @@ class SalesChartWidget(QFrame):
             days_array = np.array(days)
             amounts_array = np.array(amounts, dtype=float)
         except ImportError:
-            # Fallback: استخدام قوائم عادية
             days_array = days
             amounts_array = amounts
         
-        # إنشاء الرسم البياني الشريطي (Bar Chart)
-        # اللون الأزرق الملكي: #3b82f6
+        # إنشاء الرسم البياني الشريطي (Bar Chart) - Neon Cyan Style
         bar_chart = pg.BarGraphItem(
             x=days_array,
             height=amounts_array,
             width=0.6,
-            brush=pg.mkBrush('#3b82f6'),
-            pen=pg.mkPen('#1e40af', width=1)  # حدود زرقاء غامقة
+            brush=pg.mkBrush('#00f3ff'), # Neon Cyan Fill
+            pen=pg.mkPen('#00f3ff', width=1)  # Neon Cyan Border
         )
         
         self.plot_widget.addItem(bar_chart)

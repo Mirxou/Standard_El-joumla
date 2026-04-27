@@ -1,7 +1,21 @@
 /* ============================================
-   Invoice Template Stylesheet
-   أنماط قالب الفاتورة
+   Modern Premium Invoice Template Stylesheet
+   أنماط قالب الفاتورة الحديث
    ============================================ */
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
+
+:root {
+    --primary-color: #4f46e5;      /* Indigo 600 */
+    --secondary-color: #f1f5f9;    /* Slate 100 */
+    --text-main: #0f172a;          /* Slate 900 */
+    --text-muted: #64748b;         /* Slate 500 */
+    --border-light: #e2e8f0;       /* Slate 200 */
+    --success: #10b981;            /* Emerald 500 */
+    --danger: #ef4444;             /* Red 500 */
+    --warning: #f59e0b;            /* Amber 500 */
+    --radius-md: 12px;
+    --radius-sm: 8px;
+}
 
 * {
     margin: 0;
@@ -10,320 +24,339 @@
 }
 
 body {
-    font-family: 'Segoe UI', 'Arial', 'Tahoma', sans-serif;
-    padding: 20px;
-    background: #f3f4f6;
-    color: #1e293b;
+    font-family: 'Cairo', 'Inter', sans-serif;
+    background: #f8fafc;
+    color: var(--text-main);
+    padding: 2rem;
+    -webkit-font-smoothing: antialiased;
 }
 
-.invoice-box {
-    max-width: 800px;
+/* Container */
+.invoice-container {
+    max-width: 850px;
     margin: 0 auto;
-    padding: 40px;
-    border: 1px solid #e5e7eb;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     background: #ffffff;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+    overflow: hidden;
+    position: relative;
 }
 
-.header {
+/* Accent Bar Top */
+.invoice-container::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 6px;
+    background: linear-gradient(90deg, var(--primary-color) 0%, #818cf8 100%);
+}
+
+.invoice-content {
+    padding: 3.5rem;
+}
+
+/* Header Section */
+.invoice-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 40px;
-    padding-bottom: 20px;
-    border-bottom: 2px solid #3b82f6;
+    margin-bottom: 3rem;
 }
 
-.company-info {
-    flex: 1;
+.brand-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
 }
 
 .company-logo {
-    max-width: 150px;
-    max-height: 80px;
-    margin-bottom: 15px;
+    max-height: 65px;
     object-fit: contain;
 }
 
-.company-info h1 {
-    margin: 0 0 10px 0;
-    color: #3b82f6;
-    font-size: 28px;
-    font-weight: bold;
-}
-
-.company-info p {
-    color: #64748b;
-    font-size: 14px;
+.company-details {
+    color: var(--text-muted);
+    font-size: 0.9rem;
     line-height: 1.6;
-    margin: 5px 0;
 }
-
-.invoice-details {
-    text-align: left;
-    background: #f8fafc;
-    padding: 20px;
-    border-radius: 6px;
-    border: 1px solid #e2e8f0;
-    min-width: 250px;
-}
-
-.invoice-details h3 {
-    margin: 0 0 15px 0;
-    color: #1e293b;
-    font-size: 20px;
-}
-
-.invoice-details p {
-    margin: 8px 0;
-    color: #475569;
-    font-size: 14px;
-}
-
-.invoice-details strong {
-    color: #1e293b;
-}
-
-.invoice-codes {
-    display: flex;
-    gap: 15px;
-    margin-top: 15px;
-    align-items: center;
-}
-
-.qr-code, .barcode {
-    display: inline-block;
-    padding: 8px;
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 4px;
-}
-
-.qr-code img, .barcode img {
+.company-details strong {
+    color: var(--text-main);
+    font-size: 1.1rem;
     display: block;
-    max-width: 100px;
-    max-height: 100px;
+    margin-bottom: 0.3rem;
 }
 
-.barcode img {
-    max-height: 50px;
+/* Invoice Title & Meta */
+.invoice-meta {
+    text-align: left;
 }
-
-table {
-    width: 100%;
-    line-height: inherit;
-    text-align: right;
-    border-collapse: collapse;
-    margin: 30px 0;
+.invoice-title {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--text-main);
+    letter-spacing: -1px;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
 }
-
-table thead {
-    background: #1e293b;
-    color: white;
+.invoice-meta-grid {
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 0.5rem 1.5rem;
+    background: var(--secondary-color);
+    padding: 1rem 1.5rem;
+    border-radius: var(--radius-sm);
+    margin-top: 1rem;
 }
-
-table th {
-    padding: 15px 12px;
+.meta-label {
+    color: var(--text-muted);
+    font-size: 0.85rem;
     font-weight: 600;
-    font-size: 14px;
-    text-align: right;
 }
-
-table th:first-child {
-    text-align: right;
-}
-
-table th:last-child {
+.meta-value {
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    color: var(--text-main);
+    font-size: 0.9rem;
     text-align: left;
 }
 
-table td {
-    padding: 12px;
-    border-bottom: 1px solid #e5e7eb;
-    font-size: 14px;
-    color: #475569;
+/* Divider */
+.divider {
+    height: 1px;
+    background: var(--border-light);
+    margin: 2rem 0;
 }
 
-table tbody tr:hover {
-    background: #f8fafc;
+/* Billing Section */
+.billing-section {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 3rem;
+}
+.billing-box {
+    flex: 1;
+}
+.billing-title {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.8rem;
+    font-weight: 700;
+}
+.billing-details {
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+.billing-details strong {
+    font-size: 1.1rem;
+    display: block;
+    margin-bottom: 0.3rem;
+    color: var(--text-main);
 }
 
-table tbody tr:last-child td {
-    border-bottom: none;
+/* Table Section */
+.invoice-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin-bottom: 2rem;
 }
-
-.product-image {
-    width: 50px;
-    height: 50px;
-    object-fit: cover;
-    border-radius: 4px;
-    border: 1px solid #e2e8f0;
+.invoice-table th {
+    background: var(--secondary-color);
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 1rem;
+    text-align: right;
+    letter-spacing: 0.5px;
 }
+.invoice-table th:first-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.invoice-table th:last-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); text-align: left; }
+.invoice-table td {
+    padding: 1.2rem 1rem;
+    border-bottom: 1px solid var(--border-light);
+    font-size: 0.95rem;
+    vertical-align: middle;
+}
+.invoice-table tr:last-child td { border-bottom: none; }
+.invoice-table .col-center { text-align: center; }
+.invoice-table .col-left { text-align: left; font-family: 'Inter', sans-serif; font-weight: 500; }
 
-.total-section {
-    margin-top: 30px;
-    text-align: left;
-    background: #f8fafc;
-    padding: 25px;
+.item-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+.item-img {
+    width: 45px;
+    height: 45px;
     border-radius: 6px;
-    border: 2px solid #3b82f6;
+    object-fit: cover;
+    border: 1px solid var(--border-light);
+}
+.item-name {
+    font-weight: 600;
+    color: var(--text-main);
+}
+.item-meta {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 0.2rem;
+    font-family: 'Inter', sans-serif;
 }
 
+/* Totals Section */
+.totals-wrapper {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-top: 2rem;
+}
+.codes-section {
+    display: flex;
+    gap: 1rem;
+}
+.code-box {
+    background: white;
+    padding: 0.5rem;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+.code-box img {
+    display: block;
+    max-height: 80px;
+    mix-blend-mode: multiply;
+}
+
+.totals-box {
+    width: 350px;
+    background: var(--secondary-color);
+    padding: 1.5rem;
+    border-radius: var(--radius-md);
+}
 .total-row {
     display: flex;
     justify-content: space-between;
-    margin: 10px 0;
-    padding: 8px 0;
-    border-bottom: 1px solid #e2e8f0;
+    padding: 0.6rem 0;
+    font-size: 0.95rem;
+    color: var(--text-muted);
 }
-
-.total-row:last-child {
-    border-bottom: none;
-    margin-top: 15px;
-    padding-top: 15px;
-    border-top: 2px solid #3b82f6;
+.total-row .val {
+    font-family: 'Inter', sans-serif;
+    color: var(--text-main);
+    font-weight: 500;
 }
-
-.total-row label {
-    font-weight: 600;
-    color: #475569;
-    font-size: 14px;
+.total-row.discount .val { color: var(--danger); }
+.total-row.grand-total {
+    margin-top: 0.8rem;
+    padding-top: 1rem;
+    border-top: 1px dashed #cbd5e1;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text-main);
 }
-
-.total-row .value {
-    font-weight: bold;
-    color: #1e293b;
-    font-size: 16px;
+.total-row.grand-total .val {
+    color: var(--primary-color);
+    font-weight: 700;
 }
+.total-row.paid .val { color: var(--success); }
+.total-row.remaining .val { color: var(--warning); }
 
-.total-row:last-child label {
-    font-size: 18px;
-    color: #1e293b;
+/* Notes & Signatures */
+.footer-sections {
+    margin-top: 3rem;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2rem;
 }
-
-.total-row:last-child .value {
-    font-size: 24px;
-    color: #3b82f6;
+.notes-box {
+    background: #f0fdfa; /* Teal 50 */
+    border-right: 3px solid #14b8a6; /* Teal 500 */
+    padding: 1.2rem 1.5rem;
+    border-radius: var(--radius-sm);
 }
-
-.footer {
-    margin-top: 50px;
-    text-align: center;
-    color: #64748b;
-    font-size: 12px;
-    border-top: 1px solid #e5e7eb;
-    padding-top: 20px;
+.notes-box h4 {
+    color: #0f766e;
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
 }
-
-.footer p {
-    margin: 5px 0;
-}
-
-.notes {
-    margin-top: 30px;
-    padding: 15px;
-    background: #fef3c7;
-    border-right: 4px solid #f59e0b;
-    border-radius: 4px;
-}
-
-.notes h4 {
-    color: #92400e;
-    margin-bottom: 8px;
-    font-size: 14px;
-}
-
-.notes p {
-    color: #78350f;
-    font-size: 13px;
+.notes-box p {
+    color: #115e59;
+    font-size: 0.9rem;
     line-height: 1.6;
 }
 
 .signatures {
-    margin-top: 40px;
     display: flex;
-    justify-content: space-around;
-    padding-top: 30px;
-    border-top: 2px solid #e5e7eb;
+    justify-content: flex-end;
+    gap: 4rem;
+    margin-top: 2rem;
 }
-
-.signature-box {
+.sig-box {
     text-align: center;
-    min-width: 200px;
+    width: 180px;
 }
-
-.signature-box .signature-line {
-    border-top: 2px solid #1e293b;
-    margin-top: 60px;
-    padding-top: 10px;
+.sig-img {
+    height: 60px;
+    object-fit: contain;
+    margin-bottom: 0.5rem;
 }
-
-.signature-box .signature-label {
+.sig-line {
+    height: 1px;
+    background: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+.sig-label {
+    font-size: 0.85rem;
     font-weight: 600;
-    color: #475569;
-    font-size: 14px;
+    color: var(--text-muted);
+}
+.sig-name {
+    font-size: 0.8rem;
+    color: var(--text-main);
+    margin-top: 0.2rem;
 }
 
-.signature-box .signature-image {
-    max-width: 150px;
-    max-height: 80px;
-    margin-bottom: 10px;
+/* Footer bottom */
+.invoice-footer {
+    background: var(--text-main);
+    color: white;
+    padding: 1.5rem 3.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+}
+.invoice-footer p {
+    opacity: 0.8;
 }
 
+/* Print Styles */
 @media print {
     body {
         background: white;
         padding: 0;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
     }
-    
-    .invoice-box {
+    .invoice-container {
         box-shadow: none;
         border: none;
-        padding: 20px;
+        max-width: 100%;
+        border-radius: 0;
     }
-    
-    .header {
-        page-break-inside: avoid;
+    .invoice-content {
+        padding: 2rem;
     }
-    
-    table {
-        page-break-inside: avoid;
+    .invoice-footer {
+        padding: 1rem 2rem;
     }
-    
-    .total-section {
-        page-break-inside: avoid;
-    }
-    
-    .signatures {
-        page-break-inside: avoid;
+    .totals-box {
+        background: #f1f5f9 !important;
     }
 }
-
-/* Dark Theme Support */
-@media (prefers-color-scheme: dark) {
-    body {
-        background: #1e293b;
-        color: #f1f5f9;
-    }
-    
-    .invoice-box {
-        background: #0f172a;
-        border-color: #334155;
-    }
-    
-    .invoice-details {
-        background: #1e293b;
-        border-color: #334155;
-    }
-    
-    table thead {
-        background: #334155;
-    }
-    
-    .total-section {
-        background: #1e293b;
-        border-color: #3b82f6;
-    }
-}
-

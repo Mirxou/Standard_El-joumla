@@ -172,3 +172,6 @@ class TestCalculateGrandTotal:
         result = calculate_grand_total(Decimal('1000'), Decimal('0'), Decimal('150'))
         assert result == Decimal('1150.00')
 
+
+
+

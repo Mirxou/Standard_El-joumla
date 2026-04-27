@@ -13,8 +13,10 @@ from pathlib import Path
 from datetime import datetime
 
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
+import os
+from pathlib import Path
+# الوصول إلى جذر المشروع
+project_root = str(Path(__file__).resolve().parents[2])
 from src.core.exception_handler import (
     GlobalExceptionHandler,
     LogicalVersionError,
@@ -421,4 +423,8 @@ class TestGlobalExceptionHandlerIntegration:
                 handler.handle_exception(exc_type, exc_value, exc_traceback)
             except SystemExit:
                 pass
+
+
+
+
 

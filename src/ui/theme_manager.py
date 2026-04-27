@@ -78,6 +78,19 @@ class ThemeManager:
         'surface': '#ffffff',
         'text': '#1f2937'
     }
+
+    # Luxury Corporate Colors (UI/UX Pro Max)
+    LUXURY_COLORS = {
+        'primary': '#2563eb',     # blue-600
+        'primary_dark': '#1d4ed8',# blue-700
+        'primary_light': '#bfdbfe',# blue-200
+        'accent': '#f97316',      # orange-500
+        'background': '#f8fafc',  # slate-50
+        'surface': '#ffffff',     # white
+        'text_primary': '#1e293b',# slate-800
+        'text_secondary': '#475569',# slate-600
+        'border': '#e2e8f0',      # slate-200
+    }
     
     def __init__(self):
         self.settings = QSettings('LogicalVersion', 'ERP')
@@ -392,6 +405,22 @@ class ThemeManager:
         
         # Fallback
         return self.get_light_theme()
+
+    def get_luxury_theme(self) -> Theme:
+        """السمة الفاخرة - Luxury Corporate / Soft Minimalism"""
+        from pathlib import Path
+        
+        qss_path = Path(__file__).parent / "styles" / "luxury_corporate.qss"
+        if qss_path.exists():
+            try:
+                with open(qss_path, 'r', encoding='utf-8') as f:
+                    stylesheet = f.read()
+                return Theme('luxury', stylesheet)
+            except Exception as e:
+                print(f"Error loading luxury_corporate.qss: {e}")
+        
+        # Fallback
+        return self.get_light_theme()
     
     def get_dark_theme(self) -> Theme:
         """السمة الداكنة - Modern Glass"""
@@ -436,6 +465,8 @@ class ThemeManager:
             theme = self.get_dark_theme()
         elif theme_name == 'vision':
             theme = self.get_vision_theme()
+        elif theme_name == 'luxury':
+            theme = self.get_luxury_theme()
         else:
             theme = self.get_light_theme()
         

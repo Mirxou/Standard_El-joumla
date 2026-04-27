@@ -5,6 +5,7 @@ Comprehensive tests for Logger utility
 
 import unittest
 import logging
+import sys
 from io import StringIO
 from src.utils.logger import setup_logger, get_logger
 
@@ -181,7 +182,8 @@ class TestLoggerErrorHandling(unittest.TestCase):
         initial_handlers = len(logger.handlers)
         
         # أضف handler
-        handler = logging.StreamHandler()
+        from src.utils.logger import NonClosingStreamHandler
+        handler = NonClosingStreamHandler(sys.stdout)
         logger.addHandler(handler)
         
         self.assertGreater(len(logger.handlers), initial_handlers)
@@ -195,3 +197,6 @@ class TestLoggerErrorHandling(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+

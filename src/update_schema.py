@@ -4,13 +4,11 @@ from pathlib import Path
 
 # إعداد المسارات لكي نتمكن من استيراد DatabaseManager
 current_dir = Path(__file__).parent.parent
-sys.path.insert(0, str(current_dir))
 
 try:
     from src.core.database_manager import DatabaseManager
 except ImportError:
     # محاولة بديلة إذا كان الملف في الجذر
-    sys.path.insert(0, str(Path(__file__).parent))
     from src.core.database_manager import DatabaseManager
 
 def update_database():

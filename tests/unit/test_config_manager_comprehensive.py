@@ -13,8 +13,10 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
+import os
+from pathlib import Path
+# الوصول إلى جذر المشروع
+project_root = str(Path(__file__).resolve().parents[2])
 from src.core.config_manager import ConfigManager
 
 
@@ -461,4 +463,8 @@ class TestConfigManagerDefaultConfig:
         assert 'database' in default_config
         assert 'ui' in default_config
         assert 'security' in default_config
+
+
+
+
 

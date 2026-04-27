@@ -12,9 +12,11 @@ import json
 import sys
 from pathlib import Path
 
-# إضافة مسار المشروع
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
+import sys
+import os
+from pathlib import Path
+# الوصول إلى جذر المشروع
+project_root = str(Path(__file__).resolve().parents[2])
 from src.services.webhook_service import WebhookService, Webhook, WebhookLog
 from src.core.database_manager import DatabaseManager
 
@@ -114,10 +116,11 @@ class TestWebhookService:
                 execution_time_ms INTEGER,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (webhook_id) REFERENCES webhooks(id) ON DELETE CASCADE
-                # Drop existing companies table and create it with code column
-                db.execute_query("DROP TABLE IF EXISTS companies")
             )
         """)
+        
+        # Drop existing companies table and create it with code column
+        db.execute_query("DROP TABLE IF EXISTS companies")
         
         db.execute_query("""
             CREATE TABLE IF NOT EXISTS companies (
@@ -299,12 +302,11 @@ class TestWebhookService:
         
         assert final_payload == event_payload
     
-    @patch('src.services.webhook_service.get_webhook_dispatcher')
-    def test_trigger_webhook(self, mock_get_dispatcher, webhook_service):
+    def test_trigger_webhook(self, webhook_service):
         """اختبار إطلاق Webhook"""
         # Mock Dispatcher
         mock_dispatcher = Mock()
-        mock_get_dispatcher.return_value = mock_dispatcher
+        webhook_service.dispatcher = mock_dispatcher
         
         # إنشاء Webhook نشط
         webhook_id = webhook_service.create_webhook(
@@ -361,4 +363,8 @@ class TestWebhookService:
         assert logs[0].webhook_id == webhook_id
         assert logs[0].event_type == "sale_created"
         assert logs[0].is_success == True
+
+
+
+
 

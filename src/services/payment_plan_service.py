@@ -9,16 +9,12 @@ import sqlite3
 from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime, date, timedelta
 from decimal import Decimal
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from models.payment_plan import (
+from src.models.payment_plan import (
     PaymentPlan, PaymentInstallment, PaymentPlanStatus,
     InstallmentStatus, PaymentFrequency, LateFeeType
 )
-from core.database_manager import DatabaseManager
+from src.core.database_manager import DatabaseManager
 
 
 class PaymentPlanService:

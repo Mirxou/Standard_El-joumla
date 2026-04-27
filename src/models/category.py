@@ -11,8 +11,6 @@ from datetime import datetime
 import sys
 from pathlib import Path
 
-# إضافة مسار src
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 @dataclass
 class Category:
@@ -86,7 +84,8 @@ class CategoryManager:
         """الحصول على فئة بالمعرف"""
         try:
             query = """
-            SELECT c.*, p.name as parent_name,
+            SELECT c.id, c.name, c.name_en, c.description, c.parent_id, c.is_active, c.created_at, c.updated_at,
+                   p.name as parent_name,
                    (SELECT COUNT(*) FROM products WHERE category_id = c.id AND is_active = 1) as products_count
             FROM categories c
             LEFT JOIN categories p ON c.parent_id = p.id
@@ -108,14 +107,16 @@ class CategoryManager:
         try:
             if include_products_count:
                 query = """
-                SELECT c.*, p.name as parent_name,
+                SELECT c.id, c.name, c.name_en, c.description, c.parent_id, c.is_active, c.created_at, c.updated_at,
+                       p.name as parent_name,
                        (SELECT COUNT(*) FROM products WHERE category_id = c.id AND is_active = 1) as products_count
                 FROM categories c
                 LEFT JOIN categories p ON c.parent_id = p.id
                 """
             else:
                 query = """
-                SELECT c.*, p.name as parent_name, 0 as products_count
+                SELECT c.id, c.name, c.name_en, c.description, c.parent_id, c.is_active, c.created_at, c.updated_at,
+                       p.name as parent_name, 0 as products_count
                 FROM categories c
                 LEFT JOIN categories p ON c.parent_id = p.id
                 """
@@ -137,7 +138,8 @@ class CategoryManager:
         """الحصول على الفئات الرئيسية فقط"""
         try:
             query = """
-            SELECT c.*, NULL as parent_name,
+            SELECT c.id, c.name, c.name_en, c.description, c.parent_id, c.is_active, c.created_at, c.updated_at,
+                   NULL as parent_name,
                    (SELECT COUNT(*) FROM products WHERE category_id = c.id AND is_active = 1) as products_count
             FROM categories c
             WHERE c.parent_id IS NULL AND c.is_active = 1
@@ -156,7 +158,8 @@ class CategoryManager:
         """الحصول على الفئات الفرعية لفئة معينة"""
         try:
             query = """
-            SELECT c.*, p.name as parent_name,
+            SELECT c.id, c.name, c.name_en, c.description, c.parent_id, c.is_active, c.created_at, c.updated_at,
+                   p.name as parent_name,
                    (SELECT COUNT(*) FROM products WHERE category_id = c.id AND is_active = 1) as products_count
             FROM categories c
             LEFT JOIN categories p ON c.parent_id = p.id
@@ -176,7 +179,8 @@ class CategoryManager:
         """البحث في الفئات"""
         try:
             query = """
-            SELECT c.*, p.name as parent_name,
+            SELECT c.id, c.name, c.name_en, c.description, c.parent_id, c.is_active, c.created_at, c.updated_at,
+                   p.name as parent_name,
                    (SELECT COUNT(*) FROM products WHERE category_id = c.id AND is_active = 1) as products_count
             FROM categories c
             LEFT JOIN categories p ON c.parent_id = p.id
@@ -341,6 +345,45 @@ class CategoryManager:
             'parent_categories': 0,
             'sub_categories': 0
         }
+    
+    def create_default_categories(self) -> bool:
+        """إنشاء فئات افتراضية إذا كانت قاعدة البيانات فارغة"""
+        try:
+            # التحقق من وجود فئات
+            existing_count = self.db_manager.fetch_one("SELECT COUNT(*) FROM categories")
+            if existing_count and existing_count[0] > 0:
+                if self.logger:
+                    self.logger.info("توجد فئات بالفعل في قاعدة البيانات - تخطي إنشاء الفئات الافتراضية")
+                return True
+            
+            # قائمة الفئات الافتراضية
+            default_categories = [
+                {"name": "إلكترونيات", "name_en": "Electronics", "description": "أجهزة إلكترونية وكهربائية"},
+                {"name": "مواد غذائية", "name_en": "Food", "description": "منتجات غذائية ومشروبات"},
+                {"name": "ملابس", "name_en": "Clothing", "description": "ملابس وأحذية وأكسسوارات"},
+                {"name": "أدوات مكتبية", "name_en": "Stationery", "description": "أقلام ودفاتر وأدوات مكتبية"},
+                {"name": "منظفات", "name_en": "Detergents", "description": "مواد تنظيف ومنتجات عناية منزلية"},
+                {"name": "ألعاب", "name_en": "Toys", "description": "ألعاب أطفال وهدايا"},
+                {"name": "أخرى", "name_en": "Other", "description": "فئات متنوعة"}
+            ]
+            
+            for cat_data in default_categories:
+                category = Category(
+                    name=cat_data["name"],
+                    name_en=cat_data["name_en"],
+                    description=cat_data["description"],
+                    is_active=True
+                )
+                self.create_category(category)
+                
+            if self.logger:
+                self.logger.info(f"تم إنشاء {len(default_categories)} فئة افتراضية")
+            return True
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في إنشاء الفئات الافتراضية: {str(e)}")
+            return False
     
     def _row_to_category(self, row) -> Category:
         """تحويل صف قاعدة البيانات إلى كائن فئة"""

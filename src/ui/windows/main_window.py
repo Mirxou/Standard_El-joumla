@@ -23,14 +23,13 @@ import time
 from pathlib import Path
 from datetime import datetime, date, timedelta
 
-# إضافة مسار src
 project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root))
 
 from src.models.customer import CustomerManager
 from src.models.supplier import SupplierManager
 from src.models.payment import PaymentType
 from src.core.caching_service import AdvancedCachingService
+from src.core.local_database_manager import LocalDatabaseManager
 from src.ui.theme_manager import get_theme_manager
 from src.ui.notifications_manager import get_notifications_manager
 from src.services.dashboard_service import DashboardService
@@ -59,9 +58,10 @@ from src.services.hardware_service import HardwareService # Phase 19: Hardware
 from src.services.fiscal_service import FiscalService # Phase 19: Fiscal
 from src.services.ai_prediction_service import AIPredictionService # Phase 20: AI
 from src.services.workflow_service import WorkflowService # Phase 20: Automation
-from src.services.smart_assistant import SmartAssistant # Phase 20: NLP
+from src.services.smart_assistant import SmartAssistantService # Phase 20: NLP
 from src.services.carbon_service import CarbonService # Phase 21: Green Ledger
 from src.services.sentiment_service import SentimentService # Phase 21: Emotion AI
+from src.ui.theme_manager import ThemeManager
 from src.services.system_doctor_service import SystemDoctorService # Phase 21: Self Healing
 from src.services.gamification_service import GamificationService # Phase 22: Gamification
 from PySide6.QtGui import QShortcut, QKeySequence # For Zen Mode Shortcut
@@ -103,27 +103,37 @@ class InventoryDataLoaderThread(QThread):
     progress_updated = Signal(str)  # يرسل رسالة التقدم
     error_occurred = Signal(str)  # يرسل رسالة خطأ
     
-    def __init__(self, db_path: str, search_term: str = "", category_id: int = None, warehouse_id: int = None, limit: int = None, offset: int = 0):
+    def __init__(self, db_path: str = None, db_manager: Optional[LocalDatabaseManager] = None, search_term: str = "", category_id: int = None, warehouse_id: int = None, limit: int = None, offset: int = 0):
         super().__init__()
         self.db_path = db_path
+        self.db_manager = db_manager
         self.search_term = search_term
         self.category_id = category_id
         self.warehouse_id = warehouse_id  # Multi-Warehouse Support
         self.limit = limit
         self.offset = offset
+
+    def _connect(self):
+        if self.db_manager:
+            return self.db_manager.create_thread_connection(timeout=30.0, read_only=True)
+
+        import sqlite3
+        if not self.db_path:
+            raise RuntimeError("No database path provided for InventoryDataLoaderThread")
+
+        conn = sqlite3.connect(self.db_path, timeout=30)
+        conn.execute("PRAGMA journal_mode=WAL")  # تحسين الأداء
+        conn.execute("PRAGMA query_only=true")   # 🔥 Read-Only لتسريع الاستعلامات
+        return conn
     
     def run(self):
         """تحميل البيانات مباشرة من SQLite في الخلفية"""
         try:
-            import sqlite3
-            
             # إرسال رسالة التقدم
             self.progress_updated.emit("جاري الاتصال بقاعدة البيانات...")
             
             # فتح اتصال خاص داخل الخيط (Thread-Safe)
-            conn = sqlite3.connect(self.db_path, timeout=30)
-            conn.execute("PRAGMA journal_mode=WAL")  # تحسين الأداء
-            conn.execute("PRAGMA query_only=true")   # 🔥 Read-Only لتسريع الاستعلامات
+            conn = self._connect()
             
             # بناء الاستعلام - دعم Multi-Warehouse
             if self.warehouse_id:
@@ -243,20 +253,32 @@ class SalesDataLoaderThread(QThread):
     summary_loaded = Signal(object) # يرسل قاموس الملخص
     error_occurred = Signal(str)
 
-    def __init__(self, db_path: str, search_term: str = "", status: str = None, payment_method: str = None, limit: int = 500, offset: int = 0):
+    def __init__(self, db_path: str = None, db_manager: Optional[LocalDatabaseManager] = None, search_term: str = "", status: str = None, payment_method: str = None, limit: int = 500, offset: int = 0):
         super().__init__()
         self.db_path = db_path
+        self.db_manager = db_manager
         self.search_term = search_term
         self.status = status
         self.payment_method = payment_method
         self.limit = limit
         self.offset = offset
 
+    def _connect(self):
+        if self.db_manager:
+            return self.db_manager.create_thread_connection(timeout=30.0, read_only=True)
+
+        import sqlite3
+        if not self.db_path:
+            raise RuntimeError("No database path provided for SalesDataLoaderThread")
+
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("PRAGMA journal_mode=WAL")
+        return conn
+
     def run(self):
         try:
-            import sqlite3
-            conn = sqlite3.connect(self.db_path)
-            conn.execute("PRAGMA journal_mode=WAL")
+            conn = self._connect()
+            
 
             # بناء الاستعلام الرئيسي
             query = """
@@ -312,9 +334,11 @@ class MainWindow(QMainWindow):
                  notifications_manager=None, hybrid_service=None):
         super().__init__()
         
-        # --- Quantum Window Setup ---
-        self.setWindowFlags(Qt.FramelessWindowHint)
-        self.setAttribute(Qt.WA_TranslucentBackground)
+        # --- Modern Window Setup ---
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowMinimizeButtonHint)
+        # خلفية صلبة بدلاً من الشفافة
+        self.setAttribute(Qt.WA_TranslucentBackground, False)
+        self.setAttribute(Qt.WA_NoSystemBackground, False)
         
         # Initialize Notification Manager
         self.notify = NotificationManager(self)
@@ -570,7 +594,7 @@ class MainWindow(QMainWindow):
         try:
             self.ai_prediction_service = AIPredictionService(self.db_manager)
             self.workflow_service = WorkflowService(self.db_manager, self.notify)
-            self.smart_assistant = SmartAssistant()
+            self.smart_assistant = SmartAssistantService(self.logger)
             if self.logger:
                 self.logger.info("✅ تم تهيئة خدمات الذكاء الاصطناعي والأتمتة (Oracle/Autopilot)")
         except Exception as e:
@@ -597,15 +621,25 @@ class MainWindow(QMainWindow):
         # تهيئة خدمات Phase 22 (Gamification)
         try:
             self.gamification_service = GamificationService(self.db_manager)
-            
-            # Zen Mode Shortcut (Alt+Z)
-            self.zen_shortcut = QShortcut(QKeySequence("Alt+Z"), self)
-            self.zen_shortcut.activated.connect(self.toggle_zen_mode)
-            if self.logger:
-                self.logger.info("✅ تم تهيئة خدمات Gamification & Zen Mode")
         except Exception as e:
             if self.logger:
                 self.logger.warning(f"تعذر تهيئة خدمات Gamification: {e}")
+            
+        # ===== Vision 2030 Smart Assistant (Phase 4) =====
+        from src.ui.widgets.smart_assistant_widget import SmartAssistantWidget
+        self.smart_assistant_widget = SmartAssistantWidget(self)
+        self.smart_assistant_widget.hide()
+        self.smart_assistant_widget.command_received.connect(self.handle_smart_command_action)
+        self.update_assistant_position()
+
+        # Load Theme
+        self.theme_manager = ThemeManager()
+            
+            # Zen Mode Shortcut (Alt+Z)
+        self.zen_shortcut = QShortcut(QKeySequence("Alt+Z"), self)
+        self.zen_shortcut.activated.connect(self.toggle_zen_mode)
+        if self.logger:
+            self.logger.info("✅ تم تهيئة خدمات Gamification & Zen Mode")
 
         # تهيئة خدمات Phase 23 (The Dragon's Edge)
         try:
@@ -659,10 +693,10 @@ class MainWindow(QMainWindow):
                 self.finished.emit(False, str(e))
     
     def setup_ui(self):
-        """إعداد واجهة المستخدم - Frameless Quantum Architecture"""
-        # الويدجت المركزي (Transparent Container)
+        """إعداد واجهة المستخدم - Modern Architecture"""
+        # الويدجت المركزي مع خلفية صلبة
         central_container = QWidget()
-        central_container.setAttribute(Qt.WA_TranslucentBackground)
+        central_container.setStyleSheet("background-color: #0f172a;")
         self.setCentralWidget(central_container)
         
         # التخطيط الجذري
@@ -673,8 +707,14 @@ class MainWindow(QMainWindow):
         # الإطار الرئيسي (The Window Border)
         self.main_frame = QFrame()
         self.main_frame.setObjectName("mainFrame")
-        # Removing hardcoded dark style
-        self.main_frame.setStyleSheet("")
+        # خلفية صلبة داكنة احترافية
+        self.main_frame.setStyleSheet("""
+            QFrame#mainFrame {
+                background-color: #0f172a;
+                border-radius: 12px;
+                border: 2px solid #06b6d4;
+            }
+        """)
         # إضافة ظل للإطار الرئيسي (Neon Glow)
         from PySide6.QtWidgets import QGraphicsDropShadowEffect
         shadow = QGraphicsDropShadowEffect(self)
@@ -874,6 +914,13 @@ class MainWindow(QMainWindow):
             page_name: اسم الصفحة ('dashboard', 'inventory', 'sales', etc.)
         """
         try:
+            # Phase 5: Adaptive Intelligence Tracking
+            if hasattr(self, 'gamification_service'):
+                try:
+                    self.gamification_service.track_action(f"nav_{page_name}")
+                except Exception:
+                    pass
+
             # الحصول على الفهرس
             if page_name not in self.page_names:
                 if self.logger:
@@ -987,6 +1034,13 @@ class MainWindow(QMainWindow):
 
             # 🔥 Perform the Switch
             self.content_area.setCurrentWidget(target_widget)
+            
+            # 🔥 System 2.0 Transition: Fade-in Animation
+            try:
+                self.animation_manager.fade_in(target_widget, duration=250)
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"Could not apply fade-in animation: {e}")
 
             # Always show Sidebar in Professional Mode
             self.sidebar.show()
@@ -1213,13 +1267,7 @@ class MainWindow(QMainWindow):
         
         insights_frame = QFrame()
         insights_frame.setObjectName("AIInsightsFrame")
-        insights_frame.setStyleSheet("""
-            QFrame#AIInsightsFrame {
-                background: qlineargradient(x1:0, y1:0, x2:1, y1:1, stop:0 rgba(59, 130, 246, 0.1), stop:1 rgba(147, 51, 234, 0.1));
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 12px;
-            }
-        """)
+        # insights_frame.setStyleSheet("...") 
         insights_layout = QHBoxLayout(insights_frame)
         
         ai_icon = QLabel("🤖")
@@ -1228,20 +1276,20 @@ class MainWindow(QMainWindow):
         self.ai_insight_label = QLabel("جاري تحليل البيانات... (Vision 2030 AI)")
         self.ai_insight_label.setStyleSheet("color: #e2e8f0; font-style: italic; font-size: 14px;")
         self.ai_insight_label.setWordWrap(True)
-        
-        self.ai_action_btn = QPushButton("تحليلات مفصلة")
-        self.ai_action_btn.setStyleSheet("""
-            QPushButton {
-                background-color: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                color: white;
-                border-radius: 6px;
-                padding: 5px 15px;
-            }
-            QPushButton:hover {
-                background-color: rgba(255, 255, 255, 0.2);
-            }
-        """)
+        # إضافة المساعد الذكي
+        try:
+            from src.ui.widgets.smart_assistant_widget import SmartAssistantWidget
+            self.smart_assistant_widget = SmartAssistantWidget(self)
+            self.smart_assistant_widget.hide() # Start hidden
+            self.smart_assistant_widget.command_received.connect(self.handle_ai_command)
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"Failed to init Smart Assistant UI: {e}")
+            self.smart_assistant_widget = None
+
+        # زر المساعد الذكي العائم
+        self.ai_action_btn = QPushButton("✨ تحليلات مفصلة", self)
+        # self.ai_action_btn.setStyleSheet("...")
         self.ai_action_btn.clicked.connect(self.handle_ai_action)
         
         insights_layout.addWidget(ai_icon)
@@ -1257,7 +1305,67 @@ class MainWindow(QMainWindow):
         kpi_layout.addWidget(self._create_glass_kpi("total_profit", "الأرباح", "0 ر.س", "#4ade80", "💵"), 0, 2)
         kpi_layout.addWidget(self._create_glass_kpi("total_orders", "الطلبات", "0", "#a78bfa", "🛍️"), 0, 3)
 
-        layout.addWidget(kpi_container)
+        layout.addWidget(insights_frame)
+        # --------------------------------------
+
+        # --- Phase 5: Adaptive Suggestions Widget ---
+        adaptive_frame = QFrame()
+        # adaptive_frame.setStyleSheet("""
+        #     background: rgba(255, 255, 255, 0.05); 
+        #     border-radius: 10px; 
+        #     border: 1px dashed rgba(255, 255, 255, 0.3);
+        # """)
+        adaptive_layout = QHBoxLayout(adaptive_frame)
+        adaptive_layout.setContentsMargins(10, 5, 10, 5)
+        
+        adaptive_label = QLabel("🧠 اقتراحات ذكية:")
+        adaptive_label.setStyleSheet("color: #fbbf24; font-weight: bold;")
+        adaptive_layout.addWidget(adaptive_label)
+        
+        # Dynamic Suggestions
+        if hasattr(self, 'gamification_service'):
+            top_actions = self.gamification_service.get_top_actions(3)
+            if top_actions:
+                for action in top_actions:
+                    # Parse action name (e.g. "nav_sales")
+                    clean_name = action.replace("nav_", "")
+                    display_map = {
+                        'sales': '💰 مبيعات جديدة',
+                        'inventory': '📦 فحص المخزون',
+                        'reports': '📊 التقارير',
+                        'purchases': '🚚 مشتريات',
+                        'settings': '⚙️ الإعدادات'
+                    }
+                    btn_text = display_map.get(clean_name, clean_name.capitalize())
+                    
+                    s_btn = QPushButton(btn_text)
+                    s_btn.setCursor(Qt.PointingHandCursor)
+                    s_btn.setStyleSheet("""
+                        QPushButton {
+                            background-color: rgba(251, 191, 36, 0.2);
+                            color: #fbbf24;
+                            border: 1px solid #fbbf24;
+                            border-radius: 15px;
+                            padding: 3px 12px;
+                            font-size: 12px;
+                        }
+                        QPushButton:hover {
+                            background-color: rgba(251, 191, 36, 0.4);
+                        }
+                    """)
+                    # Use closure to capture loop variable
+                    s_btn.clicked.connect(lambda checked, name=clean_name: self.switch_page(name))
+                    adaptive_layout.addWidget(s_btn)
+            else:
+                layout_hint = QLabel("(سيظهر هنا اختصاراتك المفضلة قريباً)")
+                layout_hint.setStyleSheet("color: #9ca3af; font-size: 11px;")
+                adaptive_layout.addWidget(layout_hint)
+        
+        adaptive_layout.addStretch()
+        layout.addWidget(adaptive_frame)
+        # ---------------------------------------------
+        
+        # Add Cards to Grid
         
         # KPIs المخزون
         inventory_kpis = [
@@ -1688,17 +1796,19 @@ class MainWindow(QMainWindow):
                 (SELECT COALESCE(SUM(total_amount - paid_amount), 0) FROM sales WHERE status != 'ملغية' AND status != 'cancelled') as total_remaining_amount
             """
             
-            # تنفيذ الاستعلام باستخدام اتصال مباشر بـ timeout قصير (تفادي deadlock)
-            import sqlite3
-            db_path = getattr(self.db_manager, 'db_path', None) or (self.config_manager.get_database_path() if self.config_manager else "database.db")
-            
-            # اتصال منفصل بـ read-only mode لتفادي locks
-            conn = sqlite3.connect(db_path, timeout=5.0)
-            conn.execute("PRAGMA query_only=true")
-            cursor = conn.cursor()
-            cursor.execute(query_stats)
-            row = cursor.fetchone()
-            conn.close()
+            row = None
+            if self.db_manager and hasattr(self.db_manager, 'connection') and self.db_manager.connection:
+                cursor = self.db_manager.connection.execute(query_stats)
+                row = cursor.fetchone()
+            else:
+                import sqlite3
+                db_path = getattr(self.db_manager, 'db_path', None) or (self.config_manager.get_database_path() if self.config_manager else "database.db")
+                conn = sqlite3.connect(db_path, timeout=5.0)
+                conn.execute("PRAGMA query_only=true")
+                cursor = conn.cursor()
+                cursor.execute(query_stats)
+                row = cursor.fetchone()
+                conn.close()
             if not row:
                 return
             
@@ -1797,31 +1907,37 @@ class MainWindow(QMainWindow):
             # ------------------------------------------------
             
             if hasattr(self, "dashboard_summary_labels"):
-                # 1. تحديث بطاقات المخزون (Inventory Cards)
-                if "total_products" in self.dashboard_summary_labels:
-                    self.dashboard_summary_labels["total_products"].setText(f"{total_products:,}")
-                
-                if "total_stock_value" in self.dashboard_summary_labels:
-                    self.dashboard_summary_labels["total_stock_value"].setText(f"{total_stock_value:,.2f} دج")
-                
-                if "low_stock_items" in self.dashboard_summary_labels:
-                    self.dashboard_summary_labels["low_stock_items"].setText(f"{low_stock_items:,}")
-                
-                if "out_of_stock_items" in self.dashboard_summary_labels:
-                    self.dashboard_summary_labels["out_of_stock_items"].setText(f"{out_of_stock_items:,}")
-                
-                # 2. تحديث بطاقات الأداء (KPI Cards) - الصف الثاني
-                if "total_sales" in self.dashboard_summary_labels:
-                    self.dashboard_summary_labels["total_sales"].setText(f"{total_sales_amount:,.0f} دج")
-                
-                if "total_revenue" in self.dashboard_summary_labels:
-                    self.dashboard_summary_labels["total_revenue"].setText(f"{total_sales_amount:,.0f} دج")
-                
-                if "total_profit" in self.dashboard_summary_labels:
-                    self.dashboard_summary_labels["total_profit"].setText(f"{total_profit:,.0f} دج")
-                
-                if "avg_order" in self.dashboard_summary_labels:
-                    self.dashboard_summary_labels["avg_order"].setText(f"{avg_order:,.0f} دج")
+                try:
+                    # 1. تحديث بطاقات المخزون (Inventory Cards)
+                    if "total_products" in self.dashboard_summary_labels:
+                        self.dashboard_summary_labels["total_products"].setText(f"{total_products:,}")
+                    
+                    if "total_stock_value" in self.dashboard_summary_labels:
+                        self.dashboard_summary_labels["total_stock_value"].setText(f"{total_stock_value:,.2f} دج")
+                    
+                    if "low_stock_items" in self.dashboard_summary_labels:
+                        self.dashboard_summary_labels["low_stock_items"].setText(f"{low_stock_items:,}")
+                    
+                    if "out_of_stock_items" in self.dashboard_summary_labels:
+                        self.dashboard_summary_labels["out_of_stock_items"].setText(f"{out_of_stock_items:,}")
+                    
+                    # 2. تحديث بطاقات الأداء (KPI Cards) - الصف الثاني
+                    if "total_sales" in self.dashboard_summary_labels:
+                        self.dashboard_summary_labels["total_sales"].setText(f"{total_sales_amount:,.0f} دج")
+                    
+                    if "total_revenue" in self.dashboard_summary_labels:
+                        self.dashboard_summary_labels["total_revenue"].setText(f"{total_sales_amount:,.0f} دج")
+                    
+                    if "total_profit" in self.dashboard_summary_labels:
+                        self.dashboard_summary_labels["total_profit"].setText(f"{total_profit:,.0f} دج")
+                    
+                    if "avg_order" in self.dashboard_summary_labels:
+                        self.dashboard_summary_labels["avg_order"].setText(f"{avg_order:,.0f} دج")
+                except RuntimeError:
+                    # Qt C++ objects already deleted (e.g. after tab switch/reload) - reset refs
+                    self.dashboard_summary_labels = {}
+                    if self.logger:
+                        self.logger.debug("dashboard_summary_labels stale refs cleared")
             
             # تحديث الرسم البياني التفاعلي
             if hasattr(self, 'sales_chart') and self.sales_chart:
@@ -1853,7 +1969,11 @@ class MainWindow(QMainWindow):
         
         # الحصول على الفترة المحددة
         period = getattr(self, "dashboard_period_combo", None)
-        period_text = period.currentText() if period else "أسبوع"
+        try:
+            period_text = period.currentText() if period else "أسبوع"
+        except RuntimeError:
+            # Widget deleted
+            return
         
         end_date = date.today()
         if period_text == "اليوم":
@@ -2605,7 +2725,9 @@ class MainWindow(QMainWindow):
             if hasattr(self, "dashboard_activities_table"):
                 table = self.dashboard_activities_table
                 table.setRowCount(1)
-                    table.setItem(0, 0, info_item)
+                info_item = QTableWidgetItem("لا توجد نشاطات لعرضها حالياً")
+                info_item.setTextAlignment(Qt.AlignCenter)
+                table.setItem(0, 0, info_item)
     
     # ===== Agentic AI Handlers (Vision 2030) =====
     
@@ -2675,6 +2797,38 @@ class MainWindow(QMainWindow):
                 self.logger.error(f"Error in handle_ai_action: {e}")
             self.notify.show_error("خطأ نظمي", "حدث خطأ أثناء تنفيذ الإجراء الذكي.")
     
+    def handle_ai_command(self, command: str):
+        """
+        معالجة الأوامر الصوتية/النصية من المساعد الذكي (SmartAssistantWidget).
+        يحلل الأمر ويوجهه للدالة المناسبة.
+        """
+        if not command:
+            return
+        try:
+            cmd = command.strip().lower()
+
+            if any(k in cmd for k in ['مبيعات', 'فاتورة', 'sale']):
+                self.switch_to_tab('sales') if hasattr(self, 'switch_to_tab') else None
+            elif any(k in cmd for k in ['مخزون', 'منتج', 'inventory']):
+                self.switch_to_tab('inventory') if hasattr(self, 'switch_to_tab') else None
+            elif any(k in cmd for k in ['عميل', 'customer']):
+                self.switch_to_tab('customers') if hasattr(self, 'switch_to_tab') else None
+            elif any(k in cmd for k in ['تقرير', 'report']):
+                self.open_reports() if hasattr(self, 'open_reports') else None
+            elif any(k in cmd for k in ['مساعد', 'help', 'مساعدة']):
+                if hasattr(self, 'smart_assistant_widget') and self.smart_assistant_widget:
+                    self.smart_assistant_widget.show()
+            else:
+                # Fallback: open command palette
+                if hasattr(self, 'open_command_palette'):
+                    self.open_command_palette()
+
+            if self.logger:
+                self.logger.info(f"AI command handled: {command[:80]}")
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"handle_ai_command error: {e}")
+
     def update_dashboard_analytics(self, start_date, end_date):
         """تحديث التحليلات المتقدمة (تم نقلها إلى _populate_dashboard_analytics)"""
         pass  # تم نقل الكود إلى _populate_dashboard_analytics
@@ -2761,6 +2915,18 @@ class MainWindow(QMainWindow):
         if not data:
             data = {}  # بيانات فارغة بدلاً من return
         
+        # Guard against stale libshiboken references (widgets deleted after tab switch)
+        for _chart_attr in ('dashboard_sales_line_chart', 'dashboard_revenue_expense_chart',
+                            'dashboard_stock_chart', 'dashboard_top_products_chart'):
+            _widget = getattr(self, _chart_attr, None)
+            if _widget is not None:
+                try:
+                    _widget.isVisible()  # simple call to check C++ object is alive
+                except RuntimeError:
+                    setattr(self, _chart_attr, None)
+                    if self.logger:
+                        self.logger.debug(f"Cleared stale chart ref: {_chart_attr}")
+
         try:
             if self.logger:
                 self.logger.debug("🔄 بدء تحديث الرسوم البيانية...")
@@ -3210,16 +3376,60 @@ class MainWindow(QMainWindow):
             buttons_layout.addStretch()
             layout.addLayout(buttons_layout)
             
-            # منطقة المرشحات
+            # --- Bento Summary Cards for Inventory ---
+            inventory_summary_layout = QHBoxLayout()
+            inventory_summary_layout.setSpacing(15)
+            
+            # Helper to create Bento Cards (Local to this tab or can be moved to class)
+            def create_summary_card(title, value, color_code, icon="📊"):
+                card = QFrame()
+                card.setMinimumHeight(100)
+                card.setStyleSheet(f"""
+                    QFrame {{
+                        background-color: {color_code}15;
+                        border: 1px solid {color_code}33;
+                        border-radius: 15px;
+                    }}
+                """)
+                c_layout = QVBoxLayout(card)
+                c_layout.setContentsMargins(15, 15, 15, 15)
+                
+                h_layout = QHBoxLayout()
+                t_label = QLabel(f"<span style='font-size: 14px; font-weight: 500; color: {color_code};'>{title}</span>")
+                i_label = QLabel(icon)
+                i_label.setStyleSheet(f"font-size: 20px;")
+                h_layout.addWidget(t_label)
+                h_layout.addStretch()
+                h_layout.addWidget(i_label)
+                
+                v_label = QLabel(value)
+                v_label.setStyleSheet(f"font-size: 24px; font-weight: bold; color: {color_code};")
+                v_label.setObjectName(f"val_{title}") # To update later
+                
+                c_layout.addLayout(h_layout)
+                c_layout.addWidget(v_label)
+                return card
+
+            self.inv_total_products_card = create_summary_card("إجمالي المنتجات", "0", "#2563EB", "📦")
+            self.inv_total_value_card = create_summary_card("قيمة المخزون", "0.00 دج", "#059669", "💰")
+            self.inv_low_stock_card = create_summary_card("نقص المخزون", "0", "#DC2626", "⚠️")
+            
+            inventory_summary_layout.addWidget(self.inv_total_products_card)
+            inventory_summary_layout.addWidget(self.inv_total_value_card)
+            inventory_summary_layout.addWidget(self.inv_low_stock_card)
+            
+            layout.addLayout(inventory_summary_layout)
+            
+            # منطقة المرشحات (Glassmorphism Style)
             filters_frame = QFrame()
             filters_frame.setObjectName("inventoryFiltersFrame")
-            filters_frame.setStyleSheet(
-                "QFrame#inventoryFiltersFrame {"
-                "background-color: rgb(248, 249, 250);"
-                "border: 1px solid rgb(224, 228, 231);"
-                "border-radius: 6px;"
-                "}"
-            )
+            filters_frame.setStyleSheet("""
+                QFrame#inventoryFiltersFrame {
+                    background-color: rgba(248, 250, 252, 0.8);
+                    border: 1px solid rgba(226, 232, 240, 0.8);
+                    border-radius: 12px;
+                }
+            """)
             filters_layout = QHBoxLayout(filters_frame)
             filters_layout.setContentsMargins(12, 8, 12, 8)
             filters_layout.setSpacing(12)
@@ -4303,7 +4513,7 @@ class MainWindow(QMainWindow):
             # 🔥 استخدام SalesDataLoaderThread الجديد
             db_path = self.db_manager.db_path if hasattr(self.db_manager, 'db_path') else "data/logical_release.db"
             sales_worker = SalesDataLoaderThread(
-                db_path=db_path,
+                db_manager=self.db_manager,
                 search_term=search_term,
                 status=status,
                 payment_method=payment_method
@@ -4317,8 +4527,12 @@ class MainWindow(QMainWindow):
                 self._log_section_duration("refresh_sales_data", start_time, threshold_ms=1000.0)
                 # إعادة تفعيل زر التحديث
                 if hasattr(self, "sales_refresh_btn"):
-                    self.sales_refresh_btn.setEnabled(True)
-                    self.sales_refresh_btn.setText("🔄 تحديث")
+                    try:
+                        self.sales_refresh_btn.setEnabled(True)
+                        self.sales_refresh_btn.setText("🔄 تحديث")
+                    except RuntimeError:
+                        # الزر تم حذفه (libshiboken) - نتجاهله بأمان
+                        del self.sales_refresh_btn
                 # ✅ Safety Net: إعادة تشغيل مراقب الجلسة في حالة فشل Worker
                 if hasattr(self, 'session_monitor_timer') and self.session_monitor_timer:
                     if not self.session_monitor_timer.isActive():
@@ -5627,7 +5841,7 @@ class MainWindow(QMainWindow):
         # 🔥 تقليل LIMIT إلى 100 فقط للحد الأدنى من تجميد الواجهة
         inventory_page_size = 100
         self._inventory_loader = InventoryDataLoaderThread(
-            db_path=db_path,
+            db_manager=self.db_manager,
             search_term=search_term,
             category_id=category_id,
             warehouse_id=warehouse_id,  # Multi-Warehouse Support
@@ -5876,7 +6090,7 @@ class MainWindow(QMainWindow):
         db_path = self.db_manager.db_path if hasattr(self.db_manager, 'db_path') else "data/logical_release.db"
         
         self._load_more_worker = InventoryDataLoaderThread(
-            db_path=db_path,
+            db_manager=self.db_manager,
             search_term=search_term,
             category_id=category_id,
             limit=limit,
@@ -6263,6 +6477,15 @@ class MainWindow(QMainWindow):
     
     def _populate_customers_table(self, customers):
         """ملء جدول العملاء (في UI thread)"""
+        # Guard: widget may have been deleted if the tab was recreated (libshiboken)
+        if not hasattr(self, 'customers_table'):
+            return
+        try:
+            self.customers_table.isVisible()  # lightweight C++ liveness check
+        except RuntimeError:
+            del self.customers_table
+            return
+
         # Quick Win: Disable updates during batch operations
         self.customers_table.setUpdatesEnabled(False)
         try:
@@ -8593,21 +8816,6 @@ class MainWindow(QMainWindow):
     
     def init_websocket_client(self):
         """تهيئة WebSocket Client للتحديثات الفورية"""
-        # #region agent log
-        import json
-        from datetime import datetime
-        with open(r'c:\Users\pc\Desktop\Logical Version trae\.cursor\debug.log', 'a', encoding='utf-8') as f:
-            f.write(json.dumps({
-                "location": "main_window.py:init_websocket_client",
-                "message": "Initializing WebSocket client",
-                "data": {"has_config_manager": bool(self.config_manager)},
-                "timestamp": datetime.now().isoformat(),
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "F"
-            }, ensure_ascii=False) + "\n")
-        # #endregion
-        
         try:
             from src.ui.websocket_client import WebSocketClient
             
@@ -8615,19 +8823,6 @@ class MainWindow(QMainWindow):
             api_url = "http://localhost:8000"
             if self.config_manager:
                 api_url = self.config_manager.get('api.base_url', 'http://localhost:8000')
-            
-            # #region agent log
-            with open(r'c:\Users\pc\Desktop\Logical Version trae\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                f.write(json.dumps({
-                    "location": "main_window.py:init_websocket_client",
-                    "message": "Creating WebSocket client",
-                    "data": {"api_url": api_url},
-                    "timestamp": datetime.now().isoformat(),
-                    "sessionId": "debug-session",
-                    "runId": "run1",
-                    "hypothesisId": "F"
-                }, ensure_ascii=False) + "\n")
-            # #endregion
             
             # إنشاء WebSocket client
             self.ws_client = WebSocketClient(
@@ -8641,53 +8836,16 @@ class MainWindow(QMainWindow):
             self.ws_client.notification_received.connect(self._on_notification_received)
             self.ws_client.connection_status_changed.connect(self._on_websocket_status_changed)
             
-            # #region agent log
-            with open(r'c:\Users\pc\Desktop\Logical Version trae\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                f.write(json.dumps({
-                    "location": "main_window.py:init_websocket_client",
-                    "message": "Signals connected, starting connection",
-                    "data": {"api_url": api_url},
-                    "timestamp": datetime.now().isoformat(),
-                    "sessionId": "debug-session",
-                    "runId": "run1",
-                    "hypothesisId": "F"
-                }, ensure_ascii=False) + "\n")
-            # #endregion
-            
             # بدء الاتصال
             self.ws_client.connect()
-            
+
             if self.logger:
                 self.logger.info("✅ تم تهيئة WebSocket Client")
-            
-            # #region agent log
-            with open(r'c:\Users\pc\Desktop\Logical Version trae\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                f.write(json.dumps({
-                    "location": "main_window.py:init_websocket_client",
-                    "message": "WebSocket client initialized successfully",
-                    "data": {"api_url": api_url},
-                    "timestamp": datetime.now().isoformat(),
-                    "sessionId": "debug-session",
-                    "runId": "run1",
-                    "hypothesisId": "F"
-                }, ensure_ascii=False) + "\n")
-            # #endregion
+
         except Exception as e:
             if self.logger:
                 self.logger.warning(f"⚠️ تعذر تهيئة WebSocket Client: {e}")
-            
-            # #region agent log
-            with open(r'c:\Users\pc\Desktop\Logical Version trae\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                f.write(json.dumps({
-                    "location": "main_window.py:init_websocket_client",
-                    "message": "WebSocket client initialization failed",
-                    "data": {"error": str(e)},
-                    "timestamp": datetime.now().isoformat(),
-                    "sessionId": "debug-session",
-                    "runId": "run1",
-                    "hypothesisId": "F"
-                }, ensure_ascii=False) + "\n")
-            # #endregion
+
             self.ws_client = None
     
     def _on_data_update_received(self, entity_type: str, entity_id: int, action: str, data: dict):
@@ -8801,35 +8959,13 @@ class MainWindow(QMainWindow):
         font.setHintingPreference(QFont.PreferDefaultHinting)
         self.setFont(font)
         
-        # تطبيق السمة المحسّنة
+        # تطبيق السمة الحديثة (Modern Theme)
         try:
-            theme_manager = get_theme_manager()
-            theme_name = ui_settings.get('theme', 'light')
-            theme_manager.apply_theme(theme_name)
-        except Exception:
-            # تطبيق سمة بسيطة في حالة الفشل
-            if ui_settings.get('theme', 'light') == 'dark':
-                self.setStyleSheet("""
-                    QMainWindow {
-                        background-color: #1E1E1E;
-                        color: #E0E0E0;
-                    }
-                    QWidget {
-                        background-color: #2D2D2D;
-                        color: #E0E0E0;
-                    }
-                """)
-            else:
-                self.setStyleSheet("""
-                    QMainWindow {
-                        background-color: #FFFFFF;
-                        color: #212121;
-                    }
-                    QWidget {
-                        background-color: #FFFFFF;
-                        color: #212121;
-                    }
-                """)
+            from src.ui.modern_theme import get_modern_theme
+            modern_theme = get_modern_theme()
+            modern_theme.apply_theme()
+        except Exception as e:
+            self.logger.warning(f"⚠️ فشل في تطبيق الثيم الحديث: {e}")
         
         # تحسين الأداء - تفعيل تحديثات سلسة
         self.setAttribute(Qt.WA_DeleteOnClose, False)
@@ -9403,6 +9539,32 @@ class MainWindow(QMainWindow):
         window = self.window_manager.open_window("dashboard", parent=self)
         if not window:
             QMessageBox.critical(self, "خطأ", "فشل في فتح لوحة المعلومات")
+            
+    def show_dashboard(self):
+        """عرض لوحة التحكم"""
+        self.switch_page('dashboard')
+        return True
+        
+    def show_inventory(self):
+        """عرض المخزون"""
+        self.switch_page('inventory')
+        return True
+        
+    def show_sales(self):
+        """عرض المبيعات"""
+        self.switch_page('sales')
+        return True
+        
+    def show_reports(self):
+        """عرض التقارير"""
+        self.switch_page('reports')
+        return True
+        
+    def show_settings(self):
+        """عرض الإعدادات"""
+        self.switch_page('settings')
+        return True
+
     
     def show_advanced_search_window(self):
         """عرض نافذة البحث المتقدم"""
@@ -9525,6 +9687,20 @@ class MainWindow(QMainWindow):
         # إعادة تحميل جميع النوافذ المفتوحة إذا لزم الأمر
         # (Qt يطبق الأنماط تلقائيًا على جميع النوافذ)
     
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, 'smart_assistant'):
+            self.update_assistant_position()
+
+    def update_assistant_position(self):
+        # Bottom right with margin
+        margin = 20
+        if hasattr(self, 'smart_assistant_widget') and self.smart_assistant_widget:
+            x = self.width() - self.smart_assistant_widget.width() - margin
+            y = self.height() - self.smart_assistant_widget.height() - margin
+            self.smart_assistant_widget.move(x, y)
+            self.smart_assistant_widget.raise_()
+
     def setup_keyboard_shortcuts(self):
         """إعداد اختصارات لوحة المفاتيح"""
         from PySide6.QtGui import QShortcut, QKeySequence
@@ -9544,6 +9720,40 @@ class MainWindow(QMainWindow):
                 self.logger.info("تم إعداد اختصارات لوحة المفاتيح (Ctrl+K Global Palette)")
         except Exception:
             pass
+
+
+
+        # Vision 2030 Assistant Shortcut
+        QShortcut(QKeySequence("Ctrl+Space"), self).activated.connect(self.toggle_smart_assistant)
+        
+    def toggle_smart_assistant(self):
+        if hasattr(self, 'smart_assistant_widget'):
+            if self.smart_assistant_widget.isVisible():
+                self.smart_assistant_widget.hide()
+            else:
+                self.smart_assistant_widget.show()
+                self.smart_assistant_widget.input_field.setFocus()
+                self.smart_assistant_widget.raise_()
+
+    def handle_smart_command_action(self, action):
+        """Handle actions emitted by Smart Assistant"""
+        try:
+            action_type = action.get('type')
+            if action_type == 'NAVIGATE':
+                target = action.get('target')
+                if target == 'sales_dashboard':
+                    self.switch_page('dashboard') 
+                elif target == 'inventory':
+                    self.switch_page('products')
+            elif action_type == 'OPEN_DIALOG':
+                if action.get('target') == 'add_product':
+                     self.handle_smart_command('new_product') # Reuse existing
+            elif action_type == 'TRIGGER_AGENT':
+                if action.get('action') == 'REORDER':
+                    self.notify.show_info("Agentic AI", "Analyzing stock for reorder...")
+                    # Future: call self.handle_ai_action() with REORDER context
+        except Exception as e:
+            self.logger.error(f"Smart Command Error: {e}")
 
     def open_command_palette(self):
         """فتح لوحة الأوامر العالمية (Vision 2030 Smart Palette)"""
@@ -9802,47 +10012,7 @@ class MainWindow(QMainWindow):
             if self.logger:
                 self.logger.error(f"خطأ في فتح Database Metrics: {e}")
     
-    def closeEvent(self, event):
-        """Close window event"""
-        reply = QMessageBox.question(
-            self, 
-            "تأكيد الخروج",
-            "هل تريد إغلاق البرنامج؟",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-        
-        if reply == QMessageBox.Yes:
-            if self.logger:
-                self.logger.info("تم إغلاق التطبيق بواسطة المستخدم")
-            
-            # 🔥 إدارة الموارد الاحترافية: إيقاف العمليات الخلفية قبل الإغلاق
-            self._stop_background_threads()
-            
-            # إغلاق WebSocket connection
-            if hasattr(self, 'ws_client') and self.ws_client:
-                try:
-                    self.ws_client.disconnect()
-                except Exception:
-                    pass
-            
-            # إغلاق جميع النوافذ الفرعية المدارة
-            if hasattr(self, '_managed_windows'):
-                for window in list(self._managed_windows):
-                    try:
-                        if window and window.isVisible():
-                            window.close()
-                    except Exception:
-                        pass
-            
-            event.accept()
-            # إشارة للتطبيق للإنهاء النظيف
-            from PySide6.QtWidgets import QApplication
-            app_instance = QApplication.instance()
-            if app_instance:
-                app_instance.quit()
-        else:
-            event.ignore()
+
 
     def _create_glass_kpi(self, id, title, value, color, icon_char):
         """Card Creator for Dashboard"""

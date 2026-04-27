@@ -100,23 +100,12 @@ class PDFExportService:
     ) -> bool:
         """محاولة استخدام WeasyPrint"""
         try:
-            # قمع stdout/stderr مؤقتاً أثناء استيراد WeasyPrint
-            import sys
-            import os
-            old_stdout = sys.stdout
-            old_stderr = sys.stderr
-            sys.stdout = open(os.devnull, 'w')
-            sys.stderr = open(os.devnull, 'w')
-            
             try:
                 from weasyprint import HTML, CSS
                 from weasyprint.text.fonts import FontConfiguration
-            finally:
-                # استعادة stdout/stderr
-                sys.stdout.close()
-                sys.stderr.close()
-                sys.stdout = old_stdout
-                sys.stderr = old_stderr
+            except ImportError:
+                 # Re-raise to be caught by outer except
+                 raise
             
             # إعداد الخطوط
             font_config = FontConfiguration()
@@ -217,22 +206,10 @@ class PDFExportService:
             True إذا نجح
         """
         try:
-            # قمع stdout/stderr مؤقتاً أثناء استيراد WeasyPrint
-            import sys
-            import os
-            old_stdout = sys.stdout
-            old_stderr = sys.stderr
-            sys.stdout = open(os.devnull, 'w')
-            sys.stderr = open(os.devnull, 'w')
-            
             try:
                 from weasyprint import HTML
-            finally:
-                # استعادة stdout/stderr
-                sys.stdout.close()
-                sys.stderr.close()
-                sys.stdout = old_stdout
-                sys.stderr = old_stderr
+            except ImportError:
+                 raise
             
             html = HTML(url=url)
             html.write_pdf(output_path)

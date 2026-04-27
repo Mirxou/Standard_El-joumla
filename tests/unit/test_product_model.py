@@ -174,3 +174,6 @@ class TestProductManager:
         assert len(results) > 0
         assert any(p.name == product_data['name'] for p in results)
 
+
+
+

@@ -11,9 +11,10 @@ from datetime import date, datetime
 from unittest.mock import Mock, patch
 
 import sys
+import os
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
+# الوصول إلى جذر المشروع
+project_root = str(Path(__file__).resolve().parents[2])
 from src.services.inventory_service import InventoryService, StockMovement, StockAlert
 from src.services.sales_service import SalesService, SalesReport, DailySummary
 from src.services.payment_service import PaymentService
@@ -588,4 +589,8 @@ class TestServicesEdgeCases:
         
         # قد ينجح أو يفشل حسب التنفيذ
         assert payment is None or isinstance(payment, Payment)
+
+
+
+
 

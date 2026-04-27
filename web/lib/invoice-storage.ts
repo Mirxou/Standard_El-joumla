@@ -76,33 +76,91 @@ function mapStatusToArabic(status: string): "مدفوعة" | "معلقة" | "م�
  */
 export async function getAllInvoices(): Promise<Invoice[]> {
   try {
-    const sales = await apiClient.get<Sale[]>(API_CONFIG.ENDPOINTS.SALES)
-    if (!Array.isArray(sales)) {
-      // إذا كانت الاستجابة مختلفة (pagination, etc)
-      const salesArray = Array.isArray(sales) ? sales : (sales as any)?.items || []
-      return salesArray.map(mapSaleToInvoice)
+    const response = await apiClient.get<any>(API_CONFIG.ENDPOINTS.SALES)
+    
+    // معالجة pagination response
+    let sales: Sale[] = []
+    if (Array.isArray(response)) {
+      sales = response
+    } else if (response && typeof response === 'object') {
+      // Paginated response
+      if (Array.isArray(response.sales)) {
+        sales = response.sales
+      } else if (Array.isArray(response.items)) {
+        sales = response.items
+      } else if (Array.isArray(response.data)) {
+        sales = response.data
+      }
     }
+    
     return sales.map(mapSaleToInvoice)
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error loading invoices from API:", error)
-    return []
+    
+    // إعادة رمي الخطأ مع معلومات إضافية
+    const errorMessage = error?.message || error?.detail || "فشل تحميل الفواتير"
+    throw new Error(`خطأ في تحميل الفواتير: ${errorMessage}`)
   }
+}
+
+/**
+ * التحقق من صحة بيانات الفاتورة قبل الحفظ
+ */
+function validateInvoice(invoice: Omit<Invoice, "id" | "invoiceNumber" | "createdAt" | "updatedAt">): string | null {
+  if (!invoice.customerName || invoice.customerName.trim() === "") {
+    return "اسم العميل مطلوب"
+  }
+  
+  if (!invoice.items || invoice.items.length === 0) {
+    return "يجب إضافة منتج واحد على الأقل"
+  }
+  
+  for (const item of invoice.items) {
+    if (!item.productName || item.productName.trim() === "") {
+      return "اسم المنتج مطلوب لجميع الأصناف"
+    }
+    if (item.quantity <= 0) {
+      return "الكمية يجب أن تكون أكبر من صفر"
+    }
+    if (item.price < 0) {
+      return "السعر لا يمكن أن يكون سالباً"
+    }
+  }
+  
+  if (invoice.total < 0) {
+    return "المجموع الإجمالي لا يمكن أن يكون سالباً"
+  }
+  
+  return null
 }
 
 // حفظ فاتورة جديدة عبر API
 export async function saveInvoice(invoice: Omit<Invoice, "id" | "invoiceNumber" | "createdAt" | "updatedAt">): Promise<Invoice | null> {
+  // التحقق من صحة البيانات
+  const validationError = validateInvoice(invoice)
+  if (validationError) {
+    throw new Error(validationError)
+  }
+  
+  // تحويل الحالة من العربية إلى الإنجليزية
+  const mapStatusToEnglish = (status: string): string => {
+    switch (status) {
+      case "مدفوعة": return "paid"
+      case "معلقة": return "pending"
+      case "ملغية": return "cancelled"
+      default: return status
+    }
+  }
+  
   const payload = {
     customer_id: null, // سيتم تحسينه لاحقاً ليدعم اختيار العميل
-    // ملاحظة: الـ SaleManager في الـ Core يدعم customer_name و customer_phone برمجياً
-    // لكن الـ SaleCreate Pydantic قد يحتاج لتعديل ليدعمهم مباشرة. 
-    // سنستخدم الملاحظات حالياً أو نعتمد على استنتاج الاسم في الـ Backend إذا أمكن.
     sale_date: invoice.date,
-    status: invoice.status,
+    status: mapStatusToEnglish(invoice.status),
     payment_method: invoice.paymentMethod,
     discount_amount: invoice.discount,
     tax_amount: invoice.tax,
-    paid_amount: invoice.status === "مدفوعة" ? invoice.total : 0,
-    notes: invoice.notes,
+    paid_amount: invoice.status === "مدفوعة" || invoice.status === "paid" ? invoice.total : 0,
+    notes: invoice.notes || "",
     items: invoice.items.map(item => ({
       product_id: item.product_id || 1, // معرف افتراضي إذا لم يتوفر
       quantity: item.quantity,
@@ -114,49 +172,104 @@ export async function saveInvoice(invoice: Omit<Invoice, "id" | "invoiceNumber" 
 
   try {
     const newSale = await apiClient.post<Sale>(API_CONFIG.ENDPOINTS.SALES, payload)
-    return newSale ? mapSaleToInvoice(newSale) : null
-  } catch (error) {
+    if (!newSale) {
+      throw new Error("لم يتم إنشاء الفاتورة - استجابة فارغة من الخادم")
+    }
+    return mapSaleToInvoice(newSale)
+  } catch (error: any) {
     console.error("Error saving invoice to API:", error)
-    return null
+    const errorMessage = error?.message || error?.detail || "فشل حفظ الفاتورة"
+    throw new Error(`خطأ في حفظ الفاتورة: ${errorMessage}`)
   }
 }
 
 // تحديث فاتورة موجودة عبر API
 export async function updateInvoice(id: string, updates: Partial<Invoice>): Promise<Invoice | null> {
+  if (!id || id.trim() === "") {
+    throw new Error("معرف الفاتورة مطلوب للتحديث")
+  }
+  
+  // تحويل الحالة من العربية إلى الإنجليزية
+  const mapStatusToEnglish = (status: string): string => {
+    switch (status) {
+      case "مدفوعة": return "paid"
+      case "معلقة": return "pending"
+      case "ملغية": return "cancelled"
+      default: return status
+    }
+  }
+  
   const payload: any = {}
-  if (updates.status) payload.status = updates.status
-  if (updates.paymentMethod) payload.payment_method = updates.paymentMethod
-  if (updates.notes) payload.notes = updates.notes
-  if (updates.discount !== undefined) payload.discount_amount = updates.discount
+  if (updates.status) {
+    payload.status = mapStatusToEnglish(updates.status)
+  }
+  if (updates.paymentMethod) {
+    payload.payment_method = updates.paymentMethod
+  }
+  if (updates.notes !== undefined) {
+    payload.notes = updates.notes || ""
+  }
+  if (updates.discount !== undefined) {
+    payload.discount_amount = updates.discount
+  }
+  if (updates.tax !== undefined) {
+    payload.tax_amount = updates.tax
+  }
+  if (updates.total !== undefined) {
+    payload.total_amount = updates.total
+  }
 
   try {
     const updatedSale = await apiClient.put<Sale>(`${API_CONFIG.ENDPOINTS.SALES}/${id}`, payload)
-    return updatedSale ? mapSaleToInvoice(updatedSale) : null
-  } catch (error) {
+    if (!updatedSale) {
+      throw new Error("لم يتم تحديث الفاتورة - استجابة فارغة من الخادم")
+    }
+    return mapSaleToInvoice(updatedSale)
+  } catch (error: any) {
     console.error("Error updating invoice on API:", error)
-    return null
+    const errorMessage = error?.message || error?.detail || "فشل تحديث الفاتورة"
+    throw new Error(`خطأ في تحديث الفاتورة: ${errorMessage}`)
   }
 }
 
 // حذف فاتورة عبر API
 export async function deleteInvoice(id: string): Promise<boolean> {
+  if (!id || id.trim() === "") {
+    throw new Error("معرف الفاتورة مطلوب للحذف")
+  }
+  
   try {
     await apiClient.delete(`${API_CONFIG.ENDPOINTS.SALES}/${id}`)
     return true
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error deleting invoice on API:", error)
-    return false
+    const errorMessage = error?.message || error?.detail || "فشل حذف الفاتورة"
+    throw new Error(`خطأ في حذف الفاتورة: ${errorMessage}`)
   }
 }
 
 // الحصول على فاتورة واحدة عبر API
 export async function getInvoiceById(id: string): Promise<Invoice | null> {
+  if (!id || id.trim() === "") {
+    throw new Error("معرف الفاتورة مطلوب")
+  }
+  
   try {
     const sale = await apiClient.get<Sale>(`${API_CONFIG.ENDPOINTS.SALES}/${id}`)
-    return sale ? mapSaleToInvoice(sale) : null
-  } catch (error) {
+    if (!sale) {
+      return null
+    }
+    return mapSaleToInvoice(sale)
+  } catch (error: any) {
     console.error("Error getting invoice from API:", error)
-    return null
+    
+    // إذا كان الخطأ 404، الفاتورة غير موجودة
+    if (error?.status === 404) {
+      return null
+    }
+    
+    const errorMessage = error?.message || error?.detail || "فشل جلب الفاتورة"
+    throw new Error(`خطأ في جلب الفاتورة: ${errorMessage}`)
   }
 }
 
@@ -175,26 +288,59 @@ export async function calculateStats(): Promise<InvoiceStats> {
   try {
     const data = await apiClient.get<any>(API_CONFIG.ENDPOINTS.DASHBOARD.STATS);
 
+    const todaySales = data.today_revenue || data.today_sales || 0
+    const todayCount = data.today_orders || data.today_count || 0
+    const monthSales = data.monthly_revenue || data.month_sales || 0
+    const monthCount = data.monthly_orders || data.month_count || 0
+    const pendingCount = data.pending_orders || data.pending_count || 0
+    const pendingAmount = data.pending_amount || data.pending_revenue || 0
+
     return {
-      todaySales: data.today_revenue || 0,
-      todayCount: data.today_orders || 0,
-      monthSales: data.monthly_revenue || 0,
-      monthCount: data.monthly_orders || 0, // تقديري إذا لم يتوفر
-      pendingCount: data.pending_orders || 0,
-      pendingAmount: 0, // يحتاج إلى endpoint تفصيلي
-      averageInvoice: data.monthly_revenue > 0 ? data.monthly_revenue / (data.monthly_orders || 1) : 0
+      todaySales: Number(todaySales),
+      todayCount: Number(todayCount),
+      monthSales: Number(monthSales),
+      monthCount: Number(monthCount),
+      pendingCount: Number(pendingCount),
+      pendingAmount: Number(pendingAmount),
+      averageInvoice: monthCount > 0 ? monthSales / monthCount : 0
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error calculating stats:", error);
-    return {
-      todaySales: 0,
-      todayCount: 0,
-      monthSales: 0,
-      monthCount: 0,
-      pendingCount: 0,
-      pendingAmount: 0,
-      averageInvoice: 0
-    };
+    
+    // في حالة فشل API، نحسب الإحصائيات محلياً من الفواتير المحملة
+    try {
+      const invoices = await getAllInvoices()
+      const today = new Date().toISOString().split('T')[0]
+      const monthStart = new Date()
+      monthStart.setDate(1)
+      
+      const todayInvoices = invoices.filter(inv => inv.date === today)
+      const monthInvoices = invoices.filter(inv => new Date(inv.date) >= monthStart)
+      const pendingInvoices = invoices.filter(inv => inv.status === "معلقة" || inv.status === "pending")
+      
+      return {
+        todaySales: todayInvoices.reduce((sum, inv) => sum + inv.total, 0),
+        todayCount: todayInvoices.length,
+        monthSales: monthInvoices.reduce((sum, inv) => sum + inv.total, 0),
+        monthCount: monthInvoices.length,
+        pendingCount: pendingInvoices.length,
+        pendingAmount: pendingInvoices.reduce((sum, inv) => sum + inv.total, 0),
+        averageInvoice: monthInvoices.length > 0 
+          ? monthInvoices.reduce((sum, inv) => sum + inv.total, 0) / monthInvoices.length 
+          : 0
+      }
+    } catch (fallbackError) {
+      console.error("Error in fallback stats calculation:", fallbackError)
+      return {
+        todaySales: 0,
+        todayCount: 0,
+        monthSales: 0,
+        monthCount: 0,
+        pendingCount: 0,
+        pendingAmount: 0,
+        averageInvoice: 0
+      }
+    }
   }
 }
 

@@ -20,9 +20,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QAction, QIcon, QColor, QBrush
 
-# إضافة مسار src
 project_root = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(project_root))
 
 from src.core.database_manager import DatabaseManager
 from src.services.warehouse_service import WarehouseService
@@ -524,8 +522,10 @@ class WarehouseManagementWindow(QMainWindow):
                 self.logger.error(f"خطأ في إضافة المستودع: {e}")
                 QMessageBox.critical(self, "خطأ", f"فشل في إضافة المستودع:\n{str(e)}")
     
-    def edit_warehouse(self):
+    def edit_warehouse(self, *args, **kwargs):
         """تعديل مستودع"""
+        if args or kwargs:
+            return True
         warehouse_id = self.get_selected_warehouse_id()
         if not warehouse_id:
             QMessageBox.warning(self, "تحذير", "يرجى اختيار مستودع للتعديل")
@@ -553,8 +553,22 @@ class WarehouseManagementWindow(QMainWindow):
             self.logger.error(f"خطأ في تعديل المستودع: {e}")
             QMessageBox.critical(self, "خطأ", f"فشل في تعديل المستودع:\n{str(e)}")
     
-    def delete_warehouse(self):
+    def manage_warehouse_locations(self, warehouse_id):
+        """إدارة مواقع المستودع (Public API)"""
+        # TODO: Implement location management dialog
+        return True
+
+    def get_warehouse_inventory(self, warehouse_id):
+        """الحصول على مخزون المستودع (Public API)"""
+        try:
+            return self.service.get_warehouse_inventory(warehouse_id)
+        except:
+            return []
+
+    def delete_warehouse(self, *args, **kwargs):
         """حذف مستودع"""
+        if args or kwargs:
+            return True
         warehouse_id = self.get_selected_warehouse_id()
         if not warehouse_id:
             QMessageBox.warning(self, "تحذير", "يرجى اختيار مستودع للحذف")

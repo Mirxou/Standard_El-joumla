@@ -65,3 +65,6 @@ class TestErrorDialog:
         assert size.width() > 0
         assert size.height() > 0
 
+
+
+

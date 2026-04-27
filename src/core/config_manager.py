@@ -11,6 +11,7 @@ import re
 import base64
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Set
+from src.utils.logger import setup_logger
 
 class ConfigManager:
     """مدير إعدادات التطبيق"""
@@ -35,6 +36,9 @@ class ConfigManager:
         self.dev_config = {}
         self._encryption_manager = None
         self._encryption_enabled = False
+        
+        # تهيئة logger
+        self.logger = setup_logger(__name__)
     
     def load_config(self) -> bool:
         """تحميل ملفات الإعدادات"""
@@ -65,7 +69,7 @@ class ConfigManager:
             # التحقق من صحة الإعدادات
             validation_errors = self.validate_config()
             if validation_errors:
-                print(f"تحذير: أخطاء في التحقق من الإعدادات: {validation_errors}")
+                self.logger.warning(f"أخطاء في التحقق من الإعدادات: {validation_errors}")
             
             # إنشاء مجلدات البيانات المطلوبة
             self._ensure_data_directories()
@@ -73,7 +77,7 @@ class ConfigManager:
             return True
             
         except Exception as e:
-            print(f"خطأ في تحميل الإعدادات: {e}")
+            self.logger.error(f"خطأ في تحميل الإعدادات: {e}", exc_info=True)
             return False
     
     def save_config(self) -> bool:
@@ -92,7 +96,7 @@ class ConfigManager:
             return True
             
         except Exception as e:
-            print(f"خطأ في حفظ الإعدادات: {e}")
+            self.logger.error(f"خطأ في حفظ الإعدادات: {e}", exc_info=True)
             return False
     
     def get(self, key: str, default: Any = None, use_env: bool = True) -> Any:
@@ -135,6 +139,9 @@ class ConfigManager:
         for k in keys[:-1]:
             if k not in config:
                 config[k] = {}
+            elif not isinstance(config[k], dict):
+                # إذا كانت القيمة موجودة ولكنها ليست dict، استبدالها بـ dict
+                config[k] = {}
             config = config[k]
         
         # تعيين القيمة
@@ -146,6 +153,14 @@ class ConfigManager:
         if not os.path.isabs(db_path):
             db_path = str(self.project_root / db_path)
         return db_path
+    
+    def get_database_backend(self) -> str:
+        """الحصول على نوع database backend"""
+        return self.get('database.backend', 'sqlite')  # sqlite | postgresql
+    
+    def get_database_url(self) -> Optional[str]:
+        """الحصول على database URL (لـ PostgreSQL)"""
+        return self.get('database.url', None)
     
     def get_backup_settings(self) -> Dict[str, Any]:
         """الحصول على إعدادات النسخ الاحتياطي"""
@@ -232,7 +247,9 @@ class ConfigManager:
         """الحصول على الإعدادات الافتراضية"""
         return {
             "database": {
+                "backend": "sqlite",  # sqlite | postgresql
                 "path": "data/logical_release.db",
+                "url": None,  # postgresql://user:pass@host:5432/dbname
                 "backup_interval": 24,
                 "max_backups": 30,
                 "pool": {
@@ -303,11 +320,13 @@ class ConfigManager:
             },
             "api": {
                 "enabled": False,
-                "base_url": "",
+                "base_url": "http://127.0.0.1:8000",
+                "api_url": "http://127.0.0.1:8000",  # Alias for base_url for backward compatibility
                 "api_key": "",
                 "timeout": 30,
                 "retry_attempts": 3,
-                "verify_ssl": True
+                "verify_ssl": True,
+                "cors_origins": ["*"]  # في الإنتاج، حدد origins محددة مثل ["http://localhost:3000", "https://yourdomain.com"]
             },
             "notifications": {
                 "enabled": True,
@@ -402,14 +421,61 @@ class ConfigManager:
     def get_api_settings(self) -> Dict[str, Any]:
         """الحصول على إعدادات API"""
         api_config = self.get('api', {})
+        base_url = api_config.get('base_url') or api_config.get('api_url', 'http://127.0.0.1:8000')
         return {
             'enabled': api_config.get('enabled', False),
-            'base_url': api_config.get('base_url', ''),
+            'base_url': base_url,
+            'api_url': base_url,  # Alias for backward compatibility
             'api_key': api_config.get('api_key', ''),
             'timeout': api_config.get('timeout', 30),
             'retry_attempts': api_config.get('retry_attempts', 3),
-            'verify_ssl': api_config.get('verify_ssl', True)
+            'verify_ssl': api_config.get('verify_ssl', True),
+            'cors_origins': api_config.get('cors_origins', ['*'])
         }
+    
+    def get_api_url(self) -> str:
+        """الحصول على رابط API"""
+        api_config = self.get('api', {})
+        return api_config.get('api_url') or api_config.get('base_url', 'http://127.0.0.1:8000')
+    
+    def get_cors_origins(self) -> list:
+        """الحصول على قائمة CORS Origins المسموحة"""
+        api_config = self.get('api', {})
+        cors_origins = api_config.get('cors_origins', ['*'])
+        # دعم environment variable
+        import os
+        env_cors = os.getenv('CORS_ORIGINS')
+        if env_cors:
+            cors_origins = [origin.strip() for origin in env_cors.split(',')]
+        
+        # إذا كان "*" أو list فارغ، أضف localhost والشبكة المحلية
+        if cors_origins == ['*'] or not cors_origins:
+            cors_origins = [
+                "http://localhost:3000",
+                "http://localhost:3001",
+                "http://127.0.0.1:3000",
+                "http://127.0.0.1:3001",
+            ]
+            # إضافة IPs في الشبكة المحلية (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+            try:
+                import socket
+                hostname = socket.gethostname()
+                local_ip = socket.gethostbyname(hostname)
+                if local_ip.startswith('192.168.') or local_ip.startswith('10.') or \
+                   local_ip.startswith('172.16.') or local_ip.startswith('172.17.') or \
+                   local_ip.startswith('172.18.') or local_ip.startswith('172.19.') or \
+                   local_ip.startswith('172.20.') or local_ip.startswith('172.21.') or \
+                   local_ip.startswith('172.22.') or local_ip.startswith('172.23.') or \
+                   local_ip.startswith('172.24.') or local_ip.startswith('172.25.') or \
+                   local_ip.startswith('172.26.') or local_ip.startswith('172.27.') or \
+                   local_ip.startswith('172.28.') or local_ip.startswith('172.29.') or \
+                   local_ip.startswith('172.30.') or local_ip.startswith('172.31.'):
+                    cors_origins.append(f"http://{local_ip}:3000")
+                    cors_origins.append(f"http://{local_ip}:3001")
+            except Exception:
+                pass  # إذا فشل الكشف، نستخدم القيم الافتراضية فقط
+        
+        return cors_origins if isinstance(cors_origins, list) else [cors_origins]
     
     def get_notifications_settings(self) -> Dict[str, Any]:
         """الحصول على إعدادات الإشعارات"""
@@ -493,10 +559,10 @@ class ConfigManager:
                 self._encryption_manager = EncryptionManager(encryption_key)
                 self._encryption_enabled = True
             else:
-                print(f"تحذير: متغير البيئة {encryption_key_env} غير موجود. سيتم حفظ القيم الحساسة بدون تشفير.")
+                self.logger.warning(f"متغير البيئة {encryption_key_env} غير موجود. سيتم حفظ القيم الحساسة بدون تشفير.")
                 self._encryption_enabled = False
         except Exception as e:
-            print(f"تحذير: فشل تهيئة التشفير: {e}")
+            self.logger.warning(f"فشل تهيئة التشفير: {e}", exc_info=True)
             self._encryption_enabled = False
     
     def _encrypt_sensitive_values(self) -> Dict[str, Any]:
@@ -514,7 +580,7 @@ class ConfigManager:
                     encrypted_b64 = base64.b64encode(encrypted).decode('utf-8')
                     self._set_nested_value(config_copy, key_path, f'encrypted:{encrypted_b64}')
                 except Exception as e:
-                    print(f"تحذير: فشل تشفير {key_path}: {e}")
+                    self.logger.warning(f"فشل تشفير {key_path}: {e}", exc_info=True)
         
         return config_copy
     
@@ -532,7 +598,7 @@ class ConfigManager:
                     decrypted = self._encryption_manager.decrypt_data(encrypted)
                     self.set(key_path, decrypted.decode('utf-8'))
                 except Exception as e:
-                    print(f"تحذير: فشل فك تشفير {key_path}: {e}")
+                    self.logger.warning(f"فشل فك تشفير {key_path}: {e}", exc_info=True)
     
     def _set_nested_value(self, config: Dict[str, Any], key_path: str, value: Any):
         """تعيين قيمة متداخلة في القاموس"""
@@ -669,4 +735,4 @@ class ConfigManager:
                 cache_dir.mkdir(parents=True, exist_ok=True)
                 
         except Exception as e:
-            print(f"تحذير: فشل إنشاء مجلدات البيانات: {e}")
+            self.logger.warning(f"فشل إنشاء مجلدات البيانات: {e}", exc_info=True)

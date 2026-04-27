@@ -9,21 +9,25 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox,
     QLineEdit, QComboBox, QDateEdit, QTextEdit, QTableWidget,
     QTableWidgetItem, QPushButton, QLabel, QDoubleSpinBox,
-    QMessageBox, QHeaderView, QCheckBox
+    QMessageBox, QHeaderView, QCheckBox, QFrame,
+    QGraphicsDropShadowEffect, QWidget
 )
+from PySide6.QtGui import QColor
+
+from src.ui.widgets.custom_title_bar import CustomTitleBar
+from src.ui.widgets.quantum_notification import NotificationManager
 from PySide6.QtCore import Qt, QDate
 from decimal import Decimal
 from datetime import date
 
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from models.receiving_note import (
+from src.models.receiving_note import (
     ReceivingNote, ReceivingItem, ReceivingStatus,
     InspectionStatus, QualityRating
 )
-from models.purchase_order import PurchaseOrder
+from src.models.purchase_order import PurchaseOrder
 
 
 class ReceivingDialog(QDialog):
@@ -35,8 +39,20 @@ class ReceivingDialog(QDialog):
         self.po = purchase_order
         self.receiving_note = None
         
-        self.setWindowTitle(f"استلام شحنة - {purchase_order.po_number}")
-        self.setMinimumSize(1000, 600)
+        title = f"استلام شحنة - {purchase_order.po_number}"
+        # self.setWindowTitle(title) # Handled by CustomTitleBar
+        # self.setMinimumSize(1000, 600)
+        
+        # --- Quantum Window Setup ---
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        
+        # Notifications
+        self.notify = NotificationManager(self)
+        
+        self.resize(1000, 700)
+        
+        self.title_text = title
         
         self._create_widgets()
         self._setup_connections()
@@ -44,7 +60,49 @@ class ReceivingDialog(QDialog):
     
     def _create_widgets(self):
         """إنشاء عناصر الواجهة"""
-        layout = QVBoxLayout(self)
+        # تخطيط جذري شفاف
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(10, 10, 10, 10)
+        root_layout.setSpacing(0)
+        
+        # الإطار الرئيسي
+        self.main_frame = QFrame()
+        self.main_frame.setStyleSheet("""
+            QFrame#MainFrame {
+                background-color: #f5f5f5;
+                border: 1px solid #3498db;
+                border-radius: 10px;
+            }
+        """)
+        self.main_frame.setObjectName("MainFrame")
+        
+        # Shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor("#3498db"))
+        shadow.setOffset(0, 0)
+        self.main_frame.setGraphicsEffect(shadow)
+        
+        root_layout.addWidget(self.main_frame)
+        
+        # تخطيط النافذة الداخلية
+        main_layout = QVBoxLayout(self.main_frame)
+        main_layout.setContentsMargins(0, 0, 0, 10)
+        main_layout.setSpacing(0)
+        
+        # 1. Custom Title Bar
+        self.title_bar = CustomTitleBar(self, title=self.title_text, is_dialog=True)
+        main_layout.addWidget(self.title_bar)
+        
+        # Container for content
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setSpacing(10)
+        content_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.addWidget(content_widget)
+        
+        # Re-assign layout to content_layout for the existing widget helpers
+        layout = content_layout
         
         # معلومات الشحنة
         shipment_group = self._create_shipment_info_group()
@@ -271,7 +329,7 @@ class ReceivingDialog(QDialog):
             self.accept()
             
         except Exception as e:
-            QMessageBox.critical(self, "خطأ", f"فشل الحفظ: {str(e)}")
+            self.notify.show_error("خطأ", f"فشل الحفظ: {str(e)}")
     
     def _validate(self):
         """التحقق من صحة البيانات"""
@@ -282,7 +340,7 @@ class ReceivingDialog(QDialog):
             total_received += Decimal(str(qty_spin.value()))
         
         if total_received == 0:
-            QMessageBox.warning(self, "تحذير", "يرجى إدخال الكميات المستلمة")
+            self.notify.show_warning("تحذير", "يرجى إدخال الكميات المستلمة")
             return False
         
         # التحقق من أن المقبولة + المرفوضة = المستلمة
@@ -292,8 +350,8 @@ class ReceivingDialog(QDialog):
             rejected = Decimal(str(self.items_table.cellWidget(row, 7).value()))
             
             if accepted + rejected != received:
-                QMessageBox.warning(
-                    self, "تحذير",
+                self.notify.show_warning(
+                    "تحذير",
                     f"الصف {row + 1}: المقبولة + المرفوضة يجب أن تساوي المستلمة"
                 )
                 return False

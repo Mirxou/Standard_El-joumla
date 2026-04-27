@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Plus, UserPlus, MapPin, Phone, Mail, FileText, DollarSign } from "lucide-react"
 import { toast } from "sonner"
-import { fetchFromAPI } from "@/lib/db/client"
+import { apiClient } from "@/lib/api/client"
+import { API_CONFIG } from "@/lib/config/api"
 
 interface CreateSupplierProps {
     onSaved?: () => void;
@@ -60,10 +61,7 @@ export default function CreateSupplier({ onSaved }: CreateSupplierProps) {
                 is_active: true
             }
 
-            const result = await fetchFromAPI('/suppliers', {
-                method: 'POST',
-                body: payload
-            });
+            const result = await apiClient.post(API_CONFIG.ENDPOINTS.SUPPLIERS, payload)
 
             if (result.error) throw new Error(result.error);
 

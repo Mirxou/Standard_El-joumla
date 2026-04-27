@@ -2,8 +2,24 @@ import pytest
 from fastapi.testclient import TestClient
 from src.api.app import app
 from unittest.mock import MagicMock
+from datetime import datetime, timedelta, timezone
+
+from src.api.app import app, auth_manager
 
 client = TestClient(app)
+
+# Mock verify_token for all tests in this file
+@pytest.fixture(autouse=True)
+def mock_auth():
+    auth_manager.verify_token = MagicMock(return_value={
+        "sub": "1",
+        "username": "admin",
+        "company_id": 1,
+        "role": "admin"
+    })
+    yield
+    # No need to reset if it's a mock, but good practice
+
 
 class TestReportsFlow:
     @pytest.fixture
@@ -25,7 +41,14 @@ class TestReportsFlow:
         app.dependency_overrides[get_current_user] = lambda: {"id": 1, "username": "admin", "role": "admin"}
 
         try:
-            response = client.get("/api/v1/reports/financial")
+            auth_manager.verify_token.return_value = {
+                "sub": "1",
+                "username": "admin",
+                "company_id": 1,
+                "role": "admin",
+                "exp": datetime.now(timezone.utc) + timedelta(hours=1)
+            }
+            response = client.get("/api/v1/reports/financial", headers={"Authorization": "Bearer test"})
             assert response.status_code == 200
             data = response.json()
             assert data["total_sales"] == 1000
@@ -39,7 +62,7 @@ class TestReportsFlow:
         app.dependency_overrides[get_current_user] = lambda: {"id": 1, "username": "admin", "role": "admin"}
 
         try:
-            response = client.get("/api/v1/reports/charts/sales?days=30")
+            response = client.get("/api/v1/reports/charts/sales?days=30", headers={"Authorization": "Bearer test"})
             assert response.status_code == 200
             assert isinstance(response.json(), list)
         finally:
@@ -52,8 +75,11 @@ class TestReportsFlow:
         app.dependency_overrides[get_current_user] = lambda: {"id": 1, "username": "admin", "role": "admin"}
 
         try:
-            response = client.get("/api/v1/reports/analytics/inventory")
+            response = client.get("/api/v1/reports/analytics/inventory", headers={"Authorization": "Bearer test"})
             assert response.status_code == 200
             assert isinstance(response.json(), dict)
         finally:
             app.dependency_overrides = {}
+
+
+

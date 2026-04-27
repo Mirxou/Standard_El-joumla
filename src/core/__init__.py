@@ -3,13 +3,6 @@ Core Module - المكونات الأساسية
 المكونات الأساسية للتطبيق
 """
 
-from .config_manager import ConfigManager
-from .database_manager import DatabaseManager, get_db_manager
-from .exceptions import DatabaseException
-from .signals import signals, AppSignals
-from .encryption_manager import EncryptionManager
-from .exception_handler import GlobalExceptionHandler
-
 __all__ = [
     'ConfigManager',
     'DatabaseManager',
@@ -20,4 +13,27 @@ __all__ = [
     'EncryptionManager',
     'GlobalExceptionHandler',
 ]
+
+
+def __getattr__(name):
+    """Lazy exports to keep package imports lightweight."""
+    if name == 'ConfigManager':
+        from .config_manager import ConfigManager
+        return ConfigManager
+    if name == 'DatabaseManager' or name == 'get_db_manager':
+        from .database_manager import DatabaseManager, get_db_manager
+        return DatabaseManager if name == 'DatabaseManager' else get_db_manager
+    if name == 'DatabaseException':
+        from .exceptions import DatabaseException
+        return DatabaseException
+    if name == 'signals' or name == 'AppSignals':
+        from .signals import signals, AppSignals
+        return signals if name == 'signals' else AppSignals
+    if name == 'EncryptionManager':
+        from .encryption_manager import EncryptionManager
+        return EncryptionManager
+    if name == 'GlobalExceptionHandler':
+        from .exception_handler import GlobalExceptionHandler
+        return GlobalExceptionHandler
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

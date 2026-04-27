@@ -11,9 +11,10 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt
 
 import sys
+import os
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
+# الوصول إلى جذر المشروع
+project_root = str(Path(__file__).resolve().parents[2])
 from src.core.error_dialog import ErrorDialog, show_error_dialog, show_error_notification
 from src.core.exceptions import ErrorSeverity, ErrorCategory
 
@@ -300,4 +301,8 @@ class TestErrorDialogIntegration:
         second_info = dialog.error_info.copy()
         
         assert first_info != second_info
+
+
+
+
 

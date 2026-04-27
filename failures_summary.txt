@@ -1,0 +1,7 @@
+﻿
+❌ Database error: Database connection not initialized. Call initialize() first.
+tests\models\test_warehouse_coverage.py ...خطأ في إنشاء المنتج: DB Error
+tests\ui\test_error_dialog.py ssss
+✅ Smart Pricing Logic Passed
+❌ Agentic Action Failed (Returned None)
+Exception: DB Error

@@ -1,92 +1,112 @@
 """
 Models Module - نماذج البيانات
 Data models and business logic for the application
+Using Lazy Loading to improve performance
 """
+import importlib
 
-# Core Models
-from .product import Product, ProductManager
-from .customer import Customer, CustomerManager
-from .sale import Sale, SaleItem, SaleManager, SaleStatus, PaymentMethod
-from .supplier import Supplier, SupplierManager
-from .user import User, UserManager, UserRole
-
-# Purchase & Inventory Models
-from .purchase import Purchase, PurchaseItem, PurchaseManager, PurchaseStatus, PaymentStatus
-from .purchase_order import PurchaseOrder, PurchaseOrderItem
-from .receiving_note import ReceivingNote, ReceivingItem
-from .physical_count import PhysicalCount, CountItem
-from .inventory_optimization import ABCAnalysisResult, ReorderRecommendation, SafetyStockConfig
-
-# Financial Models
-from .payment import Payment, PaymentManager, PaymentType
-from .payment_plan import PaymentPlan, PaymentInstallment
-from .account import Account, ChartOfAccounts
-from .journal_entry import JournalEntry, JournalLine
-from .currency import Currency, ExchangeRate, CurrencyManager
-from .company import Company, UserCompany, CompanyManager
-
-# Reporting & Analytics
-from .report import (
-    Report, ReportData, ReportTemplate, ReportType, ReportPeriod,
-    ReportFormat, ExportFormat, ChartType, ReportFilter,
-    SalesReportLine, SalesReportSummary,
-    InventoryReportLine, InventoryReportSummary,
-    FinancialReportLine, FinancialReportSummary,
-    ChartData
-)
-from .dashboard import DashboardData
-
-# Other Models
-from .quote import Quote, QuoteItem
-from .return_invoice import ReturnInvoice, ReturnItem
-from .category import Category, CategoryManager
-from .permission import Permission, Role, User, AuditLog, LoginHistory
-from .search import SearchResult, SearchQuery, SearchFilter
-# Pydantic schemas are optional - import only if available
-try:
-    from .pydantic_schemas import *
-except ImportError:
-    pass
-
-__all__ = [
+# Mapping of names to their respective modules
+_MODELS_MAP = {
     # Core Models
-    'Product', 'ProductManager',
-    'Customer', 'CustomerManager',
-    'Sale', 'SaleItem', 'SaleManager', 'SaleStatus', 'PaymentMethod',
-    'Supplier', 'SupplierManager',
-    'User', 'UserManager', 'UserRole',
+    'Product': '.product',
+    'ProductManager': '.product',
+    'Customer': '.customer',
+    'CustomerManager': '.customer',
+    'Sale': '.sale',
+    'SaleItem': '.sale',
+    'SaleManager': '.sale',
+    'SaleStatus': '.sale',
+    'PaymentMethod': '.sale',
+    'Supplier': '.supplier',
+    'SupplierManager': '.supplier',
+    'User': '.user',
+    'UserManager': '.user',
+    'UserRole': '.user',
     
     # Purchase & Inventory
-    'Purchase', 'PurchaseItem', 'PurchaseManager', 'PurchaseStatus', 'PaymentStatus',
-    'PurchaseOrder', 'PurchaseOrderItem',
-    'ReceivingNote', 'ReceivingItem',
-    'PhysicalCount', 'CountItem',
-    'ABCAnalysisResult', 'ReorderRecommendation', 'SafetyStockConfig',
+    'Purchase': '.purchase',
+    'PurchaseItem': '.purchase',
+    'PurchaseManager': '.purchase',
+    'PurchaseStatus': '.purchase',
+    'PaymentStatus': '.purchase',
+    'PurchaseOrder': '.purchase_order',
+    'PurchaseOrderItem': '.purchase_order',
+    'ReceivingNote': '.receiving_note',
+    'ReceivingItem': '.receiving_note',
+    'PhysicalCount': '.physical_count',
+    'CountItem': '.physical_count',
+    'ABCAnalysisResult': '.inventory_optimization',
+    'ReorderRecommendation': '.inventory_optimization',
+    'SafetyStockConfig': '.inventory_optimization',
     
     # Financial
-    'Payment', 'PaymentManager', 'PaymentType',
-    'PaymentPlan', 'PaymentInstallment',
-    'Account', 'ChartOfAccounts',
-    'JournalEntry', 'JournalLine',
-    'Currency', 'ExchangeRate', 'CurrencyManager',
-    'Company', 'UserCompany', 'CompanyManager',
+    'Payment': '.payment',
+    'PaymentManager': '.payment',
+    'PaymentType': '.payment',
+    'PaymentPlan': '.payment_plan',
+    'PaymentInstallment': '.payment_plan',
+    'Account': '.account',
+    'ChartOfAccounts': '.account',
+    'JournalEntry': '.journal_entry',
+    'JournalLine': '.journal_entry',
+    'Currency': '.currency',
+    'ExchangeRate': '.currency',
+    'CurrencyManager': '.currency',
+    'Company': '.company',
+    'UserCompany': '.company',
+    'CompanyManager': '.company',
     
     # Reporting & Analytics
-    'Report', 'ReportData', 'ReportTemplate', 'ReportType', 'ReportPeriod',
-    'ReportFormat', 'ExportFormat', 'ChartType', 'ReportFilter',
-    'SalesReportLine', 'SalesReportSummary',
-    'InventoryReportLine', 'InventoryReportSummary',
-    'FinancialReportLine', 'FinancialReportSummary',
-    'ChartData',
-    'DashboardData',
+    'Report': '.report',
+    'ReportData': '.report',
+    'ReportTemplate': '.report',
+    'ReportType': '.report',
+    'ReportPeriod': '.report',
+    'ReportFormat': '.report',
+    'ExportFormat': '.report',
+    'ChartType': '.report',
+    'ReportFilter': '.report',
+    'SalesReportLine': '.report',
+    'SalesReportSummary': '.report',
+    'InventoryReportLine': '.report',
+    'InventoryReportSummary': '.report',
+    'FinancialReportLine': '.report',
+    'FinancialReportSummary': '.report',
+    'ChartData': '.report',
+    'DashboardData': '.dashboard',
     
     # Other Models
-    'Quote', 'QuoteItem',
-    'ReturnInvoice', 'ReturnItem',
-    'Category', 'CategoryManager',
-    'Permission', 'Role', 'User', 'AuditLog', 'LoginHistory',
-    'SearchResult', 'SearchQuery', 'SearchFilter',
-    
-    # Pydantic Schemas (optional)
-]
+    'Quote': '.quote',
+    'QuoteItem': '.quote',
+    'ReturnInvoice': '.return_invoice',
+    'ReturnItem': '.return_invoice',
+    'Category': '.category',
+    'CategoryManager': '.category',
+    'Permission': '.permission',
+    'Role': '.permission',
+    'AuditLog': '.permission',
+    'LoginHistory': '.permission',
+    'SearchResult': '.search',
+    'SearchQuery': '.search',
+    'SearchFilter': '.search',
+}
 
+def __getattr__(name):
+    if name in _MODELS_MAP:
+        module_path = _MODELS_MAP[name]
+        module = importlib.import_module(module_path, __package__)
+        return getattr(module, name)
+    
+    # Special handling for pydantic_schemas (import all if requested)
+    if name == "pydantic_schemas":
+        try:
+            return importlib.import_module('.pydantic_schemas', __package__)
+        except ImportError:
+            return None
+            
+    raise AttributeError(f"module {__name__} has no attribute {name}")
+
+def __dir__():
+    return sorted(list(_MODELS_MAP.keys()) + ['__doc__', '__file__', '__name__', '__package__', '__path__', '__spec__'])
+
+__all__ = list(_MODELS_MAP.keys())

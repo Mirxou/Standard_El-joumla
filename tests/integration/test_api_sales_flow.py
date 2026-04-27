@@ -5,14 +5,17 @@ import sys
 from pathlib import Path
 
 # ضبط المسار لاستيراد التطبيق الرئيسي
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
-
+import sys
+import os
+from pathlib import Path
+# الوصول إلى جذر المشروع
+project_root = str(Path(__file__).resolve().parents[2])
 # 🔥 FIX: استيراد كائن FastAPI من المكان الصحيح (api.app) وليس من main.py
-from api.app import app
-from core.database_manager import DatabaseManager
-from api.routes import get_db_manager # الدالة التي تحقن قاعدة البيانات في الـ Routes
-from models.product import ProductManager, Product
-from models.customer import CustomerManager, Customer
+from src.api.app import app
+from src.core.database_manager import DatabaseManager
+from src.api.routes import get_db_manager # الدالة التي تحقن قاعدة البيانات في الـ Routes
+from src.models.product import ProductManager, Product
+from src.models.customer import CustomerManager, Customer
 
 class TestApiSalesFlow:
     """
@@ -105,3 +108,7 @@ class TestApiSalesFlow:
         
         # FastAPI يعيد 422 تلقائياً عند فشل التحقق من صحة البيانات (Pydantic Validation)
         assert response.status_code == 422
+
+
+
+

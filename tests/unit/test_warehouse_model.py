@@ -4,9 +4,11 @@ from datetime import datetime
 import sys
 from pathlib import Path
 
-# إضافة مسار src
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
+import sys
+import os
+from pathlib import Path
+# الوصول إلى جذر المشروع
+project_root = str(Path(__file__).resolve().parents[2])
 from src.models.warehouse import (
     Warehouse, WarehouseManager, 
     WarehouseInventory, WarehouseInventoryManager,
@@ -180,3 +182,7 @@ class TestWarehouseTransferManager:
         # 4. تحديث حالة التحويل
         assert cursor.execute.call_count >= 4
         cursor.connection.commit.assert_called_once()
+
+
+
+

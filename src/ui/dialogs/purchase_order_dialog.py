@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 نافذة حوار إنشاء/تحرير أمر الشراء
@@ -9,8 +9,13 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox,
     QLineEdit, QComboBox, QDateEdit, QTextEdit, QTableWidget,
     QTableWidgetItem, QPushButton, QLabel, QDoubleSpinBox,
-    QMessageBox, QHeaderView, QSpinBox, QDialogButtonBox
+    QMessageBox, QHeaderView, QSpinBox, QDialogButtonBox,
+    QFrame, QGraphicsDropShadowEffect, QWidget
 )
+from PySide6.QtGui import QColor
+
+from src.ui.widgets.custom_title_bar import CustomTitleBar
+from src.ui.widgets.quantum_notification import NotificationManager
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QFont
 from decimal import Decimal
@@ -18,9 +23,8 @@ from datetime import datetime, date, timedelta
 
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from models.purchase_order import (
+from src.models.purchase_order import (
     PurchaseOrder, PurchaseOrderItem, POStatus,
     POPriority, DeliveryTerms, PaymentTerms
 )
@@ -42,8 +46,19 @@ class PurchaseOrderDialog(QDialog):
         self.i18n = I18n(locales_dir=str(Path(__file__).parent.parent.parent.parent / "locales"))
         
         title = self.i18n.get_message("po_edit_title") if self.is_edit_mode else self.i18n.get_message("po_new_title")
-        self.setWindowTitle(title)
-        self.setMinimumSize(1200, 700)
+        # self.setWindowTitle(title) # Handled by CustomTitleBar
+        # self.setMinimumSize(1200, 700)
+        
+        # --- Quantum Window Setup ---
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        
+        # Notifications
+        self.notify = NotificationManager(self)
+        
+        self.resize(1200, 750) # Slightly larger for padding
+        
+        self.title_text = title # Check if used elsewhere
         
         self._load_data()
         self._create_widgets()
@@ -73,8 +88,49 @@ class PurchaseOrderDialog(QDialog):
     
     def _create_widgets(self):
         """إنشاء عناصر الواجهة"""
-        layout = QVBoxLayout(self)
-        layout.setSpacing(15)
+        # تخطيط جذري شفاف
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(10, 10, 10, 10)
+        root_layout.setSpacing(0)
+        
+        # الإطار الرئيسي
+        self.main_frame = QFrame()
+        self.main_frame.setStyleSheet("""
+            QFrame#MainFrame {
+                background-color: #f5f5f5;
+                border: 1px solid #3498db;
+                border-radius: 10px;
+            }
+        """)
+        self.main_frame.setObjectName("MainFrame")
+        
+        # Shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor("#3498db"))
+        shadow.setOffset(0, 0)
+        self.main_frame.setGraphicsEffect(shadow)
+        
+        root_layout.addWidget(self.main_frame)
+        
+        # تخطيط النافذة الداخلية
+        main_layout = QVBoxLayout(self.main_frame)
+        main_layout.setContentsMargins(0, 0, 0, 10)
+        main_layout.setSpacing(0)
+        
+        # 1. Custom Title Bar
+        self.title_bar = CustomTitleBar(self, title=self.title_text, is_dialog=True)
+        main_layout.addWidget(self.title_bar)
+        
+        # Container for content
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setSpacing(15)
+        content_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.addWidget(content_widget)
+        
+        # Re-assign layout to content_layout for the existing widget helpers
+        layout = content_layout
         
         # معلومات أساسية
         basic_group = self._create_basic_info_group()
@@ -317,7 +373,7 @@ class PurchaseOrderDialog(QDialog):
     
     def _add_item(self):
         """إضافة بند جديد"""
-        from .product_selection_dialog import ProductSelectionDialog
+        # from .product_selection_dialog import ProductSelectionDialog  # Unused and file missing
         
         # فتح نافذة اختيار المنتج (أو استخدام combo box بسيط)
         product_combo = QComboBox()
@@ -546,23 +602,23 @@ class PurchaseOrderDialog(QDialog):
             self.accept()
             
         except Exception as e:
-            QMessageBox.critical(self, self.i18n.get_message("error"), f"{self.i18n.get_message('save_failed')}: {str(e)}")
+            self.notify.show_error(self.i18n.get_message("error"), f"{self.i18n.get_message('save_failed')}: {str(e)}")
     
     def _validate(self):
         """التحقق من صحة البيانات"""
         if not self.supplier_combo.currentData():
-            QMessageBox.warning(self, self.i18n.get_message("warning"), self.i18n.get_message("select_supplier_warning"))
+            self.notify.show_warning(self.i18n.get_message("warning"), self.i18n.get_message("select_supplier_warning"))
             return False
         
         if self.items_table.rowCount() == 0:
-            QMessageBox.warning(self, self.i18n.get_message("warning"), self.i18n.get_message("add_at_least_one_product"))
+            self.notify.show_warning(self.i18n.get_message("warning"), self.i18n.get_message("add_at_least_one_product"))
             return False
         
         # التحقق من صحة البنود
         for row in range(self.items_table.rowCount()):
             product_combo = self.items_table.cellWidget(row, 0)
             if not product_combo.currentData():
-                QMessageBox.warning(self, self.i18n.get_message("warning"), self.i18n.get_message("select_product_for_item", item_number=row + 1))
+                self.notify.show_warning(self.i18n.get_message("warning"), self.i18n.get_message("select_product_for_item", item_number=row + 1))
                 return False
         
         return True

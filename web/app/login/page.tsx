@@ -26,18 +26,15 @@ export default function LoginPage() {
     let isValid = true
 
     if (!email) {
-      newErrors.email = "البريد الإلكتروني مطلوب"
-      isValid = false
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      newErrors.email = "البريد الإلكتروني غير صحيح"
+      newErrors.email = "اسم المستخدم أو البريد الإلكتروني مطلوب"
       isValid = false
     }
 
     if (!password) {
       newErrors.password = "كلمة المرور مطلوبة"
       isValid = false
-    } else if (password.length < 6) {
-      newErrors.password = "كلمة المرور يجب أن تكون 6 أحرف على الأقل"
+    } else if (password.length < 1) {
+      newErrors.password = "كلمة المرور مطلوبة"
       isValid = false
     }
 
@@ -91,15 +88,15 @@ export default function LoginPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4">
-              {/* البريد الإلكتروني */}
+              {/* البريد الإلكتروني أو اسم المستخدم */}
               <div className="space-y-2">
-                <Label htmlFor="email">البريد الإلكتروني</Label>
+                <Label htmlFor="email">اسم المستخدم أو البريد الإلكتروني</Label>
                 <div className="relative">
                   <Mail className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
                   <Input
                     id="email"
-                    type="email"
-                    placeholder="user@example.com"
+                    type="text"
+                    placeholder="user@example.com or username"
                     className={`pr-10 ${errors.email ? "border-red-500" : ""}`}
                     value={email}
                     onChange={(e) => {
@@ -195,12 +192,12 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            {/* حساب تجريبي */}
+            {/* حساب تجريبي - للحصول على بيانات الدخول يرجى التواصل مع المسؤول */}
             <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
               <p className="text-sm font-semibold text-blue-900 mb-2">حساب تجريبي:</p>
               <div className="text-xs text-blue-700 space-y-1">
-                <p>البريد: admin@standard.com</p>
-                <p>كلمة المرور: 123456</p>
+                <p>البريد: تواصل مع المسؤول</p>
+                <p>كلمة المرور: تواصل مع المسؤول</p>
               </div>
             </div>
           </CardContent>

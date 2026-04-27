@@ -96,10 +96,31 @@ class Payment:
     attachments: List[str] = field(default_factory=list)
     
     
+    def __post_init__(self):
+        """معالجة ما بعد الإنشاء"""
+        # توليد رقم الدفعة إذا لم يكن موجوداً
+        if not self.payment_number:
+            self.payment_number = self.generate_payment_number()
+        
+        # تعيين التواريخ
+        if not self.created_at:
+            self.created_at = datetime.now()
+        self.updated_at = datetime.now()
+        
+        # حساب المبلغ بالعملة الأساسية
+        if self.exchange_rate and self.exchange_rate > 0:
+            self.amount_in_base_currency = self.amount * self.exchange_rate
+        else:
+            self.amount_in_base_currency = self.amount
+    
     def generate_payment_number(self) -> str:
-        """توليد رقم الدفعة"""
+        """توليد رقم الدفعة مع ضمان التفرد"""
+        import secrets
+        import time
         now = datetime.now()
-        return f"PAY-{now.strftime('%Y%m%d')}-{now.strftime('%H%M%S')}"
+        # إضافة جزء عشوائي وجزء من التوقيت بالملي ثانية لضمان التفرد في الاختبارات السريعة
+        return f"PAY-{now.strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(3)}"
+
     
     def to_dict(self) -> Dict[str, Any]:
         """تحويل إلى قاموس"""

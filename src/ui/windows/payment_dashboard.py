@@ -20,8 +20,6 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 import json
 
-# إضافة مسار src
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.services.payment_service import PaymentService
 from src.utils.logger import setup_logger

@@ -9,17 +9,19 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
     QPushButton, QGroupBox, QCheckBox, QProgressBar,
     QMessageBox, QTextEdit, QTabWidget, QWidget,
-    QFormLayout, QSpacerItem, QSizePolicy
+    QFormLayout, QSpacerItem, QSizePolicy,
+    QFrame, QGraphicsDropShadowEffect
 )
 from PySide6.QtCore import Qt, Signal, QThread
-from PySide6.QtGui import QFont, QIcon, QPixmap
+from PySide6.QtGui import QFont, QIcon, QPixmap, QColor
 import sys
+
+from src.ui.widgets.custom_title_bar import CustomTitleBar
+from src.ui.widgets.quantum_notification import NotificationManager
 import os
 from pathlib import Path
 
-# إضافة مسار المشروع
 project_root = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(project_root))
 
 from src.core.encryption_manager import EncryptionManager
 
@@ -75,9 +77,20 @@ class EncryptionDialog(QDialog):
         self.db_manager = db_manager
         self.encryption_worker = None
         
-        self.setWindowTitle("إدارة تشفير قاعدة البيانات")
-        self.setFixedSize(500, 600)
-        self.setModal(True)
+        # self.setWindowTitle("إدارة تشفير قاعدة البيانات")
+        # self.setFixedSize(500, 600)
+        # self.setModal(True)
+        
+        # --- Quantum Window Setup ---
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        
+        # Notifications
+        self.notify = NotificationManager(self)
+        
+        self.resize(550, 650) # Slightly larger
+        
+        self.title_text = "إدارة تشفير قاعدة البيانات"
         
         self.setup_ui()
         self.setup_connections()
@@ -86,7 +99,49 @@ class EncryptionDialog(QDialog):
     
     def setup_ui(self):
         """إعداد واجهة المستخدم"""
-        layout = QVBoxLayout(self)
+        # تخطيط جذري شفاف
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(10, 10, 10, 10)
+        root_layout.setSpacing(0)
+        
+        # الإطار الرئيسي
+        self.main_frame = QFrame()
+        self.main_frame.setStyleSheet("""
+            QFrame#MainFrame {
+                background-color: #f5f5f5;
+                border: 1px solid #3498db;
+                border-radius: 10px;
+            }
+        """)
+        self.main_frame.setObjectName("MainFrame")
+        
+        # Shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor("#3498db"))
+        shadow.setOffset(0, 0)
+        self.main_frame.setGraphicsEffect(shadow)
+        
+        root_layout.addWidget(self.main_frame)
+        
+        # تخطيط النافذة الداخلية
+        main_layout = QVBoxLayout(self.main_frame)
+        main_layout.setContentsMargins(0, 0, 0, 10)
+        main_layout.setSpacing(0)
+        
+        # 1. Custom Title Bar
+        self.title_bar = CustomTitleBar(self, title=self.title_text, is_dialog=True)
+        main_layout.addWidget(self.title_bar)
+        
+        # Container for content
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setSpacing(10)
+        content_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.addWidget(content_widget)
+        
+        # Re-assign layout to content_layout for the existing widget helpers
+        layout = content_layout
         
         # العنوان الرئيسي
         title_label = QLabel("إدارة تشفير قاعدة البيانات")
@@ -312,15 +367,15 @@ class EncryptionDialog(QDialog):
         confirm_password = self.confirm_password_input.text()
         
         if not password:
-            QMessageBox.warning(self, "تحذير", "يرجى إدخال كلمة مرور")
+            self.notify.show_warning("تحذير", "يرجى إدخال كلمة مرور")
             return
         
         if len(password) < 8:
-            QMessageBox.warning(self, "تحذير", "كلمة المرور يجب أن تكون 8 أحرف على الأقل")
+            self.notify.show_warning("تحذير", "كلمة المرور يجب أن تكون 8 أحرف على الأقل")
             return
         
         if password != confirm_password:
-            QMessageBox.warning(self, "تحذير", "كلمات المرور غير متطابقة")
+            self.notify.show_warning("تحذير", "كلمات المرور غير متطابقة")
             return
         
         # تأكيد العملية
@@ -338,7 +393,7 @@ class EncryptionDialog(QDialog):
         password = self.disable_password_input.text()
         
         if not password:
-            QMessageBox.warning(self, "تحذير", "يرجى إدخال كلمة مرور التشفير")
+            self.notify.show_warning("تحذير", "يرجى إدخال كلمة مرور التشفير")
             return
         
         # تأكيد العملية
@@ -358,15 +413,15 @@ class EncryptionDialog(QDialog):
         confirm_new_password = self.confirm_new_password_input.text()
         
         if not old_password or not new_password:
-            QMessageBox.warning(self, "تحذير", "يرجى إدخال كلمات المرور المطلوبة")
+            self.notify.show_warning("تحذير", "يرجى إدخال كلمات المرور المطلوبة")
             return
         
         if len(new_password) < 8:
-            QMessageBox.warning(self, "تحذير", "كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل")
+            self.notify.show_warning("تحذير", "كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل")
             return
         
         if new_password != confirm_new_password:
-            QMessageBox.warning(self, "تحذير", "كلمات المرور الجديدة غير متطابقة")
+            self.notify.show_warning("تحذير", "كلمات المرور الجديدة غير متطابقة")
             return
         
         # تأكيد العملية
@@ -392,7 +447,7 @@ class EncryptionDialog(QDialog):
         from PySide6.QtWidgets import QApplication
         clipboard = QApplication.clipboard()
         clipboard.setText(self.generated_password_display.text())
-        QMessageBox.information(self, "تم", "تم نسخ كلمة المرور إلى الحافظة")
+        self.notify.show_info("تم", "تم نسخ كلمة المرور إلى الحافظة")
     
     def start_encryption_operation(self, operation: str, **kwargs):
         """بدء عملية التشفير"""
@@ -422,11 +477,11 @@ class EncryptionDialog(QDialog):
         self.status_label.setVisible(False)
         
         if success:
-            QMessageBox.information(self, "نجح", message)
+            self.notify.show_success("نجح", message)
             self.update_encryption_status()
             self.clear_inputs()
         else:
-            QMessageBox.critical(self, "خطأ", message)
+            self.notify.show_error("خطأ", message)
         
         # إعادة تفعيل الأزرار
         self.update_encryption_status()

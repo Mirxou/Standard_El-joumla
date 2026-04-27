@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Plus, RotateCcw, Trash2, Calendar as CalendarIcon, Search } from "lucide-react"
 import { toast } from "sonner"
-import { fetchFromAPI } from "@/lib/db/client"
+import { apiClient } from "@/lib/api/client"
+import { API_CONFIG } from "@/lib/config/api"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import { cn } from "@/lib/utils"
@@ -54,9 +55,13 @@ export default function CreateReturn({ onSaved }: CreateReturnProps) {
     const loadData = async () => {
         // Load Products
         try {
-            const prodData = await fetchFromAPI('/products')
-            if (prodData && Array.isArray(prodData.products)) setProducts(prodData.products)
-        } catch (e) { console.error(e) }
+            const prodData = await apiClient.get<any>(API_CONFIG.ENDPOINTS.PRODUCTS)
+            const productsArray = Array.isArray(prodData) ? prodData : (prodData as any)?.products || (prodData as any)?.items || []
+            setProducts(productsArray)
+        } catch (e) { 
+            console.error("Error loading products:", e)
+            setProducts([])
+        }
 
         // Load Customers or Suppliers based on type
         if (returnType === "SALE_RETURN") {
@@ -67,9 +72,13 @@ export default function CreateReturn({ onSaved }: CreateReturnProps) {
             // Checked routes.py: `/users` exists. Let's use it as placeholder for customers.
         } else {
             try {
-                const suppData = await fetchFromAPI('/suppliers')
-                if (Array.isArray(suppData)) setSuppliers(suppData)
-            } catch (e) { console.error(e) }
+                const suppData = await apiClient.get<any[]>(API_CONFIG.ENDPOINTS.SUPPLIERS)
+                const suppliersArray = Array.isArray(suppData) ? suppData : (suppData as any)?.items || (suppData as any)?.suppliers || []
+                setSuppliers(suppliersArray)
+            } catch (e) { 
+                console.error("Error loading suppliers:", e)
+                setSuppliers([])
+            }
         }
     }
 
@@ -127,12 +136,7 @@ export default function CreateReturn({ onSaved }: CreateReturnProps) {
                 }))
             }
 
-            const result = await fetchFromAPI('/returns', {
-                method: 'POST',
-                body: payload
-            });
-
-            if (result.error) throw new Error(result.error);
+            const result = await apiClient.post('/api/v1/returns', payload);
 
             toast.success("تم إنشاء المرتجع بنجاح!")
             setOpen(false)

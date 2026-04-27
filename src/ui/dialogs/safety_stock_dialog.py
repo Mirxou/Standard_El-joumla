@@ -1,12 +1,17 @@
-﻿"""
+"""
 Safety Stock Configuration Dialog - حوار تكوين الأرصدة الآمنة
 """
 
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
     QPushButton, QLabel, QLineEdit, QDoubleSpinBox, QComboBox,
-    QGroupBox, QMessageBox, QSpinBox
+    QGroupBox, QMessageBox, QSpinBox,
+    QFrame, QGraphicsDropShadowEffect, QWidget
 )
+from PySide6.QtGui import QColor
+
+from src.ui.widgets.custom_title_bar import CustomTitleBar
+from src.ui.widgets.quantum_notification import NotificationManager
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from typing import Optional
@@ -28,8 +33,19 @@ class SafetyStockDialog(QDialog):
         self.product_service = ProductService(db_manager)
         self.config = config
         
-        self.setWindowTitle("تكوين الأرصدة الآمنة" if not config else "تعديل الأرصدة الآمنة")
-        self.setMinimumWidth(600)
+        # self.setWindowTitle("تكوين الأرصدة الآمنة" if not config else "تعديل الأرصدة الآمنة")
+        # self.setMinimumWidth(600)
+        
+        # --- Quantum Window Setup ---
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        
+        # Notifications
+        self.notify = NotificationManager(self)
+        
+        self.resize(650, 700)
+        
+        self.title_text = "تكوين الأرصدة الآمنة" if not config else "تعديل الأرصدة الآمنة"
         
         self.setup_ui()
         if config:
@@ -37,7 +53,49 @@ class SafetyStockDialog(QDialog):
     
     def setup_ui(self):
         """إعداد واجهة المستخدم"""
-        layout = QVBoxLayout(self)
+        # تخطيط جذري شفاف
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(10, 10, 10, 10)
+        root_layout.setSpacing(0)
+        
+        # الإطار الرئيسي
+        self.main_frame = QFrame()
+        self.main_frame.setStyleSheet("""
+            QFrame#MainFrame {
+                background-color: #f5f5f5;
+                border: 1px solid #3498db;
+                border-radius: 10px;
+            }
+        """)
+        self.main_frame.setObjectName("MainFrame")
+        
+        # Shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor("#3498db"))
+        shadow.setOffset(0, 0)
+        self.main_frame.setGraphicsEffect(shadow)
+        
+        root_layout.addWidget(self.main_frame)
+        
+        # تخطيط النافذة الداخلية
+        main_layout = QVBoxLayout(self.main_frame)
+        main_layout.setContentsMargins(0, 0, 0, 10)
+        main_layout.setSpacing(0)
+        
+        # 1. Custom Title Bar
+        self.title_bar = CustomTitleBar(self, title=self.title_text, is_dialog=True)
+        main_layout.addWidget(self.title_bar)
+        
+        # Container for content
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setSpacing(10)
+        content_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.addWidget(content_widget)
+        
+        # Re-assign layout to content_layout for the existing widget helpers
+        layout = content_layout
         
         # العنوان
         title = QLabel("تكوين الأرصدة الآمنة ونقطة إعادة الطلب")
@@ -249,8 +307,7 @@ class SafetyStockDialog(QDialog):
                 self.avg_demand_spin.setValue(float(stats['avg_daily_demand']))
                 self.std_dev_spin.setValue(float(stats['demand_std_dev']))
                 
-                QMessageBox.information(
-                    self,
+                self.notify.show_info(
                     "نجح",
                     f"تم حساب الإحصائيات من بيانات آخر 90 يوم:\n"
                     f"متوسط الطلب اليومي: {stats['avg_daily_demand']:.2f}\n"
@@ -259,14 +316,13 @@ class SafetyStockDialog(QDialog):
                 
                 self.calculate_values()
             else:
-                QMessageBox.information(
-                    self,
+                self.notify.show_info(
                     "معلومة",
                     "لا توجد بيانات مبيعات كافية لهذا المنتج"
                 )
                 
         except Exception as e:
-            QMessageBox.critical(self, "خطأ", f"فشل الحساب التلقائي:\n{str(e)}")
+            self.notify.show_error("خطأ", f"فشل الحساب التلقائي:\n{str(e)}")
     
     def calculate_values(self):
         """حساب القيم"""
@@ -382,12 +438,12 @@ class SafetyStockDialog(QDialog):
         """حفظ التكوين"""
         product_id = self.product_combo.currentData()
         if not product_id:
-            QMessageBox.warning(self, "تحذير", "الرجاء اختيار منتج")
+            self.notify.show_warning("تحذير", "الرجاء اختيار منتج")
             return
         
         avg_demand = Decimal(str(self.avg_demand_spin.value()))
         if avg_demand <= 0:
-            QMessageBox.warning(self, "تحذير", "الرجاء إدخال متوسط الطلب اليومي")
+            self.notify.show_warning("تحذير", "الرجاء إدخال متوسط الطلب اليومي")
             return
         
         try:
@@ -407,13 +463,13 @@ class SafetyStockDialog(QDialog):
                 # تحديث
                 config_data['id'] = self.config.id
                 self.service.update_safety_stock_config(**config_data)
-                QMessageBox.information(self, "نجح", "تم تحديث التكوين بنجاح")
+                self.notify.show_success("نجح", "تم تحديث التكوين بنجاح")
             else:
                 # إنشاء جديد
                 self.service.create_safety_stock_config(**config_data)
-                QMessageBox.information(self, "نجح", "تم إنشاء التكوين بنجاح")
+                self.notify.show_success("نجح", "تم إنشاء التكوين بنجاح")
             
             self.accept()
             
         except Exception as e:
-            QMessageBox.critical(self, "خطأ", f"فشل حفظ التكوين:\n{str(e)}")
+            self.notify.show_error("خطأ", f"فشل حفظ التكوين:\n{str(e)}")

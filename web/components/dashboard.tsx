@@ -1,258 +1,238 @@
 "use client"
 
-import { useState } from "react"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Bell, Plus, Menu, Package, ShoppingCart, FileText, Users, Box, LogOut, User, ChevronDown, Building2 } from 'lucide-react'
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { useState, useEffect } from "react"
 import { useAuth } from "@/lib/auth-context"
-import Navigation from "@/components/navigation"
-import InventoryManagement from "@/components/inventory-management"
-import SalesManagement from "@/components/sales-management"
-import ProfitReports from "@/components/profit-reports"
-import WarehouseManagement from "@/components/warehouse-management"
-import ExpiryTracking from "@/components/expiry-tracking"
-import SupplierManagement from "@/components/supplier-management"
-import AdvancedReports from "@/components/advanced-reports"
-import DashboardHome from "@/components/dashboard-home"
-import AIInsights from "@/components/ai-insights"
-import AdvancedAnalytics from "@/components/advanced-analytics"
-import AIForecastDashboard from "@/components/ai-forecast-dashboard"
-import ProductsManagement from "@/components/products-management"
-import CategoriesManagement from "@/components/categories-management"
-import AlertsPage from "@/components/alerts-page"
-import AdvancedReportsPage from "@/components/advanced-reports-page"
-import SettingsPage from "@/components/settings-page"
-import UsersManagement from "@/components/users-management"
-import ActivityLog from "@/components/activity-log"
-import BackupRestore from "@/components/backup-restore"
-import PurchasesManagement from "@/components/purchases-management"
-import ReturnsManagement from "@/components/returns-management"
-import ReportsManagement from "@/components/reports-management"
-import AIForecast from "@/components/ai-forecast"
+import { useNotifications } from "@/lib/notifications/notification-context"
+import Navigation from "./navigation"
+import { Button } from "@/components/ui/button"
+import {
+  Bell,
+  Search,
+  Menu,
+  Plus,
+  ChevronRight,
+  LogOut,
+  Building2,
+  User,
+  Settings,
+  ChevronDown,
+  LayoutDashboard
+} from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet"
+import { format } from "date-fns"
+import { arSA } from "date-fns/locale"
+import { Badge } from "@/components/ui/badge"
+
+// Components
+import ProductsManagement from "@/components/products/products-management"
+import CategoriesManagement from "@/components/categories/categories-management"
+import InventoryManagement from "@/components/inventory/inventory-management"
+import SalesManagement from "@/components/sales/sales-management"
+import ProfitReports from "@/components/reports/profit-reports"
+import AIForecastDashboard from "@/components/ai/ai-forecast-dashboard"
+import AdvancedAnalytics from "@/components/analytics/advanced-analytics"
+import WarehouseManagement from "@/components/warehouses/warehouse-management"
+import ExpiryTracking from "@/components/inventory/expiry-tracking"
+import SupplierManagement from "@/components/suppliers/supplier-management"
+import AdvancedReportsPage from "@/components/reports/advanced-reports-page"
+import AlertsPage from "@/components/alerts/alerts-page"
+import SettingsPage from "@/components/settings/settings-page"
+import UsersManagement from "@/components/users/users-management"
+import ActivityLog from "@/components/settings/activity-log"
+import BackupRestore from "@/components/settings/backup-restore"
+import PurchasesManagement from "@/components/purchases/purchases-management"
+import ReturnsManagement from "@/components/returns/returns-management"
+import ReportsManagement from "@/components/reports/reports-management"
+import DashboardHome from "./dashboard-home"
 
 export default function Dashboard() {
   const { user, logout, companies, currentCompany, selectCompany } = useAuth()
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications()
   const [activeView, setActiveView] = useState("dashboard")
-  const [showNotifications, setShowNotifications] = useState(false)
-  const [showAddMenu, setShowAddMenu] = useState(false)
 
+  // Keyboard shortcuts (Keep existing logic)
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault()
+      }
+      if (e.key === 'Escape' && activeView !== 'dashboard') {
+        setActiveView('dashboard')
+      }
+    }
+    window.addEventListener('keydown', handleKeyPress)
+    return () => window.removeEventListener('keydown', handleKeyPress)
+  }, [activeView])
+
+  // Content Renderer
   const renderContent = () => {
     switch (activeView) {
-      case "products":
-        return <ProductsManagement />
-      case "categories":
-        return <CategoriesManagement />
-      case "inventory":
-        return <InventoryManagement />
-      case "sales":
-        return <SalesManagement />
-      case "profit-reports":
-        return <ProfitReports />
-      case "ai-forecast-dashboard":
-        return <AIForecastDashboard />
-      case "analytics":
-        return <AdvancedAnalytics />
-      case "warehouses":
-        return <WarehouseManagement />
-      case "expiry":
-        return <ExpiryTracking />
-      case "suppliers":
-        return <SupplierManagement />
-      case "advanced-reports":
-        return <AdvancedReportsPage />
-      case "alerts":
-        return <AlertsPage />
-      case "settings":
-        return <SettingsPage />
-      case "users":
-        return <UsersManagement />
-      case "activity":
-        return <ActivityLog />
-      case "backup":
-        return <BackupRestore />
-      case "purchases":
-        return <PurchasesManagement />
-      case "returns":
-        return <ReturnsManagement />
-      case "reports":
-        return <ReportsManagement />
-      case "ai-forecast":
-        return <AIForecast />
-      default:
-        return <DashboardHome setActiveView={setActiveView} />
+      case "products": return <ProductsManagement />
+      case "categories": return <CategoriesManagement />
+      case "inventory": return <InventoryManagement />
+      case "sales": return <SalesManagement />
+      case "purchases": return <PurchasesManagement />
+      case "returns": return <ReturnsManagement />
+      case "reports": return <ReportsManagement />
+      case "ai-forecast": return <AIForecastDashboard />
+      case "analytics": return <AdvancedAnalytics />
+      case "warehouses": return <WarehouseManagement />
+      case "expiry": return <ExpiryTracking />
+      case "suppliers": return <SupplierManagement />
+      case "advanced-reports": return <AdvancedReportsPage />
+      case "alerts": return <AlertsPage />
+      case "settings": return <SettingsPage />
+      case "users": return <UsersManagement />
+      case "activity": return <ActivityLog />
+      case "backup": return <BackupRestore />
+      default: return <DashboardHome setActiveView={setActiveView} />
     }
   }
 
   return (
-    <div className="min-h-screen bg-gray-50" dir="rtl">
-      {/* الهيدر */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
-        <div className="flex items-center justify-between p-4">
-          <div className="flex items-center gap-3">
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="md:hidden">
-                  <Menu className="h-5 w-5" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="right" className="w-64 p-0">
-                <Navigation activeView={activeView} setActiveView={setActiveView} />
-              </SheetContent>
-            </Sheet>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <div className="flex items-center gap-3 cursor-pointer hover:bg-gray-100 p-2 rounded-lg transition-colors">
-                  <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-green-600 rounded-lg flex items-center justify-center">
-                    <Building2 className="w-6 h-6 text-white" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h1 className="text-xl font-bold text-gray-900">{currentCompany?.name || "Standard"}</h1>
-                      <ChevronDown className="h-4 w-4 text-gray-500" />
-                    </div>
-                    <p className="text-xs text-blue-600 font-semibold">
-                      الشركة المختارة
-                    </p>
-                  </div>
-                </div>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-64">
-                <DropdownMenuLabel>الشركات المتاحة</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {companies.map((company) => (
-                  <DropdownMenuItem
-                    key={company.id}
-                    onClick={() => selectCompany(company)}
-                    className="cursor-pointer justify-between"
-                  >
-                    <span className={currentCompany?.id === company.id ? "font-bold" : ""}>
-                      {company.name}
-                    </span>
-                    {company && <Badge variant="secondary" className="text-xs">مختارة</Badge>}
-                  </DropdownMenuItem>
-                ))}
-                {companies.length === 0 && (
-                  <div className="p-2 text-sm text-gray-500">لا توجد شركات أخرى</div>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-          <div className="flex items-center gap-2">
-            {/* زر التنبيهات */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="ghost" size="icon" className="relative cursor-pointer" type="button">
-                  <Bell className="h-5 w-5" />
-                  <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs bg-red-500">
-                    5
-                  </Badge>
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-80" align="end">
-                <div className="space-y-3">
-                  <h3 className="font-semibold text-gray-900">التنبيهات</h3>
-                  <div className="space-y-2">
-                    <div className="p-3 bg-red-50 rounded-lg border border-red-100">
-                      <p className="text-sm font-medium text-red-900">مخزون حرج</p>
-                      <p className="text-xs text-red-700">سماعات بلوتوث - متبقي 8 وحدات</p>
-                    </div>
-                    <div className="p-3 bg-orange-50 rounded-lg border border-orange-100">
-                      <p className="text-sm font-medium text-orange-900">قرب الانتهاء</p>
-                      <p className="text-xs text-orange-700">شوكولاتة - تنتهي 2024-08-20</p>
-                    </div>
-                    <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
-                      <p className="text-sm font-medium text-blue-900">طلبية جديدة</p>
-                      <p className="text-xs text-blue-700">فاتورة #1234 - 450 ر.س</p>
-                    </div>
-                  </div>
-                  <Button variant="outline" className="w-full" size="sm" onClick={() => setActiveView('alerts')}>
-                    عرض جميع التنبيهات
-                  </Button>
-                </div>
-              </PopoverContent>
-            </Popover>
+    <div className="min-h-screen bg-transparent rtl-grid font-cairo" dir="rtl">
 
-            {/* قائمة المستخدم */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="gap-2">
-                  <Avatar className="h-8 w-8">
-                    <AvatarFallback className="bg-blue-100 text-blue-600 text-sm font-semibold">
-                      {user?.name?.split(" ").slice(0, 2).map(n => n[0]).join("") || "AM"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="text-right hidden lg:block">
-                    <p className="text-sm font-semibold text-gray-900">{user?.name || "أحمد محمد"}</p>
-                    <p className="text-xs text-gray-500">{user?.role || "مدير النظام"}</p>
-                  </div>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <div className="px-2 py-3 border-b">
-                  <p className="text-sm font-semibold text-gray-900">{user?.name || "أحمد محمد"}</p>
-                  <p className="text-xs text-gray-500">{user?.email || "admin@standard.com"}</p>
-                </div>
-                <DropdownMenuItem onClick={() => setActiveView('settings')} className="cursor-pointer">
-                  <User className="h-4 w-4 ml-2" />
-                  الملف الشخصي
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setActiveView('settings')} className="cursor-pointer">
-                  <Package className="h-4 w-4 ml-2" />
-                  الإعدادات
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={logout} className="cursor-pointer text-red-600">
-                  <LogOut className="h-4 w-4 ml-2" />
-                  تسجيل الخروج
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* زر إضافة جديد */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" className="bg-blue-600 hover:bg-blue-700 cursor-pointer" type="button">
-                  <Plus className="h-4 w-4 ml-1" />
-                  إضافة جديد
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={() => setActiveView('products')} className="cursor-pointer">
-                  <Package className="h-4 w-4 ml-2" />
-                  منتج جديد
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setActiveView('sales')} className="cursor-pointer">
-                  <ShoppingCart className="h-4 w-4 ml-2" />
-                  فاتورة بيع
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setActiveView('inventory')} className="cursor-pointer">
-                  <Box className="h-4 w-4 ml-2" />
-                  حركة مخزون
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setActiveView('suppliers')} className="cursor-pointer">
-                  <Users className="h-4 w-4 ml-2" />
-                  مورد جديد
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-      </header>
-
-      <div className="flex">
-        {/* الشريط الجانبي للديسكتوب */}
-        <div className="hidden md:block w-64 bg-white border-l border-gray-200 min-h-screen">
+      {/* Sidebar - Desktop (Fixed Column 1) */}
+      <aside className="hidden lg:block sticky top-0 h-screen p-2 lg:p-4 overflow-hidden transition-all duration-300">
+        <div className="h-full glass-panel rounded-2xl lg:rounded-3xl overflow-hidden flex flex-col relative transition-all duration-300">
+          {/* Decor */}
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 to-purple-500" />
           <Navigation activeView={activeView} setActiveView={setActiveView} />
         </div>
+      </aside>
 
-        {/* المحتوى الرئيسي */}
-        <main className="flex-1 p-6">{renderContent()}</main>
-      </div>
+      {/* Main Content - (Column 2) */}
+      <main className="flex-1 flex flex-col min-w-0 p-2 sm:p-4 lg:pr-0 gap-3 sm:gap-4 lg:gap-6 h-screen overflow-y-auto scroll-smooth">
+
+        {/* Header */}
+        <header className="glass-panel mx-0 sm:mx-1 z-40 rounded-xl sm:rounded-2xl sticky top-0 backdrop-blur-xl transition-all duration-300">
+          <div className="flex items-center justify-between p-2 sm:p-3 lg:p-4 gap-2 sm:gap-3">
+
+            {/* Mobile Menu */}
+            <div className="flex items-center gap-2 sm:gap-3 lg:hidden">
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="icon" className="transition-transform hover:scale-110">
+                    <Menu className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="right" className="w-[85vw] sm:w-80 p-0 border-l border-white/10 bg-[#0f172a] transition-all duration-300">
+                  <SheetTitle className="sr-only">القائمة الرئيسية</SheetTitle>
+                  <Navigation activeView={activeView} setActiveView={setActiveView} />
+                </SheetContent>
+              </Sheet>
+              <span className="text-lg sm:text-xl font-bold text-white">Standard</span>
+            </div>
+
+            {/* Search Bar */}
+            <div className="hidden md:flex items-center relative flex-1 max-w-md mx-2 lg:mx-4">
+              <Search className="absolute right-3 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="بحث سريع (Ctrl + K)..."
+                className="w-full bg-white/5 border border-white/10 rounded-lg lg:rounded-xl py-1.5 lg:py-2 pr-10 pl-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all duration-200 placeholder:text-gray-500"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-3">
+
+              {/* Add Menu */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button className="bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-white rounded-lg lg:rounded-xl shadow-lg shadow-cyan-500/20 border-0 transition-all duration-200 hover:scale-105 active:scale-95 text-xs sm:text-sm px-2 sm:px-4">
+                    <Plus className="h-4 w-4 sm:h-5 sm:w-5 ml-1 sm:ml-2" />
+                    <span className="hidden sm:inline">إضافة جديدة</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="glass-panel border-white/10 text-white">
+                  <DropdownMenuItem onClick={() => setActiveView('products')}>منتج جديد</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setActiveView('sales')}>فاتورة مبيعات</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setActiveView('purchases')}>فاتورة مشتريات</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Notifications */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="icon" className="relative text-gray-300 hover:text-white hover:bg-white/10 rounded-xl">
+                    <Bell className="h-5 w-5" />
+                    {unreadCount > 0 && (
+                      <span className="absolute top-2 right-2 h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse ring-2 ring-black" />
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 p-0 glass-panel border-white/10" align="end">
+                  <div className="p-4 border-b border-white/10">
+                    <h4 className="font-semibold text-white">التنبيهات</h4>
+                  </div>
+                  <ScrollArea className="h-[300px]">
+                    {notifications.length === 0 ? (
+                      <div className="p-8 text-center text-gray-500">لا توجد تنبيهات جديدة</div>
+                    ) : (
+                      <div className="divide-y divide-white/5">
+                        {notifications.map((notification: any) => (
+                          <div key={notification.id} className="p-4 hover:bg-white/5 transition-colors">
+                            <p className="text-sm font-medium text-white">{notification.title}</p>
+                            <p className="text-xs text-gray-400 mt-1">{notification.message}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </ScrollArea>
+                </PopoverContent>
+              </Popover>
+
+              <div className="h-8 w-[1px] bg-white/10 mx-1" />
+
+              {/* User Menu */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="flex items-center gap-2 px-2 hover:bg-white/5 rounded-xl">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-500 to-purple-500 p-[1px]">
+                      <div className="w-full h-full rounded-[7px] bg-black flex items-center justify-center">
+                        <User className="w-4 h-4 text-white" />
+                      </div>
+                    </div>
+                    <div className="hidden md:block text-right">
+                      <p className="text-sm font-medium text-white leading-none">{user?.username || 'Admin'}</p>
+                      <p className="text-xs text-cyan-400 mt-1">مدير النظام</p>
+                    </div>
+                    <ChevronDown className="h-4 w-4 text-gray-400" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56 glass-panel border-white/10 text-white" align="end">
+                  <DropdownMenuLabel>حسابي</DropdownMenuLabel>
+                  <DropdownMenuSeparator className="bg-white/10" />
+                  <DropdownMenuItem className="focus:bg-white/10 focus:text-cyan-400">الملف الشخصي</DropdownMenuItem>
+                  <DropdownMenuItem className="focus:bg-white/10 focus:text-cyan-400">الإعدادات</DropdownMenuItem>
+                  <DropdownMenuSeparator className="bg-white/10" />
+                  <DropdownMenuItem onClick={logout} className="text-red-400 focus:text-red-300 focus:bg-red-500/10">
+                    تسجيل الخروج
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+            </div>
+          </div>
+        </header>
+
+        {/* Dynamic Content */}
+        <div className="flex-1 glass-panel rounded-xl sm:rounded-2xl lg:rounded-3xl p-3 sm:p-4 lg:p-6 overflow-x-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 transition-all">
+          {renderContent()}
+        </div>
+
+      </main>
     </div>
   )
 }

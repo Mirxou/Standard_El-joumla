@@ -116,3 +116,6 @@ class TestInventoryWindow:
     def test_window_creation(self, inventory_window):
         """اختبار إنشاء النافذة"""
         assert inventory_window is not None
+
+
+

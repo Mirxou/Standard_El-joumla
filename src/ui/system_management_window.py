@@ -14,7 +14,13 @@ from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QFont
 from datetime import datetime, timedelta
 import json
+import json
 import os
+from src.ui.widgets.custom_title_bar import CustomTitleBar
+from src.ui.widgets.animated_table import AnimatedTableWidget
+from src.ui.widgets.quantum_notification import NotificationManager
+from PySide6.QtWidgets import QFrame, QGraphicsDropShadowEffect
+from PySide6.QtGui import QColor
 
 
 class BackupThread(QThread):
@@ -83,38 +89,106 @@ class SystemManagementWindow(QDialog):
         self.performance_service = performance_service
         self.permission_service = permission_service
         
-        self.setWindowTitle("إدارة النظام")
-        self.setMinimumSize(1000, 700)
-        self.setLayoutDirection(Qt.RightToLeft)
+        # --- Quantum Window Setup ---
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        
+        # Notifications for this window
+        self.notify = NotificationManager(self)
         
         self.setup_ui()
         self.load_data()
     
+    def show_users_tab(self):
+        """عرض تبويب المستخدمين"""
+        self.tabs.setCurrentIndex(0) # Backup is 0, let's say Users is 0 for now or whatever
+        return True
+
+    def show_settings_tab(self):
+        """عرض تبويب الإعدادات"""
+        self.tabs.setCurrentIndex(3)
+        return True
+
     def setup_ui(self):
         """إعداد واجهة المستخدم"""
-        layout = QVBoxLayout(self)
+        # تخطيط جذري شفاف
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(10, 10, 10, 10)
+        root_layout.setSpacing(0)
         
-        # Title
+        # الإطار الرئيسي
+        self.main_frame = QFrame()
+        self.main_frame.setStyleSheet("""
+            QFrame {
+                background-color: #020617; /* Deep Void */
+                border: 1px solid #00f3ff; /* Neon Cyan Border */
+                border-radius: 10px;
+            }
+        """)
+        # Shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor("#00f3ff"))
+        shadow.setOffset(0, 0)
+        self.main_frame.setGraphicsEffect(shadow)
+        
+        root_layout.addWidget(self.main_frame)
+        
+        # تخطيط النافذة الداخلية
+        layout = QVBoxLayout(self.main_frame)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # 1. Custom Title Bar
+        self.title_bar = CustomTitleBar(self, title="إدارة النظام (System Core)", is_dialog=True)
+        layout.addWidget(self.title_bar)
+        
+        # 2. Content Area
+        content_widget = QWidget()
+        content_widget.setStyleSheet("background: transparent; border: none;")
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(20, 20, 20, 20)
+        content_layout.setSpacing(15)
+        
+        # Title (Legacy Label Removed or updated)
         title_label = QLabel("إدارة النظام والصيانة")
-        title_font = QFont()
-        title_font.setPointSize(14)
-        title_font.setBold(True)
-        title_label.setFont(title_font)
+        title_label.setStyleSheet("color: #00f3ff; font-size: 18px; font-weight: bold; border: none;")
         title_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(title_label)
+        content_layout.addWidget(title_label)
         
         # Tab Widget
         self.tabs = QTabWidget()
+        self.tabs.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid rgba(0, 243, 255, 0.2);
+                background: rgba(15, 23, 42, 0.5);
+                border-radius: 8px;
+            }
+            QTabBar::tab {
+                background: rgba(30, 41, 59, 0.5);
+                color: #94a3b8;
+                padding: 10px 20px;
+                border-top-left-radius: 6px;
+                border-top-right-radius: 6px;
+                border: 1px solid transparent;
+            }
+            QTabBar::tab:selected {
+                background: rgba(0, 243, 255, 0.1);
+                color: #00f3ff;
+                border-bottom: 2px solid #00f3ff;
+            }
+            QTabBar::tab:hover {
+                background: rgba(255, 255, 255, 0.05);
+                color: white;
+            }
+        """)
         self.tabs.addTab(self.create_backup_tab(), "النسخ الاحتياطي")
         self.tabs.addTab(self.create_performance_tab(), "الأداء والتحسين")
         self.tabs.addTab(self.create_maintenance_tab(), "الصيانة")
         self.tabs.addTab(self.create_settings_tab(), "الإعدادات")
-        layout.addWidget(self.tabs)
+        content_layout.addWidget(self.tabs)
         
-        # Close Button
-        close_btn = QPushButton("إغلاق")
-        close_btn.clicked.connect(self.accept)
-        layout.addWidget(close_btn)
+        layout.addWidget(content_widget)
     
     # ==================== Backup Tab ====================
     
@@ -173,7 +247,7 @@ class SystemManagementWindow(QDialog):
         list_group = QGroupBox("النسخ الاحتياطية المتاحة")
         list_layout = QVBoxLayout(list_group)
         
-        self.backups_table = QTableWidget()
+        self.backups_table = AnimatedTableWidget()
         self.backups_table.setColumnCount(6)
         self.backups_table.setHorizontalHeaderLabels([
             "اسم النسخة", "التاريخ", "الحجم", "النوع", "الملفات", "الإجراءات"
@@ -234,13 +308,13 @@ class SystemManagementWindow(QDialog):
                 interval = self.auto_backup_interval.value()
                 self.backup_service.enable_auto_backup(interval_hours=interval)
                 self.auto_backup_btn.setText("إيقاف النسخ التلقائي")
-                QMessageBox.information(self, "نجح", f"تم تفعيل النسخ التلقائي كل {interval} ساعة")
+                self.notify.show_success("نجح", f"تم تفعيل النسخ التلقائي كل {interval} ساعة")
             else:
                 self.backup_service.disable_auto_backup()
                 self.auto_backup_btn.setText("تفعيل النسخ التلقائي")
-                QMessageBox.information(self, "نجح", "تم إيقاف النسخ التلقائي")
+                self.notify.show_success("نجح", "تم إيقاف النسخ التلقائي")
         except Exception as e:
-            QMessageBox.critical(self, "خطأ", f"فشل تبديل النسخ التلقائي: {str(e)}")
+            self.notify.show_error("خطأ", f"فشل تبديل النسخ التلقائي: {str(e)}")
             self.auto_backup_btn.setChecked(not checked)
     
     def cleanup_backups(self):
@@ -313,11 +387,11 @@ class SystemManagementWindow(QDialog):
             self.progress_dialog.close()
         
         if success:
-            QMessageBox.information(self, "نجح", message)
+            self.notify.show_success("نجح", message)
             self.load_backups()
             self.backup_description.clear()
         else:
-            QMessageBox.critical(self, "خطأ", f"فشلت العملية: {message}")
+            self.notify.show_error("خطأ", f"فشلت العملية: {message}")
     
     def on_restore_finished(self, success, message):
         """معالج انتهاء عملية الاستعادة"""
@@ -325,14 +399,13 @@ class SystemManagementWindow(QDialog):
             self.progress_dialog.close()
         
         if success:
-            QMessageBox.information(
-                self,
+            self.notify.show_success(
                 "نجح",
                 f"{message}\n\nيُنصح بإعادة تشغيل التطبيق."
             )
             self.load_backups()
         else:
-            QMessageBox.critical(self, "خطأ", f"فشلت الاستعادة: {message}")
+            self.notify.show_error("خطأ", f"فشلت الاستعادة: {message}")
     
     def load_backups(self):
         """تحميل قائمة النسخ الاحتياطية"""
@@ -626,10 +699,10 @@ class SystemManagementWindow(QDialog):
             self.progress_dialog.close()
         
         if success:
-            QMessageBox.information(self, "نجح", message)
+            self.notify.show_success("نجح", message)
             self.load_performance_info()
         else:
-            QMessageBox.critical(self, "خطأ", f"فشلت العملية: {message}")
+            self.notify.show_error("خطأ", f"فشلت العملية: {message}")
     
     # ==================== Maintenance Tab ====================
     
@@ -642,7 +715,7 @@ class SystemManagementWindow(QDialog):
         log_group = QGroupBox("سجل الصيانة")
         log_layout = QVBoxLayout(log_group)
         
-        self.maintenance_table = QTableWidget()
+        self.maintenance_table = AnimatedTableWidget()
         self.maintenance_table.setColumnCount(5)
         self.maintenance_table.setHorizontalHeaderLabels([
             "نوع العملية", "الحالة", "وقت التنفيذ", "التاريخ", "المستخدم"

@@ -1,7 +1,9 @@
 'use server'
 
-import { fetchFromAPI } from '@/lib/db/client'
+import { apiClient } from '@/lib/api/client'
+import { API_CONFIG } from '@/lib/config/api'
 import { revalidatePath } from 'next/cache'
+import { logger } from '@/lib/utils/logger'
 
 // تعريف شكل المنتج كما يأتي من البايثون
 export interface Product {
@@ -23,8 +25,8 @@ export async function getProducts(
   offset: number = 0
 ): Promise<{ products: Product[]; totalProducts: number }> {
   try {
-    // نجلب البيانات من السيرفر المحلي
-    const rawData = await fetchFromAPI('/products')
+    // نجلب البيانات من السيرفر المحلي باستخدام المسار الصحيح
+    const rawData = await apiClient.get<any>(API_CONFIG.ENDPOINTS.PRODUCTS)
 
     // تحويل البيانات وتأمينها في حال كانت فارغة
     const allProducts = Array.isArray(rawData) ? rawData : []
@@ -43,7 +45,7 @@ export async function getProducts(
       totalProducts: filteredProducts.length,
     }
   } catch (error) {
-    console.error('Failed to fetch products:', error)
+    logger.error('Failed to fetch products:', error)
     return { products: [], totalProducts: 0 }
   }
 }
@@ -52,18 +54,18 @@ export async function getProducts(
 // حالياً نضعها بشكل صوري لكي ينجح الـ Build دون أخطاء
 
 export async function createProduct(data: any) {
-  console.log('🚧 Create Product: بانتظار تفعيل API POST')
+  logger.warn('Create Product: بانتظار تفعيل API POST')
   return { success: false, message: "Server read-only for now" }
 }
 
 export async function updateProduct(id: number, data: any) {
-  console.log('🚧 Update Product: بانتظار تفعيل API PUT')
+  logger.warn('Update Product: بانتظار تفعيل API PUT')
   revalidatePath('/dashboard/products')
   return { success: false }
 }
 
 export async function deleteProduct(id: number) {
-  console.log('🚧 Delete Product: بانتظار تفعيل API DELETE')
+  logger.warn('Delete Product: بانتظار تفعيل API DELETE')
   revalidatePath('/dashboard/products')
   return { success: false }
 }

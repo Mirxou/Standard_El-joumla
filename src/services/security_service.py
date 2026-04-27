@@ -15,7 +15,6 @@ try:
 except Exception:
     pyotp = None
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 class SecurityService:
     def __init__(self, db_manager, logger=None):

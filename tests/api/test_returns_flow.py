@@ -4,7 +4,21 @@ from src.api.app import app
 from src.models.return_invoice import ReturnManager
 from unittest.mock import MagicMock
 
+from src.api.app import app, auth_manager
+
 client = TestClient(app)
+
+# Mock verify_token for all tests in this file
+@pytest.fixture(autouse=True)
+def mock_auth():
+    auth_manager.verify_token = MagicMock(return_value={
+        "sub": "1",
+        "username": "admin",
+        "company_id": 1,
+        "role": "admin"
+    })
+    yield
+
 
 class TestReturnsFlow:
     @pytest.fixture
@@ -32,7 +46,7 @@ class TestReturnsFlow:
 
             # Since we are mocking the dependency, the actual DB call is bypassed.
             # This tests the route logic and Pydantic validation.
-            response = client.post("/api/v1/returns", json=payload)
+            response = client.post("/api/v1/returns", json=payload, headers={"Authorization": "Bearer test"})
             
             # Expect 200 OK because we mocked success
             assert response.status_code == 200
@@ -47,8 +61,9 @@ class TestReturnsFlow:
         app.dependency_overrides[get_current_user] = lambda: {"id": 1, "username": "admin", "role": "admin"}
 
         try:
-            response = client.get("/api/v1/returns")
+            response = client.get("/api/v1/returns", headers={"Authorization": "Bearer test"})
             assert response.status_code == 200
             assert isinstance(response.json(), list)
         finally:
             app.dependency_overrides = {}
+

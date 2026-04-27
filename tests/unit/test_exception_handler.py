@@ -4,6 +4,7 @@ Unit Tests for ExceptionHandler
 """
 
 import pytest
+import sys
 from src.core.exception_handler import (
     GlobalExceptionHandler,
     LogicalVersionError,
@@ -30,14 +31,15 @@ class TestExceptionTypes:
         error = DatabaseError("Database error", query="SELECT * FROM test")
         
         assert error.error_type == ExceptionType.DATABASE_QUERY
-        assert 'query' in error.details
+        assert error.details.get('query') == "SELECT * FROM test"
     
     def test_validation_error(self):
         """اختبار استثناء التحقق"""
-        error = ValidationError("Validation error", field="name", value="")
+        error = ValidationError("Validation error", field="name", value="invalid")
         
         assert error.error_type == ExceptionType.VALIDATION
-        assert error.details['field'] == "name"
+        assert error.details.get('field') == "name"
+        assert error.details.get('value') == "invalid"
     
     def test_business_logic_error(self):
         """اختبار استثناء منطق الأعمال"""
@@ -52,35 +54,33 @@ class TestGlobalExceptionHandler:
     @pytest.fixture
     def exception_handler(self):
         """إنشاء معالج أخطاء"""
-        return GlobalExceptionHandler()
+        # نستخدم نسخة لا تظهر حوارات عند الأعطال لتجنب تعليق الاختبارات
+        return GlobalExceptionHandler(enable_crash_dialog=False)
     
     def test_init(self, exception_handler):
         """اختبار التهيئة"""
         assert exception_handler is not None
+        assert exception_handler.enable_crash_dialog is False
     
-    def test_handle_exception(self, exception_handler):
-        """اختبار معالجة استثناء"""
+    def test_handle_exception_system_exit(self, exception_handler):
+        """اختبار معالجة استثناء يسبب الخروج"""
         try:
-            raise ValueError("Test error")
-        except Exception as e:
-            # يجب ألا يرفع استثناء
-            # handle_exception يحتاج 3 معاملات: exc_type, exc_value, exc_traceback
-            import sys
+            raise ValueError("Fatal error")
+        except ValueError:
             exc_type, exc_value, exc_traceback = sys.exc_info()
-            # قد يرفع SystemExit في بعض الحالات، لكن يجب ألا يرفع استثناءات أخرى
-            try:
+            # نتوقع خروج النظام لأن recoverable هو False افتراضياً للاستثناءات غير المعروفة
+            with pytest.raises(SystemExit):
                 exception_handler.handle_exception(exc_type, exc_value, exc_traceback)
-            except SystemExit:
-                # SystemExit مقبول في معالجة الأخطاء
-                pass
     
-    def test_handle_logical_version_error(self, exception_handler):
-        """اختبار معالجة LogicalVersionError"""
+    def test_handle_recoverable_error(self, exception_handler):
+        """اختبار معالجة خطأ يمكن تجاوزه"""
         try:
-            raise LogicalVersionError("Test error")
-        except Exception as e:
-            # يجب ألا يرفع استثناء
-            import sys
+            raise LogicalVersionError("Recoverable error", recoverable=True)
+        except LogicalVersionError:
             exc_type, exc_value, exc_traceback = sys.exc_info()
+            # لا يجب أن يخرج النظام
             exception_handler.handle_exception(exc_type, exc_value, exc_traceback)
 
+
+if __name__ == '__main__':
+    pytest.main([__file__, '-v'])

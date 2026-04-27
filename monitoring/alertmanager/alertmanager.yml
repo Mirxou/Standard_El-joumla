@@ -1,0 +1,46 @@
+global:
+  smtp_smarthost: 'smtp.gmail.com:587'
+  smtp_from: 'alerts@unifiedcommerce2030.com'
+  smtp_auth_username: 'alerts@unifiedcommerce2030.com'
+  smtp_auth_password: 'your-app-password'
+
+route:
+  group_by: ['alertname']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 1h
+  receiver: 'email-notifications'
+  routes:
+  - match:
+      severity: critical
+    receiver: 'critical-email'
+  - match:
+      severity: warning
+    receiver: 'warning-email'
+
+receivers:
+- name: 'email-notifications'
+  email_configs:
+  - to: 'admin@unifiedcommerce2030.com'
+    send_resolved: true
+
+- name: 'critical-email'
+  email_configs:
+  - to: 'admin@unifiedcommerce2030.com,manager@unifiedcommerce2030.com'
+    send_resolved: true
+    headers:
+      Subject: 'CRITICAL: {{ .GroupLabels.alertname }}'
+
+- name: 'warning-email'
+  email_configs:
+  - to: 'admin@unifiedcommerce2030.com'
+    send_resolved: true
+    headers:
+      Subject: 'WARNING: {{ .GroupLabels.alertname }}'
+
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'instance']

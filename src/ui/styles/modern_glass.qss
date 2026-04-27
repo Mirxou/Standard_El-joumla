@@ -1,0 +1,251 @@
+/* 
+   THEME: QUANTUM THEORY (HIGH VISIBILITY MODE)
+   Concept: Interface of the Future. Alive, Responsive, Deep.
+   Palette: Deep Void (#020617) + Neon Cyan (#00f3ff) + High Contrast White (#ffffff).
+*/
+
+/* --- GLOBAL RESET: FUTURISTIC FONTS --- */
+QWidget {
+    font-family: 'Segoe UI Variable Display', 'Roboto', sans-serif;
+    color: #ffffff; /* FORCE WHITE TEXT GLOBALLY */
+    outline: none;
+}
+
+/* --- MAIN CONTAINER: THE VOID --- */
+QMainWindow, #centralWidget {
+    background-color: #020617; /* Absolute Zero */
+}
+
+/* --- SCROLL AREA: INVISIBLE --- */
+QScrollArea {
+    background: transparent;
+    border: none;
+}
+
+/* --- SIDEBAR: GLASS PANE --- */
+#sidebar {
+    background-color: #0f172a; /* Solid Dark Blue-Grey for better contrast */
+    border-right: 2px solid #00f3ff; /* Stronger Border */
+}
+
+#sidebar QLabel {
+    color: #00f3ff; /* Neon Cyan Title */
+    font-weight: 900;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-size: 14px;
+}
+
+/* --- SIDEBAR BUTTONS: HOLOGRAPHIC TABS --- */
+#sidebarBtn {
+    background-color: transparent;
+    color: #e2e8f0; /* Very Light Grey */
+    border: none;
+    padding: 15px 20px;
+    text-align: left;
+    font-size: 15px; /* Larger Text */
+    border-radius: 0px;
+    font-weight: 600;
+}
+
+#sidebarBtn:hover {
+    color: #ffffff;
+    background: rgba(0, 243, 255, 0.2);
+    border-left: 4px solid #00f3ff;
+}
+
+#sidebarBtn:checked {
+    color: #ffffff;
+    background: rgba(0, 243, 255, 0.3);
+    border-left: 4px solid #00f3ff;
+    font-weight: bold;
+    text-shadow: 0 0 8px #00f3ff;
+}
+
+/* --- QUANTUM CARDS (Base Style) --- */
+#kpiCard {
+    background-color: #1e293b; /* Solid Background for Readability */
+    border: 1px solid #475569;
+    border-radius: 16px;
+}
+/* Hover effects handled by Python for Scale/Glow */
+
+/* --- INPUTS: NEO-GLASS --- */
+QLineEdit, QComboBox, QDateEdit, QSpinBox {
+    background-color: #1e293b; /* Darker, more solid background */
+    border: 2px solid #475569; /* Visible Border */
+    border-radius: 8px;
+    padding: 10px;
+    color: #ffffff; /* Pure White Text */
+    font-weight: 600;
+    selection-background-color: #00f3ff;
+    selection-color: #000000;
+    min-height: 25px;
+}
+
+QLineEdit:focus, QComboBox:focus {
+    border: 2px solid #00f3ff; /* Neon Glow Border */
+    background-color: #0f172a;
+    color: #00f3ff;
+}
+
+/* --- TABLES: HIGH CONTRAST DATA --- */
+QTableWidget {
+    background-color: #0f172a; /* Solid Background */
+    border: 2px solid #334155;
+    border-radius: 12px;
+    gridline-color: #334155; /* Visible Gridlines */
+    color: #ffffff; /* White Text */
+    font-size: 14px; /* Larger Text */
+    selection-background-color: rgba(0, 243, 255, 0.2);
+    selection-color: #ffffff;
+}
+
+QHeaderView::section {
+    background-color: #1e293b;
+    color: #00f3ff;
+    padding: 14px;
+    border: 1px solid #334155;
+    font-weight: bold;
+    text-transform: uppercase;
+    font-size: 12px;
+    letter-spacing: 1px;
+}
+
+QTableWidget::item {
+    padding: 8px;
+    border-bottom: 1px solid #1e293b;
+}
+
+QTableWidget::item:selected {
+    background-color: rgba(0, 243, 255, 0.3);
+    color: #ffffff;
+    border: 1px solid #00f3ff;
+}
+
+QTableWidget::item:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* --- BUTTONS: RADIANT --- */
+QPushButton {
+    background-color: #334155;
+    color: white;
+    border: 1px solid #475569;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 600;
+}
+
+QPushButton:hover {
+    background-color: #475569;
+    border-color: #94a3b8;
+}
+
+QPushButton#primaryBtn {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #00f3ff, stop:1 #2563eb);
+    color: #000000; /* Black text on bright button for max contrast */
+    border: none;
+    border-radius: 8px;
+    padding: 12px 24px;
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: 14px;
+}
+
+QPushButton#primaryBtn:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #5eead4, stop:1 #3b82f6);
+    color: #000000;
+}
+
+/* --- SCROLLBAR: CYBERPUNK --- */
+QScrollBar:vertical {
+    border: none;
+    background: #0f172a;
+    width: 12px; /* Wider for easier grabbing */
+    margin: 0;
+}
+QScrollBar::handle:vertical {
+    background: #475569;
+    min-height: 20px;
+    border-radius: 6px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #00f3ff;
+}
+
+/* --- GROUP BOX: NEUMORPHIC CONTAINER --- */
+QGroupBox {
+    border: 2px solid #334155; /* Stronger Border */
+    border-radius: 12px;
+    margin-top: 24px;
+    background-color: rgba(15, 23, 42, 0.5);
+    font-weight: bold;
+    color: #00f3ff;
+    padding-top: 20px;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top center;
+    padding: 4px 12px;
+    background-color: #020617; 
+    color: #00f3ff;
+    border: 1px solid #00f3ff;
+    border-radius: 12px;
+}
+
+/* --- MENUS: HOLOGRAPHIC --- */
+QMenuBar {
+    background-color: #020617;
+    color: #ffffff;
+    font-size: 14px;
+}
+
+QMenuBar::item:selected {
+    background-color: #1e293b;
+    color: #00f3ff;
+    border-radius: 4px;
+}
+
+QMenu {
+    background-color: #0f172a;
+    border: 2px solid #334155;
+    color: #ffffff;
+    padding: 5px;
+}
+
+QMenu::item {
+    padding: 8px 24px;
+}
+
+QMenu::item:selected {
+    background-color: rgba(0, 243, 255, 0.2);
+    color: #00f3ff;
+    border-radius: 4px;
+}
+
+/* --- TOOLTIPS: HIGH TECH --- */
+QToolTip {
+    border: 2px solid #00f3ff;
+    background-color: #020617;
+    color: #ffffff;
+    border-radius: 4px;
+    padding: 8px;
+    font-size: 13px;
+}
+
+/* --- PROGRESS BAR: ENERGY_BEAM --- */
+QProgressBar {
+    border: 2px solid #334155;
+    border-radius: 6px;
+    text-align: center;
+    background-color: #0f172a;
+    color: #ffffff;
+    font-weight: bold;
+}
+
+QProgressBar::chunk {
+    background-color: #00f3ff;
+    width: 20px;
+}

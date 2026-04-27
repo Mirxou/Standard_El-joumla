@@ -280,7 +280,8 @@ class InvoicePrintService:
             'qr_code_url': qr_code_url,
             'barcode_url': barcode_url,
             'signatures': data.get('signatures', []),
-            'theme': data.get('theme', 'light')
+            'theme': data.get('theme', 'light'),
+            'company_stamp': data.get('company_stamp', '') # 🔥 Digital Stamp (Cachet) Path
         }
     
     def _generate_qr_code(self, invoice_id: str, data: Dict[str, Any]) -> Optional[str]:

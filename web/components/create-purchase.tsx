@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, ShoppingCart, Trash2, Calendar as CalendarIcon, Search } from "lucide-react"
 import { toast } from "sonner"
-import { fetchFromAPI } from "@/lib/db/client"
+import { apiClient } from "@/lib/api/client"
+import { API_CONFIG } from "@/lib/config/api"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import { cn } from "@/lib/utils"
@@ -49,16 +50,24 @@ export default function CreatePurchase({ onSaved }: CreatePurchaseProps) {
 
     const loadSuppliers = async () => {
         try {
-            const data = await fetchFromAPI('/suppliers')
-            if (Array.isArray(data)) setSuppliers(data)
-        } catch (e) { console.error(e) }
+            const data = await apiClient.get<any[]>(API_CONFIG.ENDPOINTS.SUPPLIERS)
+            const suppliersArray = Array.isArray(data) ? data : (data as any)?.items || (data as any)?.suppliers || []
+            setSuppliers(suppliersArray)
+        } catch (error: any) {
+            console.error("Error loading suppliers:", error)
+            setSuppliers([])
+        }
     }
 
     const loadProducts = async () => {
         try {
-            const data = await fetchFromAPI('/products')
-            if (data && Array.isArray(data.products)) setProducts(data.products)
-        } catch (e) { console.error(e) }
+            const data = await apiClient.get<any>(API_CONFIG.ENDPOINTS.PRODUCTS)
+            const productsArray = Array.isArray(data) ? data : (data as any)?.products || (data as any)?.items || []
+            setProducts(productsArray)
+        } catch (error: any) {
+            console.error("Error loading products:", error)
+            setProducts([])
+        }
     }
 
     const handleAddItem = () => {
@@ -119,12 +128,11 @@ export default function CreatePurchase({ onSaved }: CreatePurchaseProps) {
                 }))
             }
 
-            const result = await fetchFromAPI('/purchases', {
-                method: 'POST',
-                body: payload
-            });
+            const result = await apiClient.post('/api/v1/purchases', payload)
 
-            if (result.error) throw new Error(result.error);
+            if (!result || (result as any).error) {
+                throw new Error((result as any)?.error || "فشل إنشاء أمر الشراء")
+            }
 
             toast.success("تم إنشاء أمر الشراء بنجاح!")
             setOpen(false)

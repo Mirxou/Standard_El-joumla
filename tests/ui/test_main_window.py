@@ -93,3 +93,6 @@ class TestSalesDialog:
         assert title is not None
         assert len(title) > 0
 
+
+
+

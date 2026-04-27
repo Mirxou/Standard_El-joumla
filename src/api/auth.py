@@ -5,7 +5,7 @@ JWT Authentication للـ REST API
 JWT Authentication for REST API
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 import jwt
 from jwt.exceptions import InvalidTokenError, ExpiredSignatureError
@@ -103,16 +103,16 @@ class JWTAuthManager:
             JWT Token كسلسلة نصية
         """
         if expires_delta:
-            expire = datetime.utcnow() + expires_delta
+            expire = datetime.now(timezone.utc) + expires_delta
         else:
-            expire = datetime.utcnow() + timedelta(hours=self.access_token_expire_hours)
+            expire = datetime.now(timezone.utc) + timedelta(hours=self.access_token_expire_hours)
         
         # بيانات Token
         payload = {
             "sub": str(user_id),  # Subject (User ID)
             "username": username,
             "exp": expire,  # Expiration
-            "iat": datetime.utcnow(),  # Issued At
+            "iat": datetime.now(timezone.utc),  # Issued At
             "type": "access"
         }
         
@@ -141,13 +141,13 @@ class JWTAuthManager:
         Returns:
             JWT Refresh Token كسلسلة نصية
         """
-        expire = datetime.utcnow() + timedelta(days=self.refresh_token_expire_days)
+        expire = datetime.now(timezone.utc) + timedelta(days=self.refresh_token_expire_days)
         
         payload = {
             "sub": str(user_id),
             "username": username,
             "exp": expire,
-            "iat": datetime.utcnow(),
+            "iat": datetime.now(timezone.utc),
             "type": "refresh"
         }
         
@@ -252,19 +252,41 @@ class JWTAuthManager:
                     return None
             
             # التحقق من كلمة المرور
-            # نحتاج إلى الحصول على كلمة المرور من قاعدة البيانات
+            # نحتاج إلى الحصول على كلمة المرور والملح من قاعدة البيانات
             password_result = self.db_manager.fetch_one(
-                "SELECT password_hash FROM users WHERE id = ?",
+                "SELECT password_hash, salt FROM users WHERE id = ?",
                 (user_id,)
             )
             
             if not password_result:
                 return None
             
-            password_hash = password_result[0]
+            # التعامل مع النتيجة (قد تكون dict أو tuple)
+            if isinstance(password_result, dict):
+                password_hash = password_result.get('password_hash')
+                salt = password_result.get('salt')
+            else:
+                password_hash = password_result[0] if len(password_result) > 0 else None
+                salt = password_result[1] if len(password_result) > 1 else None
             
-            # التحقق من كلمة المرور (الترتيب: stored_hash, provided_password)
-            if not self.security_service.verify_password(password_hash, password):
+            if not password_hash or not salt:
+                self.logger.warning(f"كلمة مرور أو ملح مفقود للمستخدم: {username}")
+                return None
+            
+            # التحقق من كلمة المرور
+            password_valid = False
+            
+            # محاولة التحقق باستخدام UserManager method (PBKDF2 مع salt منفصل)
+            if salt and password_hash and not (password_hash.startswith('$argon2') or password_hash.startswith('$pbkdf2$')):
+                # استخدام طريقة UserManager للتحقق (PBKDF2 مع salt منفصل)
+                from src.models.user import UserManager
+                user_manager = UserManager(self.db_manager, self.logger)
+                password_valid = user_manager._verify_password(password, password_hash, salt)
+            else:
+                # استخدام security_service للتحقق (Argon2 أو PBKDF2 بصيغة محددة)
+                password_valid = self.security_service.verify_password(password_hash, password)
+            
+            if not password_valid:
                 self.logger.warning(f"كلمة مرور خاطئة للمستخدم: {username}")
                 # تسجيل محاولة فاشلة
                 self.security_service.record_failed_login(username)
@@ -309,7 +331,8 @@ class JWTAuthManager:
                 "access_token": access_token,
                 "refresh_token": refresh_token,
                 "token_type": "bearer",
-                "expires_in": self.access_token_expire_hours * 3600  # بالثواني
+                "expires_in": self.access_token_expire_hours * 3600,  # بالثواني
+                "is_active": bool(is_active)
             }
             
         except Exception as e:

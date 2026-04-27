@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import {
   Search, Plus, MoreHorizontal, Filter,
-  Edit, Trash2, Package, ArrowUpDown, RefreshCw
+  Edit, Trash2, Package, ArrowUpDown, RefreshCw, CheckSquare, Square
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import { apiClient } from "@/lib/api/client"
 import { API_CONFIG } from "@/lib/config/api"
 import { toast } from "sonner"
@@ -57,6 +58,10 @@ export default function ProductsManagement() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [productToDelete, setProductToDelete] = useState<number | null>(null)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [selectedProducts, setSelectedProducts] = useState<Set<number>>(new Set())
+  const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
+  const [sortField, setSortField] = useState<"name" | "price" | "stock" | "sku">("name")
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
 
   // دالة جلب المنتجات
   const loadProducts = async () => {
@@ -157,17 +162,88 @@ export default function ProductsManagement() {
   }, [])
 
   // منطق الفلترة والبحث
-  const filteredProducts = products.filter((product) => {
-    const matchesSearch =
-      (product.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (product.sku || '').toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredProducts = products
+    .filter((product) => {
+      const matchesSearch =
+        (product.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (product.sku || '').toLowerCase().includes(searchTerm.toLowerCase())
 
-    const categoryName = typeof product.category === 'string' ? product.category : product.category?.name
-    const matchesCategory = categoryFilter === "all" || categoryName === categoryFilter
-    // const matchesStatus = statusFilter === "all" || product.status === statusFilter
+      const categoryName = typeof product.category === 'string' ? product.category : product.category?.name
+      const matchesCategory = categoryFilter === "all" || categoryName === categoryFilter
+      
+      const matchesStatus = statusFilter === "all" || 
+        (statusFilter === "active" && product.stock > 0) ||
+        (statusFilter === "out_of_stock" && product.stock === 0) ||
+        (statusFilter === "low_stock" && product.stock > 0 && product.stock <= (product.min_stock_level || 10))
 
-    return matchesSearch && matchesCategory
-  })
+      return matchesSearch && matchesCategory && matchesStatus
+    })
+    .sort((a, b) => {
+      let aValue: any, bValue: any
+      
+      switch (sortField) {
+        case "name":
+          aValue = a.name?.toLowerCase() || ""
+          bValue = b.name?.toLowerCase() || ""
+          break
+        case "price":
+          aValue = a.price || 0
+          bValue = b.price || 0
+          break
+        case "stock":
+          aValue = a.stock || 0
+          bValue = b.stock || 0
+          break
+        case "sku":
+          aValue = a.sku?.toLowerCase() || ""
+          bValue = b.sku?.toLowerCase() || ""
+          break
+        default:
+          return 0
+      }
+      
+      if (aValue < bValue) return sortDirection === "asc" ? -1 : 1
+      if (aValue > bValue) return sortDirection === "asc" ? 1 : -1
+      return 0
+    })
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedProducts(new Set(filteredProducts.map(p => p.id)))
+    } else {
+      setSelectedProducts(new Set())
+    }
+  }
+
+  const handleSelectProduct = (productId: number, checked: boolean) => {
+    const newSelected = new Set(selectedProducts)
+    if (checked) {
+      newSelected.add(productId)
+    } else {
+      newSelected.delete(productId)
+    }
+    setSelectedProducts(newSelected)
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedProducts.size === 0) return
+    
+    try {
+      const deletePromises = Array.from(selectedProducts).map(id =>
+        apiClient.delete(`${API_CONFIG.ENDPOINTS.PRODUCTS}/${id}`)
+      )
+      
+      await Promise.all(deletePromises)
+      toast.success(`تم حذف ${selectedProducts.size} منتج بنجاح`)
+      setSelectedProducts(new Set())
+      await loadProducts()
+    } catch (error: any) {
+      console.error("فشل حذف المنتجات:", error)
+      toast.error("فشل حذف بعض المنتجات")
+    } finally {
+      setIsBulkDeleteDialogOpen(false)
+    }
+  }
 
   return (
     <div className="space-y-6" dir="rtl">
@@ -178,6 +254,22 @@ export default function ProductsManagement() {
           <p className="text-gray-500">مراقبة المخزون، تعديل الأسعار، وإدارة الأصناف</p>
         </div>
         <div className="flex gap-2">
+          {selectedProducts.size > 0 && (
+            <>
+              <Button 
+                variant="destructive" 
+                onClick={() => setIsBulkDeleteDialogOpen(true)}
+              >
+                <Trash2 className="h-4 w-4 ml-2" /> حذف المحدد ({selectedProducts.size})
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => setSelectedProducts(new Set())}
+              >
+                إلغاء التحديد
+              </Button>
+            </>
+          )}
           <Button variant="outline" onClick={loadProducts}>
             <RefreshCw className="h-4 w-4 ml-2" /> تحديث
           </Button>
@@ -222,6 +314,39 @@ export default function ProductsManagement() {
                 ))}
               </SelectContent>
             </Select>
+            
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="حالة المخزون" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">جميع الحالات</SelectItem>
+                <SelectItem value="active">متوفر</SelectItem>
+                <SelectItem value="out_of_stock">نفذت الكمية</SelectItem>
+                <SelectItem value="low_stock">مخزون منخفض</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={`${sortField}-${sortDirection}`} onValueChange={(value) => {
+              const [field, direction] = value.split('-')
+              setSortField(field as "name" | "price" | "stock" | "sku")
+              setSortDirection(direction as "asc" | "desc")
+            }}>
+              <SelectTrigger className="w-[180px]">
+                <ArrowUpDown className="ml-2 h-4 w-4" />
+                <SelectValue placeholder="ترتيب" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="name-asc">الاسم (أ-ي)</SelectItem>
+                <SelectItem value="name-desc">الاسم (ي-أ)</SelectItem>
+                <SelectItem value="price-asc">السعر (منخفض-عالي)</SelectItem>
+                <SelectItem value="price-desc">السعر (عالي-منخفض)</SelectItem>
+                <SelectItem value="stock-asc">المخزون (قليل-كثير)</SelectItem>
+                <SelectItem value="stock-desc">المخزون (كثير-قليل)</SelectItem>
+                <SelectItem value="sku-asc">SKU (أ-ي)</SelectItem>
+                <SelectItem value="sku-desc">SKU (ي-أ)</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
@@ -232,6 +357,12 @@ export default function ProductsManagement() {
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50/50">
+                <TableHead className="w-12">
+                  <Checkbox
+                    checked={selectedProducts.size > 0 && selectedProducts.size === filteredProducts.length}
+                    onCheckedChange={handleSelectAll}
+                  />
+                </TableHead>
                 <TableHead className="text-right">المنتج</TableHead>
                 <TableHead className="text-right">الرمز (SKU)</TableHead>
                 <TableHead className="text-center">الفئة</TableHead>
@@ -244,19 +375,25 @@ export default function ProductsManagement() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center">
+                  <TableCell colSpan={8} className="h-24 text-center">
                     جاري تحميل المنتجات من المخزن...
                   </TableCell>
                 </TableRow>
               ) : filteredProducts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center text-gray-500">
+                  <TableCell colSpan={8} className="h-24 text-center text-gray-500">
                     لا توجد منتجات مطابقة للبحث
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredProducts.map((product) => (
                   <TableRow key={product.id} className="hover:bg-gray-50/50 transition-colors">
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedProducts.has(product.id)}
+                        onCheckedChange={(checked) => handleSelectProduct(product.id, checked as boolean)}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
                         <div className="h-8 w-8 rounded bg-blue-100 flex items-center justify-center text-blue-600">
@@ -336,6 +473,27 @@ export default function ProductsManagement() {
               className="bg-red-600 hover:bg-red-700"
             >
               حذف
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* حوار تأكيد الحذف المتعدد */}
+      <AlertDialog open={isBulkDeleteDialogOpen} onOpenChange={setIsBulkDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>هل أنت متأكد من حذف المنتجات المحددة؟</AlertDialogTitle>
+            <AlertDialogDescription>
+              سيتم حذف {selectedProducts.size} منتج نهائياً من النظام. هذا الإجراء لا يمكن التراجع عنه.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              حذف المحدد
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

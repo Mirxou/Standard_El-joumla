@@ -1,0 +1,10 @@
+# Grafana Datasource Configuration for Prometheus
+# This file configures Prometheus datasource for Grafana
+# Format: Grafana Provisioning API v1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true

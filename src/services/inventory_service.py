@@ -8,15 +8,11 @@
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, date, timedelta
 from dataclasses import dataclass
-import sys
-from pathlib import Path
 
-# إضافة مسار src
-sys.path.insert(0, str(Path(__file__).parent.parent))
+from src.models.product import Product, ProductManager
+from src.models.category import Category, CategoryManager
+from src.models.supplier import Supplier, SupplierManager
 
-from models.product import Product, ProductManager
-from models.category import Category, CategoryManager
-from models.supplier import Supplier, SupplierManager
 
 @dataclass
 class StockMovement:
@@ -253,6 +249,9 @@ class InventoryService:
                     old_quantity = inventory.quantity if inventory else 0.0
                     quantity_diff = new_quantity - old_quantity
                     
+                    if self.logger:
+                        self.logger.debug(f"DEBUG ADJUST: new={new_quantity}, old={old_quantity}, diff={quantity_diff}, prod={product_id}")
+                    
                     # تحديث المخزون في المستودع
                     success = self.warehouse_service.adjust_stock(
                         warehouse_id, product_id, quantity_diff
@@ -273,7 +272,7 @@ class InventoryService:
                         
                         # تحديث المخزون الإجمالي في products (للتوافق)
                         total_stock = self.warehouse_service.get_total_stock(product_id)
-                        self.product_manager.update_stock(product_id, total_stock)
+                        self.product_manager.update_stock(product_id, int(total_stock))
                         
                         if self.logger:
                             self.logger.info(f"تم تعديل مخزون المنتج {product_id} في المستودع {warehouse_id}: {old_quantity} -> {new_quantity}")
@@ -288,8 +287,8 @@ class InventoryService:
                 old_quantity = product.current_stock
                 quantity_diff = new_quantity - old_quantity
                 
-                # تحديث الكمية
-                success = self.product_manager.update_stock(product_id, new_quantity)
+                # تحديث الكمية النهائية المطلوبة
+                success = self.product_manager.update_stock(product_id, int(new_quantity))
                 if success:
                     # تسجيل حركة المخزون
                     movement_type = "in" if quantity_diff > 0 else "out"
@@ -323,6 +322,11 @@ class InventoryService:
             if not from_product or not to_product:
                 return False
             
+            if from_product_id == to_product_id:
+                if self.logger:
+                    self.logger.warning(f"محاولة نقل المخزون لنفس المنتج {from_product_id}")
+                return False
+            
             # التحقق من توفر الكمية
             if from_product.current_stock < quantity:
                 if self.logger:
@@ -331,10 +335,10 @@ class InventoryService:
             
             # تحديث المخزون
             success1 = self.product_manager.update_stock(
-                from_product_id, from_product.current_stock - quantity
+                from_product_id, int(from_product.current_stock - quantity)
             )
             success2 = self.product_manager.update_stock(
-                to_product_id, to_product.current_stock + quantity
+                to_product_id, int(to_product.current_stock + quantity)
             )
             
             if success1 and success2:
@@ -598,7 +602,7 @@ class InventoryService:
             query = """
             INSERT INTO stock_movements (
                 product_id, movement_type, quantity, reference_id, 
-                reference_type, notes, created_by, created_at
+                reference_type, notes, user_id, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """
             

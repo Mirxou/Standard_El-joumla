@@ -140,3 +140,6 @@ class TestI18n:
                                    locale="ar")
         assert "100.00" in message or "150.00" in message
 
+
+
+

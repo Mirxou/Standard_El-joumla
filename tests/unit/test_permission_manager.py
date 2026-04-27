@@ -134,3 +134,6 @@ class TestPermissionManager:
             # قد يرفع استثناء إذا لم يكن هناك جدول users أو roles
             pass
 
+
+
+

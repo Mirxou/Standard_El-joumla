@@ -15,8 +15,6 @@ import sys
 from pathlib import Path
 import json
 
-# إضافة مسار src
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # ==================== التعريفات والثوابت ====================
 

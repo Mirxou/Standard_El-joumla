@@ -8,8 +8,11 @@ import sys
 from pathlib import Path
 
 # إضافة المسار الرئيسي
-sys.path.insert(0, str(Path(__file__).parent))
-
+import sys
+import os
+from pathlib import Path
+# الوصول إلى جذر المشروع
+project_root = str(Path(__file__).resolve().parents[2])
 from PySide6.QtWidgets import QApplication
 from src.core.window_manager import WindowManager
 from src.core.database_manager import DatabaseManager
@@ -295,4 +298,8 @@ if __name__ == "__main__":
     tester = WindowManagerTester()
     success = tester.run_all_tests()
     sys.exit(0 if success else 1)
+
+
+
+
 

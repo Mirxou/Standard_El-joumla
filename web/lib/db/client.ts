@@ -4,6 +4,7 @@
 // ملاحظة: هذا الملف للتوافقية مع الكود القديم فقط
 // يُنصح باستخدام apiClient من @/lib/api/client بدلاً من هذا الملف
 import { API_CONFIG } from '@/lib/config/api'
+import { logger } from '@/lib/utils/logger'
 
 const API_BASE_URL = API_CONFIG.BASE_URL;
 
@@ -22,10 +23,14 @@ export async function fetchFromAPI(
   const { method = 'GET', body = null } = options;
 
   try {
-    const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    // إضافة بادئة /api/v1 إذا لم تكن موجودة
+    let path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    if (!path.startsWith('/api/v1')) {
+      path = `/api/v1${path}`;
+    }
     const url = `${API_BASE_URL}${path}`;
 
-    console.log(`📡 ${method}: ${url}`);
+    logger.debug(`${method}: ${url}`);
 
     const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
     const companyId = typeof window !== 'undefined' ? localStorage.getItem('company_id') : null;

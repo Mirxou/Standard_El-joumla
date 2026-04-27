@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""إعادة تعيين كلمة سر admin باستخدام الطريقة الصحيحة (PBKDF2)"""
+"""
+إعادة تعيين كلمة سر admin باستخدام الطريقة الصحيحة (PBKDF2)
+
+الاستخدام: python fix_admin_password.py [new_password]
+           أو استخدم متغير البيئة: ADMIN_PASSWORD=your_password python fix_admin_password.py
+"""
 import sys
+import os
 import io
 import hashlib
 import secrets
@@ -11,12 +17,29 @@ if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
+# الحصول على كلمة المرور من متغير البيئة أو المعاملات
+new_password = os.getenv('ADMIN_PASSWORD')
+if not new_password:
+    if len(sys.argv) > 1:
+        new_password = sys.argv[1]
+    else:
+        print("❌ خطأ: يجب تحديد كلمة المرور الجديدة")
+        print("   الاستخدام:")
+        print("   - ADMIN_PASSWORD=كلمة_مرور python fix_admin_password.py")
+        print("   - python fix_admin_password.py كلمة_المرور")
+        sys.exit(1)
+
+# التحقق من قوة كلمة المرور
+if len(new_password) < 8:
+    print("❌ خطأ: كلمة المرور يجب أن تكون 8 أحرف على الأقل")
+    sys.exit(1)
+
 sys.path.insert(0, str(Path.cwd()))
 from src.core.database_manager import DatabaseManager
 from src.core.config_manager import ConfigManager
 
 def hash_password_pbkdf2(password: str, salt: str) -> str:
-    """تشفير كلمة المرور باستخدام PBKDF2 (نفس الطريقة المستخدمة في user.py)"""
+    """تشفير كلمة المرور باستخدام PBKDF2"""
     return hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000).hex()
 
 config = ConfigManager()
@@ -38,8 +61,6 @@ salt = admin['salt'] if admin['salt'] else secrets.token_hex(16)
 if not admin['salt']:
     print(f"⚠️ لم يكن هناك salt، تم إنشاء واحد جديد")
 
-new_password = "admin123"
-
 # تشفير كلمة المرور
 password_hash = hash_password_pbkdf2(new_password, salt)
 
@@ -50,9 +71,6 @@ try:
         (password_hash, salt, user_id)
     )
     print(f"✅ تم تحديث كلمة مرور 'admin' بنجاح")
-    print(f"\n🔑 بيانات الدخول:")
-    print(f"   Username: admin")
-    print(f"   Password: admin123")
     print(f"\n💡 جرب الآن: python main.py")
 except Exception as e:
     print(f"❌ خطأ في التحديث: {e}")

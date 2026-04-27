@@ -9,15 +9,11 @@ import sqlite3
 from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime, date, timedelta
 from decimal import Decimal
-import sys
-from pathlib import Path
 
-# إضافة مسار src
-sys.path.insert(0, str(Path(__file__).parent.parent))
+from src.models.quote import Quote, QuoteItem, QuoteStatus
+from src.core.database_manager import DatabaseManager
+from src.utils.logger import setup_logger
 
-from models.quote import Quote, QuoteItem, QuoteStatus
-from core.database_manager import DatabaseManager
-from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 

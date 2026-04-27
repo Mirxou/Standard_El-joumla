@@ -7,7 +7,7 @@
 import hashlib
 import secrets
 import jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from enum import Enum
@@ -614,8 +614,8 @@ class UserService:
                 'user_id': user.id,
                 'username': user.username,
                 'role': role_val,
-                'exp': datetime.utcnow() + timedelta(hours=self.security_settings.jwt_expiry_hours),
-                'iat': datetime.utcnow()
+                'exp': datetime.now(timezone.utc) + timedelta(hours=self.security_settings.jwt_expiry_hours),
+                'iat': datetime.now(timezone.utc)
             }
             
             token = jwt.encode(payload, self.security_settings.jwt_secret_key, algorithm='HS256')

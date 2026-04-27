@@ -6,7 +6,7 @@ Reminder Service
 """
 from __future__ import annotations
 from typing import List, Dict, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 
 from src.core.database_manager import DatabaseManager
@@ -92,7 +92,7 @@ class ReminderService:
                 ORDER BY due_at ASC
                 LIMIT ?
                 """,
-                (datetime.utcnow().isoformat(timespec='seconds'), limit)
+                (datetime.now(timezone.utc).isoformat(timespec='seconds'), limit)
             )
             return rows
         except Exception as e:

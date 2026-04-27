@@ -3,187 +3,196 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>فاتورة مبيعات - {{ invoice_id }}</title>
+    <title>فاتورة - {{ invoice_id }}</title>
     <link rel="stylesheet" href="invoice.css">
     {% if theme == 'dark' %}
     <link rel="stylesheet" href="invoice-dark.css">
     {% endif %}
 </head>
 <body>
-    <div class="invoice-box">
-        <!-- Header -->
-        <div class="header">
-            <div class="company-info">
-                {% if company_logo %}
-                <img src="{{ company_logo }}" alt="شعار الشركة" class="company-logo">
-                {% endif %}
-                <h1>{{ company_name or "الإصدار المنطقي" }}</h1>
-                <p>
-                    {{ company_address or "شارع التقنية، الجزائر العاصمة" }}<br>
-                    هاتف: {{ company_phone or "0123456789" }}<br>
-                    {% if company_email %}
-                    البريد: {{ company_email }}<br>
-                    {% endif %}
-                    {% if company_tax_id %}
-                    الرقم الضريبي: {{ company_tax_id }}
-                    {% endif %}
-                </p>
-            </div>
+    <div class="invoice-container">
+        <div class="invoice-content">
             
-            <div class="invoice-details">
-                <h3>فاتورة رقم: #{{ invoice_id }}</h3>
-                <p><strong>التاريخ:</strong> {{ date }}</p>
-                <p><strong>العميل:</strong> {{ customer_name }}</p>
-                {% if customer_phone %}
-                <p><strong>الهاتف:</strong> {{ customer_phone }}</p>
-                {% endif %}
-                {% if customer_address %}
-                <p><strong>العنوان:</strong> {{ customer_address }}</p>
-                {% endif %}
+            <!-- Header -->
+            <div class="invoice-header">
+                <div class="brand-section">
+                    {% if company_logo %}
+                    <img src="{{ company_logo }}" alt="شعار الشركة" class="company-logo">
+                    {% endif %}
+                    <div class="company-details">
+                        <strong>{{ company_name or "الإصدار المنطقي" }}</strong>
+                        {{ company_address or "شارع التقنية، الجزائر العاصمة" }}<br>
+                        {% if company_phone %}هاتف: <span dir="ltr">{{ company_phone }}</span><br>{% endif %}
+                        {% if company_email %}البريد: {{ company_email }}<br>{% endif %}
+                        {% if company_tax_id %}الرقم الضريبي: {{ company_tax_id }}{% endif %}
+                    </div>
+                </div>
                 
-                <!-- QR Code & Barcode -->
-                {% if qr_code_url or barcode_url %}
-                <div class="invoice-codes">
+                <div class="invoice-meta">
+                    <div class="invoice-title">فاتورة</div>
+                    <div class="invoice-meta-grid">
+                        <div class="meta-label">رقم الفاتورة</div>
+                        <div class="meta-value">#{{ invoice_id }}</div>
+                        
+                        <div class="meta-label">تاريخ الإصدار</div>
+                        <div class="meta-value">{{ date }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Billing Info -->
+            <div class="billing-section">
+                <div class="billing-box">
+                    <div class="billing-title">فاتورة إلى</div>
+                    <div class="billing-details">
+                        <strong>{{ customer_name }}</strong>
+                        {% if customer_address %}{{ customer_address }}<br>{% endif %}
+                        {% if customer_phone %}<span dir="ltr">{{ customer_phone }}</span>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Items Table -->
+            <table class="invoice-table">
+                <thead>
+                    <tr>
+                        <th style="width: 5%; text-align: center;">#</th>
+                        <th style="width: 45%;">المنتج / الوصف</th>
+                        <th class="col-center" style="width: 15%;">الكمية</th>
+                        <th class="col-left" style="width: 15%;">سعر الوحدة</th>
+                        <th class="col-left" style="width: 20%;">الإجمالي</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr>
+                        <td class="col-center" style="color: var(--text-muted);">{{ loop.index }}</td>
+                        <td>
+                            <div class="item-info">
+                                {% if item.image %}
+                                <img src="{{ item.image }}" alt="" class="item-img">
+                                {% endif %}
+                                <div>
+                                    <div class="item-name">{{ item.name }}</div>
+                                    {% if item.barcode %}
+                                    <div class="item-meta">باركود: {{ item.barcode }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td class="col-center">{{ item.qty }}</td>
+                        <td class="col-left">{{ "{:,.2f}".format(item.price) }} د.ج</td>
+                        <td class="col-left" style="font-weight: 600; color: var(--text-main);">{{ "{:,.2f}".format(item.total) }} د.ج</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <!-- Totals & Codes -->
+            <div class="totals-wrapper">
+                <div class="codes-section">
                     {% if qr_code_url %}
-                    <div class="qr-code">
+                    <div class="code-box">
                         <img src="{{ qr_code_url }}" alt="QR Code">
                     </div>
                     {% endif %}
                     {% if barcode_url %}
-                    <div class="barcode">
+                    <div class="code-box">
                         <img src="{{ barcode_url }}" alt="Barcode">
                     </div>
                     {% endif %}
                 </div>
+
+                <div class="totals-box">
+                    {% if subtotal %}
+                    <div class="total-row">
+                        <span>المجموع الفرعي</span>
+                        <span class="val">{{ "{:,.2f}".format(subtotal) }} د.ج</span>
+                    </div>
+                    {% endif %}
+                    
+                    {% if discount and discount > 0 %}
+                    <div class="total-row discount">
+                        <span>الخصم</span>
+                        <span class="val">- {{ "{:,.2f}".format(discount) }} د.ج</span>
+                    </div>
+                    {% endif %}
+                    
+                    {% if tax and tax > 0 %}
+                    <div class="total-row">
+                        <span>الضريبة</span>
+                        <span class="val">{{ "{:,.2f}".format(tax) }} د.ج</span>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="total-row grand-total">
+                        <span>الإجمالي النهائي</span>
+                        <span class="val">{{ "{:,.2f}".format(grand_total) }} د.ج</span>
+                    </div>
+                    
+                    {% if paid and paid > 0 %}
+                    <div class="total-row paid" style="margin-top: 0.5rem;">
+                        <span>المبلغ المدفوع</span>
+                        <span class="val">{{ "{:,.2f}".format(paid) }} د.ج</span>
+                    </div>
+                    {% endif %}
+                    
+                    {% if remaining and remaining > 0 %}
+                    <div class="total-row remaining">
+                        <span>المبلغ المتبقي</span>
+                        <span class="val">{{ "{:,.2f}".format(remaining) }} د.ج</span>
+                    </div>
+                    {% endif %}
+                    
+                    {% if payment_method %}
+                    <div class="total-row" style="margin-top: 1rem; padding-top: 0.8rem; border-top: 1px solid var(--border-light); font-size: 0.85rem;">
+                        <span>طريقة الدفع</span>
+                        <span class="val" style="color: var(--text-muted);">{{ payment_method }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Footer Notes & Signatures -->
+            <div class="footer-sections">
+                {% if notes %}
+                <div class="notes-box">
+                    <h4>ملاحظات</h4>
+                    <p>{{ notes }}</p>
+                </div>
+                {% endif %}
+
+                {% if signatures %}
+                <div class="signatures">
+                    {% for signature in signatures %}
+                    <div class="sig-box">
+                        {% if signature.image %}
+                        <img src="{{ signature.image }}" alt="{{ signature.label }}" class="sig-img">
+                        {% else %}
+                        <div style="height: 60px;"></div>
+                        {% endif %}
+                        <div class="sig-line"></div>
+                        <div class="sig-label">{{ signature.label }}</div>
+                        {% if signature.name %}
+                        <div class="sig-name">{{ signature.name }}</div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
                 {% endif %}
             </div>
+
         </div>
         
-        <!-- Items Table -->
-        <table>
-            <thead>
-                <tr>
-                    <th style="width: 5%;">#</th>
-                    <th style="width: 40%;">المنتج</th>
-                    <th style="width: 15%; text-align: center;">الكمية</th>
-                    <th style="width: 20%; text-align: left;">السعر</th>
-                    <th style="width: 20%; text-align: left;">الإجمالي</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in items %}
-                <tr>
-                    <td style="text-align: center; color: #94a3b8;">{{ loop.index }}</td>
-                    <td>
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            {% if item.image %}
-                            <img src="{{ item.image }}" alt="{{ item.name }}" class="product-image">
-                            {% endif %}
-                            <div>
-                                <strong>{{ item.name }}</strong>
-                                {% if item.barcode %}
-                                <br><small style="color: #94a3b8;">باركود: {{ item.barcode }}</small>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </td>
-                    <td style="text-align: center;">{{ item.qty }}</td>
-                    <td style="text-align: left;">{{ "{:,.2f}".format(item.price) }} د.ج</td>
-                    <td style="text-align: left; font-weight: 600;">{{ "{:,.2f}".format(item.total) }} د.ج</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        
-        <!-- Totals -->
-        <div class="total-section">
-            {% if subtotal %}
-            <div class="total-row">
-                <label>المجموع الفرعي:</label>
-                <span class="value">{{ "{:,.2f}".format(subtotal) }} د.ج</span>
-            </div>
-            {% endif %}
-            
-            {% if discount and discount > 0 %}
-            <div class="total-row">
-                <label>الخصم:</label>
-                <span class="value" style="color: #ef4444;">- {{ "{:,.2f}".format(discount) }} د.ج</span>
-            </div>
-            {% endif %}
-            
-            {% if tax and tax > 0 %}
-            <div class="total-row">
-                <label>الضريبة:</label>
-                <span class="value">{{ "{:,.2f}".format(tax) }} د.ج</span>
-            </div>
-            {% endif %}
-            
-            <div class="total-row">
-                <label>الإجمالي النهائي:</label>
-                <span class="value">{{ "{:,.2f}".format(grand_total) }} د.ج</span>
-            </div>
-            
-            {% if paid and paid > 0 %}
-            <div class="total-row">
-                <label>المدفوع:</label>
-                <span class="value" style="color: #10b981;">{{ "{:,.2f}".format(paid) }} د.ج</span>
-            </div>
-            {% endif %}
-            
-            {% if remaining and remaining > 0 %}
-            <div class="total-row">
-                <label>المتبقي:</label>
-                <span class="value" style="color: #f59e0b;">{{ "{:,.2f}".format(remaining) }} د.ج</span>
-            </div>
-            {% endif %}
-            
-            {% if payment_method %}
-            <div class="total-row" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e2e8f0;">
-                <label>طريقة الدفع:</label>
-                <span class="value">{{ payment_method }}</span>
-            </div>
-            {% endif %}
-        </div>
-        
-        <!-- Notes -->
-        {% if notes %}
-        <div class="notes">
-            <h4>ملاحظات:</h4>
-            <p>{{ notes }}</p>
-        </div>
-        {% endif %}
-        
-        <!-- Signatures -->
-        {% if signatures %}
-        <div class="signatures">
-            {% for signature in signatures %}
-            <div class="signature-box">
-                {% if signature.image %}
-                <img src="{{ signature.image }}" alt="{{ signature.label }}" class="signature-image">
-                {% endif %}
-                <div class="signature-line"></div>
-                <div class="signature-label">{{ signature.label }}</div>
-                {% if signature.name %}
-                <div style="margin-top: 5px; font-size: 12px; color: #64748b;">{{ signature.name }}</div>
-                {% endif %}
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
-        
-        <!-- Footer -->
-        <div class="footer">
-            <p><strong>شكراً لتعاملكم معنا!</strong></p>
-            <p>تم إصدار هذه الفاتورة إلكترونياً - {{ print_date }}</p>
-            <p style="margin-top: 10px; color: #94a3b8;">هذه الفاتورة صالحة قانونياً ويمكن استخدامها للأغراض الضريبية</p>
+        <!-- Bottom Bar -->
+        <div class="invoice-footer">
+            <p>نشكركم على ثقتكم بنا. هذه الفاتورة معتمدة إلكترونياً.</p>
+            <p>تاريخ الإصدار: <span dir="ltr">{{ print_date }}</span></p>
         </div>
     </div>
     
     <script>
-        // Auto-print when opened (optional - can be disabled)
-        // window.onload = function() {
-        //     window.print();
-        // }
+        // window.onload = function() { window.print(); }
     </script>
 </body>
 </html>

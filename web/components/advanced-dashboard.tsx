@@ -24,7 +24,7 @@ import {
   Download,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet"
 import Navigation from "@/components/navigation"
 import InventoryManagement from "@/components/inventory-management"
 import SalesManagement from "@/components/sales-management"
@@ -33,6 +33,7 @@ import WarehouseManagement from "@/components/warehouse-management"
 import ExpiryTracking from "@/components/expiry-tracking"
 import SupplierManagement from "@/components/supplier-management"
 import AdvancedReports from "@/components/advanced-reports"
+import { dashboardService } from "@/lib/api/services/dashboard"
 
 export default function AdvancedDashboard() {
   const [activeView, setActiveView] = useState("dashboard")
@@ -47,21 +48,29 @@ export default function AdvancedDashboard() {
     activeSuppliers: 0,
   })
 
-  // Simulate real-time data updates
+  // Fetch real-time data from API
   useEffect(() => {
-    const interval = setInterval(() => {
-      setRealTimeData((prev) => ({
-        totalRevenue: prev.totalRevenue + Math.random() * 1000,
-        totalProducts: 1247 + Math.floor(Math.random() * 10),
-        lowStockAlerts: 23 + Math.floor(Math.random() * 5),
-        profitMargin: 32.4 + (Math.random() - 0.5) * 2,
-        todaySales: prev.todaySales + Math.random() * 500,
-        pendingOrders: 8 + Math.floor(Math.random() * 3),
-        expiringItems: 15 + Math.floor(Math.random() * 5),
-        activeSuppliers: 45 + Math.floor(Math.random() * 3),
-      }))
-    }, 5000)
+    const fetchData = async () => {
+      try {
+        const statsData = await dashboardService.getStats()
+        setRealTimeData({
+          totalRevenue: statsData.total_revenue || statsData.total_sales || 0,
+          totalProducts: statsData.products_count || 0,
+          lowStockAlerts: statsData.low_stock_count || 0,
+          profitMargin: statsData.profit_margin || 0,
+          todaySales: statsData.today_sales || 0,
+          pendingOrders: statsData.pending_orders || 0,
+          expiringItems: statsData.expiring_items || 0,
+          activeSuppliers: statsData.active_suppliers || 0,
+        })
+      } catch (e) {
+        console.error("Error fetching dashboard data:", e)
+      }
+    }
 
+    fetchData()
+    // تحديث البيانات كل 30 ثانية
+    const interval = setInterval(fetchData, 30000)
     return () => clearInterval(interval)
   }, [])
 
@@ -99,6 +108,7 @@ export default function AdvancedDashboard() {
                 </Button>
               </SheetTrigger>
               <SheetContent side="right" className="w-64 p-0">
+                <SheetTitle className="sr-only">القائمة الرئيسية</SheetTitle>
                 <Navigation activeView={activeView} setActiveView={setActiveView} />
               </SheetContent>
             </Sheet>

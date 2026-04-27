@@ -53,16 +53,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
         authorization = request.headers.get("Authorization")
         
         if not authorization:
-            return JSONResponse(
+            raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                content={"detail": "مطلوب مصادقة - يرجى إرسال Token في Header"}
+                detail="مطلوب مصادقة - يرجى إرسال Token في Header"
             )
         
         # استخراج Token
         if not authorization.startswith("Bearer "):
-            return JSONResponse(
+            raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                content={"detail": "صيغة Token غير صحيحة - يجب أن تبدأ بـ 'Bearer '"}
+                detail="صيغة Token غير صحيحة - يجب أن تبدأ بـ 'Bearer '"
             )
         
         token = authorization.split(" ")[1]
@@ -71,13 +71,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
         payload = self.auth_manager.verify_token(token, token_type="access")
         
         if not payload:
-            return JSONResponse(
+            raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                content={"detail": "Token غير صالح أو منتهي الصلاحية"}
+                detail="Token غير صالح أو منتهي الصلاحية"
             )
         
         # إضافة بيانات المستخدم إلى Request
-        request.state.user_id = int(payload.get("sub"))
+        request.state.user_id = str(payload.get("sub"))
         request.state.username = payload.get("username")
         request.state.company_id = payload.get("company_id")
         
@@ -121,12 +121,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         )
         
         if not is_allowed:
-            return JSONResponse(
+            raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                content={
-                    "detail": "تم تجاوز الحد المسموح من الطلبات",
-                    "retry_after": retry_after
-                },
+                detail="تم تجاوز الحد المسموح من الطلبات",
                 headers={
                     "X-RateLimit-Limit": str(self.rate_limiter.default_max_requests),
                     "X-RateLimit-Remaining": "0",

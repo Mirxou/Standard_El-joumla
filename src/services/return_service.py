@@ -9,18 +9,14 @@ import sqlite3
 from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime, date
 from decimal import Decimal
-import sys
-from pathlib import Path
 
-# إضافة مسار src
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from models.return_invoice import (
+from src.models.return_invoice import (
     ReturnInvoice, ReturnItem, ReturnType, 
     ReturnReason, ReturnStatus, RefundMethod
 )
-from core.database_manager import DatabaseManager
-from utils.logger import setup_logger
+from src.core.database_manager import DatabaseManager
+from src.utils.logger import setup_logger
+
 
 logger = setup_logger(__name__)
 

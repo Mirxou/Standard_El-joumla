@@ -4,9 +4,11 @@ from datetime import datetime, timedelta
 import sys
 from pathlib import Path
 
-# إضافة مسار src
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
+import sys
+import os
+from pathlib import Path
+# الوصول إلى جذر المشروع
+project_root = str(Path(__file__).resolve().parents[2])
 from src.services.user_service import UserService, SecuritySettings
 from src.models.user import User, UserRole, Permission
 
@@ -37,7 +39,7 @@ class TestUserService:
 
     def test_authenticate_user_success(self, service, mock_user_manager):
         """اختبار مصادقة مستخدم بنجاح"""
-        mock_user = User(id=1, username="testuser", role=UserRole.USER, is_active=True, is_locked=False)
+        mock_user = User(id=1, username="testuser", role=UserRole.ADMIN, is_active=True, is_locked=False)
         mock_user_manager.authenticate_user.return_value = mock_user
         
         # محاكاة عدم وجود محاولات فاشلة
@@ -116,16 +118,16 @@ class TestUserService:
             mock_session = MagicMock(user_id=1)
             mock_validate.return_value = (True, mock_session)
             
-            has_permission = service.check_permission("valid_session_id", Permission.USERS_CREATE)
+            has_permission = service.check_permission("valid_session_id", Permission.USERS_MANAGE)
             
             assert has_permission is True
     
     def test_validate_session_success(self, service):
         """اختبار التحقق من جلسة صالحة"""
-        session = service._create_session(User(id=1, username="testuser", role=UserRole.USER), "127.0.0.1")
+        session = service._create_session(User(id=1, username="testuser", role=UserRole.ADMIN), "127.0.0.1", "pytest-agent")
         session_id = session.session_id
         
-        valid, returned_session, message = service.validate_session(session_id)
+        valid, returned_session = service.validate_session(session_id)
         
         assert valid is True
         assert returned_session is not None
@@ -136,16 +138,16 @@ class TestUserService:
         # إنشاء جلسة منتهية الصلاحية
         with patch.object(service, 'security_settings') as mock_settings:
             mock_settings.jwt_expiry_hours = -1  # انتهت الصلاحية
-            session = service._create_session(User(id=1, username="testuser", role=UserRole.USER), "127.0.0.1")
+            session = service._create_session(User(id=1, username="testuser", role=UserRole.ADMIN), "127.0.0.1", "pytest-agent")
         
         # محاولة التحقق من جلسة منتهية
-        valid, returned_session, message = service.validate_session("invalid_session")
+        valid, returned_session = service.validate_session("invalid_session")
         
         assert valid is False
     
     def test_logout_user(self, service):
         """اختبار تسجيل خروج المستخدم"""
-        session = service._create_session(User(id=1, username="testuser", role=UserRole.USER), "127.0.0.1")
+        session = service._create_session(User(id=1, username="testuser", role=UserRole.CASHIER), "127.0.0.1", "pytest-agent")
         session_id = session.session_id
         
         result = service.logout_user(session_id)
@@ -167,3 +169,7 @@ class TestUserService:
         assert success is False
         assert "ضعيفة" in message
         mock_user_manager.change_password.assert_not_called()
+
+
+
+

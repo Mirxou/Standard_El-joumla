@@ -13,10 +13,10 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
 import sys
-
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
+import os
+from pathlib import Path
+# الوصول إلى جذر المشروع
+project_root = str(Path(__file__).resolve().parents[2])
 from src.core.database_manager import DatabaseManager
 from src.core.exceptions import DatabaseException
 
@@ -650,4 +650,8 @@ class TestDatabaseManagerEdgeCases:
         # التحقق من جميع الإدراجات
         results = db.fetch_all("SELECT * FROM test_table")
         assert len(results) == 10
+
+
+
+
 

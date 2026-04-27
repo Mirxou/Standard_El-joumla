@@ -41,9 +41,10 @@ class TestConfigManager:
         config = ConfigManager()
         config.load_config()
         
-        # قيمة موجودة
-        db_path = config.get('database.path')
+        # قيمة موجودة - استخدام get_database_path الذي يستخدم get داخلياً
+        db_path = config.get_database_path()
         assert db_path is not None
+        assert isinstance(db_path, str)
     
     def test_set_value(self):
         """اختبار تعيين قيمة"""
@@ -268,4 +269,7 @@ class TestConfigManager:
         # تنظيف
         if 'TEST_KEY' in os.environ:
             del os.environ['TEST_KEY']
+
+
+
 

@@ -10,7 +10,6 @@ from decimal import Decimal
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 class BillingService:
     def __init__(self, db_manager, logger=None):

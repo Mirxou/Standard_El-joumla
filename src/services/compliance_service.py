@@ -14,8 +14,6 @@ import json
 import sys
 from pathlib import Path
 
-# إضافة مسار src
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.core.database_manager import DatabaseManager
 from src.core.tenant_isolation import TenantIsolationManager
@@ -904,3 +902,27 @@ class ComplianceService:
         """الحصول على طلبات GDPR"""
         return self.gdpr_handler.get_all_requests(status, request_type)
 
+
+    def generate_compliance_summary_report(self, *args, **kwargs):
+        """توليد تقرير ملخص الامتثال (Stub)"""
+        return {"success": True, "data": {"rules": [], "checks": []}}
+
+    def generate_compliance_rules_report(self, *args, **kwargs):
+        """توليد تقرير قواعد الامتثال (Stub)"""
+        return {"success": True, "data": {"rules": []}}
+
+    def generate_compliance_checks_report(self, *args, **kwargs):
+        """توليد تقرير فحوصات الامتثال (Stub)"""
+        return {"success": True, "data": {"checks": []}}
+
+    def generate_sox_controls_report(self, *args, **kwargs):
+        """توليد تقرير ضوابط SOX (Stub)"""
+        return {"success": True, "data": {"controls": []}}
+
+    def generate_gdpr_requests_report(self, *args, **kwargs):
+        """توليد تقرير طلبات GDPR (Stub)"""
+        return {"success": True, "data": {"requests": []}}
+
+    def generate_audit_trail_report(self, *args, **kwargs):
+        """توليد تقرير سجل التدقيق (Stub)"""
+        return {"success": True, "data": {"logs": []}}

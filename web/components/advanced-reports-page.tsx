@@ -28,52 +28,41 @@ export default function AdvancedReportsPage() {
   const [dateRange, setDateRange] = useState("month")
   const [reportType, setReportType] = useState("sales")
 
-  // بيانات تقارير المبيعات
-  const salesData = [
-    { month: "يناير", sales: 45000, profit: 12000, orders: 234 },
-    { month: "فبراير", sales: 52000, profit: 15600, orders: 267 },
-    { month: "مارس", sales: 48000, profit: 13440, orders: 245 },
-    { month: "أبريل", sales: 61000, profit: 18300, orders: 298 },
-    { month: "مايو", sales: 55000, profit: 16500, orders: 276 },
-    { month: "يونيو", sales: 67000, profit: 20100, orders: 312 },
-  ]
+  const [salesData, setSalesData] = useState<any[]>([])
+  const [topProducts, setTopProducts] = useState<any[]>([])
+  const [categoryData, setCategoryData] = useState<any[]>([])
+  const [dailyProfitData, setDailyProfitData] = useState<any[]>([])
+  const [inventoryData, setInventoryData] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
 
-  // بيانات المنتجات الأكثر مبيعاً
-  const topProducts = [
-    { name: "زيت الزيتون", sales: 12500, units: 450, category: "مواد غذائية" },
-    { name: "شامبو الأطفال", sales: 8900, units: 320, category: "صحة وجمال" },
-    { name: "سماعات بلوتوث", sales: 15600, units: 180, category: "إلكترونيات" },
-    { name: "شوكولاتة فاخرة", sales: 6700, units: 560, category: "حلويات" },
-    { name: "منظف الأطباق", sales: 5400, units: 290, category: "منتجات النظافة" },
-  ]
+  useEffect(() => {
+    const fetchReportsData = async () => {
+      try {
+        setLoading(true)
+        const [salesTrends, topProductsData, inventoryAnalytics] = await Promise.all([
+          apiClient.get(`/api/v1/reports/charts/sales?days=${dateRange === 'month' ? 30 : dateRange === 'week' ? 7 : 365}`),
+          apiClient.get('/api/v1/reports/charts/top-products?limit=5'),
+          apiClient.get('/api/v1/reports/analytics/inventory')
+        ])
 
-  // بيانات توزيع المبيعات حسب الفئة
-  const categoryData = [
-    { name: "مواد غذائية", value: 35, amount: 23450 },
-    { name: "صحة وجمال", value: 25, amount: 16750 },
-    { name: "إلكترونيات", value: 20, amount: 13400 },
-    { name: "حلويات", value: 12, amount: 8040 },
-    { name: "منتجات النظافة", value: 8, amount: 5360 },
-  ]
-
-  // بيانات الأرباح اليومية
-  const dailyProfitData = [
-    { day: "السبت", revenue: 8500, cost: 5100, profit: 3400 },
-    { day: "الأحد", revenue: 9200, cost: 5520, profit: 3680 },
-    { day: "الاثنين", revenue: 7800, cost: 4680, profit: 3120 },
-    { day: "الثلاثاء", revenue: 10500, cost: 6300, profit: 4200 },
-    { day: "الأربعاء", revenue: 9800, cost: 5880, profit: 3920 },
-    { day: "الخميس", revenue: 11200, cost: 6720, profit: 4480 },
-    { day: "الجمعة", revenue: 6900, cost: 4140, profit: 2760 },
-  ]
-
-  // بيانات المخزون
-  const inventoryData = [
-    { category: "متوفر", count: 450, percentage: 65, color: "#22c55e" },
-    { category: "منخفض", count: 120, percentage: 17, color: "#f59e0b" },
-    { category: "حرج", count: 80, percentage: 12, color: "#ef4444" },
-    { category: "نفد", count: 42, percentage: 6, color: "#6b7280" },
-  ]
+        setSalesData(Array.isArray(salesTrends) ? salesTrends : [])
+        setTopProducts(Array.isArray(topProductsData) ? topProductsData : [])
+        setCategoryData(inventoryAnalytics?.category_distribution || [])
+        setDailyProfitData(salesTrends?.daily_profit || [])
+        setInventoryData(inventoryAnalytics?.inventory_status || [])
+      } catch (e) {
+        console.error("Error fetching reports data:", e)
+        setSalesData([])
+        setTopProducts([])
+        setCategoryData([])
+        setDailyProfitData([])
+        setInventoryData([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchReportsData()
+  }, [dateRange])
 
   const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"]
 

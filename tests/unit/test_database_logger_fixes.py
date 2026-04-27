@@ -9,10 +9,12 @@ import pytest
 from pathlib import Path
 import sys
 
-# إضافة مسار المشروع
 project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root))
-
+import sys
+import os
+from pathlib import Path
+# الوصول إلى جذر المشروع
+project_root = str(Path(__file__).resolve().parents[2])
 from src.utils.logger import DatabaseLogger
 from src.core.database_manager import DatabaseManager
 
@@ -23,6 +25,22 @@ def db_manager():
     db_path = ":memory:"
     db = DatabaseManager(db_path)
     db.initialize()
+    
+    # إنشاء جدول سجل التدقيق
+    db.execute_non_query("""
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            username TEXT,
+            action TEXT,
+            module TEXT,
+            entity_type TEXT,
+            entity_id INTEGER,
+            old_values TEXT,
+            new_values TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
     return db
 
 
@@ -211,4 +229,7 @@ class TestDatabaseLoggerEdgeCases:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+
 

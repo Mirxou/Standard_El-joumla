@@ -15,11 +15,9 @@ try:
         BaseModel,
         Field,
         EmailStr,
-        validator,
-        root_validator,
-        constr,
-        conint,
-        confloat
+        field_validator,
+        model_validator,
+        ConfigDict
     )
     PYDANTIC_AVAILABLE = True
 except ImportError:
@@ -73,35 +71,34 @@ class TransactionType(str, Enum):
 
 class UserCreate(BaseModel):
     """نموذج إنشاء مستخدم جديد"""
-    username: constr(min_length=3, max_length=50)
-    password: constr(min_length=8)
+    username: str = Field(min_length=3, max_length=50)
+    password: str = Field(min_length=8)
     email: Optional[EmailStr] = None
-    full_name: constr(min_length=2, max_length=100)
+    full_name: str = Field(min_length=2, max_length=100)
     role: UserRole = UserRole.VIEWER
     is_active: bool = True
     
     if PYDANTIC_AVAILABLE:
-        @validator('username', allow_reuse=True)
+        @field_validator('username')
+        @classmethod
         def username_alphanumeric(cls, v):
             """التحقق من أن اسم المستخدم أبجدي رقمي"""
             if not v.replace('_', '').replace('-', '').isalnum():
                 raise ValueError('اسم المستخدم يجب أن يكون أبجدي رقمي')
             return v
         
-        class Config:
-            use_enum_values = True
+        model_config = ConfigDict(use_enum_values=True)
 
 
 class UserUpdate(BaseModel):
     """نموذج تحديث مستخدم"""
     email: Optional[EmailStr] = None
-    full_name: Optional[constr(min_length=2, max_length=100)] = None
+    full_name: Optional[str] = Field(None, min_length=2, max_length=100)
     role: Optional[UserRole] = None
     is_active: Optional[bool] = None
     
     if PYDANTIC_AVAILABLE:
-        class Config:
-            use_enum_values = True
+        model_config = ConfigDict(use_enum_values=True)
 
 
 class UserResponse(BaseModel):
@@ -116,48 +113,50 @@ class UserResponse(BaseModel):
     last_login: Optional[datetime] = None
     
     if PYDANTIC_AVAILABLE:
-        class Config:
-            from_attributes = True  # تم تغيير orm_mode إلى from_attributes في pydantic v2
-            use_enum_values = True
+        model_config = ConfigDict(from_attributes=True, use_enum_values=True)
 
 
 # ==================== Product Models ====================
 
 class ProductCreate(BaseModel):
     """نموذج إنشاء منتج"""
-    name: constr(min_length=1, max_length=200)
-    barcode: Optional[constr(max_length=50)] = None
+    name: str = Field(min_length=1, max_length=200)
+    barcode: Optional[str] = Field(None, max_length=50)
     category_id: Optional[int] = None
-    unit: constr(min_length=1, max_length=20) = "وحدة"
+    unit: str = Field("وحدة", min_length=1, max_length=20)
     
     # الأسعار
-    purchase_price: confloat(ge=0) = 0.0
-    sale_price: confloat(ge=0)
-    min_sale_price: Optional[confloat(ge=0)] = None
+    purchase_price: float = Field(0.0, ge=0)
+    sale_price: float = Field(ge=0)
+    min_sale_price: Optional[float] = Field(None, ge=0)
     
     # المخزون
-    stock_quantity: confloat(ge=0) = 0.0
-    min_stock: confloat(ge=0) = 0.0
-    max_stock: Optional[confloat(ge=0)] = None
+    stock_quantity: float = Field(0.0, ge=0)
+    min_stock: float = Field(0.0, ge=0)
+    max_stock: Optional[float] = Field(None, ge=0)
     
     # معلومات إضافية
     description: Optional[str] = None
     supplier_id: Optional[int] = None
     is_active: bool = True
-    tax_rate: confloat(ge=0, le=100) = 0.0
+    tax_rate: float = Field(0.0, ge=0, le=100)
     
     if PYDANTIC_AVAILABLE:
-        @validator('min_sale_price')
-        def min_price_check(cls, v, values):
+        @field_validator('min_sale_price')
+        @classmethod
+        def min_price_check(cls, v, info):
             """التحقق من أن الحد الأدنى للسعر أقل من سعر البيع"""
+            values = info.data
             if v is not None and 'sale_price' in values:
                 if v > values['sale_price']:
                     raise ValueError('الحد الأدنى للسعر يجب أن يكون أقل من سعر البيع')
             return v
         
-        @validator('max_stock')
-        def max_stock_check(cls, v, values):
+        @field_validator('max_stock')
+        @classmethod
+        def max_stock_check(cls, v, info):
             """التحقق من أن الحد الأقصى أكبر من الحد الأدنى"""
+            values = info.data
             if v is not None and 'min_stock' in values:
                 if v < values['min_stock']:
                     raise ValueError('الحد الأقصى يجب أن يكون أكبر من الحد الأدنى')
@@ -166,23 +165,23 @@ class ProductCreate(BaseModel):
 
 class ProductUpdate(BaseModel):
     """نموذج تحديث منتج"""
-    name: Optional[constr(min_length=1, max_length=200)] = None
-    barcode: Optional[constr(max_length=50)] = None
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    barcode: Optional[str] = Field(None, max_length=50)
     category_id: Optional[int] = None
-    unit: Optional[constr(min_length=1, max_length=20)] = None
+    unit: Optional[str] = Field(None, min_length=1, max_length=20)
     
-    purchase_price: Optional[confloat(ge=0)] = None
-    sale_price: Optional[confloat(ge=0)] = None
-    min_sale_price: Optional[confloat(ge=0)] = None
+    purchase_price: Optional[float] = Field(None, ge=0)
+    sale_price: Optional[float] = Field(None, ge=0)
+    min_sale_price: Optional[float] = Field(None, ge=0)
     
-    stock_quantity: Optional[confloat(ge=0)] = None
-    min_stock: Optional[confloat(ge=0)] = None
-    max_stock: Optional[confloat(ge=0)] = None
+    stock_quantity: Optional[float] = Field(None, ge=0)
+    min_stock: Optional[float] = Field(None, ge=0)
+    max_stock: Optional[float] = Field(None, ge=0)
     
     description: Optional[str] = None
     supplier_id: Optional[int] = None
     is_active: Optional[bool] = None
-    tax_rate: Optional[confloat(ge=0, le=100)] = None
+    tax_rate: Optional[float] = Field(None, ge=0, le=100)
 
 
 class ProductResponse(BaseModel):
@@ -210,32 +209,31 @@ class ProductResponse(BaseModel):
     updated_at: Optional[datetime]
     
     if PYDANTIC_AVAILABLE:
-        class Config:
-            from_attributes = True  # تم تغيير orm_mode إلى from_attributes في pydantic v2
+        model_config = ConfigDict(from_attributes=True)
 
 
 # ==================== Customer Models ====================
 
 class CustomerCreate(BaseModel):
     """نموذج إنشاء عميل"""
-    name: constr(min_length=2, max_length=200)
-    phone: Optional[constr(max_length=20)] = None
+    name: str = Field(min_length=2, max_length=200)
+    phone: Optional[str] = Field(None, max_length=20)
     email: Optional[EmailStr] = None
     address: Optional[str] = None
-    tax_number: Optional[constr(max_length=50)] = None
-    credit_limit: confloat(ge=0) = 0.0
+    tax_number: Optional[str] = Field(None, max_length=50)
+    credit_limit: float = Field(0.0, ge=0)
     is_active: bool = True
     notes: Optional[str] = None
 
 
 class CustomerUpdate(BaseModel):
     """نموذج تحديث عميل"""
-    name: Optional[constr(min_length=2, max_length=200)] = None
-    phone: Optional[constr(max_length=20)] = None
+    name: Optional[str] = Field(None, min_length=2, max_length=200)
+    phone: Optional[str] = Field(None, max_length=20)
     email: Optional[EmailStr] = None
     address: Optional[str] = None
-    tax_number: Optional[constr(max_length=50)] = None
-    credit_limit: Optional[confloat(ge=0)] = None
+    tax_number: Optional[str] = Field(None, max_length=50)
+    credit_limit: Optional[float] = Field(None, ge=0)
     is_active: Optional[bool] = None
     notes: Optional[str] = None
 
@@ -255,8 +253,7 @@ class CustomerResponse(BaseModel):
     created_at: datetime
     
     if PYDANTIC_AVAILABLE:
-        class Config:
-            from_attributes = True  # تم تغيير orm_mode إلى from_attributes في pydantic v2
+        model_config = ConfigDict(from_attributes=True)
 
 
 # ==================== Invoice Models ====================
@@ -264,10 +261,10 @@ class CustomerResponse(BaseModel):
 class InvoiceItemCreate(BaseModel):
     """نموذج عنصر في الفاتورة"""
     product_id: int
-    quantity: confloat(gt=0)
-    unit_price: confloat(ge=0)
-    discount: confloat(ge=0, le=100) = 0.0
-    tax_rate: confloat(ge=0, le=100) = 0.0
+    quantity: float = Field(gt=0)
+    unit_price: float = Field(ge=0)
+    discount: float = Field(0.0, ge=0, le=100)
+    tax_rate: float = Field(0.0, ge=0, le=100)
     notes: Optional[str] = None
     
     if PYDANTIC_AVAILABLE:
@@ -294,24 +291,24 @@ class InvoiceCreate(BaseModel):
     supplier_id: Optional[int] = None
     invoice_date: date = Field(default_factory=date.today)
     
-    items: List[InvoiceItemCreate] = Field(min_items=1)
+    items: List[InvoiceItemCreate] = Field(min_length=1)
     
-    discount: confloat(ge=0) = 0.0
-    tax_rate: confloat(ge=0, le=100) = 0.0
-    shipping_cost: confloat(ge=0) = 0.0
+    discount: float = Field(0.0, ge=0)
+    tax_rate: float = Field(0.0, ge=0, le=100)
+    shipping_cost: float = Field(0.0, ge=0)
     
     payment_method: Optional[PaymentMethod] = None
-    paid_amount: confloat(ge=0) = 0.0
+    paid_amount: float = Field(0.0, ge=0)
     
     notes: Optional[str] = None
     
     if PYDANTIC_AVAILABLE:
-        @root_validator(skip_on_failure=True)
-        def validate_customer_supplier(cls, values):
+        @model_validator(mode='after')
+        def validate_customer_supplier(self):
             """التحقق من وجود عميل أو مورد حسب نوع الفاتورة"""
-            invoice_type = values.get('invoice_type')
-            customer_id = values.get('customer_id')
-            supplier_id = values.get('supplier_id')
+            invoice_type = self.invoice_type
+            customer_id = self.customer_id
+            supplier_id = self.supplier_id
             
             if invoice_type in [InvoiceType.SALES, InvoiceType.RETURN_SALES]:
                 if not customer_id:
@@ -321,16 +318,16 @@ class InvoiceCreate(BaseModel):
                 if not supplier_id:
                     raise ValueError('فاتورة المشتريات تتطلب تحديد مورد')
             
-            return values
+            return self
         
-        @validator('paid_amount')
-        def paid_amount_check(cls, v, values):
+        @field_validator('paid_amount')
+        @classmethod
+        def paid_amount_check(cls, v, info):
             """التحقق من أن المبلغ المدفوع لا يتجاوز الإجمالي"""
             # سيتم حسابه في Service layer
             return v
         
-        class Config:
-            use_enum_values = True
+        model_config = ConfigDict(use_enum_values=True)
 
 
 class InvoiceResponse(BaseModel):
@@ -359,9 +356,7 @@ class InvoiceResponse(BaseModel):
     created_at: datetime
     
     if PYDANTIC_AVAILABLE:
-        class Config:
-            from_attributes = True  # تم تغيير orm_mode إلى from_attributes في pydantic v2
-            use_enum_values = True
+        model_config = ConfigDict(from_attributes=True, use_enum_values=True)
 
 
 # ==================== Accounting Models ====================
@@ -370,28 +365,27 @@ class AccountingEntryCreate(BaseModel):
     """نموذج إنشاء قيد محاسبي"""
     account_id: int
     transaction_type: TransactionType
-    amount: confloat(gt=0)
+    amount: float = Field(gt=0)
     description: str
     reference_type: Optional[str] = None
     reference_id: Optional[int] = None
     transaction_date: date = Field(default_factory=date.today)
     
     if PYDANTIC_AVAILABLE:
-        class Config:
-            use_enum_values = True
+        model_config = ConfigDict(use_enum_values=True)
 
 
 class JournalEntryCreate(BaseModel):
     """نموذج إنشاء قيد يومية"""
     entry_date: date = Field(default_factory=date.today)
     description: str
-    entries: List[AccountingEntryCreate] = Field(min_items=2)
+    entries: List[AccountingEntryCreate] = Field(min_length=2)
     
     if PYDANTIC_AVAILABLE:
-        @root_validator(skip_on_failure=True)
-        def validate_balanced(cls, values):
+        @model_validator(mode='after')
+        def validate_balanced(self):
             """التحقق من توازن القيد"""
-            entries = values.get('entries', [])
+            entries = self.entries
             
             debit_total = sum(
                 e.amount for e in entries
@@ -408,7 +402,7 @@ class JournalEntryCreate(BaseModel):
                     f'القيد غير متوازن: مدين={debit_total}, دائن={credit_total}'
                 )
             
-            return values
+            return self
 
 
 # ==================== Payment Models ====================
@@ -416,15 +410,14 @@ class JournalEntryCreate(BaseModel):
 class PaymentCreate(BaseModel):
     """نموذج تسجيل دفعة"""
     invoice_id: int
-    amount: confloat(gt=0)
+    amount: float = Field(gt=0)
     payment_method: PaymentMethod
     payment_date: date = Field(default_factory=date.today)
     reference_number: Optional[str] = None
     notes: Optional[str] = None
     
     if PYDANTIC_AVAILABLE:
-        class Config:
-            use_enum_values = True
+        model_config = ConfigDict(use_enum_values=True)
 
 
 class PaymentResponse(BaseModel):
@@ -440,9 +433,7 @@ class PaymentResponse(BaseModel):
     created_at: datetime
     
     if PYDANTIC_AVAILABLE:
-        class Config:
-            from_attributes = True  # تم تغيير orm_mode إلى from_attributes في pydantic v2
-            use_enum_values = True
+        model_config = ConfigDict(from_attributes=True, use_enum_values=True)
 
 
 # ==================== Inventory Models ====================
@@ -451,7 +442,7 @@ class InventoryAdjustmentCreate(BaseModel):
     """نموذج تعديل المخزون"""
     product_id: int
     quantity_change: float  # يمكن أن يكون موجب أو سالب
-    reason: constr(min_length=3, max_length=200)
+    reason: str = Field(min_length=3, max_length=200)
     notes: Optional[str] = None
     adjustment_date: date = Field(default_factory=date.today)
 
@@ -461,7 +452,7 @@ class StockTransferCreate(BaseModel):
     product_id: int
     from_location: str
     to_location: str
-    quantity: confloat(gt=0)
+    quantity: float = Field(gt=0)
     notes: Optional[str] = None
     transfer_date: date = Field(default_factory=date.today)
 
@@ -477,9 +468,11 @@ class SalesReportFilter(BaseModel):
     payment_method: Optional[PaymentMethod] = None
     
     if PYDANTIC_AVAILABLE:
-        @validator('end_date')
-        def end_date_after_start(cls, v, values):
+        @field_validator('end_date')
+        @classmethod
+        def end_date_after_start(cls, v, info):
             """التحقق من أن تاريخ النهاية بعد تاريخ البداية"""
+            values = info.data
             if v and 'start_date' in values and values['start_date']:
                 if v < values['start_date']:
                     raise ValueError('تاريخ النهاية يجب أن يكون بعد تاريخ البداية')
@@ -493,8 +486,8 @@ class SalesReportFilter(BaseModel):
 class ReturnItemCreate(BaseModel):
     """نموذج عنصر مرتجع"""
     product_id: int
-    quantity: confloat(gt=0)
-    unit_price: confloat(ge=0)
+    quantity: float = Field(gt=0)
+    unit_price: float = Field(ge=0)
     return_reason: str = "DEFECTIVE"
     notes: Optional[str] = None
 
@@ -519,8 +512,7 @@ class ReturnResponse(BaseModel):
     created_at: datetime
     
     if PYDANTIC_AVAILABLE:
-        class Config:
-            from_attributes = True
+        model_config = ConfigDict(from_attributes=True)
 
 
 # ==================== مثال على الاستخدام ====================

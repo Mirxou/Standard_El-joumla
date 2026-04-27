@@ -5,9 +5,14 @@
 Add Company ID Columns to All Main Tables Script
 """
 
-import sqlite3
 import sys
 from pathlib import Path
+
+# Add src to path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
+from src.core.database_manager import DatabaseManager
 
 def column_exists(cursor, table_name: str, column_name: str) -> bool:
     """التحقق من وجود عمود في جدول"""
@@ -26,9 +31,10 @@ def table_exists(cursor, table_name: str) -> bool:
 def add_company_columns(db_path: str):
     """إضافة company_id إلى جميع الجداول الرئيسية"""
     
-    conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA foreign_keys = ON")
-    cursor = conn.cursor()
+    db_manager = DatabaseManager(db_path)
+    db_manager.initialize()
+    db_manager.connection.execute("PRAGMA foreign_keys = ON")
+    cursor = db_manager.connection.cursor()
     
     try:
         # الحصول على معرف الشركة الافتراضية
@@ -150,7 +156,7 @@ def add_company_columns(db_path: str):
         # ملاحظة: SQLite لا يدعم إضافة Foreign Key بعد إنشاء الجدول مباشرة
         # سنستخدم طريقة بديلة: التحقق من وجود الشركة في الكود
         
-        conn.commit()
+        db_manager.connection.commit()
         
         print("\n" + "=" * 60)
         print("📊 ملخص التحديث:")
@@ -160,11 +166,11 @@ def add_company_columns(db_path: str):
         print("\n✅ تم إضافة جميع أعمدة company_id بنجاح!")
         
     except Exception as e:
-        conn.rollback()
+        db_manager.connection.rollback()
         print(f"\n❌ خطأ: {e}")
         raise
     finally:
-        conn.close()
+        db_manager.connection.close()
 
 if __name__ == "__main__":
     # تحديد مسار قاعدة البيانات

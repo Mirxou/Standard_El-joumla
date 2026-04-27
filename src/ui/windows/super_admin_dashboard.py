@@ -19,9 +19,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QColor, QBrush
 
-# إضافة مسار src
 project_root = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(project_root))
 
 from src.core.database_manager import DatabaseManager
 from src.core.security_monitor import SecurityMonitor

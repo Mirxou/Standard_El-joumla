@@ -1,4 +1,4 @@
-﻿"""
+"""
 نظام نقاط الولاء والمكافآت
 Loyalty Points & Rewards System
 

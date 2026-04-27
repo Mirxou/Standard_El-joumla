@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 نافذة إضافة/تعديل المنتجات - Product Dialog
 واجهة شاملة لإدارة المنتجات مع دعم اللغة العربية
@@ -19,13 +19,18 @@ from PySide6.QtWidgets import (
     QInputDialog
 )
 from PySide6.QtCore import Qt, QTimer, Signal, QThread, QDate, QStringListModel
-from PySide6.QtGui import QFont, QPixmap, QIcon, QPalette, QColor, QValidator, QDoubleValidator
+from PySide6.QtGui import QFont, QPixmap, QIcon, QPalette, QColor, QValidator, QDoubleValidator, QShowEvent, QCloseEvent
+from PySide6.QtWidgets import QGraphicsDropShadowEffect
+
+from ...ui.widgets.custom_title_bar import CustomTitleBar
+from ...ui.widgets.quantum_notification import NotificationManager
 
 from ...core.database_manager import DatabaseManager
 from ...models.product import Product, ProductManager
 from ...models.category import CategoryManager
 from ...models.supplier import SupplierManager
 from ...utils.logger import setup_logger
+from ...ui.animations.animation_manager import AnimationManager
 
 # Try to use enhanced product service/model if available
 try:
@@ -154,6 +159,9 @@ class ProductDialog(QDialog):
         from ...utils.i18n_api import I18n
         self.i18n = I18n(locales_dir=str(Path(__file__).parent.parent.parent.parent / "locales"))
         
+        # تهيئة Animation Manager
+        self.animation_manager = AnimationManager(self)
+        
         # إعداد الواجهة
         self.setup_ui()
         self.setup_connections()
@@ -164,21 +172,60 @@ class ProductDialog(QDialog):
         
         if self.is_edit_mode:
             self.populate_form()
+        
+        # إعداد Opacity للـ fade in
+        self.setWindowOpacity(0.0)
+        
+        # --- Quantum Window Setup ---
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        
+        # Notifications
+        self.notify = NotificationManager(self)
     
     def setup_ui(self):
         """إعداد واجهة المستخدم المحسنة"""
         title = self.i18n.get_message("product_edit_title") if self.is_edit_mode else self.i18n.get_message("product_new_title")
-        self.setWindowTitle(title)
+        # self.setWindowTitle(title) # Handled by CustomTitleBar
         self.setMinimumSize(900, 700)
         self.resize(1000, 750)
         self.setModal(True)
         
-        # تخطيط رئيسي
-        main_layout = QVBoxLayout(self)
+        # تخطيط جذري شفاف
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(10, 10, 10, 10)
+        root_layout.setSpacing(0)
+        
+        # الإطار الرئيسي
+        self.main_frame = QFrame()
+        self.main_frame.setStyleSheet("""
+            QFrame {
+                background-color: #f8f9fa; /* Light Background for Content */
+                border: 1px solid #3498db;
+                border-radius: 10px;
+            }
+        """)
+        # Shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor("#3498db"))
+        shadow.setOffset(0, 0)
+        self.main_frame.setGraphicsEffect(shadow)
+        
+        root_layout.addWidget(self.main_frame)
+        
+        # تخطيط النافذة الداخلية
+        main_layout = QVBoxLayout(self.main_frame)
         main_layout.setSpacing(15)
         main_layout.setContentsMargins(20, 20, 20, 20)
         
-        # شريط العنوان
+        # 1. Custom Title Bar
+        self.title_bar = CustomTitleBar(self, title=title, is_dialog=True)
+        main_layout.addWidget(self.title_bar)
+        
+        # Remove old header call if it duplicates title functionality, 
+        # BUT setup_header adds specific product info, so we keep it but maybe simplify?
+        # Let's keep existing setup_header for the "banner" look inside the dialog.
         self.setup_header(main_layout)
         
         # شريط التقدم
@@ -1179,7 +1226,7 @@ class ProductDialog(QDialog):
                                 if self.logger:
                                     self.logger.warning(f"⚠️ فشل إطلاق الإشارات: {e}")
                             
-                            QMessageBox.information(self, "نجح", f"تم إضافة المنتج بنجاح\nرقم المنتج: {product_id}")
+                            self.notify.show_success("نجح", f"تم إضافة المنتج بنجاح\nرقم المنتج: {product_id}")
                             if close_after_save:
                                 self.accept()
                             else:
@@ -1222,20 +1269,20 @@ class ProductDialog(QDialog):
                                 if self.logger:
                                     self.logger.warning(f"⚠️ فشل إطلاق الإشارات: {e}")
                             
-                            QMessageBox.information(self, "نجح", f"تم إضافة المنتج بنجاح\nرقم المنتج: {product_id}")
+                            self.notify.show_success("نجح", f"تم إضافة المنتج بنجاح\nرقم المنتج: {product_id}")
                             if close_after_save:
                                 self.accept()
                             else:
                                 # مسح النموذج للإضافة الجديدة
                                 self.clear_form()
                         else:
-                            QMessageBox.critical(self, "خطأ", "فشل في إعادة تحميل المنتج المُنشأ")
+                            self.notify.show_error("خطأ", "فشل في إعادة تحميل المنتج المُنشأ")
                     else:
-                        QMessageBox.critical(self, "خطأ", "فشل في إضافة المنتج")
+                        self.notify.show_error("خطأ", "فشل في إضافة المنتج")
                     
         except Exception as e:
             self.logger.error(f"خطأ في حفظ المنتج: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"حدث خطأ أثناء الحفظ: {str(e)}")
+            self.notify.show_error("خطأ", f"حدث خطأ أثناء الحفظ: {str(e)}")
     
     # الدوال الجديدة للميزات المتقدمة
     def select_image(self, event=None):
@@ -1264,11 +1311,11 @@ class ProductDialog(QDialog):
                     self.current_image_path = file_path
                     self.remove_image_btn.setEnabled(True)
                 else:
-                    QMessageBox.warning(self, "تحذير", "فشل في تحميل الصورة")
+                    self.notify.show_warning("تحذير", "فشل في تحميل الصورة")
                     
         except Exception as e:
             self.logger.error(f"خطأ في اختيار الصورة: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في اختيار الصورة:\n{str(e)}")
+            self.notify.show_error("خطأ", f"فشل في اختيار الصورة:\n{str(e)}")
     
     def remove_image(self):
         """حذف صورة المنتج"""
@@ -1391,7 +1438,7 @@ class ProductDialog(QDialog):
         try:
             product_name = self.name_edit.text().strip()
             if not product_name:
-                QMessageBox.information(self, "معلومات", "يرجى إدخال اسم المنتج أولاً")
+                self.notify.show_info("معلومات", "يرجى إدخال اسم المنتج أولاً")
                 return
             
             # البحث في قاعدة البيانات
@@ -1401,13 +1448,12 @@ class ProductDialog(QDialog):
                 # عرض النتائج في رسالة
                 products_list = "\n".join([f"- {p.name} (الباركود: {p.barcode})" 
                                          for p in similar_products[:5]])
-                QMessageBox.information(
-                    self, 
+                self.notify.show_info(
                     "منتجات مشابهة", 
                     f"تم العثور على المنتجات التالية:\n\n{products_list}"
                 )
             else:
-                QMessageBox.information(self, "معلومات", "لم يتم العثور على منتجات مشابهة")
+                self.notify.show_info("معلومات", "لم يتم العثور على منتجات مشابهة")
                 
         except Exception as e:
             self.logger.error(f"خطأ في البحث عن منتجات مشابهة: {str(e)}")
@@ -1420,7 +1466,7 @@ class ProductDialog(QDialog):
             products = self.product_manager.get_all_products()
             
             if not products:
-                QMessageBox.information(self, "معلومات", "لا توجد منتجات في قاعدة البيانات")
+                self.notify.show_info("معلومات", "لا توجد منتجات في قاعدة البيانات")
                 return
             
             # إنشاء قائمة بأسماء المنتجات
@@ -1451,11 +1497,11 @@ class ProductDialog(QDialog):
                 self.cost_price_spin.setValue(float(selected_product.cost_price or 0))
                 self.selling_price_spin.setValue(float(selected_product.selling_price or 0))
                 
-                QMessageBox.information(self, "نجح", "تم نسخ بيانات المنتج بنجاح")
+                self.notify.show_success("نجح", "تم نسخ بيانات المنتج بنجاح")
                 
         except Exception as e:
             self.logger.error(f"خطأ في نسخ المنتج: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في نسخ البيانات:\n{str(e)}")
+            self.notify.show_error("خطأ", f"فشل في نسخ البيانات:\n{str(e)}")
     
     def show_profit_calculator(self):
         """عرض حاسبة هامش الربح"""
@@ -1539,7 +1585,7 @@ class ProductDialog(QDialog):
             
         except Exception as e:
             self.logger.error(f"خطأ في حاسبة الربح: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في فتح الحاسبة:\n{str(e)}")
+            self.notify.show_error("خطأ", f"فشل في فتح الحاسبة:\n{str(e)}")
     
     def clear_form(self):
         """مسح النموذج"""
@@ -1625,13 +1671,34 @@ class ProductDialog(QDialog):
             self.save_and_new_button.setEnabled(enabled)
         self.cancel_button.setEnabled(enabled)
     
-    def closeEvent(self, event):
-        """معالجة إغلاق النافذة"""
+    def showEvent(self, event: QShowEvent):
+        """معالجة حدث العرض مع fade in animation"""
+        super().showEvent(event)
+        # تطبيق fade in animation
+        QTimer.singleShot(50, lambda: self.animation_manager.fade_in(self, duration=300))
+    
+    def closeEvent(self, event: QCloseEvent):
+        """معالجة إغلاق النافذة مع fade out animation"""
         if self.validation_worker and self.validation_worker.isRunning():
             self.validation_worker.terminate()
             self.validation_worker.wait()
         
-        super().closeEvent(event)
+        # تطبيق fade out animation قبل الإغلاق
+        if hasattr(self, 'animation_manager'):
+            # حفظ event للاستخدام لاحقاً
+            self._close_event = event
+            self.animation_manager.fade_out(self, duration=200)
+            QTimer.singleShot(250, self._finalize_close)
+        else:
+            super().closeEvent(event)
+    
+    def _finalize_close(self):
+        """إتمام إغلاق النافذة بعد انتهاء animation"""
+        if hasattr(self, '_close_event'):
+            super().closeEvent(self._close_event)
+            delattr(self, '_close_event')
+        else:
+            self.close()
 
 
 # اختبار النافذة

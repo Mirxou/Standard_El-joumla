@@ -4,9 +4,11 @@ from datetime import date
 import sys
 from pathlib import Path
 
-# إضافة مسار المشروع للاستيراد
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
+import sys
+import os
+from pathlib import Path
+# الوصول إلى جذر المشروع
+project_root = str(Path(__file__).resolve().parents[2])
 from src.models.sale import Sale, SaleItem, SaleStatus, PaymentMethod
 
 class TestSaleItem:
@@ -86,3 +88,7 @@ class TestSale:
         sale.calculate_totals()
         assert sale.status == SaleStatus.PAID
         assert sale.remaining_amount == Decimal("0.00")
+
+
+
+

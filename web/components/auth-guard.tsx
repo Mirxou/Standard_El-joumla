@@ -16,10 +16,14 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">جاري التحميل...</p>
+      <div className="min-h-screen flex items-center justify-center bg-[#0f172a]">
+        <div className="flex flex-col items-center gap-6">
+          <div className="relative w-20 h-20">
+            <div className="absolute inset-0 rounded-full border-4 border-cyan-500/20" />
+            <div className="absolute inset-0 rounded-full border-4 border-cyan-500 border-t-transparent animate-spin" />
+            <div className="absolute inset-4 rounded-full bg-cyan-500/10 blur-md animate-pulse" />
+          </div>
+          <p className="text-cyan-400/80 font-medium tracking-widest text-sm animate-pulse">جاري التحقق من الأمان...</p>
         </div>
       </div>
     )

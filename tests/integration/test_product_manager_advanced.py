@@ -125,3 +125,6 @@ class TestProductManagerAdvanced:
         deleted_product = manager.get_product_by_id(product_id)
         assert deleted_product is None or deleted_product.is_active == False
 
+
+
+

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -10,7 +10,6 @@ import {
   Package,
   ShoppingCart,
   TrendingUp,
-  TrendingDown,
   AlertTriangle,
   DollarSign,
   BarChart3,
@@ -22,17 +21,35 @@ import {
   Settings,
   FolderTree,
   Loader2,
+  RefreshCw,
+  Zap,
+  ArrowUpRight
 } from "lucide-react"
-import { apiClient } from "@/lib/api/client"
 import { API_CONFIG } from "@/lib/config/api"
 import { toast } from "sonner"
-import type { Product, Category } from "@/lib/database/types"
+import type { Category } from "@/lib/database/types"
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+} from "recharts"
+import { motion } from "framer-motion"
+import { dashboardService } from "@/lib/api/services/dashboard"
+import { DashboardHomeSkeleton } from "@/components/ui/loading-skeletons"
+import { getWebSocketClient } from "@/lib/websocket-client"
 
 interface DashboardHomeProps {
   setActiveView?: (view: string) => void
 }
 
-export default function DashboardHome({ setActiveView }: DashboardHomeProps = {}) {
+export default function DashboardHome(props: DashboardHomeProps = {} as DashboardHomeProps) {
+  const { setActiveView } = props
   const [loading, setLoading] = useState(true)
   const [realTimeData, setRealTimeData] = useState({
     totalRevenue: 0,
@@ -41,477 +58,329 @@ export default function DashboardHome({ setActiveView }: DashboardHomeProps = {}
     profitMargin: 0,
     todaySales: 0,
     pendingOrders: 0,
-    expiringItems: 0,
-    activeSuppliers: 0,
   })
-  const [categoryStats, setCategoryStats] = useState<Array<{
-    id: string
-    name_ar: string
-    productCount: number
-    totalStock: number
-    totalValue: number
-    percentage: number
-  }>>([])
-  const [searchQuery, setSearchQuery] = useState("")
+  const [salesChartData, setSalesChartData] = useState<any[]>([])
+  const [liveActivities, setLiveActivities] = useState<any[]>([])
 
-  // جلب البيانات الحقيقية
+  // Initial Data Fetch
   useEffect(() => {
     fetchDashboardData()
-    const interval = setInterval(() => {
-      fetchDashboardData()
-    }, 30000) // تحديث كل 30 ثانية
-
-    return () => clearInterval(interval)
+    
+    // Connect to WebSocket for real-time updates (optional - won't break if fails)
+    let wsClient: any = null
+    try {
+      wsClient = getWebSocketClient('data_updates')
+      
+      wsClient.on('data_update', (message: any) => {
+        if (message.data) {
+          // تحديث البيانات عند استقبال تحديثات من Desktop
+          if (message.data.type === 'sale' || message.data.type === 'product' || message.data.type === 'inventory') {
+            fetchDashboardData()
+            
+            // إضافة نشاط مباشر جديد
+            if (message.data.type === 'sale') {
+              setLiveActivities(prev => [{
+                title: `فاتورة جديدة #${message.data.id || ''}`,
+                time: 'الآن',
+                desc: `+ ${message.data.amount || 0} ر.س`,
+                isAlert: false
+              }, ...prev.slice(0, 4)])
+            } else if (message.data.type === 'inventory' && message.data.low_stock) {
+              setLiveActivities(prev => [{
+                title: `مخزون منخفض: ${message.data.product_name || ''}`,
+                time: 'الآن',
+                desc: `متبقي ${message.data.current_stock || 0} قطعة`,
+                isAlert: true
+              }, ...prev.slice(0, 4)])
+            }
+          }
+        }
+      })
+      
+      // محاولة الاتصال بدون إيقاف التطبيق عند الفشل
+      wsClient.connect().catch((err: any) => {
+        // WebSocket غير متاح - هذا طبيعي إذا كان Backend غير متاح
+        console.info("ℹ️ WebSocket غير متاح - سيتم العمل بدون تحديثات مباشرة")
+      })
+      
+    } catch (err) {
+      // WebSocket غير متاح - هذا طبيعي
+      console.info("ℹ️ WebSocket غير متاح - سيتم العمل بدون تحديثات مباشرة")
+    }
+    
+    return () => {
+      if (wsClient) {
+        try {
+          wsClient.disconnect()
+        } catch (e) {
+          // تجاهل الأخطاء عند الإغلاق
+        }
+      }
+    }
   }, [])
 
-  const handleGlobalSearch = (query: string) => {
-    if (!query.trim()) return
-
-    // البحث في الفئات
-    const categoryMatch = categoryStats.some(cat =>
-      cat.name_ar.toLowerCase().includes(query.toLowerCase())
-    )
-
-    if (categoryMatch || query.length > 2) {
-      // الانتقال لصفحة المنتجات مع البحث
-      setActiveView?.("products")
-      toast.info(`البحث عن: ${query}`)
-    }
-  }
-
-  async function fetchDashboardData() {
+  const fetchDashboardData = async () => {
     try {
       setLoading(true)
+      const [statsData, chartData] = await Promise.all([
+        dashboardService.getStats(),
+        dashboardService.getSalesChartData(7)
+      ])
 
-      // جلب الإحصائيات العامة
-      const statsData = await apiClient.get<any>(API_CONFIG.ENDPOINTS.DASHBOARD.STATS).catch(() => ({}));
+      // تحويل بيانات الرسم البياني من API
+      if (Array.isArray(chartData) && chartData.length > 0) {
+        setSalesChartData(chartData.map((item: any) => ({
+          name: item.date || item.name || '',
+          value: item.value || item.amount || item.total || 0
+        })))
+      } else {
+        setSalesChartData([])
+      }
 
-      // جلب المنتجات (لإحصائيات الفئات)
-      const productsResponse = await apiClient.get<any>(`${API_CONFIG.ENDPOINTS.PRODUCTS}?page_size=100`).catch(() => ({ products: [] }));
-      const products = productsResponse.products || productsResponse.data || (Array.isArray(productsResponse) ? productsResponse : []);
-
-      // جلب الفئات
-      const categories = await apiClient.get<Category[]>(API_CONFIG.ENDPOINTS.CATEGORIES).catch(() => []);
-
-      // حساب إحصائيات الفئات
-      const categoryStatsMap = new Map<string, {
-        name_ar: string
-        productCount: number
-        totalStock: number
-        totalValue: number
-      }>()
-
-      products.forEach((product: any) => {
-        // توحيد category_id إلى number
-        const categoryId = product.category_id ? Number(product.category_id) : 0
-        const categoryName = product.category_name || 'غير مصنف'
-
-        if (!categoryStatsMap.has(categoryId)) {
-          categoryStatsMap.set(categoryId, {
-            name_ar: categoryName,
-            productCount: 0,
-            totalStock: 0,
-            totalValue: 0,
-          })
-        }
-
-        const stats = categoryStatsMap.get(categoryId)!
-        stats.productCount++
-        stats.totalStock += product.current_stock || 0
-        stats.totalValue += (product.current_stock || 0) * (product.cost_price || 0)
-      })
-
-      const totalCategoryValue = Array.from(categoryStatsMap.values()).reduce((sum, cat) => sum + cat.totalValue, 0)
-
-      const categoryStatsArray = Array.from(categoryStatsMap.entries()).map(([id, stats]) => ({
-        id,
-        ...stats,
-        percentage: totalCategoryValue > 0 ? (stats.totalValue / totalCategoryValue) * 100 : 0,
-      })).sort((a, b) => b.totalValue - a.totalValue).slice(0, 5)
-
-      setCategoryStats(categoryStatsArray)
       setRealTimeData({
-        totalRevenue: statsData.total_revenue || 0,
-        totalProducts: statsData.products_count || products.length,
+        totalRevenue: statsData.total_revenue || statsData.total_sales || 0,
+        totalProducts: statsData.products_count || 0,
         lowStockAlerts: statsData.low_stock_count || 0,
         profitMargin: statsData.profit_margin || 0,
         todaySales: statsData.today_sales || 0,
         pendingOrders: statsData.pending_orders || 0,
-        expiringItems: statsData.expiring_items_count || 0,
-        activeSuppliers: statsData.suppliers_count || 0,
       })
-    } catch (error: any) {
-      console.error('[dashboard] Error fetching data:', error)
-      toast.error("فشل تحميل بيانات Dashboard")
+    } catch (e) {
+      console.error("Error fetching dashboard data:", e)
+      setSalesChartData([])
+      setRealTimeData({
+        totalRevenue: 0,
+        totalProducts: 0,
+        lowStockAlerts: 0,
+        profitMargin: 0,
+        todaySales: 0,
+        pendingOrders: 0,
+      })
     } finally {
       setLoading(false)
     }
   }
 
+  const containerAnimations = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1
+      }
+    }
+  }
+
+  const itemAnimations = {
+    hidden: { y: 20, opacity: 0 },
+    show: { y: 0, opacity: 1 }
+  }
+
+  if (loading) {
+    return <DashboardHomeSkeleton />
+  }
+
   return (
-    <div className="space-y-6">
-      {/* شريط البحث المتقدم */}
-      <div className="relative">
-        <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-        <Input
-          placeholder="البحث المتقدم في المنتجات، الفئات، الطلبات..."
-          className="pr-12 h-12 bg-white shadow-sm border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && searchQuery.trim()) {
-              handleGlobalSearch(searchQuery)
-            }
-          }}
-        />
-        {searchQuery && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="absolute left-3 top-1/2 transform -translate-y-1/2"
-            onClick={() => {
-              handleGlobalSearch(searchQuery)
-            }}
-          >
-            بحث
+    <motion.div
+      variants={containerAnimations}
+      initial="hidden"
+      animate="show"
+      className="space-y-8"
+    >
+
+      {/* Title & Actions */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-white mb-2">لوحة القيادة</h1>
+          <p className="text-gray-400">نظرة عامة على أداء مشروعك اليوم.</p>
+        </div>
+        <div className="flex gap-3">
+          <Button variant="outline" className="glass-panel border-white/10 hover:bg-white/5 text-gray-300">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            تحديث
           </Button>
-        )}
+          <Button className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white border-0 shadow-lg shadow-cyan-500/20">
+            <Zap className="w-4 h-4 mr-2" />
+            تقرير ذكي
+          </Button>
+        </div>
       </div>
 
-      {/* مؤشرات الأداء الرئيسية */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className="hover:shadow-xl transition-all duration-300 border-0 shadow-lg bg-gradient-to-br from-green-50 to-green-100">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-green-700 font-medium">إجمالي الإيرادات</p>
-                <p className="text-3xl font-bold text-green-800">{realTimeData.totalRevenue.toLocaleString('en-US')} ر.س</p>
-              </div>
-              <div className="bg-green-200 p-3 rounded-xl">
-                <DollarSign className="h-6 w-6 text-green-700" />
-              </div>
-            </div>
-            <div className="flex items-center mt-3">
-              <TrendingUp className="h-4 w-4 text-green-600 ml-1" />
-              <span className="text-sm text-green-600 font-medium">
-                {realTimeData.totalProducts > 0 ? `${realTimeData.totalProducts} منتج` : "لا توجد منتجات"}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="hover:shadow-xl transition-all duration-300 border-0 shadow-lg bg-gradient-to-br from-blue-50 to-blue-100">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-blue-700 font-medium">إجمالي المنتجات</p>
-                <p className="text-3xl font-bold text-blue-800">{realTimeData.totalProducts.toLocaleString('en-US')}</p>
-              </div>
-              <div className="bg-blue-200 p-3 rounded-xl">
-                <Package className="h-6 w-6 text-blue-700" />
-              </div>
-            </div>
-            <div className="flex items-center mt-3">
-              <TrendingUp className="h-4 w-4 text-blue-600 ml-1" />
-              <span className="text-sm text-blue-600 font-medium">
-                {realTimeData.lowStockAlerts > 0 ? `${realTimeData.lowStockAlerts} تنبيه` : "مخزون صحي"}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="hover:shadow-xl transition-all duration-300 border-0 shadow-lg bg-gradient-to-br from-orange-50 to-orange-100">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-orange-700 font-medium">تنبيهات المخزون</p>
-                <p className="text-3xl font-bold text-orange-800">{realTimeData.lowStockAlerts}</p>
-              </div>
-              <div className="bg-orange-200 p-3 rounded-xl">
-                <AlertTriangle className="h-6 w-6 text-orange-700" />
-              </div>
-            </div>
-            <div className="flex items-center mt-3">
-              <TrendingDown className="h-4 w-4 text-orange-600 ml-1" />
-              <span className="text-sm text-orange-600 font-medium">يتطلب إجراء فوري</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="hover:shadow-xl transition-all duration-300 border-0 shadow-lg bg-gradient-to-br from-purple-50 to-purple-100">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-purple-700 font-medium">هامش الربح</p>
-                <p className="text-3xl font-bold text-purple-800">{realTimeData.profitMargin.toFixed(1)}%</p>
-              </div>
-              <div className="bg-purple-200 p-3 rounded-xl">
-                <BarChart3 className="h-6 w-6 text-purple-700" />
-              </div>
-            </div>
-            <div className="flex items-center mt-3">
-              <TrendingUp className="h-4 w-4 text-purple-600 ml-1" />
-              <span className="text-sm text-purple-600 font-medium">+2.1% تحسن</span>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
+        <StatsCard
+          title="إجمالي الإيرادات"
+          value={`${realTimeData.totalRevenue.toLocaleString()} ر.س`}
+          trend="+12.5%"
+          icon={DollarSign}
+          color="cyan"
+          delay={0.1}
+        />
+        <StatsCard
+          title="المنتجات النشطة"
+          value={realTimeData.totalProducts.toString()}
+          trend="+4"
+          icon={Package}
+          color="purple"
+          delay={0.2}
+        />
+        <StatsCard
+          title="تنبيهات المخزون"
+          value={realTimeData.lowStockAlerts.toString()}
+          trend="تحذير"
+          isAlert
+          icon={AlertTriangle}
+          color="orange"
+          delay={0.3}
+        />
+        <StatsCard
+          title="مؤشر الأداء"
+          value="98.2%"
+          trend="+1.2%"
+          icon={TrendingUp}
+          color="green"
+          delay={0.4}
+        />
       </div>
 
-      {/* الإجراءات السريعة */}
-      <Card className="shadow-lg border-0">
-        <CardHeader>
-          <CardTitle className="text-xl flex items-center gap-2">
-            <Settings className="h-5 w-5 text-blue-600" />
-            الإجراءات السريعة
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            <Button
-              variant="outline"
-              className="h-20 flex-col gap-2 bg-gradient-to-br from-blue-50 to-blue-100 hover:from-blue-100 hover:to-blue-200 border-blue-200"
-              onClick={() => setActiveView?.("products")}
-              type="button"
-            >
-              <Package className="h-6 w-6 text-blue-600" />
-              <span className="text-sm font-medium">إضافة منتج</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-20 flex-col gap-2 bg-gradient-to-br from-purple-50 to-purple-100 hover:from-purple-100 hover:to-purple-200 border-purple-200"
-              onClick={() => setActiveView?.("categories")}
-              type="button"
-            >
-              <FolderTree className="h-6 w-6 text-purple-600" />
-              <span className="text-sm font-medium">إدارة الفئات</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-20 flex-col gap-2 bg-gradient-to-br from-green-50 to-green-100 hover:from-green-100 hover:to-green-200 border-green-200"
-              onClick={() => setActiveView?.("sales")}
-            >
-              <ShoppingCart className="h-6 w-6 text-green-600" />
-              <span className="text-sm font-medium">فاتورة جديدة</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-20 flex-col gap-2 bg-gradient-to-br from-purple-50 to-purple-100 hover:from-purple-100 hover:to-purple-200 border-purple-200"
-              onClick={() => setActiveView?.("reports")}
-            >
-              <BarChart3 className="h-6 w-6 text-purple-600" />
-              <span className="text-sm font-medium">تقارير الأرباح</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-20 flex-col gap-2 bg-gradient-to-br from-orange-50 to-orange-100 hover:from-orange-100 hover:to-orange-200 border-orange-200"
-              onClick={() => setActiveView?.("warehouses")}
-            >
-              <Warehouse className="h-6 w-6 text-orange-600" />
-              <span className="text-sm font-medium">إدارة المستودعات</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-20 flex-col gap-2 bg-gradient-to-br from-red-50 to-red-100 hover:from-red-100 hover:to-red-200 border-red-200"
-              onClick={() => setActiveView?.("expiry")}
-            >
-              <Calendar className="h-6 w-6 text-red-600" />
-              <span className="text-sm font-medium">تتبع الصلاحية</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-20 flex-col gap-2 bg-gradient-to-br from-indigo-50 to-indigo-100 hover:from-indigo-100 hover:to-indigo-200 border-indigo-200"
-              onClick={() => setActiveView?.("suppliers")}
-            >
-              <Users className="h-6 w-6 text-indigo-600" />
-              <span className="text-sm font-medium">إدارة الموردين</span>
-            </Button>
+      {/* Main Content Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
+
+        {/* Sales Chart (2 Cols) */}
+        <motion.div variants={itemAnimations} className="lg:col-span-2 glass-panel p-3 sm:p-4 lg:p-6 rounded-xl sm:rounded-2xl lg:rounded-3xl relative overflow-hidden transition-all">
+          <div className="absolute top-0 right-0 p-6 opacity-10 pointer-events-none">
+            <BarChart3 className="w-32 h-32 text-cyan-500" />
           </div>
-        </CardContent>
-      </Card>
 
-      {/* الأنشطة المباشرة والمؤشرات */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* الأنشطة المباشرة */}
-        <Card className="shadow-lg border-0">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Bell className="h-5 w-5 text-blue-600" />
-                الأنشطة المباشرة
-              </CardTitle>
-              <Badge className="bg-green-100 text-green-800">مباشر</Badge>
+          <div className="flex items-center justify-between mb-8 relative z-10">
+            <h3 className="text-xl font-bold text-white">تحليل المبيعات</h3>
+            <div className="flex gap-2">
+              <Badge variant="outline" className="border-cyan-500/30 text-cyan-400 bg-cyan-500/10 cursor-pointer">اسبوعي</Badge>
+              <Badge variant="outline" className="border-white/10 text-gray-400 hover:bg-white/5 cursor-pointer">شهري</Badge>
             </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 bg-gradient-to-r from-green-50 to-green-100 rounded-xl border border-green-200">
-                <div className="flex items-center gap-3">
-                  <div className="bg-green-200 p-2 rounded-lg">
-                    <Package className="h-5 w-5 text-green-700" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-green-900">وصول مخزون جديد</p>
-                    <p className="text-sm text-green-700">إلكترونيات - 50 قطعة</p>
-                  </div>
-                </div>
-                <span className="text-xs text-green-600 font-medium">الآن</span>
-              </div>
+          </div>
 
-              <div className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl border border-blue-200">
-                <div className="flex items-center gap-3">
-                  <div className="bg-blue-200 p-2 rounded-lg">
-                    <DollarSign className="h-5 w-5 text-blue-700" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-blue-900">عملية بيع مكتملة</p>
-                    <p className="text-sm text-blue-700">طلب #1248 - 450 ر.س</p>
-                  </div>
-                </div>
-                <span className="text-xs text-blue-600 font-medium">منذ دقيقة</span>
-              </div>
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={salesChartData}>
+                <defs>
+                  <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#0f172a', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '12px' }}
+                  itemStyle={{ color: '#fff' }}
+                />
+                <XAxis dataKey="name" stroke="#64748b" tick={{ fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <YAxis stroke="#64748b" tick={{ fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.05)" />
+                <Area type="monotone" dataKey="value" stroke="#06b6d4" strokeWidth={3} fillOpacity={1} fill="url(#colorValue)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </motion.div>
 
-              <div className="flex items-center justify-between p-4 bg-gradient-to-r from-orange-50 to-orange-100 rounded-xl border border-orange-200">
-                <div className="flex items-center gap-3">
-                  <div className="bg-orange-200 p-2 rounded-lg">
-                    <AlertTriangle className="h-5 w-5 text-orange-700" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-orange-900">تنبيه مخزون منخفض</p>
-                    <p className="text-sm text-orange-700">سماعات بلوتوث - 3 متبقية</p>
-                  </div>
-                </div>
-                <span className="text-xs text-orange-600 font-medium">منذ 3 دقائق</span>
-              </div>
+        {/* Quick Actions & Recent Activity (1 Col) */}
+        <motion.div variants={itemAnimations} className="space-y-6">
+
+          {/* Quick Actions */}
+          <div className="glass-panel p-3 sm:p-4 lg:p-6 rounded-xl sm:rounded-2xl lg:rounded-3xl transition-all">
+            <h3 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">وصول سريع</h3>
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:gap-4">
+              <ActionButton icon={ShoppingCart} label="بيع جديد" color="bg-green-500" onClick={() => setActiveView?.("sales")} />
+              <ActionButton icon={Package} label="إضافة منتج" color="bg-blue-500" onClick={() => setActiveView?.("products")} />
+              <ActionButton icon={Users} label="موردين" color="bg-purple-500" onClick={() => setActiveView?.("suppliers")} />
+              <ActionButton icon={Settings} label="إعدادات" color="bg-gray-600" onClick={() => setActiveView?.("settings")} />
             </div>
-          </CardContent>
-        </Card>
+          </div>
 
-        {/* مؤشرات الأداء */}
-        <Card className="shadow-lg border-0">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <BarChart3 className="h-5 w-5 text-purple-600" />
-              مؤشرات الأداء
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-6">
-              <div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="font-medium">كفاءة المخزون</span>
-                  <span className="font-bold text-green-600">92%</span>
-                </div>
-                <Progress value={92} className="h-3 bg-gray-200" />
-                <p className="text-xs text-gray-600 mt-1">معدل دوران المخزون ممتاز</p>
-              </div>
-
-              <div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="font-medium">رضا العملاء</span>
-                  <span className="font-bold text-blue-600">88%</span>
-                </div>
-                <Progress value={88} className="h-3 bg-gray-200" />
-                <p className="text-xs text-gray-600 mt-1">تقييم ممتاز من العملاء</p>
-              </div>
-
-              <div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="font-medium">كفاءة الموردين</span>
-                  <span className="font-bold text-purple-600">85%</span>
-                </div>
-                <Progress value={85} className="h-3 bg-gray-200" />
-                <p className="text-xs text-gray-600 mt-1">أداء جيد للموردين</p>
-              </div>
-
-              <div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="font-medium">نمو المبيعات</span>
-                  <span className="font-bold text-orange-600">76%</span>
-                </div>
-                <Progress value={76} className="h-3 bg-gray-200" />
-                <p className="text-xs text-gray-600 mt-1">نمو مستمر في المبيعات</p>
-              </div>
+          {/* Live Activity */}
+          <div className="glass-panel p-3 sm:p-4 lg:p-6 rounded-xl sm:rounded-2xl lg:rounded-3xl transition-all">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
+              <h3 className="text-base sm:text-lg font-bold text-white">النشاط المباشر</h3>
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
             </div>
-          </CardContent>
-        </Card>
+            <div className="space-y-2 sm:space-y-3 lg:space-y-4">
+              {liveActivities.length === 0 ? (
+                <div className="text-center text-gray-400 py-8 text-sm">لا يوجد نشاط مباشر</div>
+              ) : (
+                liveActivities.map((activity, index) => (
+                  <ActivityItem 
+                    key={index}
+                    title={activity.title} 
+                    time={activity.time} 
+                    desc={activity.desc} 
+                    isAlert={activity.isAlert} 
+                  />
+                ))
+              )}
+            </div>
+          </div>
+
+        </motion.div>
       </div>
 
-      {/* أداء الفئات */}
-      <Card className="shadow-lg border-0">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-xl flex items-center gap-2">
-              <FolderTree className="h-5 w-5 text-blue-600" />
-              أداء الفئات
-            </CardTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setActiveView?.("categories")}
-              type="button"
-            >
-              عرض الكل
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-            </div>
-          ) : categoryStats.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <FolderTree className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-              <p>لا توجد فئات بعد</p>
-              <Button
-                variant="outline"
-                className="mt-4"
-                onClick={() => setActiveView?.("categories")}
-                type="button"
-              >
-                إضافة فئة جديدة
-              </Button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-              {categoryStats.map((category, index) => {
-                const colors = [
-                  "bg-green-500",
-                  "bg-blue-500",
-                  "bg-purple-500",
-                  "bg-orange-500",
-                  "bg-pink-500",
-                ]
-                const color = colors[index % colors.length]
+    </motion.div>
+  )
+}
 
-                return (
-                  <div key={category.id} className="p-4 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border hover:shadow-md transition-shadow cursor-pointer" onClick={() => setActiveView?.("products")}>
-                    <div className="text-center mb-3">
-                      <h3 className="font-semibold text-gray-900 text-sm">{category.name_ar}</h3>
-                      <p className="text-xs text-gray-600 mt-1">
-                        {category.productCount} منتج
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {category.totalStock.toLocaleString('en-US')} وحدة
-                      </p>
-                    </div>
-                    <div className="relative">
-                      <Progress value={category.percentage} className="h-3" />
-                      <div className="text-center mt-2">
-                        <span className="text-sm font-bold text-gray-700">{category.percentage.toFixed(1)}%</span>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1 text-center">
-                        {category.totalValue.toLocaleString('en-US')} ر.س
-                      </p>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+function StatsCard({ title, value, trend, icon: Icon, color, delay, isAlert }: any) {
+  const colors: any = {
+    cyan: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20",
+    purple: "text-purple-400 bg-purple-500/10 border-purple-500/20",
+    orange: "text-orange-400 bg-orange-500/10 border-orange-500/20",
+    green: "text-green-400 bg-green-500/10 border-green-500/20",
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay }}
+      className={`glass-panel p-4 sm:p-5 lg:p-6 rounded-xl sm:rounded-2xl lg:rounded-3xl relative overflow-hidden group hover:-translate-y-1 transition-all duration-300`}
+    >
+      <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center mb-3 sm:mb-4 ${colors[color]} group-hover:scale-110 transition-transform`}>
+        <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
+      </div>
+      <div>
+        <p className="text-gray-400 text-xs sm:text-sm font-medium mb-1">{title}</p>
+        <h3 className="text-xl sm:text-2xl font-bold text-white">{value}</h3>
+      </div>
+      <div className={`absolute top-3 left-3 sm:top-4 sm:left-4 lg:top-6 lg:left-6 text-xs sm:text-sm font-bold flex items-center gap-1 ${isAlert ? 'text-red-400' : 'text-green-400'}`}>
+        <span>{trend}</span>
+        {!isAlert && <ArrowUpRight className="w-3 h-3 sm:w-4 sm:h-4" />}
+      </div>
+    </motion.div>
+  )
+}
+
+function ActionButton({ icon: Icon, label, color, onClick }: any) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex flex-col items-center justify-center p-2 sm:p-3 lg:p-4 rounded-xl sm:rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all group"
+    >
+      <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white mb-1 sm:mb-2 ${color} shadow-lg group-hover:scale-110 transition-transform`}>
+        <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
+      </div>
+      <span className="text-[10px] sm:text-xs font-medium text-gray-300 group-hover:text-white text-center">{label}</span>
+    </button>
+  )
+}
+
+function ActivityItem({ title, time, desc, isAlert }: any) {
+  return (
+    <div className="flex items-start gap-2 sm:gap-3 p-2 sm:p-3 rounded-lg sm:rounded-xl hover:bg-white/5 transition-colors">
+      <div className={`w-2 h-2 mt-2 rounded-full ${isAlert ? 'bg-red-500' : 'bg-cyan-500'}`} />
+      <div className="flex-1">
+        <div className="flex justify-between items-start">
+          <h4 className="text-sm font-medium text-white">{title}</h4>
+          <span className="text-[10px] text-gray-500">{time}</span>
+        </div>
+        <p className="text-xs text-gray-400 mt-1">{desc}</p>
+      </div>
     </div>
   )
 }

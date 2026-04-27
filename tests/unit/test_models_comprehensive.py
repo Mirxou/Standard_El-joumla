@@ -11,9 +11,10 @@ from datetime import date, datetime
 from unittest.mock import Mock, patch
 
 import sys
+import os
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
+# الوصول إلى جذر المشروع
+project_root = str(Path(__file__).resolve().parents[2])
 from src.models.product import Product, ProductManager
 from src.models.sale import Sale, SaleItem, SaleStatus, PaymentMethod, SaleManager
 from src.models.purchase import Purchase, PurchaseItem, PurchaseManager
@@ -341,4 +342,8 @@ class TestModelsValidation:
         """اختبار التحقق من مبلغ الدفعة"""
         payment = Payment(amount=Decimal('0.00'))
         assert payment.amount == Decimal('0.00')
+
+
+
+
 

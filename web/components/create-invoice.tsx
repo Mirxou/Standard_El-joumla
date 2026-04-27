@@ -136,28 +136,33 @@ export default function CreateInvoice({ invoice, onSaved }: CreateInvoiceProps) 
       if (isEditMode && invoice) {
         // تحديث فاتورة موجودة
         result = await updateInvoice(invoice.id, invoiceData)
-        if (result) toast.success("تم تحديث الفاتورة بنجاح!")
+        if (result) {
+          toast.success("تم تحديث الفاتورة بنجاح!")
+        } else {
+          throw new Error("فشل تحديث الفاتورة - استجابة فارغة من الخادم")
+        }
       } else {
         // إنشاء فاتورة جديدة
         result = await saveInvoice(invoiceData)
-        if (result) toast.success("تم إنشاء الفاتورة بنجاح!")
-      }
-
-      if (result) {
-        // إعادة تعيين النموذج
-        resetForm()
-        setOpen(false)
-
-        // إعلام المكون الأب بالتحديث
-        if (onSaved) {
-          onSaved()
+        if (result) {
+          toast.success("تم إنشاء الفاتورة بنجاح!")
+        } else {
+          throw new Error("فشل إنشاء الفاتورة - استجابة فارغة من الخادم")
         }
-      } else {
-        toast.error("فشل حفظ الفاتورة")
       }
-    } catch (error) {
+
+      // إعادة تعيين النموذج
+      resetForm()
+      setOpen(false)
+
+      // إعلام المكون الأب بالتحديث
+      if (onSaved) {
+        onSaved()
+      }
+    } catch (error: any) {
       console.error("Error saving invoice:", error)
-      toast.error("حدث خطأ أثناء حفظ الفاتورة")
+      const errorMessage = error?.message || "حدث خطأ أثناء حفظ الفاتورة"
+      toast.error(errorMessage)
     } finally {
       setSaving(false)
     }

@@ -112,3 +112,6 @@ class TestCustomerManager:
         all_customers = manager.get_all_customers()
         assert len(all_customers) >= 3
 
+
+
+

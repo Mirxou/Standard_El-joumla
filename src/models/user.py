@@ -14,8 +14,6 @@ import secrets
 import sys
 from pathlib import Path
 
-# إضافة مسار src
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 class UserRole(Enum):
     """أدوار المستخدمين"""
@@ -571,7 +569,7 @@ class UserManager:
                 is_active=True
             )
             
-            admin_id = self.create_user(admin, "admin123")
+            admin_id = self.create_user(admin, "123")
             if admin_id:
                 if self.logger:
                     self.logger.info("تم إنشاء المدير الافتراضي")

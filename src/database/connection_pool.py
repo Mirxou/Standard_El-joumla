@@ -1,18 +1,22 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-خدمة Connection Pooling
-إدارة اتصالات قاعدة البيانات بكفاءة
-"""
-
+# ... (Header remains)
 import sqlite3
 import threading
 import time
-from typing import Optional, Callable, Any, Dict
+import os
+from typing import Optional, Callable, Any, Dict, Union
 from queue import Queue, Empty, Full
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from src.utils.logger import setup_logger
+
+# Optional import for psycopg2
+try:
+    import psycopg2
+    from psycopg2 import pool as pg_pool
+    HAS_POSTGRES = True
+except ImportError:
+    HAS_POSTGRES = False
 
 
 @dataclass
@@ -20,29 +24,31 @@ class PoolConfig:
     """تكوين Connection Pool"""
     
     # حجم Pool (موسّع للتعامل مع 200K+ منتج)
-    pool_size: int = 15  # عدد الاتصالات الافتراضي (زيادة من 10)
-    max_overflow: int = 30  # أقصى عدد اتصالات إضافية (زيادة من 20)
+    pool_size: int = 15
+    max_overflow: int = 30
     
     # المهلات الزمنية
-    timeout: float = 60.0  # مهلة انتظار اتصال (زيادة من 30 إلى 60 ثانية)
-    recycle: int = 3600  # إعادة تدوير الاتصال بعد ساعة
+    timeout: float = 60.0
+    recycle: int = 3600
     
     # إعدادات SQLite
     check_same_thread: bool = False
     isolation_level: Optional[str] = None  # None = autocommit
     
+    # إعدادات PostgreSQL
+    db_type: str = "sqlite"  # 'sqlite' or 'postgres'
+    postgres_config: Optional[Dict[str, Any]] = None
+    
     # الصيانة
     enable_health_check: bool = True
-    health_check_interval: int = 300  # 5 دقائق
+    health_check_interval: int = 300
 
 
 class PooledConnection:
     """
-    اتصال في Pool
-    يحتوي على الاتصال الفعلي ومعلومات الحالة
+    اتصال في Pool (SQLite only wrapper)
     """
-    
-    def __init__(self, connection: sqlite3.Connection, pool: 'ConnectionPool'):
+    def __init__(self, connection: Any, pool: 'ConnectionPool'):
         self.connection = connection
         self.pool = pool
         self.created_at = time.time()
@@ -51,22 +57,18 @@ class PooledConnection:
         self.uses = 0
     
     def is_expired(self, recycle_time: int) -> bool:
-        """التحقق من انتهاء صلاحية الاتصال"""
         age = time.time() - self.created_at
         return age > recycle_time
     
     def mark_used(self) -> None:
-        """تعليم الاتصال كمستخدم"""
         self.in_use = True
         self.last_used = time.time()
         self.uses += 1
     
     def mark_returned(self) -> None:
-        """تعليم الاتصال كمُعاد"""
         self.in_use = False
     
     def is_healthy(self) -> bool:
-        """التحقق من سلامة الاتصال"""
         try:
             cursor = self.connection.cursor()
             cursor.execute("SELECT 1")
@@ -76,7 +78,6 @@ class PooledConnection:
             return False
     
     def close(self) -> None:
-        """إغلاق الاتصال"""
         try:
             self.connection.close()
         except Exception:
@@ -85,15 +86,7 @@ class PooledConnection:
 
 class ConnectionPool:
     """
-    Connection Pool لـ SQLite
-    
-    المزايا:
-    - Pool بحجم قابل للتكوين
-    - دعم Overflow (اتصالات إضافية مؤقتة)
-    - إعادة تدوير الاتصالات القديمة
-    - فحص سلامة الاتصالات
-    - Thread-safe
-    - إحصائيات الاستخدام
+    Connection Pool يدعم SQLite و PostgreSQL
     """
     
     def __init__(
@@ -101,28 +94,14 @@ class ConnectionPool:
         database_path: str,
         config: Optional[PoolConfig] = None
     ):
-        """
-        تهيئة Connection Pool
-        
-        Args:
-            database_path: مسار قاعدة البيانات
-            config: تكوين Pool
-        """
         self.database_path = database_path
         self.config = config or PoolConfig()
         
-        # Queue للاتصالات المتاحة
-        self.pool: Queue[PooledConnection] = Queue(maxsize=self.config.pool_size)
+        # تهيئة logger
+        self.logger = setup_logger(__name__)
         
-        # جميع الاتصالات (للتتبع)
-        self.all_connections: list[PooledConnection] = []
-        self.overflow_connections: list[PooledConnection] = []
-        
-        # قفل للعمليات الحساسة
-        self.lock = threading.RLock()
-        
-        # حالة Pool
         self.is_closed = False
+        self.lock = threading.RLock()
         
         # إحصائيات
         self.stats = {
@@ -135,25 +114,52 @@ class ConnectionPool:
             'health_checks': 0,
             'recycled': 0
         }
-        
-        # إنشاء الاتصالات الأولية
-        self._initialize_pool()
-        
-        # بدء thread للصيانة
-        if self.config.enable_health_check:
-            self._start_maintenance_thread()
-    
-    def _initialize_pool(self) -> None:
-        """إنشاء الاتصالات الأولية"""
+
+        # PostgreSQL Pool
+        self.pg_connection_pool = None
+
+        # SQLite Pool components
+        self.pool: Queue[PooledConnection] = Queue(maxsize=self.config.pool_size)
+        self.all_connections: list[PooledConnection] = []
+        self.overflow_connections: list[PooledConnection] = []
+
+        if self.config.db_type == 'postgres':
+            if not HAS_POSTGRES:
+                raise ImportError("psycopg2 is required for PostgreSQL support but not installed.")
+            self._initialize_postgres_pool()
+        else:
+            # SQLite initialization
+            self._initialize_sqlite_pool()
+            
+            # Start maintenance thread only for SQLite manual pool
+            if self.config.enable_health_check:
+                self._start_maintenance_thread()
+
+    def _initialize_postgres_pool(self):
+        """تهيئة pool للـ PostgreSQL"""
+        try:
+            pg_conf = self.config.postgres_config or {}
+            # Use ThreadedConnectionPool
+            self.pg_connection_pool = pg_pool.ThreadedConnectionPool(
+                minconn=1,
+                maxconn=self.config.pool_size,
+                **pg_conf
+            )
+            self.logger.info("تم تهيئة PostgreSQL Connection Pool بنجاح")
+        except Exception as e:
+            self.logger.error(f"فشل تهيئة PostgreSQL Pool: {e}")
+            raise
+
+    def _initialize_sqlite_pool(self) -> None:
+        """إنشاء الاتصالات الأولية لـ SQLite"""
         for _ in range(self.config.pool_size):
-            conn = self._create_connection()
+            conn = self._create_sqlite_connection()
             if conn:
                 self.pool.put(conn)
-    
-    def _create_connection(self) -> Optional[PooledConnection]:
-        """إنشاء اتصال جديد"""
+
+    def _create_sqlite_connection(self) -> Optional[PooledConnection]:
+        """إنشاء اتصال SQLite جديد"""
         try:
-            # إنشاء اتصال SQLite
             connection = sqlite3.connect(
                 self.database_path,
                 check_same_thread=self.config.check_same_thread,
@@ -161,17 +167,14 @@ class ConnectionPool:
                 timeout=self.config.timeout
             )
             
-            # إعدادات أداء وموثوقية
             connection.execute("PRAGMA foreign_keys = ON")
             connection.execute("PRAGMA journal_mode=WAL")
             connection.execute("PRAGMA synchronous=NORMAL")
             connection.execute("PRAGMA cache_size=10000")
             connection.execute("PRAGMA temp_store=MEMORY")
             
-            # Row factory للنتائج كـ dict
             connection.row_factory = sqlite3.Row
             
-            # إنشاء PooledConnection
             pooled = PooledConnection(connection, self)
             
             with self.lock:
@@ -181,102 +184,112 @@ class ConnectionPool:
             return pooled
             
         except Exception as e:
-            print(f"❌ فشل إنشاء اتصال: {e}")
+            self.logger.error(f"فشل إنشاء اتصال SQLite: {e}", exc_info=True)
+            try:
+                if 'connection' in locals():
+                    connection.close()
+            except Exception:
+                pass
             return None
-    
+
     def _create_overflow_connection(self) -> Optional[PooledConnection]:
-        """إنشاء اتصال overflow مؤقت"""
+        """إنشاء اتصال overflow مؤقت (SQLite only)"""
+        if self.config.db_type == 'postgres':
+             return None # Postgres pool handles overflow internally (kinda) or blocks
+             
         with self.lock:
-            # التحقق من عدم تجاوز الحد الأقصى
             current_overflow = len(self.overflow_connections)
             if current_overflow >= self.config.max_overflow:
                 return None
             
-            conn = self._create_connection()
+            conn = self._create_sqlite_connection()
             if conn:
                 self.overflow_connections.append(conn)
                 self.stats['overflow_created'] += 1
             
             return conn
-    
+
     @contextmanager
     def get_connection(self):
         """
-        الحصول على اتصال من Pool
-        
-        يُستخدم مع with statement لضمان الإرجاع:
-        
-        Example:
-            >>> with pool.get_connection() as conn:
-            ...     cursor = conn.cursor()
-            ...     cursor.execute("SELECT * FROM users")
-        
-        Yields:
-            sqlite3.Connection
+        الحصول على اتصال من Pool (يدعم SQLite و PostgreSQL)
         """
         if self.is_closed:
             raise RuntimeError("Connection Pool مُغلق")
-        
-        pooled_conn = None
-        is_overflow = False
-        
-        try:
-            # محاولة الحصول من Pool
+
+        if self.config.db_type == 'postgres':
+             # Postgres Logic
+             if not self.pg_connection_pool:
+                 raise RuntimeError("PostgreSQL Pool not initialized")
+             
+             conn = None
+             try:
+                 conn = self.pg_connection_pool.getconn()
+                 # Ensure autocommit is on by default to match SQLite behavior often expected? 
+                 # Or keep default. Psycopg2 default is autocommit=False (transactional).
+                 # SQLite with isolation_level=None is autocommit.
+                 # We'll assume the user manages transactions or expects auto-commit for reads.
+                 # But let's check config.
+                 if conn:
+                     self.stats['checkouts'] += 1
+                     yield conn
+             except Exception as e:
+                 self.logger.error(f"Error getting PG connection: {e}")
+                 raise
+             finally:
+                 if conn:
+                     self.pg_connection_pool.putconn(conn)
+                     self.stats['checkins'] += 1
+        else:
+            # SQLite Logic
+            pooled_conn = None
+            is_overflow = False
+            
             try:
-                pooled_conn = self.pool.get(timeout=self.config.timeout)
-            except Empty:
-                # محاولة إنشاء overflow
-                pooled_conn = self._create_overflow_connection()
-                is_overflow = True
+                try:
+                    pooled_conn = self.pool.get(timeout=self.config.timeout)
+                except Empty:
+                    pooled_conn = self._create_overflow_connection()
+                    is_overflow = True
+                    
+                    if pooled_conn is None:
+                        self.stats['timeouts'] += 1
+                        raise TimeoutError(f"فشل الحصول على اتصال خلال {self.config.timeout} ثانية")
                 
-                if pooled_conn is None:
-                    self.stats['timeouts'] += 1
-                    raise TimeoutError(
-                        f"فشل الحصول على اتصال خلال {self.config.timeout} ثانية"
-                    )
-            
-            # التحقق من الصلاحية وإعادة التدوير إذا لزم الأمر
-            if pooled_conn.is_expired(self.config.recycle):
-                pooled_conn.close()
-                pooled_conn = self._create_connection()
-                self.stats['recycled'] += 1
-            
-            # التحقق من السلامة
-            if self.config.enable_health_check:
-                if not pooled_conn.is_healthy():
+                if pooled_conn.is_expired(self.config.recycle):
                     pooled_conn.close()
-                    pooled_conn = self._create_connection()
-                self.stats['health_checks'] += 1
-            
-            # تعليم كمستخدم
-            pooled_conn.mark_used()
-            self.stats['checkouts'] += 1
-            
-            # إعطاء الاتصال الفعلي
-            yield pooled_conn.connection
-            
-        finally:
-            # إرجاع الاتصال
-            if pooled_conn:
-                pooled_conn.mark_returned()
+                    pooled_conn = self._create_sqlite_connection()
+                    self.stats['recycled'] += 1
                 
-                if is_overflow:
-                    # إغلاق overflow connections
-                    pooled_conn.close()
-                    with self.lock:
-                        if pooled_conn in self.overflow_connections:
-                            self.overflow_connections.remove(pooled_conn)
-                        if pooled_conn in self.all_connections:
-                            self.all_connections.remove(pooled_conn)
-                else:
-                    # إرجاع إلى Pool
-                    try:
-                        self.pool.put(pooled_conn, block=False)
-                        self.stats['checkins'] += 1
-                    except Full:
-                        # لا ينبغي أن يحدث
+                if self.config.enable_health_check:
+                    if not pooled_conn.is_healthy():
                         pooled_conn.close()
-    
+                        pooled_conn = self._create_sqlite_connection()
+                    self.stats['health_checks'] += 1
+                
+                pooled_conn.mark_used()
+                self.stats['checkouts'] += 1
+                
+                yield pooled_conn.connection
+                
+            finally:
+                if pooled_conn:
+                    pooled_conn.mark_returned()
+                    
+                    if is_overflow:
+                        pooled_conn.close()
+                        with self.lock:
+                            if pooled_conn in self.overflow_connections:
+                                self.overflow_connections.remove(pooled_conn)
+                            if pooled_conn in self.all_connections:
+                                self.all_connections.remove(pooled_conn)
+                    else:
+                        try:
+                            self.pool.put(pooled_conn, block=False)
+                            self.stats['checkins'] += 1
+                        except Full:
+                            pooled_conn.close()
+
     def execute(
         self,
         query: str,
@@ -284,21 +297,14 @@ class ConnectionPool:
         fetch_one: bool = False,
         fetch_all: bool = True
     ) -> Any:
-        """
-        تنفيذ استعلام مع إدارة تلقائية للاتصال
-        
-        Args:
-            query: الاستعلام
-            params: المعاملات
-            fetch_one: إرجاع صف واحد
-            fetch_all: إرجاع جميع الصفوف
-            
-        Returns:
-            النتيجة أو None
-        """
         with self.get_connection() as conn:
+            # Handle placeholder difference
+            final_query = query
+            if self.config.db_type == 'postgres':
+                final_query = query.replace('?', '%s')
+            
             cursor = conn.cursor()
-            cursor.execute(query, params)
+            cursor.execute(final_query, params)
             
             if fetch_one:
                 return cursor.fetchone()
@@ -306,34 +312,26 @@ class ConnectionPool:
                 return cursor.fetchall()
             else:
                 conn.commit()
+                if self.config.db_type == 'postgres':
+                    # No lastrowid in PG by default without RETURNING
+                    return 0
                 return cursor.lastrowid
-    
+
     def execute_many(
         self,
         query: str,
         params_list: list[tuple]
     ) -> None:
-        """
-        تنفيذ استعلام متعدد (batch insert/update)
-        
-        Args:
-            query: الاستعلام
-            params_list: قائمة المعاملات
-        """
         with self.get_connection() as conn:
+            final_query = query
+            if self.config.db_type == 'postgres':
+                final_query = query.replace('?', '%s')
+
             cursor = conn.cursor()
-            cursor.executemany(query, params_list)
+            cursor.executemany(final_query, params_list)
             conn.commit()
-    
+
     def transaction(self):
-        """
-        سياق لـ Transaction
-        
-        Example:
-            >>> with pool.transaction() as conn:
-            ...     conn.execute("INSERT INTO users ...")
-            ...     conn.execute("UPDATE stats ...")
-        """
         @contextmanager
         def _transaction():
             with self.get_connection() as conn:
@@ -345,9 +343,8 @@ class ConnectionPool:
                     raise
         
         return _transaction()
-    
+
     def _start_maintenance_thread(self) -> None:
-        """بدء thread للصيانة الدورية"""
         def maintenance():
             while not self.is_closed:
                 time.sleep(self.config.health_check_interval)
@@ -357,55 +354,56 @@ class ConnectionPool:
         thread.start()
     
     def _perform_maintenance(self) -> None:
-        """إجراء الصيانة الدورية"""
         with self.lock:
-            # فحص جميع الاتصالات
             for pooled in self.all_connections[:]:
-                # إزالة الاتصالات الميتة
                 if not pooled.in_use and not pooled.is_healthy():
                     pooled.close()
                     self.all_connections.remove(pooled)
                     
-                    # إنشاء بديل
-                    new_conn = self._create_connection()
+                    new_conn = self._create_sqlite_connection()
                     if new_conn:
                         try:
                             self.pool.put(new_conn, block=False)
                         except Full:
                             pass
-    
+
     def get_stats(self) -> Dict[str, Any]:
-        """الحصول على إحصائيات Pool"""
         with self.lock:
-            return {
-                **self.stats,
-                'pool_size': self.pool.qsize(),
-                'max_pool_size': self.config.pool_size,
-                'overflow_size': len(self.overflow_connections),
-                'max_overflow': self.config.max_overflow,
-                'total_connections': len(self.all_connections),
-                'in_use': sum(1 for c in self.all_connections if c.in_use)
-            }
-    
+            stats = {**self.stats}
+            if self.config.db_type == 'sqlite':
+                stats.update({
+                    'pool_size': self.pool.qsize(),
+                    'max_pool_size': self.config.pool_size,
+                    'overflow_size': len(self.overflow_connections),
+                    'max_overflow': self.config.max_overflow,
+                    'total_connections': len(self.all_connections),
+                    'in_use': sum(1 for c in self.all_connections if c.in_use)
+                })
+            return stats
+
     def close(self) -> None:
-        """إغلاق Pool وجميع الاتصالات"""
         with self.lock:
             self.is_closed = True
             
-            # إغلاق جميع الاتصالات
-            for pooled in self.all_connections[:]:
-                pooled.close()
-                self.stats['connections_closed'] += 1
-            
-            self.all_connections.clear()
-            self.overflow_connections.clear()
-            
-            # تفريغ Queue
-            while not self.pool.empty():
+            if self.pg_connection_pool:
                 try:
-                    self.pool.get_nowait()
-                except Empty:
-                    break
+                    self.pg_connection_pool.closeall()
+                except Exception:
+                    pass
+            
+            if self.config.db_type == 'sqlite':
+                for pooled in self.all_connections[:]:
+                    pooled.close()
+                    self.stats['connections_closed'] += 1
+                
+                self.all_connections.clear()
+                self.overflow_connections.clear()
+                
+                while not self.pool.empty():
+                    try:
+                        self.pool.get_nowait()
+                    except Empty:
+                        break
 
 
 # ==================== مثال على الاستخدام ====================

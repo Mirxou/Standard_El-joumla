@@ -130,7 +130,9 @@ class AuditService:
             params.append(end_date.isoformat())
         
         result = self.db.execute_query(sql, params)
-        return result[0]['total'] if result else 0
+        if isinstance(result, list) and len(result) > 0:
+            return result[0].get('total', 0)
+        return 0
     
     def get_user_activity(self, user_id: int, days: int = 30) -> Dict[str, Any]:
         """الحصول على نشاط مستخدم معين"""
@@ -205,6 +207,39 @@ class AuditService:
             error_message=row.get('error_message', ''),
             created_at=datetime.fromisoformat(row['created_at']) if row.get('created_at') else None
         )
+
+    def get_audit_logs(self, **kwargs) -> List[AuditLog]:
+        """الحصول على سجلات التدقيق (Public API)"""
+        return self.list_audit_logs(**kwargs)
+
+    def get_system_activity_summary(self, days: int = 30) -> Dict[str, Any]:
+        """الحصول على ملخص نشاط النظام"""
+        start_date = datetime.now() - timedelta(days=days)
+        
+        total_actions = self.count_audit_logs(start_date=start_date)
+        failed_actions = self.count_audit_logs(start_date=start_date, status='failed')
+        
+        # محاولات الدخول الفاشلة
+        login_stats = self.get_login_statistics(days=days)
+        
+        # أكثر المستخدمين نشاطاً
+        top_users_result = self.db.execute_query(
+            """SELECT username, COUNT(*) as count
+               FROM audit_logs
+               WHERE created_at >= ?
+               GROUP BY username
+               ORDER BY count DESC
+               LIMIT 10""",
+            [start_date.isoformat()]
+        )
+        top_users = {row['username']: row['count'] for row in top_users_result}
+        
+        return {
+            'total_actions': total_actions,
+            'failed_actions': failed_actions,
+            'failed_logins': login_stats.get('failed_logins', 0),
+            'top_users': top_users
+        }
     
     # ==================== Login History ====================
     
@@ -266,7 +301,10 @@ class AuditService:
             "SELECT COUNT(*) as total FROM login_history WHERE created_at >= ?",
             [start_date.isoformat()]
         )
-        total = total_result[0]['total'] if total_result else 0
+        if isinstance(total_result, list) and len(total_result) > 0:
+            total = total_result[0].get('total', 0)
+        else:
+            total = 0
         
         # المحاولات الناجحة والفاشلة
         status_result = self.db.execute_query(

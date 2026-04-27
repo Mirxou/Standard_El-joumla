@@ -92,6 +92,37 @@ class SmartCommandPalette(QDialog):
             {"name": "إعدادات النظام", "action": "settings", "icon": "⚙️"},
             {"name": "خروج", "action": "exit", "icon": "❌"},
         ]
+        # Try to load tracking data for sorting
+        try:
+            from src.services.gamification_service import GamificationService
+            # We assume DB manager is not needed for just reading JSON in constructor for now
+            # Or we pass it. For now, we will just read the JSON directly or create a dummy service
+            # Simpler: Just read the JSON directly here to avoid dependency hell if DB is required Init
+            import json, os
+            behavior_data = {}
+            if os.path.exists('data/user_behavior.json'):
+                with open('data/user_behavior.json', 'r', encoding='utf-8') as f:
+                    behavior_data = json.load(f)
+            
+            actions_count = behavior_data.get('actions', {})
+            
+            # Sort commands by count (descending)
+            def get_sort_key(cmd):
+                # Map command action to tracking key (e.g. 'new_invoice' -> 'nav_sales' or exact match)
+                # This is a loose mapping for now
+                key = cmd['action']
+                return actions_count.get(key, 0)
+
+            self.commands.sort(key=get_sort_key, reverse=True)
+            
+            # Mark top 3 as "🔥"
+            for i in range(min(3, len(self.commands))):
+                if get_sort_key(self.commands[i]) > 0:
+                    self.commands[i]['name'] = f"🔥 {self.commands[i]['name']}"
+                    
+        except Exception:
+            pass
+
         self.filter_commands("")
         
         # التركيز على البحث مباشرة

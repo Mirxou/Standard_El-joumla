@@ -11,9 +11,11 @@ import time
 import sys
 from pathlib import Path
 
-# إضافة مسار المشروع
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
+import sys
+import os
+from pathlib import Path
+# الوصول إلى جذر المشروع
+project_root = str(Path(__file__).resolve().parents[2])
 from src.api.rate_limiter import APIRateLimiter
 
 
@@ -239,5 +241,9 @@ class TestAPIRateLimiter:
         allowed, remaining, retry_after = rate_limiter.is_allowed(ip_address, products_endpoint)
         assert allowed is True
         assert remaining == 9
+
+
+
+
 
 

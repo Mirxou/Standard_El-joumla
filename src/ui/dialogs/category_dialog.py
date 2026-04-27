@@ -6,10 +6,14 @@
 
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
-    QPushButton, QLineEdit, QLabel, QMessageBox, QHeaderView
+    QPushButton, QLineEdit, QLabel, QMessageBox, QHeaderView, QFrame,
+    QGraphicsDropShadowEffect, QWidget
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
+
+from src.ui.widgets.custom_title_bar import CustomTitleBar
+from src.ui.widgets.quantum_notification import NotificationManager
 
 
 class CategoryDialog(QDialog):
@@ -21,8 +25,17 @@ class CategoryDialog(QDialog):
         self.logger = logger
         self.categories = []
         
-        self.setWindowTitle("إدارة الفئات")
-        self.setGeometry(100, 100, 600, 400)
+        # self.setWindowTitle("إدارة الفئات") # Handled by CustomTitleBar
+        # self.setGeometry(100, 100, 600, 400)
+        
+        # --- Quantum Window Setup ---
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        
+        # Notifications
+        self.notify = NotificationManager(self)
+        
+        self.resize(800, 600)
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         
         self.init_ui()
@@ -30,7 +43,47 @@ class CategoryDialog(QDialog):
     
     def init_ui(self):
         """تهيئة واجهة المستخدم"""
-        layout = QVBoxLayout(self)
+        # تخطيط جذري شفاف
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(10, 10, 10, 10)
+        root_layout.setSpacing(0)
+        
+        # الإطار الرئيسي
+        self.main_frame = QFrame()
+        self.main_frame.setStyleSheet("""
+            QFrame#MainFrame {
+                background-color: #f5f5f5;
+                border: 1px solid #3498db;
+                border-radius: 10px;
+            }
+        """)
+        self.main_frame.setObjectName("MainFrame")
+        
+        # Shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor("#3498db"))
+        shadow.setOffset(0, 0)
+        self.main_frame.setGraphicsEffect(shadow)
+        
+        root_layout.addWidget(self.main_frame)
+        
+        # تخطيط النافذة الداخلية
+        layout = QVBoxLayout(self.main_frame)
+        layout.setContentsMargins(0, 0, 0, 10) # Bottom margin for content
+        layout.setSpacing(10)
+        
+        # 1. Custom Title Bar
+        self.title_bar = CustomTitleBar(self, title="إدارة الفئات", is_dialog=True)
+        layout.addWidget(self.title_bar)
+        
+        # Container for content
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        layout.addWidget(content_widget)
+        
+        # Re-assign layout to content_layout for the rest of the elements
+        layout = content_layout
         
         # شريط البحث والإضافة
         search_layout = QHBoxLayout()
@@ -100,7 +153,7 @@ class CategoryDialog(QDialog):
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في تحميل الفئات: {str(e)}")
-            QMessageBox.warning(self, "خطأ", f"فشل في تحميل الفئات: {str(e)}")
+            self.notify.show_error("خطأ", f"فشل في تحميل الفئات: {str(e)}")
     
     def display_categories(self, categories):
         """عرض الفئات في الجدول"""
@@ -189,8 +242,7 @@ class CategoryDialog(QDialog):
             count = count_result[0] if count_result else 0
             
             if count > 0:
-                QMessageBox.warning(
-                    self,
+                self.notify.show_warning(
                     "تحذير",
                     f"لا يمكن حذف هذه الفئة. هناك {count} منتج مرتبط بها."
                 )
@@ -206,8 +258,8 @@ class CategoryDialog(QDialog):
             if reply == QMessageBox.StandardButton.Yes:
                 self.db_manager.execute_query("DELETE FROM categories WHERE id = ?", (category_id,))
                 self.load_categories()
-                QMessageBox.information(self, "نجاح", "تم حذف الفئة بنجاح")
+                self.notify.show_success("نجاح", "تم حذف الفئة بنجاح")
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في حذف الفئة: {str(e)}")
-            QMessageBox.critical(self, "خطأ", f"فشل في حذف الفئة: {str(e)}")
+            self.notify.show_error("خطأ", f"فشل في حذف الفئة: {str(e)}")

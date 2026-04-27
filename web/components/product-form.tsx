@@ -9,15 +9,17 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, Package, Save, Loader2 } from "lucide-react"
 import { toast } from "sonner"
-import { supabase } from "@/lib/supabase"
-import { fetchFromAPI } from "@/lib/db/client"
+import { productsService } from "@/lib/api/services/products"
+import { apiClient } from "@/lib/api/client"
+import { API_CONFIG } from "@/lib/config/api"
 
 interface ProductFormProps {
     product?: any | null
     onSaved?: () => void
+    trigger?: React.ReactNode
 }
 
-export default function ProductForm({ product, onSaved }: ProductFormProps) {
+export default function ProductForm({ product, onSaved, trigger }: ProductFormProps) {
     const [open, setOpen] = useState(false)
     const [saving, setSaving] = useState(false)
     const [categories, setCategories] = useState<any[]>([])
@@ -65,12 +67,12 @@ export default function ProductForm({ product, onSaved }: ProductFormProps) {
     async function loadCategories() {
         setLoadingCats(true)
         try {
-            const { data, error } = await supabase.from('categories').select('*').eq('is_active', true)
-            if (error) throw error
-            const cats = Array.isArray(data) ? data : (data?.categories || [])
-            setCategories(cats)
+            const response = await apiClient.get(API_CONFIG.ENDPOINTS.CATEGORIES)
+            const cats = Array.isArray(response) ? response : (response?.items || response?.categories || [])
+            setCategories(cats.filter((cat: any) => cat.is_active !== false))
         } catch (err) {
             console.error("Error loading categories:", err)
+            toast.error("فشل تحميل الفئات")
         } finally {
             setLoadingCats(false)
         }
@@ -103,37 +105,44 @@ export default function ProductForm({ product, onSaved }: ProductFormProps) {
 
         setSaving(true)
         try {
-            const payload = {
+            const payload: any = {
                 name: formData.name.trim(),
+                name_en: formData.name.trim() || formData.name.trim(), // إضافة name_en
                 barcode: formData.barcode.trim() || null,
                 category_id: formData.category_id ? parseInt(formData.category_id) : null,
                 selling_price: parseFloat(formData.selling_price) || 0,
                 cost_price: parseFloat(formData.cost_price) || 0,
                 min_stock: parseInt(formData.min_stock) || 0,
                 current_stock: parseInt(formData.current_stock) || 0,
-                unit: formData.unit,
+                unit: formData.unit || "قطعة",
                 description: formData.description.trim() || null,
                 is_active: true
             }
+            
+            // إزالة الحقول null لتجنب مشاكل API
+            Object.keys(payload).forEach(key => {
+                if (payload[key] === null || payload[key] === undefined || payload[key] === '') {
+                    if (key !== 'barcode' && key !== 'description') {
+                        delete payload[key]
+                    }
+                }
+            })
 
-            let error;
-            if (isEditMode) {
-                const { error: err } = await supabase.from('products').update(payload).eq('id', product.id)
-                error = err
+            if (isEditMode && product?.id) {
+                await productsService.update(product.id, payload)
+                toast.success("تم تحديث المنتج بنجاح")
             } else {
-                const { error: err } = await supabase.from('products').insert(payload)
-                error = err
+                await productsService.create(payload)
+                toast.success("تم إضافة المنتج بنجاح")
             }
 
-            if (error) throw error
-
-            toast.success(isEditMode ? "تم تحديث المنتج بنجاح" : "تم إضافة المنتج بنجاح")
             setOpen(false)
             resetForm()
             if (onSaved) onSaved()
-        } catch (err) {
+        } catch (err: any) {
             console.error("Error saving product:", err)
-            toast.error("حدث خطأ أثناء حفظ المنتج")
+            const errorMessage = err?.message || err?.detail || "حدث خطأ أثناء حفظ المنتج"
+            toast.error(errorMessage)
         } finally {
             setSaving(false)
         }
@@ -146,9 +155,11 @@ export default function ProductForm({ product, onSaved }: ProductFormProps) {
         }}>
             {!isEditMode && (
                 <DialogTrigger asChild>
-                    <Button className="bg-blue-600 hover:bg-blue-700">
-                        <Plus className="ml-2 h-4 w-4" /> إضافة منتج
-                    </Button>
+                    {trigger || (
+                        <Button className="bg-blue-600 hover:bg-blue-700">
+                            <Plus className="ml-2 h-4 w-4" /> إضافة منتج
+                        </Button>
+                    )}
                 </DialogTrigger>
             )}
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">

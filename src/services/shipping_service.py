@@ -14,8 +14,6 @@ from dataclasses import dataclass
 from pathlib import Path
 import sys
 
-# إضافة مسار src
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.core.database_manager import DatabaseManager
 from src.core.tenant_isolation import TenantIsolationManager

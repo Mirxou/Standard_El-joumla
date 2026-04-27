@@ -55,3 +55,6 @@ def test_generate_mfa_secret_and_qr_code(mfa_service: MFAService):
             user_id=1, 
             secret="encrypted_TESTSECRET1234567890"
         )
+
+
+

@@ -17,6 +17,22 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar as CalendarIcon } from "lucide-react"
+import { format } from "date-fns"
+import { Calendar } from "@/components/ui/calendar"
+import {
   Plus,
   Search,
   Filter,
@@ -28,22 +44,27 @@ import {
   Trash2,
   ShoppingCart,
   DollarSign,
-  Calendar,
   User,
   ChevronRight,
   ChevronLeft,
   RefreshCcw,
   Loader2,
+  Copy,
+  Check,
+  MoreVertical,
 } from "lucide-react"
 import { toast } from "sonner"
 import CreateInvoice from "./create-invoice"
+import PrintInvoice from "./print-invoice"
 import {
   getAllInvoices,
   deleteInvoice,
+  updateInvoice,
   initializeSampleData,
   calculateStats,
   type Invoice,
 } from "@/lib/invoice-storage"
+import { TableSkeleton } from "@/components/ui/loading-skeletons"
 
 export default function SalesManagement() {
   const [searchTerm, setSearchTerm] = useState("")
@@ -65,6 +86,13 @@ export default function SalesManagement() {
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [invoiceToDelete, setInvoiceToDelete] = useState<string | null>(null)
+  const [printDialogOpen, setPrintDialogOpen] = useState(false)
+  const [invoiceToPrint, setInvoiceToPrint] = useState<Invoice | null>(null)
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
+  const [invoiceToView, setInvoiceToView] = useState<Invoice | null>(null)
+  const [copiedInvoiceId, setCopiedInvoiceId] = useState<string | null>(null)
+  const [customDateRange, setCustomDateRange] = useState<{ from?: Date; to?: Date }>({})
+  const [showDatePicker, setShowDatePicker] = useState(false)
 
   // تحميل البيانات عند بدء التشغيل
   useEffect(() => {
@@ -76,10 +104,19 @@ export default function SalesManagement() {
     try {
       const loadedInvoices = await getAllInvoices()
       setInvoices(loadedInvoices)
-      const dataStats = await calculateStats()
-      setStats(dataStats)
-    } catch (error) {
-      toast.error("حدث خطأ أثناء تحميل البيانات")
+      try {
+        const dataStats = await calculateStats()
+        setStats(dataStats)
+      } catch (statsError: any) {
+        console.error("Error loading stats:", statsError)
+        // لا نوقف التحميل إذا فشلت الإحصائيات
+        toast.warning("تم تحميل الفواتير لكن فشل تحميل الإحصائيات")
+      }
+    } catch (error: any) {
+      console.error("Error loading invoices:", error)
+      const errorMessage = error?.message || "حدث خطأ أثناء تحميل البيانات"
+      toast.error(errorMessage)
+      setInvoices([])
     } finally {
       setLoading(false)
     }
@@ -91,23 +128,60 @@ export default function SalesManagement() {
   }
 
   const confirmDelete = async () => {
-    if (invoiceToDelete) {
-      setLoading(true)
-      const success = await deleteInvoice(invoiceToDelete)
-      if (success) {
-        toast.success("تم حذف الفاتورة بنجاح")
-        await loadInvoices()
-      } else {
-        toast.error("فشل حذف الفاتورة")
-        setLoading(false)
-      }
+    if (!invoiceToDelete) {
+      setDeleteDialogOpen(false)
+      return
     }
-    setDeleteDialogOpen(false)
-    setInvoiceToDelete(null)
+    
+    setLoading(true)
+    try {
+      await deleteInvoice(invoiceToDelete)
+      toast.success("تم حذف الفاتورة بنجاح")
+      await loadInvoices()
+    } catch (error: any) {
+      console.error("Error deleting invoice:", error)
+      const errorMessage = error?.message || "فشل حذف الفاتورة"
+      toast.error(errorMessage)
+    } finally {
+      setLoading(false)
+      setDeleteDialogOpen(false)
+      setInvoiceToDelete(null)
+    }
   }
 
   const handleEdit = (invoice: Invoice) => {
     setEditingInvoice(invoice)
+  }
+
+  const handleViewDetails = (invoice: Invoice) => {
+    setInvoiceToView(invoice)
+    setDetailsDialogOpen(true)
+  }
+
+  const handleCopyInvoiceNumber = async (invoiceNumber: string) => {
+    try {
+      await navigator.clipboard.writeText(invoiceNumber)
+      setCopiedInvoiceId(invoiceNumber)
+      toast.success("تم نسخ رقم الفاتورة")
+      setTimeout(() => setCopiedInvoiceId(null), 2000)
+    } catch (error) {
+      toast.error("فشل نسخ رقم الفاتورة")
+    }
+  }
+
+  const handleQuickStatusChange = async (invoice: Invoice, newStatus: "مدفوعة" | "معلقة" | "ملغية") => {
+    try {
+      setLoading(true)
+      await updateInvoice(invoice.id, { status: newStatus })
+      toast.success(`تم تغيير حالة الفاتورة إلى ${newStatus}`)
+      await loadInvoices()
+    } catch (error: any) {
+      console.error("Error updating invoice status:", error)
+      const errorMessage = error?.message || "فشل تحديث حالة الفاتورة"
+      toast.error(errorMessage)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const getStatusColor = (status: string) => {
@@ -143,6 +217,9 @@ export default function SalesManagement() {
       const monthAgo = new Date()
       monthAgo.setMonth(monthAgo.getMonth() - 1)
       matchesDate = new Date(invoice.date) >= monthAgo
+    } else if (dateFilter === "custom" && customDateRange.from && customDateRange.to) {
+      const invoiceDate = new Date(invoice.date)
+      matchesDate = invoiceDate >= customDateRange.from && invoiceDate <= customDateRange.to
     }
 
     return matchesSearch && matchesStatus && matchesDate
@@ -159,9 +236,9 @@ export default function SalesManagement() {
     setCurrentPage(1)
   }, [searchTerm, selectedStatus, dateFilter])
 
-  const printInvoice = (invoice: Invoice) => {
-    // سيتم تطبيق الطباعة لاحقاً
-    toast.info("سيتم إضافة ميزة الطباعة قريباً")
+  const handlePrint = (invoice: Invoice) => {
+    setInvoiceToPrint(invoice)
+    setPrintDialogOpen(true)
   }
 
   const exportToExcel = () => {
@@ -270,7 +347,12 @@ export default function SalesManagement() {
             <SelectItem value="ملغية">ملغية</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={dateFilter} onValueChange={setDateFilter}>
+        <Select value={dateFilter} onValueChange={(value) => {
+          setDateFilter(value)
+          if (value !== "custom") {
+            setCustomDateRange({})
+          }
+        }}>
           <SelectTrigger className="w-full md:w-48">
             <SelectValue placeholder="الفترة الزمنية" />
           </SelectTrigger>
@@ -279,8 +361,38 @@ export default function SalesManagement() {
             <SelectItem value="today">اليوم</SelectItem>
             <SelectItem value="week">آخر أسبوع</SelectItem>
             <SelectItem value="month">آخر شهر</SelectItem>
+            <SelectItem value="custom">نطاق مخصص</SelectItem>
           </SelectContent>
         </Select>
+        {dateFilter === "custom" && (
+          <Popover open={showDatePicker} onOpenChange={setShowDatePicker}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="w-full md:w-48 justify-start text-right font-normal">
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {customDateRange.from && customDateRange.to ? (
+                  `${format(customDateRange.from, "yyyy-MM-dd")} - ${format(customDateRange.to, "yyyy-MM-dd")}`
+                ) : (
+                  "اختر النطاق"
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                initialFocus
+                mode="range"
+                defaultMonth={customDateRange.from}
+                selected={{ from: customDateRange.from, to: customDateRange.to }}
+                onSelect={(range) => {
+                  if (range?.from && range?.to) {
+                    setCustomDateRange({ from: range.from, to: range.to })
+                    setShowDatePicker(false)
+                  }
+                }}
+                numberOfMonths={2}
+              />
+            </PopoverContent>
+          </Popover>
+        )}
       </div>
 
       {/* ملخص المبيعات */}
@@ -338,7 +450,7 @@ export default function SalesManagement() {
                 <p className="text-2xl font-bold text-purple-600">{stats.averageInvoice.toFixed(2)} ر.س</p>
               </div>
               <div className="bg-purple-100 p-2 rounded-lg">
-                <Calendar className="h-5 w-5 text-purple-600" />
+                <CalendarIcon className="h-5 w-5 text-purple-600" />
               </div>
             </div>
             <p className="text-xs text-gray-500 mt-1">هذا الشهر</p>
@@ -366,10 +478,7 @@ export default function SalesManagement() {
         <CardContent>
           <div className="space-y-4">
             {loading ? (
-              <div className="text-center py-8 text-gray-500">
-                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
-                جاري التحميل...
-              </div>
+              <TableSkeleton rows={5} cols={6} />
             ) : paginatedInvoices.length === 0 ? (
               <div className="text-center py-8">
                 <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -396,7 +505,7 @@ export default function SalesManagement() {
                           <span className="text-sm text-gray-400">({invoice.customerPhone})</span>
                         </div>
                         <div className="flex items-center gap-2 mt-1">
-                          <Calendar className="h-4 w-4 text-gray-400" />
+                          <CalendarIcon className="h-4 w-4 text-gray-400" />
                           <span className="text-sm text-gray-500">
                             {invoice.date} - {invoice.time}
                           </span>
@@ -455,14 +564,56 @@ export default function SalesManagement() {
 
                   <div className="flex justify-between items-center">
                     <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => handleViewDetails(invoice)}>
+                        <Eye className="h-4 w-4 ml-1" />
+                        تفاصيل
+                      </Button>
                       <Button size="sm" variant="outline" onClick={() => handleEdit(invoice)}>
                         <Edit className="h-4 w-4 ml-1" />
                         تعديل
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => printInvoice(invoice)}>
+                      <Button size="sm" variant="outline" onClick={() => handlePrint(invoice)}>
                         <Printer className="h-4 w-4 ml-1" />
                         طباعة
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleCopyInvoiceNumber(invoice.invoiceNumber)}
+                      >
+                        {copiedInvoiceId === invoice.invoiceNumber ? (
+                          <Check className="h-4 w-4 ml-1 text-green-600" />
+                        ) : (
+                          <Copy className="h-4 w-4 ml-1" />
+                        )}
+                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="sm" variant="outline">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => handleQuickStatusChange(invoice, "مدفوعة")}
+                            disabled={invoice.status === "مدفوعة"}
+                          >
+                            تغيير الحالة إلى مدفوعة
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleQuickStatusChange(invoice, "معلقة")}
+                            disabled={invoice.status === "معلقة"}
+                          >
+                            تغيير الحالة إلى معلقة
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleQuickStatusChange(invoice, "ملغية")}
+                            disabled={invoice.status === "ملغية"}
+                          >
+                            تغيير الحالة إلى ملغية
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                     <Button
                       size="sm"
@@ -548,6 +699,119 @@ export default function SalesManagement() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* مربع حوار الطباعة */}
+      <PrintInvoice
+        invoice={invoiceToPrint}
+        open={printDialogOpen}
+        onOpenChange={(open) => {
+          setPrintDialogOpen(open)
+          if (!open) setInvoiceToPrint(null)
+        }}
+      />
+
+      {/* مربع حوار تفاصيل الفاتورة */}
+      <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between">
+              <span>تفاصيل الفاتورة</span>
+              {invoiceToView && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleCopyInvoiceNumber(invoiceToView.invoiceNumber)}
+                >
+                  {copiedInvoiceId === invoiceToView.invoiceNumber ? (
+                    <>
+                      <Check className="h-4 w-4 ml-1 text-green-600" />
+                      تم النسخ
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-4 w-4 ml-1" />
+                      نسخ رقم الفاتورة
+                    </>
+                  )}
+                </Button>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          {invoiceToView && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-500">رقم الفاتورة</p>
+                  <p className="font-semibold">{invoiceToView.invoiceNumber}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">التاريخ والوقت</p>
+                  <p className="font-semibold">{invoiceToView.date} - {invoiceToView.time}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">اسم العميل</p>
+                  <p className="font-semibold">{invoiceToView.customerName}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">رقم الهاتف</p>
+                  <p className="font-semibold">{invoiceToView.customerPhone || "غير محدد"}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">الحالة</p>
+                  <Badge className={getStatusColor(invoiceToView.status)}>{invoiceToView.status}</Badge>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">طريقة الدفع</p>
+                  <p className="font-semibold">{invoiceToView.paymentMethod}</p>
+                </div>
+              </div>
+
+              <div className="border-t pt-4">
+                <h3 className="font-semibold mb-3">المنتجات</h3>
+                <div className="space-y-2">
+                  {invoiceToView.items.map((item, index) => (
+                    <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                      <div>
+                        <p className="font-medium">{item.productName}</p>
+                        <p className="text-sm text-gray-500">الكمية: {item.quantity} × {item.price.toFixed(2)} ر.س</p>
+                      </div>
+                      <p className="font-semibold">{item.total.toFixed(2)} ر.س</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="border-t pt-4 space-y-2">
+                <div className="flex justify-between">
+                  <span>المجموع الفرعي:</span>
+                  <span className="font-semibold">{invoiceToView.subtotal.toFixed(2)} ر.س</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>الضريبة (15%):</span>
+                  <span className="font-semibold">{invoiceToView.tax.toFixed(2)} ر.س</span>
+                </div>
+                {invoiceToView.discount > 0 && (
+                  <div className="flex justify-between text-green-600">
+                    <span>الخصم:</span>
+                    <span className="font-semibold">-{invoiceToView.discount.toFixed(2)} ر.س</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-lg font-bold border-t pt-2">
+                  <span>الإجمالي:</span>
+                  <span className="text-green-600">{invoiceToView.total.toFixed(2)} ر.س</span>
+                </div>
+              </div>
+
+              {invoiceToView.notes && (
+                <div className="border-t pt-4">
+                  <p className="text-sm text-gray-500 mb-1">ملاحظات</p>
+                  <p className="bg-blue-50 p-3 rounded">{invoiceToView.notes}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

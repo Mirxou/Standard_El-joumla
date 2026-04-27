@@ -28,7 +28,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { fetchFromAPI } from "@/lib/db/client"
+import { apiClient } from "@/lib/api/client"
+import { API_CONFIG } from "@/lib/config/api"
 import { toast } from "sonner"
 import CategoryForm from "./category-form"
 import {
@@ -65,12 +66,12 @@ export default function CategoriesManagement() {
     setIsLoading(true)
     try {
       // جلب القائمة من Python API
-      const response = await fetchFromAPI('/categories')
+      const response = await apiClient.get<any>(API_CONFIG.ENDPOINTS.CATEGORIES)
 
       let formattedCategories: Category[] = []
 
       // التحقق وتنسيق البيانات - الـ API قد يعيد قائمة أو مصفوفة من `CategoryResponse`
-      const rawData = Array.isArray(response) ? response : (response?.categories || [])
+      const rawData = Array.isArray(response) ? response : (response?.categories || (response as any)?.items || [])
 
       if (Array.isArray(rawData)) {
         formattedCategories = rawData.map((item: any, index: number) => {
@@ -95,9 +96,7 @@ export default function CategoriesManagement() {
 
   const handleDeleteCategory = async (id: number | string) => {
     try {
-      await fetchFromAPI(`/categories/${id}`, {
-        method: 'DELETE'
-      })
+      await apiClient.delete(`/api/v1/categories/${id}`)
       toast.success("تم حذف الفئة بنجاح")
       loadCategories()
     } catch (error) {

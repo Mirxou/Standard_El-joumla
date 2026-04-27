@@ -1,0 +1,32 @@
+version: '3.9'
+services:
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    image: trae-api:prod
+    container_name: trae-api-prod
+    environment:
+      - LOGICAL_DB_PATH=/data/logical_release.db
+      - JWT_SECRET=${JWT_SECRET:-prod-secret}
+    ports:
+      - "8000:8000"
+    volumes:
+      - trae-prod-db:/data
+    restart: unless-stopped
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    image: trae-web:prod
+    container_name: trae-web-prod
+    environment:
+      - API_URL=http://api:8000
+    depends_on:
+      - api
+    ports:
+      - "8080:3000"
+    restart: unless-stopped
+volumes:
+  trae-prod-db:
+    driver: local

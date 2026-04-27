@@ -11,8 +11,6 @@ import json
 import sys
 from pathlib import Path
 
-# إضافة مسار src
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.core.database_manager import DatabaseManager
 from src.core.webhook_dispatcher import get_webhook_dispatcher, WebhookDeliveryResult
@@ -155,7 +153,7 @@ class WebhookService:
     def tenant_manager(self) -> TenantIsolationManager:
         """Lazy loading لـ TenantIsolationManager"""
         if self._tenant_manager is None:
-            self._tenant_manager = TenantIsolationManager(self.db_manager, self.logger)
+            self._tenant_manager = TenantIsolationManager(self.db_manager)
         return self._tenant_manager
     
     def _get_company_id(self) -> Optional[int]:
@@ -328,6 +326,8 @@ class WebhookService:
         retry_count: Optional[int] = None,
         timeout_seconds: Optional[int] = None,
         secret_key: Optional[str] = None,
+        priority: Optional[int] = None,
+        rate_limit_per_minute: Optional[int] = None,
         company_id: Optional[int] = None
     ) -> bool:
         """
@@ -548,27 +548,26 @@ class WebhookService:
             return event_payload
         
         try:
-            # Parse Template
-            template = json.loads(webhook.payload_template)
+            # استبدال Template Variables في النص أولاً
+            template_str = webhook.payload_template
             
-            # دمج Template مع Event Payload
-            # يمكن استخدام Template Variables مثل {event_type}, {entity_id}, etc.
-            final_payload = {}
+            # استبدال المتغيرات الأساسية
+            if webhook.event_type:
+                template_str = template_str.replace("{event_type}", webhook.event_type)
             
-            # نسخ Template
-            if isinstance(template, dict):
-                final_payload.update(template)
-            
-            # دمج Event Payload
-            final_payload.update(event_payload)
-            
-            # استبدال Template Variables
-            final_payload_str = json.dumps(final_payload)
-            final_payload_str = final_payload_str.replace("{event_type}", webhook.event_type)
             if webhook.id:
-                final_payload_str = final_payload_str.replace("{webhook_id}", str(webhook.id))
+                # نستخدم استبدال ذكي للأرقام إذا كانت القيم غير محاطة بعلامات اقتباس
+                # لكن الاستبدال النصي البسيط يكفي عادة إذا كان القالب مكتوباً بشكل صحيح
+                template_str = template_str.replace("{webhook_id}", str(webhook.id))
             
-            return json.loads(final_payload_str)
+            # Parse Template بعد الاستبدال
+            final_payload = json.loads(template_str)
+            
+            # دمج Event Payload (يغطي القيم الأصلية)
+            if isinstance(final_payload, dict):
+                final_payload.update(event_payload)
+            
+            return final_payload
             
         except Exception as e:
             if self.logger:

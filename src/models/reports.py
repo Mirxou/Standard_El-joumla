@@ -35,9 +35,9 @@ class ReportManager:
             WHERE date(sale_date) BETWEEN date(?) AND date(?)
             AND status IN ('CONFIRMED', 'PAID', 'PARTIALLY_PAID', 'مؤكدة', 'مدفوعة', 'مدفوعة جزئياً')
             """
-            sales_result = self.db_manager.execute_query(sales_query, (start_date, end_date)).fetchone()
-            total_sales = float(sales_result['total_sales'] or 0)
-            collected_cash = float(sales_result['collected_cash'] or 0)
+            sales_result = self.db_manager.fetch_one(sales_query, (start_date, end_date))
+            total_sales = float(sales_result['total_sales'] or 0) if sales_result else 0.0
+            collected_cash = float(sales_result['collected_cash'] or 0) if sales_result else 0.0
 
             # 2. تكلفة البضاعة المباعة (COGS)
             # نحتاج لحساب تكلفة العناصر في الفواتير المؤكدة
@@ -49,8 +49,8 @@ class ReportManager:
             WHERE date(s.sale_date) BETWEEN date(?) AND date(?)
             AND s.status IN ('CONFIRMED', 'PAID', 'PARTIALLY_PAID', 'مؤكدة', 'مدفوعة', 'مدفوعة جزئياً')
             """
-            cogs_result = self.db_manager.execute_query(cogs_query, (start_date, end_date)).fetchone()
-            total_cost = float(cogs_result['total_cogs'] or 0)
+            cogs_result = self.db_manager.fetch_one(cogs_query, (start_date, end_date))
+            total_cost = float(cogs_result['total_cogs'] or 0) if cogs_result else 0.0
 
             # 3. صافي الربح
             net_profit = total_sales - total_cost
@@ -107,8 +107,8 @@ class ReportManager:
             query = """
             SELECT p.name, 
                    SUM(si.quantity) as units_sold,
-                   SUM(si.total_amount) as revenue,
-                   (SUM(si.total_amount) - SUM(si.quantity * p.cost_price)) as profit
+                   SUM(si.quantity * si.unit_price) as revenue,
+                   (SUM(si.quantity * si.unit_price) - SUM(si.quantity * p.cost_price)) as profit
             FROM sale_items si
             JOIN sales s ON si.sale_id = s.id
             JOIN products p ON si.product_id = p.id
@@ -138,7 +138,7 @@ class ReportManager:
             FROM products
             WHERE is_active = 1
             """
-            value_result = self.db_manager.execute_query(value_query).fetchone()
+            value_result = self.db_manager.fetch_one(value_query)
             
             # 2. المنتجات منخفضة المخزون
             low_stock_query = """
@@ -146,15 +146,15 @@ class ReportManager:
             FROM products 
             WHERE current_stock <= min_stock AND is_active = 1
             """
-            low_stock_result = self.db_manager.execute_query(low_stock_query).fetchone()
+            low_stock_result = self.db_manager.fetch_one(low_stock_query)
 
             return {
-                "total_cost_value": float(value_result['total_cost_value'] or 0),
-                "total_sales_value": float(value_result['total_sales_value'] or 0),
-                "potential_profit": float((value_result['total_sales_value'] or 0) - (value_result['total_cost_value'] or 0)),
-                "total_products": int(value_result['total_products'] or 0),
-                "total_items": int(value_result['total_items'] or 0),
-                "low_stock_count": int(low_stock_result['count'] or 0)
+                "total_cost_value": float(value_result['total_cost_value'] or 0) if value_result else 0.0,
+                "total_sales_value": float(value_result['total_sales_value'] or 0) if value_result else 0.0,
+                "potential_profit": float((value_result['total_sales_value'] or 0) - (value_result['total_cost_value'] or 0)) if value_result else 0.0,
+                "total_products": int(value_result['total_products'] or 0) if value_result else 0,
+                "total_items": int(value_result['total_items'] or 0) if value_result else 0,
+                "low_stock_count": int(low_stock_result['count'] or 0) if low_stock_result else 0
             }
         except Exception as e:
             self.logger.error(f"Error getting inventory analytics: {e}")

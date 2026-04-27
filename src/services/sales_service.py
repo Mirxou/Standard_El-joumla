@@ -12,8 +12,6 @@ from decimal import Decimal
 import sys
 from pathlib import Path
 
-# إضافة مسار src
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.models.sale import Sale, SaleItem, SaleManager, SaleStatus, PaymentMethod
 from src.models.product import Product, ProductManager
@@ -74,7 +72,7 @@ class SalesService:
         self.product_manager = ProductManager(db_manager, logger)
         self.customer_manager = CustomerManager(db_manager, logger)
         self.inventory_service = InventoryService(db_manager, logger)
-        self.accounting_service = AccountingService(db_manager)
+        self.accounting_service = AccountingService(db_manager, logger)
         self.exchange_rate_service = ExchangeRateService(db_manager, logger)
         self.current_session: Optional[POSSession] = None
         # Lazy loading لـ WorkflowService
@@ -109,6 +107,16 @@ class SalesService:
                         self.logger.warning(f"كمية غير كافية للمنتج {product.name}")
                     return None
             
+            # حساب إجمالي الفاتورة إذا كان 0 (لم يتم حسابه مسبقاً)
+            if (not sale.total_amount or sale.total_amount == 0) and sale.items:
+                calculated_total = sum(
+                    (Decimal(str(item.quantity)) * Decimal(str(item.unit_price or 0))) - Decimal(str(item.discount_amount or 0)) 
+                    for item in sale.items
+                )
+                sale.total_amount = float(calculated_total)
+                if self.logger:
+                    self.logger.debug(f"تم حساب إجمالي الفاتورة تلقائياً: {sale.total_amount}")
+
             # Multi-Currency: حساب المبالغ بالعملة الأساسية
             if sale.currency_id:
                 try:
@@ -157,26 +165,39 @@ class SalesService:
                 sale.exchange_rate = Decimal('1.0')
             
             # إنشاء الفاتورة
-            sale_id = self.sale_manager.create_sale(sale)
+            sale_id = self.sale_manager.create_sale(sale, update_stock=False)
             if sale_id:
+                sale.id = sale_id  # تحديث المعرف في الكائن
                 try:
                     # --- بدء ربط الخدمات (Glue Code) ---
                     
                     # 1. تحديث المخزون
+                    # 1. تحديث المخزون
                     for item in sale.items:
+                        # الحصول على المخزون الحالي لحساب الكمية الجديدة
+                        prod = self.product_manager.get_product_by_id(item.product_id)
+                        current_qty = prod.current_stock if prod else 0
+                        new_qty = current_qty - item.quantity
+                        
                         self.inventory_service.adjust_stock(
                             product_id=item.product_id,
-                            quantity_change=-item.quantity,
-                            reason="sale",
-                            reference_id=sale_id
+                            new_quantity=new_qty,
+                            reason=f"sale:{sale_id}",
+                            user_id=user_id
                         )
                     
                     # 2. إنشاء قيد محاسبي
-                    self.accounting_service.create_sale_journal_entry(sale)
+                    entry_id = self.accounting_service.create_sale_journal_entry(sale)
+                    if entry_id:
+                        if self.logger:
+                            self.logger.info(f"تم إنشاء قيد محاسبي للمبيعات تلقائياً: {entry_id}")
+                    else:
+                        if self.logger:
+                            self.logger.warning(f"فشل إنشاء قيد محاسبي للفاتورة: {sale_id}")
                     
                     # 3. تحديث رصيد العميل
                     if sale.customer_id:
-                        self.customer_manager.update_balance(sale.customer_id, sale.final_amount, "increase")
+                        self.customer_manager.update_balance(sale.customer_id, sale.total_amount, "increase")
 
                     # 4. تحديث جلسة نقطة البيع
                     if self.current_session:
@@ -259,7 +280,7 @@ class SalesService:
                 product_id=product_id,
                 quantity=quantity,
                 unit_price=unit_price,
-                discount=discount
+                discount_amount=discount
             )
             
             # إضافة العنصر

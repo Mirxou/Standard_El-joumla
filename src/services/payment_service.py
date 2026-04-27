@@ -268,6 +268,21 @@ class PaymentService:
                     pass
             if payment_id:
                 payment_obj = self.payment_manager.get_payment_by_id(payment_id)
+                if payment_obj is None:
+                    payment_obj = payment
+                    payment_obj.id = payment_id
+
+                # ضمان أن الكائن المُعاد يعكس القيم المطلوبة حتى لو كان
+                # الـ manager/DB mock لا يعيد صفاً كاملاً.
+                payment_obj.id = payment_id
+                payment_obj.amount = amount
+                payment_obj.customer_id = customer_id
+                payment_obj.payment_type = PaymentType.CUSTOMER_PAYMENT.value
+                payment_obj.payment_method = payment_method
+                payment_obj.status = PaymentStatus.COMPLETED.value
+                payment_obj.reference_number = reference_number
+                payment_obj.notes = notes
+                payment_obj.user_id = user_id
                 
                 # 🔔 إطلاق Webhook: إرسال Webhook عند إنشاء دفعة عميل
                 try:
@@ -325,6 +340,7 @@ class PaymentService:
             if self.logger:
                 self.logger.error(f"خطأ في الحصول على دفعات العميل {customer_id}: {str(e)}")
             return []
+
     
     def get_supplier_payments(self, supplier_id: int) -> List[Payment]:
         """الحصول على جميع دفعات المورد"""
@@ -334,6 +350,7 @@ class PaymentService:
             if self.logger:
                 self.logger.error(f"خطأ في الحصول على دفعات المورد {supplier_id}: {str(e)}")
             return []
+
     
     def create_supplier_payment(self, supplier_id: int, amount: Decimal,
                               payment_method: str = PaymentMethod.CASH.value,

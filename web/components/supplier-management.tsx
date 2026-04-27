@@ -25,7 +25,8 @@ import {
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useEffect } from "react"
-import { fetchFromAPI } from "@/lib/db/client"
+import { apiClient } from "@/lib/api/client"
+import { API_CONFIG } from "@/lib/config/api"
 import CreateSupplier from "./create-supplier"
 
 // Utility function to calculate progress width
@@ -42,34 +43,35 @@ export default function SupplierManagement() {
 
   const loadSuppliers = async () => {
     try {
-      const data = await fetchFromAPI('/suppliers');
-      if (Array.isArray(data)) {
-        const mapped = data.map((s: any) => ({
-          id: s.id,
-          name: s.name,
-          category: "عام", // Placeholder
-          contactPerson: s.contact_person || "-",
-          phone: s.phone || "-",
-          email: s.email || "-",
-          address: s.address || "-",
-          rating: 5.0, // Placeholder
-          totalOrders: s.purchases_count || 0,
-          totalValue: s.total_purchases || 0,
-          lastOrder: "-", // Placeholder
-          paymentTerms: "-", // Placeholder
-          deliveryTime: "-", // Placeholder
-          status: s.is_active ? "نشط" : "معلق",
-          products: [], // Placeholder
-          performance: {
-            onTimeDelivery: 100,
-            qualityRating: 5.0,
-            priceCompetitiveness: 5.0,
-          },
-        }));
-        setSuppliers(mapped);
-      }
-    } catch (e) {
-      console.error(e);
+      const data = await apiClient.get<any[]>(API_CONFIG.ENDPOINTS.SUPPLIERS)
+      const suppliersArray = Array.isArray(data) ? data : (data as any)?.items || (data as any)?.suppliers || []
+      
+      const mapped = suppliersArray.map((s: any) => ({
+        id: s.id,
+        name: s.name,
+        category: "عام", // Placeholder
+        contactPerson: s.contact_person || "-",
+        phone: s.phone || "-",
+        email: s.email || "-",
+        address: s.address || "-",
+        rating: 5.0, // Placeholder
+        totalOrders: s.purchases_count || 0,
+        totalValue: s.total_purchases || 0,
+        lastOrder: "-", // Placeholder
+        paymentTerms: "-", // Placeholder
+        deliveryTime: "-", // Placeholder
+        status: s.is_active ? "نشط" : "معلق",
+        products: [], // Placeholder
+        performance: {
+          onTimeDelivery: 100,
+          qualityRating: 5.0,
+          priceCompetitiveness: 5.0,
+        },
+      }))
+      setSuppliers(mapped)
+    } catch (error: any) {
+      console.error("Error loading suppliers:", error)
+      setSuppliers([])
     }
   }
 

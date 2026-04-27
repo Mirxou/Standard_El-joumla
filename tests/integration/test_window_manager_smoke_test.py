@@ -117,3 +117,6 @@ if __name__ == "__main__":
         print("✅ SMOKE TEST PASSED: جميع النوافذ تعمل!")
         sys.exit(0)
 
+
+
+

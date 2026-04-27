@@ -1,0 +1,37 @@
+name: Production Deployment
+
+on:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    env:
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r api/requirements-prod.txt
+          pip install -r requirements-prod.txt
+      - name: Build API Docker image
+        run: |
+          docker build -t trae-api:prod -f api/Dockerfile .
+      - name: Build Web Docker image
+        run: |
+          docker build -t trae-web:prod -f web/Dockerfile .
+      - name: Run unit tests
+        run: |
+          pytest tests/unit -q
+      - name: Production packaging (desktop)
+        run: |
+          python tools/production_packaging.py
+      - name: Smoke tests against prod images
+        run: |
+          echo "Placeholder for remote smoke tests on prod environment"

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 
@@ -39,10 +39,26 @@ class CycleCountService:
       - variance_reasons(id, code, name, description, is_active)
     """
 
-    def __init__(self, db_path: str) -> None:
-        self.db_path = db_path
+    def __init__(self, db_path: str = None, db_manager: Any = None) -> None:
+        self.db_manager = db_manager
+        if db_manager is not None:
+            self.db_path = getattr(db_manager, 'db_path', db_path)
+        else:
+            self.db_path = db_path
 
     def _conn(self) -> sqlite3.Connection:
+        if self.db_manager is not None:
+            if hasattr(self.db_manager, 'connection') and self.db_manager.connection:
+                return self.db_manager.connection
+            if hasattr(self.db_manager, 'create_thread_connection'):
+                return self.db_manager.create_thread_connection()
+            if hasattr(self.db_manager, 'initialize'):
+                self.db_manager.initialize()
+                return self.db_manager.connection
+
+        if not self.db_path:
+            raise ValueError("No database source configured for CycleCountService")
+
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
@@ -102,7 +118,7 @@ class CycleCountService:
                 INSERT INTO cycle_count_sessions(plan_id, location_id, started_at, counted_by, status)
                 VALUES(?,?,?,?, 'open')
                 """,
-                (plan_id, location_id, datetime.utcnow().isoformat(timespec="seconds"), counted_by),
+                (plan_id, location_id, datetime.now(timezone.utc).isoformat(timespec="seconds"), counted_by),
             )
             return int(cur.lastrowid)
 

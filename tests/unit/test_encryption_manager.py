@@ -193,3 +193,184 @@ class TestEncryptionManager:
             # هذا متوقع
             pass
 
+
+class TestPasswordValidation:
+    """اختبارات التحقق من قوة كلمة المرور"""
+    
+    def test_validate_password_strength_valid(self):
+        """اختبار كلمة مرور قوية"""
+        password = "StrongPass123!@#"
+        is_valid, message = EncryptionManager.validate_password_strength(password)
+        
+        assert is_valid is True
+        assert message == ""
+    
+    def test_validate_password_strength_too_short(self):
+        """اختبار كلمة مرور قصيرة جداً"""
+        password = "Short1!"
+        is_valid, message = EncryptionManager.validate_password_strength(password)
+        
+        assert is_valid is False
+        assert "12" in message
+    
+    def test_validate_password_strength_no_uppercase(self):
+        """اختبار كلمة مرور بدون حروف كبيرة"""
+        password = "lowercase123!@#"
+        is_valid, message = EncryptionManager.validate_password_strength(password)
+        
+        assert is_valid is False
+        assert "كبير" in message or "uppercase" in message
+    
+    def test_validate_password_strength_no_lowercase(self):
+        """اختبار كلمة مرور بدون حروف صغيرة"""
+        password = "UPPERCASE123!@#"
+        is_valid, message = EncryptionManager.validate_password_strength(password)
+        
+        assert is_valid is False
+        assert "صغير" in message or "lowercase" in message
+    
+    def test_validate_password_strength_no_digits(self):
+        """اختبار كلمة مرور بدون أرقام"""
+        password = "NoDigitsHere!@#"
+        is_valid, message = EncryptionManager.validate_password_strength(password)
+        
+        assert is_valid is False
+        assert "رقم" in message or "digit" in message
+    
+    def test_validate_password_strength_no_special(self):
+        """اختبار كلمة مرور بدون رموز خاصة"""
+        password = "NoSpecialChars123"
+        is_valid, message = EncryptionManager.validate_password_strength(password)
+        
+        assert is_valid is False
+        assert "رمز" in message or "special" in message
+    
+    def test_validate_password_strength_empty(self):
+        """اختبار كلمة مرور فارغة"""
+        is_valid, message = EncryptionManager.validate_password_strength("")
+        
+        assert is_valid is False
+        assert "مطلوبة" in message
+    
+    def test_is_password_compliant_valid(self):
+        """اختبار التحقق السريع من كلمة مرور صحيحة"""
+        password = "ValidPass123!@"
+        result = EncryptionManager.is_password_compliant(password)
+        
+        assert result is True
+    
+    def test_is_password_compliant_invalid(self):
+        """اختبار التحقق السريع من كلمة مرور ضعيفة"""
+        password = "weak"
+        result = EncryptionManager.is_password_compliant(password)
+        
+        assert result is False
+
+
+class TestDatabaseEncryption:
+    """اختبارات تشفير قاعدة البيانات"""
+    
+    @pytest.fixture
+    def encryption_mgr(self):
+        """إنشاء EncryptionManager"""
+        return EncryptionManager("test_password")
+    
+    def test_is_database_encrypted_with_normal_db(self, encryption_mgr):
+        """اختبار التحقق من قاعدة بيانات عادية"""
+        import tempfile
+        import sqlite3
+        
+        # إنشاء قاعدة بيانات SQLite عادية
+        with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as f:
+            db_path = f.name
+        
+        try:
+            conn = sqlite3.connect(db_path)
+            conn.execute("CREATE TABLE test (id INTEGER)")
+            conn.close()
+            
+            result = encryption_mgr.is_database_encrypted(db_path)
+            assert result is False
+        finally:
+            if Path(db_path).exists():
+                os.remove(db_path)
+    
+    def test_is_database_encrypted_with_encrypted_file(self, encryption_mgr):
+        """اختبار التحقق من ملف مشفر"""
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as f:
+            f.write("test content")
+            temp_file = f.name
+        
+        try:
+            # تشفير الملف
+            encrypted_path = encryption_mgr.encrypt_file(temp_file)
+            
+            # التحقق
+            result = encryption_mgr.is_database_encrypted(encrypted_path)
+            assert result is True
+            
+            os.remove(encrypted_path)
+        finally:
+            if Path(temp_file).exists():
+                os.remove(temp_file)
+    
+    def test_is_database_encrypted_nonexistent_file(self, encryption_mgr):
+        """اختبار التحقق من ملف غير موجود"""
+        result = encryption_mgr.is_database_encrypted("/nonexistent/path/file.db")
+        assert result is False
+    
+    def test_verify_database_integrity_valid(self, encryption_mgr):
+        """اختبار التحقق من سلامة قاعدة بيانات سليمة"""
+        import tempfile
+        import sqlite3
+        
+        with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as f:
+            db_path = f.name
+        
+        try:
+            conn = sqlite3.connect(db_path)
+            conn.execute("CREATE TABLE test (id INTEGER PRIMARY KEY)")
+            conn.execute("INSERT INTO test VALUES (1)")
+            conn.close()
+            
+            result = encryption_mgr.verify_database_integrity(db_path)
+            assert result is True
+        finally:
+            if Path(db_path).exists():
+                os.remove(db_path)
+    
+    def test_verify_database_integrity_nonexistent(self, encryption_mgr):
+        """اختبار التحقق من قاعدة بيانات غير موجودة"""
+        result = encryption_mgr.verify_database_integrity("/nonexistent/db.sqlite")
+        assert result is False
+
+
+class TestEncryptionAliases:
+    """اختبارات aliases للتوافق مع الكود القديم"""
+    
+    def test_encrypt_alias(self):
+        """اختبار alias encrypt()"""
+        encryption_manager = EncryptionManager("test_password")
+        
+        data = "test data"
+        encrypted = encryption_manager.encrypt(data)
+        decrypted = encryption_manager.decrypt(encrypted)
+        
+        assert decrypted.decode() == data
+    
+    def test_decrypt_alias(self):
+        """اختبار alias decrypt()"""
+        encryption_manager = EncryptionManager("test_password")
+        
+        data = "test data"
+        encrypted = encryption_manager.encrypt_data(data)
+        decrypted = encryption_manager.decrypt(encrypted)
+        
+        assert decrypted.decode() == data
+
+
+if __name__ == '__main__':
+    pytest.main([__file__, '-v'])
+
+
+

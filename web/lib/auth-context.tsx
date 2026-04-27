@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { apiClient } from "@/lib/api/client"
+import { apiClient, getCookie, deleteCookie } from "@/lib/api/client"
 import { API_CONFIG } from "@/lib/config/api"
 import type { User, Company, AuthContextType, LoginResponse } from "@/lib/types"
 
@@ -18,17 +18,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [companies, setCompanies] = useState<Company[]>([])
   const [currentCompany, setCurrentCompany] = useState<Company | null>(null)
   const router = useRouter()
+  const isProduction = process.env.NODE_ENV === 'production'
 
   const checkAuth = async () => {
     try {
-      const storedUser = localStorage.getItem("user")
-      const token = localStorage.getItem("access_token")
+      // في الإنتاج: قراءة من httpOnly cookie فقط (لا يمكن قراءة التوكن من JS لكن سيتم إرساله تلقائياً)
+      // في التطوير: استخدام localStorage للتوافق
+      const isProduction = process.env.NODE_ENV === 'production'
+      
+      let storedUser = localStorage.getItem("user")
+      let token = localStorage.getItem("access_token")
+      
+      // في التطوير، نقرأ من cookie كـ fallback
+      // في الإنتاج، httpOnly cookie لا يمكن قراءته لكن يتم إرساله تلقائياً مع الطلبات
+      if (!token && !isProduction) {
+        token = getCookie('access_token')
+      }
 
-      if (storedUser && token) {
+      // في الإنتاج، إذا كان هناك user في localStorage بدون token، استخدمه
+      // لكن apiClient لا يحتاج token لأن cookies ستُرسل تلقائياً
+      if (storedUser && isProduction) {
+        const user = JSON.parse(storedUser) as User
+        setUser(user)
+        // في الإنتاج، لا نحتاج apiClient.setToken() لأن httpOnly cookies تُرسل تلقائياً
+        
+        // تحديث قائمة الشركات
+        await fetchCompanies()
+      } else if (storedUser && token) {
+        // في التطوير، نستخدم localStorage + apiClient.setToken()
         const user = JSON.parse(storedUser) as User
         setUser(user)
         apiClient.setToken(token)
-        
+
         // تحديث قائمة الشركات
         await fetchCompanies()
       } else {
@@ -46,9 +67,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchCompanies = async () => {
     try {
-      const token = localStorage.getItem('access_token')
+      // في الإنتاج: httpOnly cookie يُرسل تلقائياً، لا حاجة لـ token من localStorage
+      // في التطوير: نأخذ token من localStorage
+      const isProduction = process.env.NODE_ENV === 'production'
+      let token: string | null = null
       
-      if (!token) return
+      if (!isProduction) {
+        token = localStorage.getItem('access_token')
+      }
+
+      // في الإنتاج، apiClient يرسل cookies تلقائياً بدون token صريح
+      // في التطوير، نتحقق من وجود token
+      if (!isProduction && !token) return
 
       const data = await apiClient.get<Company[]>(API_CONFIG.ENDPOINTS.AUTH.COMPANIES)
       setCompanies(data)
@@ -75,9 +105,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setCurrentCompany(company)
     apiClient.setCompanyId(company.id.toString())
     localStorage.setItem("company_id", company.id.toString())
-    
+
     toast.success(`تم التحويل إلى شركة: ${company.name}`)
-    
+
     // بدلاً من reload - جلب البيانات الجديدة
     // هذا يتم عبر dependency على currentCompany في المكونات
   }
@@ -96,32 +126,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const data = await apiClient.post<LoginResponse>(API_CONFIG.ENDPOINTS.AUTH.LOGIN, loginPayload)
 
-      // تخزين التوكن والمعلومات
-      const userData: User = {
-        id: data.user?.id || 0,
+      // تخزين التوكن والمعلومات - يدعم الاستجابة المسطحة من backend أو user المتداخلة
+      const normalizedUser = data.user ?? {
+        id: data.user_id || 0,
         email,
-        username: data.user?.username || email,
-        name: data.full_name || data.user?.full_name || data.user?.username || "مستخدم",
-        full_name: data.full_name || "",
-        role: data.user?.role || data.role || "مستخدم",
+        username: data.username || email,
+        full_name: data.full_name || data.username || email,
+        name: data.full_name || data.username || email,
+        role: data.role || (data.role_id === 1 ? "مدير النظام" : "مستخدم"),
         avatar: null,
-        is_active: true,
+        is_active: data.is_active ?? true,
         loggedInAt: new Date().toISOString(),
       }
 
-      localStorage.setItem("user", JSON.stringify(userData))
-      localStorage.setItem("access_token", data.access_token)
-      if (data.refresh_token) {
-        localStorage.setItem("refresh_token", data.refresh_token)
+      const userData: User = {
+        id: normalizedUser.id,
+        email: normalizedUser.email,
+        username: normalizedUser.username,
+        name: normalizedUser.name,
+        full_name: normalizedUser.full_name,
+        role: normalizedUser.role,
+        avatar: normalizedUser.avatar,
+        is_active: normalizedUser.is_active,
+        loggedInAt: normalizedUser.loggedInAt,
       }
 
-      // تعيين التوكن في العميل
-      apiClient.setToken(data.access_token)
+      // في التطوير: تخزين في localStorage
+      // في الإنتاج: httpOnly cookie يُعيّن من الخادم، نحتاج localStorage للمعلومات غير الحساسة فقط
+      const isProduction = process.env.NODE_ENV === 'production'
+      
+      localStorage.setItem("user", JSON.stringify(userData))
+      
+      if (!isProduction) {
+        // في التطوير فقط: تخزين token في localStorage
+        localStorage.setItem("access_token", data.access_token)
+        if (data.refresh_token) {
+          localStorage.setItem("refresh_token", data.refresh_token)
+        }
+        // تعيين التوكن في apiClient
+        apiClient.setToken(data.access_token)
+      }
+      // في الإنتاج: لا حاجة لتعيين token في localStorage لأن httpOnly cookie يُرسل تلقائياً
 
-      // تعيين Cookie للميدل وير
+      // تعيين Cookie للميدل وير - استخدام Secure و HttpOnly attributes في الإنتاج
       try {
         const expiresIn = data.expires_in || 86400
-        document.cookie = `auth-token=${data.access_token}; path=/; max-age=${expiresIn}`
+        // في الإنتاج، يجب استخدام HttpOnly cookies من الخادم
+        // هذا للعرض فقط في التطوير
+        const isProduction = process.env.NODE_ENV === 'production'
+        const cookieOptions = isProduction 
+          ? `; path=/; max-age=${expiresIn}; SameSite=Strict; Secure`
+          : `; path=/; max-age=${expiresIn}`
+        document.cookie = `auth-token=${data.access_token}${cookieOptions}`
       } catch { }
 
       setUser(userData)
@@ -132,20 +188,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       toast.success("تم تسجيل الدخول بنجاح!")
       router.push("/")
     } catch (error: any) {
-      toast.error(error.message || "حدث خطأ أثناء تسجيل الدخول")
+      console.error("Login error:", error)
+
+      // تحسين رسائل الخطأ
+      // تحسين معالجة الأخطاء
+      let errorMessage = "حدث خطأ أثناء تسجيل الدخول"
+
+      const errorMsg = error.message || "";
+
+      if (errorMsg.includes("fetch") || errorMsg.includes("Failed to fetch") || errorMsg.includes("Network request failed")) {
+        errorMessage = "لا يمكن الاتصال بالخادم. تأكد من تشغيل Backend API على http://localhost:8001"
+      } else if (error.status === 401) {
+        errorMessage = "اسم المستخدم أو كلمة المرور غير صحيحة"
+      } else if (error.status === 404) {
+        errorMessage = "الخادم غير متاح (404). تأكد من المسار الصحيح للـ API"
+      } else if (error.status === 500) {
+        errorMessage = "خطأ داخلي في الخادم (500). يرجى المحاولة لاحقاً"
+      } else if (error.data?.detail) {
+        errorMessage = error.data.detail
+      } else if (errorMsg) {
+        errorMessage = errorMsg
+      }
+
+      toast.error(errorMessage)
       throw error
     }
   }
 
-  const logout = () => {
+  const logout = async () => {
+    // Call logout API endpoint to clear server-side cookies
+    try {
+      await apiClient.post('/api/v1/auth/logout', {})
+    } catch {
+      // Continue even if API call fails
+    }
+    
+    // Clear client-side storage
     localStorage.removeItem("user")
     localStorage.removeItem("access_token")
     localStorage.removeItem("refresh_token")
     localStorage.removeItem("company_id")
     localStorage.removeItem("rememberMe")
-    try {
-      document.cookie = "auth-token=; path=/; max-age=0"
-    } catch { }
+    
+    // Clear any remaining cookies
+    deleteCookie('access_token')
+    deleteCookie('refresh_token')
+    deleteCookie('auth-token')
+    
     setUser(null)
     toast.info("تم تسجيل الخروج بنجاح")
     router.push("/login")
