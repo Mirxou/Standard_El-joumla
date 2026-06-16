@@ -2,7 +2,7 @@
 
 ## نظرة عامة
 
-يستخدم نظام الإصدار المنطقي نظام إعدادات مرن يدعم:
+يستخدم نظام ستاندرد الجملة نظام إعدادات مرن يدعم:
 - ملفات JSON للإعدادات
 - متغيرات البيئة
 - تشفير القيم الحساسة
@@ -287,9 +287,9 @@ else:
 ### مثال 2: إعداد الشركة
 
 ```python
-config.set('company.name', 'شركة الإصدار المنطقي')
-config.set('company.name_ar', 'شركة الإصدار المنطقي')
-config.set('company.name_en', 'Logical Version Company')
+config.set('company.name', 'شركة ستاندرد الجملة')
+config.set('company.name_ar', 'شركة ستاندرد الجملة')
+config.set('company.name_en', 'Standard El-Joumla Company')
 config.set('company.address', 'الجزائر العاصمة')
 config.set('company.phone', '0123456789')
 config.set('company.email', 'info@logicalversion.com')
@@ -365,7 +365,7 @@ for error in errors:
 
 ---
 
-**تم إنشاء هذا الدليل بواسطة:** Logical Version Team  
+**تم إنشاء هذا الدليل بواسطة:** Standard El-Joumla Team  
 **التاريخ:** 2025-01-15  
 **الإصدار:** 5.3.0
 

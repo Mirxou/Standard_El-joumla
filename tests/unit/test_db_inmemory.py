@@ -9,10 +9,7 @@ def test_ai_models_table_inmemory_exists():
     cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='ai_models'")
     result = cur.fetchone()
     assert result is not None
-    cur.execute('PRAGMA table_info(ai_models)')
+    cur.execute("PRAGMA table_info(ai_models)")
     columns = cur.fetchall()
     assert len(columns) == 2
     conn.close()
-
-
-

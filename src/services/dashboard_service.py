@@ -2,12 +2,14 @@
 خدمة لوحات المعلومات (Dashboard)
 تحسب مؤشرات الأداء (KPIs) وتجهز بيانات الرسوم البيانية.
 """
+
 from __future__ import annotations
-from typing import List, Dict, Any
+
 from datetime import date, timedelta
+from typing import Any, Dict, List
 
 from ..core.database_manager import DatabaseManager
-from ..models.dashboard import KPI, DashboardData, ChartSeries, TimeSeriesPoint
+from ..models.dashboard import KPI, ChartSeries, DashboardData, TimeSeriesPoint
 
 
 class DashboardService:
@@ -24,14 +26,14 @@ class DashboardService:
             self._kpi_today_sales(end),
             self._kpi_month_sales(end),
             self._kpi_gross_profit(start, end),
-            self._kpi_profit_margin(start, end),            # NEW
-            self._kpi_avg_order_value(start, end),          # NEW
+            self._kpi_profit_margin(start, end),  # NEW
+            self._kpi_avg_order_value(start, end),  # NEW
             self._kpi_inventory_value(),
-            self._kpi_inventory_turnover(start, end),       # NEW
+            self._kpi_inventory_turnover(start, end),  # NEW
             self._kpi_low_stock_count(),
             self._kpi_receivables(),
             self._kpi_payables(),
-            self._kpi_cash_flow(start, end),                # NEW
+            self._kpi_cash_flow(start, end),  # NEW
         ]
 
         # Time series: sales per day
@@ -60,7 +62,14 @@ class DashboardService:
         total = self._scalar(q, [start, end])
         prev_total = self._scalar(q, [start - (end - start), start])
         change = self._change_pct(prev_total, total)
-        return KPI(key="total_sales", title="إجمالي المبيعات", value=total, change=change, unit="ر.س", color="#4CAF50")
+        return KPI(
+            key="total_sales",
+            title="إجمالي المبيعات",
+            value=total,
+            change=change,
+            unit="ر.س",
+            color="#4CAF50",
+        )
 
     def _kpi_today_sales(self, today: date) -> KPI:
         q = """
@@ -73,7 +82,14 @@ class DashboardService:
         y = today - timedelta(days=1)
         prev = self._scalar(q, [y])
         change = self._change_pct(prev, total)
-        return KPI(key="today_sales", title="مبيعات اليوم", value=total, change=change, unit="ر.س", color="#2196F3")
+        return KPI(
+            key="today_sales",
+            title="مبيعات اليوم",
+            value=total,
+            change=change,
+            unit="ر.س",
+            color="#2196F3",
+        )
 
     def _kpi_month_sales(self, today: date) -> KPI:
         start = today.replace(day=1)
@@ -88,7 +104,14 @@ class DashboardService:
         prev_end = start - timedelta(days=1)
         prev = self._scalar(q, [prev_start, prev_end])
         change = self._change_pct(prev, total)
-        return KPI(key="month_sales", title="مبيعات هذا الشهر", value=total, change=change, unit="ر.س", color="#1976D2")
+        return KPI(
+            key="month_sales",
+            title="مبيعات هذا الشهر",
+            value=total,
+            change=change,
+            unit="ر.س",
+            color="#1976D2",
+        )
 
     def _kpi_gross_profit(self, start: date, end: date) -> KPI:
         q = """
@@ -102,7 +125,14 @@ class DashboardService:
         profit = self._scalar(q, [start, end])
         prev_profit = self._scalar(q, [start - (end - start), start])
         change = self._change_pct(prev_profit, profit)
-        return KPI(key="gross_profit", title="إجمالي الربح", value=profit, change=change, unit="ر.س", color="#FF9800")
+        return KPI(
+            key="gross_profit",
+            title="إجمالي الربح",
+            value=profit,
+            change=change,
+            unit="ر.س",
+            color="#FF9800",
+        )
 
     def _kpi_inventory_value(self) -> KPI:
         q = """
@@ -110,14 +140,26 @@ class DashboardService:
             FROM products
         """
         value = self._scalar(q)
-        return KPI(key="inventory_value", title="قيمة المخزون", value=value, unit="ر.س", color="#9C27B0")
+        return KPI(
+            key="inventory_value",
+            title="قيمة المخزون",
+            value=value,
+            unit="ر.س",
+            color="#9C27B0",
+        )
 
     def _kpi_low_stock_count(self) -> KPI:
         q = """
             SELECT COUNT(*) FROM products WHERE current_stock <= COALESCE(min_stock, 0)
         """
         c = self._scalar(q)
-        return KPI(key="low_stock", title="منتجات منخفضة المخزون", value=int(c), unit=None, color="#F44336")
+        return KPI(
+            key="low_stock",
+            title="منتجات منخفضة المخزون",
+            value=int(c),
+            unit=None,
+            color="#F44336",
+        )
 
     def _kpi_receivables(self) -> KPI:
         # Prefer account_balances table if populated; fallback to customers.current_balance
@@ -128,7 +170,13 @@ class DashboardService:
         if v == 0:
             q2 = "SELECT COALESCE(SUM(current_balance), 0) FROM customers WHERE current_balance > 0"
             v = self._scalar(q2)
-        return KPI(key="receivables", title="الذمم المدينة", value=v, unit="ر.س", color="#26A69A")
+        return KPI(
+            key="receivables",
+            title="الذمم المدينة",
+            value=v,
+            unit="ر.س",
+            color="#26A69A",
+        )
 
     def _kpi_payables(self) -> KPI:
         q1 = """
@@ -140,7 +188,7 @@ class DashboardService:
     def _kpi_profit_margin(self, start: date, end: date) -> KPI:
         """هامش الربح (Profit Margin %) = (الربح / المبيعات) × 100"""
         q_sales = """
-            SELECT COALESCE(SUM(final_amount), 0) FROM sales 
+            SELECT COALESCE(SUM(final_amount), 0) FROM sales
             WHERE DATE(sale_date) BETWEEN ? AND ?
             AND status NOT IN ('cancelled', 'ملغية')
         """
@@ -153,9 +201,9 @@ class DashboardService:
         """
         sales = self._scalar(q_sales, [start, end])
         profit = self._scalar(q_profit, [start, end])
-        
+
         margin = 0.0 if sales == 0 else (profit / sales * 100)
-        
+
         # Previous period margin
         period_len = (end - start).days
         prev_end = start - timedelta(days=1)
@@ -163,22 +211,22 @@ class DashboardService:
         prev_sales = self._scalar(q_sales, [prev_start, prev_end])
         prev_profit = self._scalar(q_profit, [prev_start, prev_end])
         prev_margin = 0.0 if prev_sales == 0 else (prev_profit / prev_sales * 100)
-        
+
         change = margin - prev_margin
-        
+
         return KPI(
             key="profit_margin",
             title="هامش الربح",
             value=margin,
             change=change,
             unit="%",
-            color="#673AB7"
+            color="#673AB7",
         )
 
     def _kpi_avg_order_value(self, start: date, end: date) -> KPI:
         """متوسط قيمة الطلب (AOV - Average Order Value)"""
         q = """
-            SELECT 
+            SELECT
                 COALESCE(SUM(final_amount), 0) as total_sales,
                 COUNT(*) as order_count
             FROM sales
@@ -187,12 +235,18 @@ class DashboardService:
         """
         rows = self.db.execute_query(q, [start, end])
         if not isinstance(rows, list) or not rows or rows[0].get("order_count", 0) == 0:
-            return KPI(key="aov", title="متوسط قيمة الطلب", value=0, unit="ر.س", color="#3F51B5")
-        
+            return KPI(
+                key="aov",
+                title="متوسط قيمة الطلب",
+                value=0,
+                unit="ر.س",
+                color="#3F51B5",
+            )
+
         total = float(rows[0].get("total_sales", 0))
         count = int(rows[0].get("order_count", 0))
         aov = total / count
-        
+
         # Previous period AOV
         period_len = (end - start).days
         prev_end = start - timedelta(days=1)
@@ -201,16 +255,16 @@ class DashboardService:
         prev_aov = 0.0
         if isinstance(prev_rows, list) and prev_rows and prev_rows[0].get("order_count", 0) > 0:
             prev_aov = float(prev_rows[0].get("total_sales", 0)) / int(prev_rows[0].get("order_count", 1))
-        
+
         change = self._change_pct(prev_aov, aov)
-        
+
         return KPI(
             key="aov",
             title="متوسط قيمة الطلب",
             value=aov,
             change=change,
             unit="ر.س",
-            color="#3F51B5"
+            color="#3F51B5",
         )
 
     def _kpi_inventory_turnover(self, start: date, end: date) -> KPI:
@@ -224,37 +278,37 @@ class DashboardService:
             AND s.status NOT IN ('cancelled', 'ملغية')
         """
         cogs = self._scalar(q_cogs, [start, end])
-        
+
         # Average inventory value
         q_inv = """
             SELECT COALESCE(SUM(current_stock * cost_price), 0) as value FROM products
         """
         avg_inventory = self._scalar(q_inv)
-        
+
         turnover = 0.0 if avg_inventory == 0 else (cogs / avg_inventory)
-        
+
         return KPI(
             key="inventory_turnover",
             title="معدل دوران المخزون",
             value=turnover,
             unit="مرة",
-            color="#8E24AA"
+            color="#8E24AA",
         )
 
     def _kpi_cash_flow(self, start: date, end: date) -> KPI:
         """التدفق النقدي = (المقبوضات - المدفوعات)"""
         q_in = """
-            SELECT COALESCE(SUM(amount), 0) FROM payments 
+            SELECT COALESCE(SUM(amount), 0) FROM payments
             WHERE DATE(payment_date) BETWEEN ? AND ? AND payment_type = 'received'
         """
         q_out = """
-            SELECT COALESCE(SUM(amount), 0) FROM payments 
+            SELECT COALESCE(SUM(amount), 0) FROM payments
             WHERE DATE(payment_date) BETWEEN ? AND ? AND payment_type = 'paid'
         """
         cash_in = self._scalar(q_in, [start, end])
         cash_out = self._scalar(q_out, [start, end])
         net_flow = cash_in - cash_out
-        
+
         # Previous period
         period_len = (end - start).days
         prev_end = start - timedelta(days=1)
@@ -262,18 +316,18 @@ class DashboardService:
         prev_in = self._scalar(q_in, [prev_start, prev_end])
         prev_out = self._scalar(q_out, [prev_start, prev_end])
         prev_flow = prev_in - prev_out
-        
+
         change = self._change_pct(prev_flow, net_flow)
-        
+
         color = "#4CAF50" if net_flow >= 0 else "#F44336"
-        
+
         return KPI(
             key="cash_flow",
             title="التدفق النقدي الصافي",
             value=net_flow,
             change=change,
             unit="ر.س",
-            color=color
+            color=color,
         )
 
     # ============================ Series & Lists ============================
@@ -289,10 +343,12 @@ class DashboardService:
         rows = self.db.execute_query(q, [start, end])
         series = ChartSeries(name="المبيعات اليومية", color="#2196F3")
         for r in rows:
-            series.points.append(TimeSeriesPoint(label=str(r["d"]), value=float(r["total"])) )
+            series.points.append(TimeSeriesPoint(label=str(r["d"]), value=float(r["total"])))
         return series
 
-    def _top_products(self, start: date, end: date, limit: int = 10, category_id: int | None = None) -> List[Dict[str, Any]]:
+    def _top_products(
+        self, start: date, end: date, limit: int = 10, category_id: int | None = None
+    ) -> List[Dict[str, Any]]:
         base = """
             SELECT p.name, SUM(si.quantity) as qty, SUM(si.total_price) as total
             FROM sale_items si
@@ -333,16 +389,16 @@ class DashboardService:
             prev = 0.0
         if curr is None:
             curr = 0.0
-        
+
         # Convert to float if needed
         prev = float(prev) if not isinstance(prev, float) else prev
         curr = float(curr) if not isinstance(curr, float) else curr
-        
+
         if prev == 0:
             return 0.0 if curr == 0 else 100.0
-        
+
         try:
-            return ((curr - prev) * 100 / prev)
+            return (curr - prev) * 100 / prev
         except (ValueError, ZeroDivisionError, TypeError):
             return 0.0
 
@@ -412,14 +468,14 @@ class DashboardService:
         """
         return {
             "revenue": self.db.execute_query(q_revenue, [start, end]),
-            "expenses": self.db.execute_query(q_expenses, [start, end])
+            "expenses": self.db.execute_query(q_expenses, [start, end]),
         }
 
     def get_inventory_status_distribution(self) -> List[Dict[str, Any]]:
         """توزيع حالة المخزون: منخفض / عادي / عالي"""
         q = """
-            SELECT 
-                CASE 
+            SELECT
+                CASE
                     WHEN current_stock = 0 THEN 'نفذ من المخزون'
                     WHEN current_stock <= COALESCE(min_stock, 0) THEN 'منخفض'
                     WHEN current_stock >= COALESCE(max_stock, current_stock * 2) THEN 'مرتفع'
@@ -435,12 +491,12 @@ class DashboardService:
     def get_profit_trend(self, start: date, end: date) -> List[Dict[str, Any]]:
         """اتجاه الربحية اليومي"""
         q = """
-            SELECT 
+            SELECT
                 DATE(s.sale_date) as day,
                 COALESCE(SUM(si.profit), 0) as profit,
                 COALESCE(SUM(si.total_price), 0) as sales,
-                CASE 
-                    WHEN SUM(si.total_price) > 0 
+                CASE
+                    WHEN SUM(si.total_price) > 0
                     THEN (SUM(si.profit) * 100.0 / SUM(si.total_price))
                     ELSE 0
                 END as margin
@@ -473,7 +529,7 @@ class DashboardService:
             )
         """
         q_avg_value = """
-            SELECT 
+            SELECT
                 AVG(customer_total) as avg_customer_value
             FROM (
                 SELECT customer_id, SUM(final_amount) as customer_total
@@ -483,37 +539,37 @@ class DashboardService:
                 GROUP BY customer_id
             )
         """
-        
+
         total_rows = self.db.execute_query(q_total, [start, end])
         repeat_rows = self.db.execute_query(q_repeat, [start, end])
         avg_rows = self.db.execute_query(q_avg_value, [start, end])
-        
+
         total = 0
         if isinstance(total_rows, list) and total_rows:
             total = int(total_rows[0].get("total_customers", 0))
-            
+
         repeat = 0
         if isinstance(repeat_rows, list) and repeat_rows:
             repeat = int(repeat_rows[0].get("repeat_customers", 0))
-            
+
         new = total - repeat
-        
+
         avg_val = 0.0
         if isinstance(avg_rows, list) and avg_rows:
             avg_val = float(avg_rows[0].get("avg_customer_value", 0) or 0)
-        
+
         return {
             "total_customers": total,
             "new_customers": new,
             "repeat_customers": repeat,
             "repeat_rate": (repeat / total * 100) if total > 0 else 0.0,
-            "avg_customer_value": avg_val
+            "avg_customer_value": avg_val,
         }
 
     def get_low_stock_products(self) -> List[Dict[str, Any]]:
         """الحصول على قائمة المنتجات منخفضة المخزون مع التفاصيل"""
         q = """
-            SELECT 
+            SELECT
                 p.id,
                 p.name,
                 p.barcode,
@@ -522,7 +578,7 @@ class DashboardService:
                 p.cost_price,
                 p.selling_price,
                 c.name as category_name,
-                CASE 
+                CASE
                     WHEN p.current_stock = 0 THEN 'نفذ من المخزون'
                     WHEN p.current_stock <= COALESCE(p.min_stock, 0) THEN 'منخفض'
                     ELSE 'عادي'
@@ -533,4 +589,3 @@ class DashboardService:
             ORDER BY p.current_stock ASC, p.name
         """
         return self.db.execute_query(q)
-

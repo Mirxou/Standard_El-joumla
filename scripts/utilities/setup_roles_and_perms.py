@@ -11,11 +11,11 @@ if sys.platform == 'win32':
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 sys.path.insert(0, str(Path.cwd()))
-from src.core.database_manager import DatabaseManager
+from src.core.local_database_manager import LocalDatabaseManager
 from src.core.config_manager import ConfigManager
 
 config = ConfigManager()
-db = DatabaseManager(config.get_database_path())
+db = LocalDatabaseManager(config.get_database_path())
 db.initialize()
 
 print("\n=== 1️⃣ إضافة الأدوار الأساسية ===")
@@ -77,9 +77,9 @@ print("\n=== 3️⃣ منح جميع الصلاحيات للمدير (role_id=1)
 for perm_code, perm_id in perm_map.items():
     try:
         db.execute_insert(
-            '''INSERT OR IGNORE INTO role_permissions (role_id, permission_id, granted_at, granted_by)
-               VALUES (1, ?, ?, 1)''',
-            (perm_id, datetime.now())
+            '''INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
+               VALUES (1, ?)''',
+            (perm_id,)
         )
         print(f"✓ {perm_code}")
     except Exception as e:
@@ -92,9 +92,9 @@ for perm_code in cashier_perms:
     if perm_code in perm_map:
         try:
             db.execute_insert(
-                '''INSERT OR IGNORE INTO role_permissions (role_id, permission_id, granted_at, granted_by)
-                   VALUES (2, ?, ?, 1)''',
-                (perm_map[perm_code], datetime.now())
+                '''INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
+               VALUES (2, ?)''',
+                (perm_map[perm_code],)
             )
             print(f"✓ {perm_code}")
         except Exception as e:
@@ -107,9 +107,9 @@ for perm_code in warehouse_perms:
     if perm_code in perm_map:
         try:
             db.execute_insert(
-                '''INSERT OR IGNORE INTO role_permissions (role_id, permission_id, granted_at, granted_by)
-                   VALUES (3, ?, ?, 1)''',
-                (perm_map[perm_code], datetime.now())
+                '''INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
+               VALUES (3, ?)''',
+                (perm_map[perm_code],)
             )
             print(f"✓ {perm_code}")
         except Exception as e:

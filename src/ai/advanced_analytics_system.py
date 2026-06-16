@@ -4,17 +4,16 @@
 نظام شامل للتحليلات المتقدمة يجمع بين جميع مكونات الذكاء الاصطناعي
 """
 
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional, Tuple
-from collections import defaultdict
-import statistics
-import math
 import json
+import statistics
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
+
 from .advanced_analytics_engine import AdvancedAnalyticsEngine
-from .intelligent_recommendation_system import RecommendationEngine
-from .anomaly_detection_system import AnomalyDetectionSystem
-from .machine_learning_model import SalesPredictionModel, InventoryPredictionModel
 from .advanced_prediction_system import AdvancedPredictionSystem
+from .anomaly_detection_system import AnomalyDetectionSystem
+from .intelligent_recommendation_system import RecommendationEngine
+from .machine_learning_model import InventoryPredictionModel, SalesPredictionModel
 
 
 class AdvancedAnalyticsSystem:
@@ -28,12 +27,11 @@ class AdvancedAnalyticsSystem:
         self.prediction_system = AdvancedPredictionSystem()
         self.ml_models = {
             "sales": SalesPredictionModel(),
-            "inventory": InventoryPredictionModel()
+            "inventory": InventoryPredictionModel(),
         }
         self.system_status = "initializing"
         self.last_analysis = None
         self.insights_cache = {}
-
 
     def initialize_system(self, config: Dict[str, Any] = None) -> Dict[str, Any]:
         """تهيئة النظام"""
@@ -47,8 +45,8 @@ class AdvancedAnalyticsSystem:
             "prediction_system": {"status": "ready"},
             "ml_models": {
                 "sales_model": {"status": "ready"},
-                "inventory_model": {"status": "ready"}
-            }
+                "inventory_model": {"status": "ready"},
+            },
         }
 
         self.system_status = "ready"
@@ -58,7 +56,7 @@ class AdvancedAnalyticsSystem:
             "status": "initialized",
             "components": init_results,
             "timestamp": self.last_analysis.isoformat(),
-            "version": "1.0.0"
+            "version": "1.0.0",
         }
 
     def perform_comprehensive_analysis(self, analysis_context: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -81,26 +79,27 @@ class AdvancedAnalyticsSystem:
             # التنبؤات المتقدمة
             predictions = self.prediction_system.generate_comprehensive_forecast(
                 forecast_period_days=analysis_context.get("forecast_days", 30),
-                context=analysis_context
+                context=analysis_context,
             )
 
             # تحليل الاتجاهات
             trend_analysis = self._analyze_trends_and_patterns(performance_analysis, predictions)
 
             # تحليل المخاطر
-            risk_analysis = self._perform_risk_assessment(
-                performance_analysis, anomaly_analysis, predictions
-            )
+            risk_analysis = self._perform_risk_assessment(performance_analysis, anomaly_analysis, predictions)
 
             # توليد الرؤى الرئيسية
             key_insights = self._generate_key_insights(
-                performance_analysis, anomaly_analysis, recommendations, predictions, trend_analysis, risk_analysis
+                performance_analysis,
+                anomaly_analysis,
+                recommendations,
+                predictions,
+                trend_analysis,
+                risk_analysis,
             )
 
             # حساب نقاط الأداء
-            performance_scores = self._calculate_performance_scores(
-                performance_analysis, anomaly_analysis, predictions
-            )
+            performance_scores = self._calculate_performance_scores(performance_analysis, anomaly_analysis, predictions)
 
             analysis_duration = (datetime.now() - start_time).total_seconds()
 
@@ -117,9 +116,7 @@ class AdvancedAnalyticsSystem:
                 "risk_analysis": risk_analysis,
                 "key_insights": key_insights,
                 "performance_scores": performance_scores,
-                "executive_summary": self._generate_executive_summary(
-                    key_insights, performance_scores, risk_analysis
-                )
+                "executive_summary": self._generate_executive_summary(key_insights, performance_scores, risk_analysis),
             }
 
             # حفظ في الذاكرة المؤقتة
@@ -133,7 +130,7 @@ class AdvancedAnalyticsSystem:
                 "status": "error",
                 "error": str(e),
                 "timestamp": start_time.isoformat(),
-                "duration_seconds": (datetime.now() - start_time).total_seconds()
+                "duration_seconds": (datetime.now() - start_time).total_seconds(),
             }
 
     def analyze_real_time_metrics(self, metrics_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -158,21 +155,18 @@ class AdvancedAnalyticsSystem:
             "real_time_anomalies": real_time_anomalies,
             "immediate_predictions": immediate_predictions,
             "current_status": current_status,
-            "alerts": self._generate_real_time_alerts(real_time_anomalies, current_status)
+            "alerts": self._generate_real_time_alerts(real_time_anomalies, current_status),
         }
 
     def generate_executive_dashboard(self, dashboard_config: Dict[str, Any] = None) -> Dict[str, Any]:
         """توليد لوحة تحكم تنفيذية"""
-        config = dashboard_config or {}
+        dashboard_config or {}
 
         # الحصول على آخر تحليل شامل
         latest_analysis = self._get_latest_analysis()
 
         if not latest_analysis or latest_analysis.get("status") != "completed":
-            return {
-                "status": "no_data",
-                "message": "لا توجد تحليلات شاملة متاحة"
-            }
+            return {"status": "no_data", "message": "لا توجد تحليلات شاملة متاحة"}
 
         # بناء لوحة التحكم
         dashboard = {
@@ -185,7 +179,7 @@ class AdvancedAnalyticsSystem:
             "trend_charts": self._generate_trend_charts(latest_analysis),
             "recommendation_summary": self._extract_recommendation_summary(latest_analysis),
             "predictive_insights": self._extract_predictive_insights(latest_analysis),
-            "alerts_and_warnings": self._extract_alerts_and_warnings(latest_analysis)
+            "alerts_and_warnings": self._extract_alerts_and_warnings(latest_analysis),
         }
 
         return dashboard
@@ -206,7 +200,7 @@ class AdvancedAnalyticsSystem:
         else:
             return self.prediction_system.generate_comprehensive_forecast(
                 forecast_period_days=config.get("days", 30),
-                context=config.get("context", {})
+                context=config.get("context", {}),
             )
 
     def generate_custom_report(self, report_config: Dict[str, Any]) -> Dict[str, Any]:
@@ -231,22 +225,22 @@ class AdvancedAnalyticsSystem:
         """حالة النظام"""
         return {
             "overall_status": self.system_status,
-            "last_analysis": self.last_analysis.isoformat() if self.last_analysis else None,
+            "last_analysis": (self.last_analysis.isoformat() if self.last_analysis else None),
             "components_health": {
                 "analytics_engine": "operational",
                 "recommendation_system": "operational",
                 "anomaly_detector": "operational",
                 "prediction_system": "operational",
                 "ml_models": {
-                    "sales": "trained" if self.ml_models["sales"].model_parameters else "not_trained",
-                    "inventory": f"{len(self.ml_models['inventory'].product_models)} products"
-                }
+                    "sales": ("trained" if self.ml_models["sales"].model_parameters else "not_trained"),
+                    "inventory": f"{len(self.ml_models['inventory'].product_models)} products",
+                },
             },
             "cache_status": {
                 "insights_cached": len(self.insights_cache),
-                "cache_size_mb": self._estimate_cache_size()
+                "cache_size_mb": self._estimate_cache_size(),
             },
-            "performance_metrics": self._get_performance_metrics()
+            "performance_metrics": self._get_performance_metrics(),
         }
 
     def _analyze_trends_and_patterns(self, performance: Dict, predictions: Dict) -> Dict[str, Any]:
@@ -257,13 +251,13 @@ class AdvancedAnalyticsSystem:
             "customer_trend": self._analyze_customer_trend(performance),
             "operational_trends": self._analyze_operational_trends(performance),
             "seasonal_patterns": self._identify_seasonal_patterns(performance),
-            "growth_patterns": self._identify_growth_patterns(performance, predictions)
+            "growth_patterns": self._identify_growth_patterns(performance, predictions),
         }
 
         return {
             "trends": trends,
             "key_patterns": self._extract_key_patterns(trends),
-            "trend_confidence": self._calculate_trend_confidence(trends)
+            "trend_confidence": self._calculate_trend_confidence(trends),
         }
 
     def _perform_risk_assessment(self, performance: Dict, anomalies: Dict, predictions: Dict) -> Dict[str, Any]:
@@ -286,60 +280,75 @@ class AdvancedAnalyticsSystem:
             "risk_level": self._categorize_risk_level(overall_risk_score),
             "mitigation_strategies": self._generate_risk_mitigation_strategies(
                 operational_risks, financial_risks, market_risks, strategic_risks
-            )
+            ),
         }
 
-    def _generate_key_insights(self, performance: Dict, anomalies: Dict, recommendations: Dict,
-                             predictions: Dict, trends: Dict, risks: Dict) -> List[Dict[str, Any]]:
+    def _generate_key_insights(
+        self,
+        performance: Dict,
+        anomalies: Dict,
+        recommendations: Dict,
+        predictions: Dict,
+        trends: Dict,
+        risks: Dict,
+    ) -> List[Dict[str, Any]]:
         """توليد الرؤى الرئيسية"""
         insights = []
 
         # رؤى الأداء
         if performance.get("overall_performance_score", 0) > 0.8:
-            insights.append({
-                "type": "performance",
-                "priority": "high",
-                "title": "أداء ممتاز",
-                "description": "الأداء العام يتجاوز التوقعات",
-                "impact": "positive",
-                "confidence": 0.9
-            })
+            insights.append(
+                {
+                    "type": "performance",
+                    "priority": "high",
+                    "title": "أداء ممتاز",
+                    "description": "الأداء العام يتجاوز التوقعات",
+                    "impact": "positive",
+                    "confidence": 0.9,
+                }
+            )
 
         # رؤى الشذوذ
         anomaly_count = anomalies.get("total_anomalies_detected", 0)
         if anomaly_count > 5:
-            insights.append({
-                "type": "anomaly",
-                "priority": "high",
-                "title": "عدد كبير من الشذوذ",
-                "description": f"تم كشف {anomaly_count} شذوذ يتطلب الانتباه",
-                "impact": "negative",
-                "confidence": 0.85
-            })
+            insights.append(
+                {
+                    "type": "anomaly",
+                    "priority": "high",
+                    "title": "عدد كبير من الشذوذ",
+                    "description": f"تم كشف {anomaly_count} شذوذ يتطلب الانتباه",
+                    "impact": "negative",
+                    "confidence": 0.85,
+                }
+            )
 
         # رؤى التنبؤات
         prediction_confidence = predictions.get("confidence_score", 0.5)
         if prediction_confidence > 0.8:
-            insights.append({
-                "type": "prediction",
-                "priority": "medium",
-                "title": "تنبؤات دقيقة",
-                "description": "نظام التنبؤ يعمل بدقة عالية",
-                "impact": "positive",
-                "confidence": prediction_confidence
-            })
+            insights.append(
+                {
+                    "type": "prediction",
+                    "priority": "medium",
+                    "title": "تنبؤات دقيقة",
+                    "description": "نظام التنبؤ يعمل بدقة عالية",
+                    "impact": "positive",
+                    "confidence": prediction_confidence,
+                }
+            )
 
         # رؤى المخاطر
         risk_score = risks.get("overall_risk_score", 0.5)
         if risk_score > 0.7:
-            insights.append({
-                "type": "risk",
-                "priority": "high",
-                "title": "مخاطر عالية",
-                "description": "مستوى المخاطر يتطلب خطة طوارئ",
-                "impact": "negative",
-                "confidence": 0.9
-            })
+            insights.append(
+                {
+                    "type": "risk",
+                    "priority": "high",
+                    "title": "مخاطر عالية",
+                    "description": "مستوى المخاطر يتطلب خطة طوارئ",
+                    "impact": "negative",
+                    "confidence": 0.9,
+                }
+            )
 
         return insights
 
@@ -365,7 +374,7 @@ class AdvancedAnalyticsSystem:
             "anomaly_detection_score": round(anomaly_score, 3),
             "prediction_accuracy_score": round(prediction_score, 3),
             "system_stability_score": round(stability_score, 3),
-            "score_grade": self._convert_score_to_grade(overall_score)
+            "score_grade": self._convert_score_to_grade(overall_score),
         }
 
     def _generate_executive_summary(self, insights: List[Dict], scores: Dict, risks: Dict) -> Dict[str, Any]:
@@ -379,10 +388,10 @@ class AdvancedAnalyticsSystem:
                 f"الأداء العام: {scores['score_grade']}",
                 f"مستوى المخاطر: {risks['risk_level']}",
                 f"الرؤى الإيجابية: {positive_insights}",
-                f"الرؤى السلبية: {negative_insights}"
+                f"الرؤى السلبية: {negative_insights}",
             ],
             "critical_actions": self._extract_critical_actions(insights, risks),
-            "next_steps": self._generate_next_steps_recommendations(scores, risks)
+            "next_steps": self._generate_next_steps_recommendations(scores, risks),
         }
 
     def _analyze_short_term_trends(self, metrics: Dict[str, Any]) -> Dict[str, Any]:
@@ -391,7 +400,7 @@ class AdvancedAnalyticsSystem:
         return {
             "sales_trend": "stable",
             "performance_trend": "improving",
-            "confidence": 0.7
+            "confidence": 0.7,
         }
 
     def _generate_immediate_predictions(self, metrics: Dict[str, Any]) -> Dict[str, Any]:
@@ -399,7 +408,7 @@ class AdvancedAnalyticsSystem:
         return {
             "next_hour_sales": 150.0,
             "confidence": 0.8,
-            "based_on": "current_trends"
+            "based_on": "current_trends",
         }
 
     def _assess_current_system_status(self, metrics: Dict[str, Any], anomalies: Dict[str, Any]) -> Dict[str, Any]:
@@ -420,7 +429,7 @@ class AdvancedAnalyticsSystem:
             "status": status,
             "status_score": status_score,
             "active_anomalies": anomaly_count,
-            "last_updated": datetime.now().isoformat()
+            "last_updated": datetime.now().isoformat(),
         }
 
     def _generate_real_time_alerts(self, anomalies: Dict[str, Any], status: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -428,19 +437,23 @@ class AdvancedAnalyticsSystem:
         alerts = []
 
         if status["status"] == "critical":
-            alerts.append({
-                "level": "critical",
-                "message": "حالة النظام حرجة - يتطلب تدخل فوري",
-                "timestamp": datetime.now().isoformat()
-            })
+            alerts.append(
+                {
+                    "level": "critical",
+                    "message": "حالة النظام حرجة - يتطلب تدخل فوري",
+                    "timestamp": datetime.now().isoformat(),
+                }
+            )
 
         for anomaly in anomalies.get("detected_anomalies", []):
             if anomaly.get("severity") == "high":
-                alerts.append({
-                    "level": "high",
-                    "message": f"شذوذ حرج: {anomaly.get('description', 'غير محدد')}",
-                    "timestamp": anomaly.get("timestamp", datetime.now().isoformat())
-                })
+                alerts.append(
+                    {
+                        "level": "high",
+                        "message": f"شذوذ حرج: {anomaly.get('description', 'غير محدد')}",
+                        "timestamp": anomaly.get("timestamp", datetime.now().isoformat()),
+                    }
+                )
 
         return alerts
 
@@ -449,7 +462,10 @@ class AdvancedAnalyticsSystem:
         if not self.insights_cache:
             return None
 
-        latest_key = max(self.insights_cache.keys(), key=lambda x: self.insights_cache[x]["timestamp"])
+        latest_key = max(
+            self.insights_cache.keys(),
+            key=lambda x: self.insights_cache[x]["timestamp"],
+        )
         return self.insights_cache[latest_key]
 
     def _extract_kpi_summary(self, analysis: Dict[str, Any]) -> Dict[str, Any]:
@@ -461,7 +477,7 @@ class AdvancedAnalyticsSystem:
             "total_sales": performance.get("total_sales", 0),
             "predicted_sales": predictions.get("integrated_forecast", {}).get("integrated_sales_prediction", 0),
             "anomaly_count": analysis.get("anomaly_analysis", {}).get("total_anomalies_detected", 0),
-            "risk_score": analysis.get("risk_analysis", {}).get("overall_risk_score", 0.5)
+            "risk_score": analysis.get("risk_analysis", {}).get("overall_risk_score", 0.5),
         }
 
     def _extract_performance_indicators(self, analysis: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -472,18 +488,18 @@ class AdvancedAnalyticsSystem:
             {
                 "name": "الأداء العام",
                 "value": scores.get("overall_score", 0),
-                "grade": scores.get("score_grade", "N/A")
+                "grade": scores.get("score_grade", "N/A"),
             },
             {
                 "name": "دقة التنبؤ",
                 "value": scores.get("prediction_accuracy_score", 0),
-                "grade": self._convert_score_to_grade(scores.get("prediction_accuracy_score", 0))
+                "grade": self._convert_score_to_grade(scores.get("prediction_accuracy_score", 0)),
             },
             {
                 "name": "كشف الشذوذ",
                 "value": scores.get("anomaly_detection_score", 0),
-                "grade": self._convert_score_to_grade(scores.get("anomaly_detection_score", 0))
-            }
+                "grade": self._convert_score_to_grade(scores.get("anomaly_detection_score", 0)),
+            },
         ]
 
     def _extract_risk_indicators(self, analysis: Dict[str, Any]) -> Dict[str, Any]:
@@ -493,7 +509,7 @@ class AdvancedAnalyticsSystem:
         return {
             "overall_risk": risks.get("overall_risk_score", 0.5),
             "risk_level": risks.get("risk_level", "medium"),
-            "high_priority_risks": len([r for r in risks.get("operational_risks", []) if r.get("priority") == "high"])
+            "high_priority_risks": len([r for r in risks.get("operational_risks", []) if r.get("priority") == "high"]),
         }
 
     def _generate_trend_charts(self, analysis: Dict[str, Any]) -> Dict[str, Any]:
@@ -504,13 +520,13 @@ class AdvancedAnalyticsSystem:
             "sales_trend_chart": {
                 "data": trends.get("trends", {}).get("sales_trend", {}),
                 "type": "line",
-                "title": "اتجاه المبيعات"
+                "title": "اتجاه المبيعات",
             },
             "performance_trend_chart": {
                 "data": trends.get("trends", {}).get("profitability_trend", {}),
                 "type": "bar",
-                "title": "اتجاه الربحية"
-            }
+                "title": "اتجاه الربحية",
+            },
         }
 
     def _extract_recommendation_summary(self, analysis: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -527,7 +543,7 @@ class AdvancedAnalyticsSystem:
             {
                 "type": "sales_prediction",
                 "value": predictions.get("integrated_forecast", {}).get("integrated_sales_prediction", 0),
-                "confidence": predictions.get("confidence_score", 0.5)
+                "confidence": predictions.get("confidence_score", 0.5),
             }
         ]
 
@@ -538,20 +554,18 @@ class AdvancedAnalyticsSystem:
         # تنبيهات المخاطر
         risks = analysis.get("risk_analysis", {})
         if risks.get("overall_risk_score", 0) > 0.7:
-            alerts.append({
-                "type": "risk",
-                "level": "high",
-                "message": "مستوى المخاطر مرتفع"
-            })
+            alerts.append({"type": "risk", "level": "high", "message": "مستوى المخاطر مرتفع"})
 
         # تنبيهات الشذوذ
         anomalies = analysis.get("anomaly_analysis", {})
         if anomalies.get("total_anomalies_detected", 0) > 3:
-            alerts.append({
-                "type": "anomaly",
-                "level": "medium",
-                "message": f"تم كشف {anomalies['total_anomalies_detected']} شذوذ"
-            })
+            alerts.append(
+                {
+                    "type": "anomaly",
+                    "level": "medium",
+                    "message": f"تم كشف {anomalies['total_anomalies_detected']} شذوذ",
+                }
+            )
 
         return alerts
 
@@ -560,15 +574,13 @@ class AdvancedAnalyticsSystem:
         return self.ml_models["sales"].predict_range(
             datetime.now(),
             datetime.now() + timedelta(days=config.get("days", 30)),
-            config.get("context", {})
+            config.get("context", {}),
         )
 
     def _perform_inventory_prediction_analysis(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """تحليل تنبؤ المخزون"""
         product_id = config.get("product_id", "PROD001")
-        return self.ml_models["inventory"].predict_inventory_needs(
-            product_id, config.get("days", 30)
-        )
+        return self.ml_models["inventory"].predict_inventory_needs(product_id, config.get("days", 30))
 
     def _perform_customer_prediction_analysis(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """تحليل تنبؤ العملاء"""
@@ -582,7 +594,7 @@ class AdvancedAnalyticsSystem:
             "report_type": "performance",
             "date_range": date_range,
             "filters": filters,
-            "data": self.analytics_engine.analyze_business_performance(filters)
+            "data": self.analytics_engine.analyze_business_performance(filters),
         }
 
     def _generate_anomaly_report(self, date_range: Dict, filters: Dict) -> Dict[str, Any]:
@@ -591,7 +603,7 @@ class AdvancedAnalyticsSystem:
             "report_type": "anomaly",
             "date_range": date_range,
             "filters": filters,
-            "data": self.anomaly_detector.perform_comprehensive_anomaly_detection(filters)
+            "data": self.anomaly_detector.perform_comprehensive_anomaly_detection(filters),
         }
 
     def _generate_prediction_report(self, date_range: Dict, filters: Dict) -> Dict[str, Any]:
@@ -600,9 +612,7 @@ class AdvancedAnalyticsSystem:
             "report_type": "prediction",
             "date_range": date_range,
             "filters": filters,
-            "data": self.prediction_system.generate_comprehensive_forecast(
-                forecast_period_days=30, context=filters
-            )
+            "data": self.prediction_system.generate_comprehensive_forecast(forecast_period_days=30, context=filters),
         }
 
     def _generate_trend_report(self, date_range: Dict, filters: Dict) -> Dict[str, Any]:
@@ -611,7 +621,7 @@ class AdvancedAnalyticsSystem:
             "report_type": "trend",
             "date_range": date_range,
             "filters": filters,
-            "data": {"trends": "trend_analysis_placeholder"}
+            "data": {"trends": "trend_analysis_placeholder"},
         }
 
     def _generate_general_report(self, date_range: Dict, filters: Dict) -> Dict[str, Any]:
@@ -620,7 +630,7 @@ class AdvancedAnalyticsSystem:
             "report_type": "general",
             "date_range": date_range,
             "filters": filters,
-            "data": self.perform_comprehensive_analysis(filters)
+            "data": self.perform_comprehensive_analysis(filters),
         }
 
     def _estimate_cache_size(self) -> float:
@@ -633,7 +643,7 @@ class AdvancedAnalyticsSystem:
             "analysis_count": len(self.insights_cache),
             "average_analysis_time": 2.5,  # ثواني
             "cache_hit_rate": 0.85,
-            "system_uptime": "99.9%"
+            "system_uptime": "99.9%",
         }
 
     def _analyze_sales_trend(self, performance: Dict, predictions: Dict) -> Dict[str, Any]:
@@ -678,7 +688,13 @@ class AdvancedAnalyticsSystem:
 
     def _assess_market_risks(self, predictions: Dict) -> List[Dict[str, Any]]:
         """تقييم مخاطر السوق"""
-        return [{"type": "market_volatility", "level": "medium", "description": "تقلبات السوق"}]
+        return [
+            {
+                "type": "market_volatility",
+                "level": "medium",
+                "description": "تقلبات السوق",
+            }
+        ]
 
     def _assess_strategic_risks(self, performance: Dict, predictions: Dict) -> List[Dict[str, Any]]:
         """تقييم المخاطر الاستراتيجية"""
@@ -704,7 +720,9 @@ class AdvancedAnalyticsSystem:
         else:
             return "high"
 
-    def _generate_risk_mitigation_strategies(self, operational: List, financial: List, market: List, strategic: List) -> List[str]:
+    def _generate_risk_mitigation_strategies(
+        self, operational: List, financial: List, market: List, strategic: List
+    ) -> List[str]:
         """توليد استراتيجيات تخفيف المخاطر"""
         return ["تطوير خطط طوارئ", "تحسين مراقبة النظام", "تنويع المخاطر"]
 

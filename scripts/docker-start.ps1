@@ -42,8 +42,8 @@ Write-Host ""
 Write-Host "Docker Containers started!" -ForegroundColor Green
 Write-Host ""
 Write-Host "Access Points:" -ForegroundColor Cyan
-Write-Host "  - API: http://localhost:8000" -ForegroundColor White
-Write-Host "  - API Docs: http://localhost:8000/docs" -ForegroundColor White
+Write-Host "  - API: http://localhost:8001" -ForegroundColor White
+Write-Host "  - API Docs: http://localhost:8001/docs" -ForegroundColor White
 Write-Host "  - Grafana: http://localhost:3001 (admin/admin)" -ForegroundColor White
 Write-Host "  - Prometheus: http://localhost:9090" -ForegroundColor White
 Write-Host ""

@@ -1,4 +1,4 @@
-{
+﻿{
   "app_title": "Logisches Version ERP-System",
   "welcome": "Willkommen",
   "login": "Anmelden",
@@ -263,10 +263,10 @@
   "error_network": "Netzwerkfehler",
   "error_file_system": "Dateisystemfehler",
   "error_system": "Systemfehler",
-  "login_title": "Anmeldung - Logische Version",
-  "app_name_short": "Logische Version",
+  "login_title": "Anmeldung - Standard El Joumla",
+  "app_name_short": "Standard El Joumla",
   "app_description": "Integriertes Verkaufs- und Lagerverwaltungssystem",
-  "app_version_copyright": "Version 1.0.0 | © 2024 Logische Version - Alle Rechte vorbehalten",
+  "app_version_copyright": "Version 1.0.0 | © 2024 Standard El Joumla - Alle Rechte vorbehalten",
   "username_label": "👤 Benutzername",
   "password_label": "🔒 Passwort",
   "enter_username": "Benutzernamen eingeben",
@@ -412,7 +412,7 @@
   "data_updated_ask_question": "Daten aktualisiert. Sie können jetzt eine Frage stellen.",
   "refresh_data_failed": "Fehler beim Aktualisieren der Daten: {error}",
   "processing_query": "Anfrage wird verarbeitet...",
-  "welcome_title": "🚀 Logische Version",
+  "welcome_title": "🚀 Standard El Joumla",
   "main_dashboard": "🏠 Haupt-Dashboard",
   "period": "Zeitraum",
   "chart_load_error": "⚠️ Diagramm konnte nicht geladen werden. Bitte installieren Sie die erforderliche Bibliothek: pip install pyqtgraph",
@@ -432,4 +432,5 @@
   "question": "Frage",
   "answer": "Antwort"
 }
+
 

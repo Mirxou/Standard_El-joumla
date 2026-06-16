@@ -1,4 +1,6 @@
-#!/usr/bin/env python3
+import logging
+
+#!/usr/bin/env python3  # noqa: E265
 # -*- coding: utf-8 -*-
 """
 خدمة CPQ - Configure Price Quote Service
@@ -6,22 +8,19 @@
 """
 
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any, Tuple
-from decimal import Decimal, ROUND_HALF_UP
-from datetime import datetime, date, timedelta
-import json
+from datetime import date, datetime, timedelta
+from decimal import Decimal
+from typing import Any, Dict, List, Optional
 
-from src.models.customer import Customer
-from src.models.product import Product
-from src.services.pricing_service import PricingService
-from src.services.dynamic_pricing_engine import DynamicPricingEngine
 from src.core.database_manager import DatabaseManager
-from src.core.config_manager import ConfigManager
+from src.models.customer import Customer
+from src.services.pricing_service import PricingService
 
 
 @dataclass
 class ProductConfiguration:
     """تكوين المنتج المخصص"""
+
     product_id: int
     selected_options: Dict[str, Any] = field(default_factory=dict)  # option_name -> selected_value
     custom_text: Dict[str, str] = field(default_factory=dict)  # field_name -> text
@@ -32,8 +31,13 @@ class ProductConfiguration:
 class QuoteItem:
     """عنصر في عرض الأسعار"""
 
-    def __init__(self, product_id: int, quantity: int, unit_price: Decimal,
-                 discount_percentage: Decimal = Decimal('0.00')):
+    def __init__(
+        self,
+        product_id: int,
+        quantity: int,
+        unit_price: Decimal,
+        discount_percentage: Decimal = Decimal("0.00"),
+    ):
         self.product_id = product_id
         self.quantity = quantity
         self.unit_price = unit_price
@@ -47,7 +51,7 @@ class QuoteItem:
     @property
     def discount_amount(self) -> Decimal:
         """مبلغ الخصم"""
-        return self.line_total * (self.discount_percentage / Decimal('100'))
+        return self.line_total * (self.discount_percentage / Decimal("100"))
 
     @property
     def net_total(self) -> Decimal:
@@ -58,8 +62,13 @@ class QuoteItem:
 class Quote:
     """عرض أسعار شامل"""
 
-    def __init__(self, customer: Customer, items: List[QuoteItem],
-                 valid_until: date, notes: Optional[str] = None):
+    def __init__(
+        self,
+        customer: Customer,
+        items: List[QuoteItem],
+        valid_until: date,
+        notes: Optional[str] = None,
+    ):
         self.customer = customer
         self.items = items
         self.valid_until = valid_until
@@ -91,14 +100,18 @@ class Quote:
 class CPQService:
     """خدمة CPQ للتكوين والتسعير والعروض"""
 
-    def __init__(self, db_manager: DatabaseManager, pricing_service: PricingService,
-                 logger = None):
+    def __init__(self, db_manager: DatabaseManager, pricing_service: PricingService, logger=None):
         self.db_manager = db_manager
         self.pricing_service = pricing_service
-        self.logger = logger or setup_logger(__name__)
+        self.logger = logger or logging.getLogger(__name__)
 
-    def create_quote(self, customer_id: int, items: List[Dict[str, Any]],
-                    valid_days: int = 30, notes: Optional[str] = None) -> Optional[Quote]:
+    def create_quote(
+        self,
+        customer_id: int,
+        items: List[Dict[str, Any]],
+        valid_days: int = 30,
+        notes: Optional[str] = None,
+    ) -> Optional[Quote]:
         """
         إنشاء عرض أسعار جديد
 
@@ -120,20 +133,18 @@ class CPQService:
             # Create quote items
             quote_items = []
             for item_data in items:
-                product_id = item_data['product_id']
-                quantity = item_data['quantity']
-                custom_discount = Decimal(str(item_data.get('custom_discount', 0)))
+                product_id = item_data["product_id"]
+                quantity = item_data["quantity"]
+                custom_discount = Decimal(str(item_data.get("custom_discount", 0)))
 
                 # Get price for customer
-                unit_price = self.pricing_service.get_price_for_customer(
-                    product_id, customer, quantity
-                )
+                unit_price = self.pricing_service.get_price_for_customer(product_id, customer, quantity)
 
                 quote_item = QuoteItem(
                     product_id=product_id,
                     quantity=quantity,
                     unit_price=unit_price,
-                    discount_percentage=custom_discount
+                    discount_percentage=custom_discount,
                 )
 
                 quote_items.append(quote_item)
@@ -146,7 +157,7 @@ class CPQService:
                 customer=customer,
                 items=quote_items,
                 valid_until=valid_until,
-                notes=notes
+                notes=notes,
             )
 
             # Save to database
@@ -161,10 +172,7 @@ class CPQService:
     def _get_customer(self, customer_id: int) -> Optional[Customer]:
         """الحصول على العميل من قاعدة البيانات"""
         try:
-            customer_data = self.db_manager.fetch_one(
-                "SELECT * FROM customers WHERE id = ?",
-                (customer_id,)
-            )
+            customer_data = self.db_manager.fetch_one("SELECT * FROM customers WHERE id = ?", (customer_id,))
 
             if not customer_data:
                 return None
@@ -175,7 +183,7 @@ class CPQService:
                 name=customer_data[1] or "",
                 customer_type=customer_data[16],  # Assuming column position
                 pricing_tier=customer_data[19],
-                contract_id=customer_data[21]
+                contract_id=customer_data[21],
             )
 
         except Exception as e:
@@ -194,11 +202,11 @@ class CPQService:
                     quote.customer.id,
                     self._generate_quote_number(),
                     float(quote.total),
-                    'draft',
+                    "draft",
                     quote.valid_until,
                     quote.notes,
-                    quote.created_at
-                )
+                    quote.created_at,
+                ),
             )
 
             quote_id = result.lastrowid if result else None
@@ -216,8 +224,8 @@ class CPQService:
                             item.quantity,
                             float(item.unit_price),
                             float(item.discount_percentage),
-                            float(item.net_total)
-                        )
+                            float(item.net_total),
+                        ),
                     )
 
             return quote_id
@@ -235,14 +243,14 @@ class CPQService:
             # Get next sequence number
             result = self.db_manager.fetch_one(
                 "SELECT COUNT(*) FROM quotes WHERE strftime('%Y', created_at) = ?",
-                (str(year),)
+                (str(year),),
             )
 
             sequence = (result[0] if result else 0) + 1
 
             return f"Q{year}{sequence:04d}"
 
-        except Exception as e:
+        except Exception as e:  # noqa: F841
             return f"Q{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
     def get_quote(self, quote_id: int) -> Optional[Quote]:
@@ -254,7 +262,7 @@ class CPQService:
                    FROM quotes q
                    JOIN customers c ON q.customer_id = c.id
                    WHERE q.id = ?""",
-                (quote_id,)
+                (quote_id,),
             )
 
             if not quote_data:
@@ -264,22 +272,19 @@ class CPQService:
             customer = Customer(
                 id=quote_data[1],  # customer_id
                 name=quote_data[24] or "",  # customer_name
-                customer_type=quote_data[25]  # customer_type
+                customer_type=quote_data[25],  # customer_type
             )
 
             # Get quote items
-            items_data = self.db_manager.fetch_all(
-                "SELECT * FROM quote_items WHERE quote_id = ?",
-                (quote_id,)
-            )
+            items_data = self.db_manager.fetch_all("SELECT * FROM quote_items WHERE quote_id = ?", (quote_id,))
 
             items = []
             for item_data in items_data:
                 item = QuoteItem(
                     product_id=item_data[2],  # product_id
-                    quantity=item_data[3],    # quantity
+                    quantity=item_data[3],  # quantity
                     unit_price=Decimal(str(item_data[4])),  # unit_price
-                    discount_percentage=Decimal(str(item_data[5] or 0))  # discount_percentage
+                    discount_percentage=Decimal(str(item_data[5] or 0)),  # discount_percentage
                 )
                 items.append(item)
 
@@ -288,7 +293,7 @@ class CPQService:
                 customer=customer,
                 items=items,
                 valid_until=quote_data[5],  # valid_until
-                notes=quote_data[6]         # notes
+                notes=quote_data[6],  # notes
             )
             quote.id = quote_id
             quote.created_at = quote_data[7]  # created_at
@@ -306,7 +311,7 @@ class CPQService:
                 """UPDATE quotes
                    SET status = 'approved', approved_by = ?, approved_at = ?
                    WHERE id = ?""",
-                (approved_by, datetime.now(), quote_id)
+                (approved_by, datetime.now(), quote_id),
             )
             return True
 
@@ -321,7 +326,7 @@ class CPQService:
                 """UPDATE quotes
                    SET status = 'rejected', rejected_by = ?, rejected_at = ?, rejection_reason = ?
                    WHERE id = ?""",
-                (rejected_by, datetime.now(), reason, quote_id)
+                (rejected_by, datetime.now(), reason, quote_id),
             )
             return True
 
@@ -344,11 +349,11 @@ class CPQService:
                 (
                     quote.customer.id,
                     float(quote.total),
-                    'confirmed',
+                    "confirmed",
                     user_id,
                     datetime.now(),
-                    quote_id
-                )
+                    quote_id,
+                ),
             )
 
             sale_id = sale_result.lastrowid if sale_result else None
@@ -366,14 +371,14 @@ class CPQService:
                             item.quantity,
                             float(item.unit_price),
                             float(item.discount_percentage),
-                            float(item.net_total)
-                        )
+                            float(item.net_total),
+                        ),
                     )
 
                 # Update quote status
                 self.db_manager.execute_query(
                     "UPDATE quotes SET status = 'converted', converted_at = ? WHERE id = ?",
-                    (datetime.now(), quote_id)
+                    (datetime.now(), quote_id),
                 )
 
             return sale_id
@@ -403,15 +408,18 @@ class CPQService:
 
             quotes = self.db_manager.fetch_all(query, tuple(params))
 
-            return [{
-                'id': q[0],
-                'quote_number': q[1],
-                'total_amount': float(q[2]),
-                'status': q[3],
-                'valid_until': q[4],
-                'created_at': q[5],
-                'item_count': q[6]
-            } for q in quotes]
+            return [
+                {
+                    "id": q[0],
+                    "quote_number": q[1],
+                    "total_amount": float(q[2]),
+                    "status": q[3],
+                    "valid_until": q[4],
+                    "created_at": q[5],
+                    "item_count": q[6],
+                }
+                for q in quotes
+            ]
 
         except Exception as e:
             self.logger.error(f"خطأ في الحصول على عروض الأسعار للعميل {customer_id}: {str(e)}")
@@ -425,25 +433,28 @@ class CPQService:
                 return {}
 
             return {
-                'id': quote.id,
-                'customer': {
-                    'id': quote.customer.id,
-                    'name': quote.customer.name,
-                    'type': quote.customer.customer_type
+                "id": quote.id,
+                "customer": {
+                    "id": quote.customer.id,
+                    "name": quote.customer.name,
+                    "type": quote.customer.customer_type,
                 },
-                'items': [{
-                    'product_id': item.product_id,
-                    'quantity': item.quantity,
-                    'unit_price': float(item.unit_price),
-                    'discount_percentage': float(item.discount_percentage),
-                    'net_total': float(item.net_total)
-                } for item in quote.items],
-                'subtotal': float(quote.subtotal),
-                'total_discount': float(quote.total_discount),
-                'total': float(quote.total),
-                'valid_until': quote.valid_until.isoformat(),
-                'is_expired': quote.is_expired,
-                'created_at': quote.created_at.isoformat()
+                "items": [
+                    {
+                        "product_id": item.product_id,
+                        "quantity": item.quantity,
+                        "unit_price": float(item.unit_price),
+                        "discount_percentage": float(item.discount_percentage),
+                        "net_total": float(item.net_total),
+                    }
+                    for item in quote.items
+                ],
+                "subtotal": float(quote.subtotal),
+                "total_discount": float(quote.total_discount),
+                "total": float(quote.total),
+                "valid_until": quote.valid_until.isoformat(),
+                "is_expired": quote.is_expired,
+                "created_at": quote.created_at.isoformat(),
             }
 
         except Exception as e:

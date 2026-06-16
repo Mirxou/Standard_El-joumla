@@ -3,13 +3,14 @@
 واجهة محادثية - Conversational UI Service
 """
 
-from datetime import datetime
 from dataclasses import dataclass
+from datetime import datetime
 
 
 @dataclass
 class ActionResult:
     """نتيجة الإجراء المنفذ"""
+
     result: any
     explanation: str
     sources: list
@@ -32,7 +33,7 @@ class ConversationalUIService:
             "search_customer": ["ابحث عن عميل", "أريد عميل"],
             "create_invoice": ["أنشئ فاتورة"],
             "show_sales": ["أرني المبيعات"],
-            "help": ["مساعدة"]
+            "help": ["مساعدة"],
         }
 
     def process_natural_language_query(self, query, user_context=None):
@@ -49,7 +50,7 @@ class ConversationalUIService:
             explanation=explanation,
             sources=sources,
             suggested_actions=suggestions,
-            confidence=confidence
+            confidence=confidence,
         )
 
     def _extract_intent(self, query):
@@ -65,7 +66,8 @@ class ConversationalUIService:
         """استخراج الكيانات"""
         entities = {}
         import re
-        numbers = re.findall(r'\d+', query)
+
+        numbers = re.findall(r"\d+", query)
         if numbers:
             entities["quantity"] = int(numbers[0])
         return entities

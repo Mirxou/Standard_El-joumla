@@ -5,19 +5,19 @@ Advanced Printing System with Templates
 يوفر طباعة احترافية للفواتير والتقارير بقوالب قابلة للتخصيص
 Provides professional printing for invoices and reports with customizable templates
 """
-
-from datetime import datetime
-from typing import Optional, Dict, Any, List
-from pathlib import Path
-import json
 import logging
+
+import json
+from datetime import datetime
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 
 class TemplateType(Enum):
     """أنواع القوالب"""
+
     INVOICE = "invoice"
     QUOTE = "quote"
     RETURN = "return"
@@ -28,6 +28,7 @@ class TemplateType(Enum):
 
 class PaperSize(Enum):
     """أحجام الورق"""
+
     A4 = "A4"
     A5 = "A5"
     LETTER = "Letter"
@@ -37,7 +38,7 @@ class PaperSize(Enum):
 
 class PrintTemplate:
     """قالب طباعة"""
-    
+
     def __init__(
         self,
         template_id: Optional[int] = None,
@@ -51,7 +52,7 @@ class PrintTemplate:
         header_html: str = "",
         footer_html: str = "",
         is_default: bool = False,
-        created_at: Optional[datetime] = None
+        created_at: Optional[datetime] = None,
     ):
         self.template_id = template_id
         self.name = name
@@ -65,29 +66,29 @@ class PrintTemplate:
         self.footer_html = footer_html
         self.is_default = is_default
         self.created_at = created_at or datetime.now()
-        
+
     def to_dict(self) -> Dict[str, Any]:
         """تحويل إلى قاموس"""
         return {
-            'template_id': self.template_id,
-            'name': self.name,
-            'template_type': self.template_type,
-            'html_content': self.html_content,
-            'css_content': self.css_content,
-            'paper_size': self.paper_size,
-            'orientation': self.orientation,
-            'margins': self.margins,
-            'header_html': self.header_html,
-            'footer_html': self.footer_html,
-            'is_default': self.is_default,
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            "template_id": self.template_id,
+            "name": self.name,
+            "template_type": self.template_type,
+            "html_content": self.html_content,
+            "css_content": self.css_content,
+            "paper_size": self.paper_size,
+            "orientation": self.orientation,
+            "margins": self.margins,
+            "header_html": self.header_html,
+            "footer_html": self.footer_html,
+            "is_default": self.is_default,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
 
 class PrintManager:
     """
     مدير الطباعة المتقدم
-    
+
     يوفر:
     - قوالب طباعة مخصصة
     - تصدير PDF
@@ -95,21 +96,21 @@ class PrintManager:
     - إعدادات طابعة متقدمة
     - معاينة قبل الطباعة
     """
-    
+
     def __init__(self, db_manager):
         """
         تهيئة مدير الطباعة
-        
+
         Args:
             db_manager: مدير قاعدة البيانات
         """
         self.db = db_manager
         self._create_tables()
         self._initialize_default_templates()
-        
+
     def _create_tables(self):
         """إنشاء جداول الطباعة"""
-        
+
         # جدول القوالب
         self.db.execute("""
             CREATE TABLE IF NOT EXISTS print_templates (
@@ -128,7 +129,7 @@ class PrintManager:
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
+
         # جدول سجل الطباعة
         self.db.execute("""
             CREATE TABLE IF NOT EXISTS print_jobs (
@@ -144,57 +145,57 @@ class PrintManager:
                 FOREIGN KEY (template_id) REFERENCES print_templates(template_id)
             )
         """)
-        
+
         # فهارس
         self.db.execute("CREATE INDEX IF NOT EXISTS idx_templates_type ON print_templates(template_type)")
         self.db.execute("CREATE INDEX IF NOT EXISTS idx_templates_default ON print_templates(is_default)")
         self.db.execute("CREATE INDEX IF NOT EXISTS idx_jobs_date ON print_jobs(printed_at DESC)")
-        
+
     def _initialize_default_templates(self):
         """تهيئة القوالب الافتراضية"""
-        
+
         # قالب فاتورة A4 افتراضي
         invoice_template = {
-            'name': 'فاتورة A4 قياسية',
-            'template_type': TemplateType.INVOICE.value,
-            'paper_size': PaperSize.A4.value,
-            'html_content': self._get_default_invoice_template(),
-            'css_content': self._get_default_css(),
-            'is_default': True
+            "name": "فاتورة A4 قياسية",
+            "template_type": TemplateType.INVOICE.value,
+            "paper_size": PaperSize.A4.value,
+            "html_content": self._get_default_invoice_template(),
+            "css_content": self._get_default_css(),
+            "is_default": True,
         }
-        
+
         # قالب إيصال حراري
         thermal_template = {
-            'name': 'إيصال حراري 80 ملم',
-            'template_type': TemplateType.RECEIPT.value,
-            'paper_size': PaperSize.THERMAL_80MM.value,
-            'html_content': self._get_thermal_receipt_template(),
-            'css_content': self._get_thermal_css(),
-            'is_default': False
+            "name": "إيصال حراري 80 ملم",
+            "template_type": TemplateType.RECEIPT.value,
+            "paper_size": PaperSize.THERMAL_80MM.value,
+            "html_content": self._get_thermal_receipt_template(),
+            "css_content": self._get_thermal_css(),
+            "is_default": False,
         }
-        
+
         # قالب عرض سعر
         quote_template = {
-            'name': 'عرض سعر A4',
-            'template_type': TemplateType.QUOTE.value,
-            'paper_size': PaperSize.A4.value,
-            'html_content': self._get_default_quote_template(),
-            'css_content': self._get_default_css(),
-            'is_default': True
+            "name": "عرض سعر A4",
+            "template_type": TemplateType.QUOTE.value,
+            "paper_size": PaperSize.A4.value,
+            "html_content": self._get_default_quote_template(),
+            "css_content": self._get_default_css(),
+            "is_default": True,
         }
-        
+
         for template_data in [invoice_template, thermal_template, quote_template]:
             try:
                 existing = self.db.fetch_one(
                     "SELECT template_id FROM print_templates WHERE name = ?",
-                    (template_data['name'],)
+                    (template_data["name"],),
                 )
-                
+
                 if not existing:
                     self.create_template(**template_data)
             except Exception as e:
                 logger.debug(f"Template {template_data['name']} may already exist: {str(e)}")
-                
+
     def _get_default_invoice_template(self) -> str:
         """قالب فاتورة HTML افتراضي"""
         return """
@@ -220,7 +221,7 @@ class PrintManager:
                 <p><strong>التاريخ:</strong> {{ sale_date }}</p>
             </div>
         </div>
-        
+
         <!-- Customer Info -->
         <div class="customer-info">
             <h3>بيانات العميل</h3>
@@ -230,7 +231,7 @@ class PrintManager:
             <p><strong>العنوان:</strong> {{ customer_address }}</p>
             {% endif %}
         </div>
-        
+
         <!-- Items Table -->
         <table class="items-table">
             <thead>
@@ -254,7 +255,7 @@ class PrintManager:
                 {% endfor %}
             </tbody>
         </table>
-        
+
         <!-- Totals -->
         <div class="totals">
             <div class="totals-row">
@@ -278,7 +279,7 @@ class PrintManager:
                 <span><strong>{{ total }} دج</strong></span>
             </div>
         </div>
-        
+
         <!-- Payment Info -->
         <div class="payment-info">
             <p><strong>طريقة الدفع:</strong> {{ payment_method }}</p>
@@ -289,7 +290,7 @@ class PrintManager:
             <p><strong>المتبقي:</strong> {{ remaining_amount }} دج</p>
             {% endif %}
         </div>
-        
+
         <!-- Footer -->
         <div class="footer">
             <p>شكراً لتعاملكم معنا</p>
@@ -301,7 +302,7 @@ class PrintManager:
 </body>
 </html>
 """
-    
+
     def _get_thermal_receipt_template(self) -> str:
         """قالب إيصال حراري"""
         return """
@@ -317,15 +318,15 @@ class PrintManager:
             <h2>{{ company_name }}</h2>
             <p>{{ company_phone }}</p>
         </div>
-        
+
         <div class="divider"></div>
-        
+
         <p><strong>فاتورة #:</strong> {{ invoice_number }}</p>
         <p><strong>التاريخ:</strong> {{ sale_date }}</p>
         <p><strong>العميل:</strong> {{ customer_name }}</p>
-        
+
         <div class="divider"></div>
-        
+
         <table>
             {% for item in items %}
             <tr>
@@ -337,30 +338,30 @@ class PrintManager:
             </tr>
             {% endfor %}
         </table>
-        
+
         <div class="divider"></div>
-        
+
         <div class="total-line">
             <span>المجموع:</span>
             <span>{{ total }} دج</span>
         </div>
-        
+
         {% if paid_amount > 0 %}
         <div class="total-line">
             <span>المدفوع:</span>
             <span>{{ paid_amount }} دج</span>
         </div>
         {% endif %}
-        
+
         {% if remaining_amount > 0 %}
         <div class="total-line">
             <span>المتبقي:</span>
             <span>{{ remaining_amount }} دج</span>
         </div>
         {% endif %}
-        
+
         <div class="divider"></div>
-        
+
         <div class="center">
             <p>شكراً لزيارتكم</p>
         </div>
@@ -368,7 +369,7 @@ class PrintManager:
 </body>
 </html>
 """
-    
+
     def _get_default_quote_template(self) -> str:
         """قالب عرض سعر"""
         return """
@@ -393,13 +394,13 @@ class PrintManager:
                 <p><strong>صالح حتى:</strong> {{ valid_until }}</p>
             </div>
         </div>
-        
+
         <div class="customer-info">
             <h3>إلى السيد/ة</h3>
             <p><strong>{{ customer_name }}</strong></p>
             <p>{{ customer_phone }}</p>
         </div>
-        
+
         <table class="items-table">
             <thead>
                 <tr>
@@ -422,14 +423,14 @@ class PrintManager:
                 {% endfor %}
             </tbody>
         </table>
-        
+
         <div class="totals">
             <div class="totals-row total">
                 <span><strong>الإجمالي:</strong></span>
                 <span><strong>{{ total }} دج</strong></span>
             </div>
         </div>
-        
+
         <div class="footer">
             <p><strong>ملاحظات:</strong></p>
             <p>{{ notes }}</p>
@@ -439,7 +440,7 @@ class PrintManager:
 </body>
 </html>
 """
-    
+
     def _get_default_css(self) -> str:
         """CSS افتراضي للقوالب"""
         return """
@@ -569,13 +570,13 @@ body {
     body {
         padding: 0;
     }
-    
+
     .invoice-container {
         max-width: none;
     }
 }
 """
-    
+
     def _get_thermal_css(self) -> str:
         """CSS للطباعة الحرارية"""
         return """
@@ -636,7 +637,7 @@ table td {
     }
 }
 """
-    
+
     def create_template(
         self,
         name: str,
@@ -648,11 +649,11 @@ table td {
         margins: Optional[Dict[str, int]] = None,
         header_html: str = "",
         footer_html: str = "",
-        is_default: bool = False
+        is_default: bool = False,
     ) -> Optional[int]:
         """
         إنشاء قالب طباعة جديد
-        
+
         Args:
             name: اسم القالب
             template_type: نوع القالب
@@ -664,43 +665,52 @@ table td {
             header_html: رأس الصفحة
             footer_html: تذييل الصفحة
             is_default: افتراضي
-            
+
         Returns:
             معرف القالب أو None
         """
         try:
-            margins_json = json.dumps(margins) if margins else json.dumps({"top": 20, "right": 20, "bottom": 20, "left": 20})
-            
+            margins_json = (
+                json.dumps(margins) if margins else json.dumps({"top": 20, "right": 20, "bottom": 20, "left": 20})
+            )
+
             # إذا كان افتراضي، إزالة الافتراضية من القوالب الأخرى
             if is_default:
                 self.db.execute(
                     "UPDATE print_templates SET is_default = 0 WHERE template_type = ?",
-                    (template_type,)
+                    (template_type,),
                 )
-            
+
             cursor = self.db.execute(
                 """INSERT INTO print_templates (
                     name, template_type, html_content, css_content,
                     paper_size, orientation, margins, header_html, footer_html, is_default
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (name, template_type, html_content, css_content, paper_size,
-                 orientation, margins_json, header_html, footer_html, is_default)
+                (
+                    name,
+                    template_type,
+                    html_content,
+                    css_content,
+                    paper_size,
+                    orientation,
+                    margins_json,
+                    header_html,
+                    footer_html,
+                    is_default,
+                ),
             )
-            
+
             logger.info(f"Template created: {name}")
             return cursor.lastrowid
-            
+
         except Exception as e:
-            logger.error(f"Failed to create template: {str(e)}")
+            logger.log(logging.ERROR, f"Failed to create template: {str(e)}")
             return None
-            
+
     def get_template(self, template_id: int) -> Optional[PrintTemplate]:
         """الحصول على قالب بالمعرف"""
-        row = self.db.fetch_one(
-            "SELECT * FROM print_templates WHERE template_id = ?",
-            (template_id,)
-        )
-        
+        row = self.db.fetch_one("SELECT * FROM print_templates WHERE template_id = ?", (template_id,))
+
         if row:
             margins = json.loads(row[7]) if row[7] else {}
             return PrintTemplate(
@@ -715,17 +725,39 @@ table td {
                 header_html=row[8],
                 footer_html=row[9],
                 is_default=bool(row[10]),
-                created_at=datetime.fromisoformat(row[11]) if row[11] else None
+                created_at=datetime.fromisoformat(row[11]) if row[11] else None,
             )
         return None
-        
+
+    def get_template_by_name(self, name: str) -> Optional[PrintTemplate]:
+        """الحصول على قالب بالاسم"""
+        row = self.db.fetch_one("SELECT * FROM print_templates WHERE name = ?", (name,))
+
+        if row:
+            margins = json.loads(row[7]) if row[7] else {}
+            return PrintTemplate(
+                template_id=row[0],
+                name=row[1],
+                template_type=row[2],
+                html_content=row[3],
+                css_content=row[4],
+                paper_size=row[5],
+                orientation=row[6],
+                margins=margins,
+                header_html=row[8],
+                footer_html=row[9],
+                is_default=bool(row[10]),
+                created_at=datetime.fromisoformat(row[11]) if row[11] else None,
+            )
+        return None
+
     def get_default_template(self, template_type: str) -> Optional[PrintTemplate]:
         """الحصول على القالب الافتراضي لنوع معين"""
         row = self.db.fetch_one(
             "SELECT * FROM print_templates WHERE template_type = ? AND is_default = 1",
-            (template_type,)
+            (template_type,),
         )
-        
+
         if row:
             margins = json.loads(row[7]) if row[7] else {}
             return PrintTemplate(
@@ -740,10 +772,10 @@ table td {
                 header_html=row[8],
                 footer_html=row[9],
                 is_default=bool(row[10]),
-                created_at=datetime.fromisoformat(row[11]) if row[11] else None
+                created_at=datetime.fromisoformat(row[11]) if row[11] else None,
             )
         return None
-        
+
     def list_templates(self, template_type: Optional[str] = None) -> List[PrintTemplate]:
         """قائمة القوالب"""
         if template_type:
@@ -752,47 +784,45 @@ table td {
         else:
             query = "SELECT * FROM print_templates ORDER BY template_type, name"
             rows = self.db.fetch_all(query)
-            
+
         templates = []
         for row in rows:
             margins = json.loads(row[7]) if row[7] else {}
-            templates.append(PrintTemplate(
-                template_id=row[0],
-                name=row[1],
-                template_type=row[2],
-                html_content=row[3],
-                css_content=row[4],
-                paper_size=row[5],
-                orientation=row[6],
-                margins=margins,
-                header_html=row[8],
-                footer_html=row[9],
-                is_default=bool(row[10]),
-                created_at=datetime.fromisoformat(row[11]) if row[11] else None
-            ))
-            
+            templates.append(
+                PrintTemplate(
+                    template_id=row[0],
+                    name=row[1],
+                    template_type=row[2],
+                    html_content=row[3],
+                    css_content=row[4],
+                    paper_size=row[5],
+                    orientation=row[6],
+                    margins=margins,
+                    header_html=row[8],
+                    footer_html=row[9],
+                    is_default=bool(row[10]),
+                    created_at=datetime.fromisoformat(row[11]) if row[11] else None,
+                )
+            )
+
         return templates
-        
-    def render_template(
-        self,
-        template: PrintTemplate,
-        data: Dict[str, Any]
-    ) -> str:
+
+    def render_template(self, template: PrintTemplate, data: Dict[str, Any]) -> str:
         """
         تصيير قالب مع البيانات
-        
+
         Args:
             template: القالب
             data: البيانات
-            
+
         Returns:
             HTML جاهز للطباعة
         """
         try:
             from jinja2 import Template
-            
+
             # تجميع HTML و CSS
-            full_html = f"""
+            full_html = """
 <!DOCTYPE html>
 <html>
 <head>
@@ -806,17 +836,17 @@ table td {
 </body>
 </html>
 """
-            
+
             # تصيير القالب
             jinja_template = Template(full_html)
             rendered = jinja_template.render(**data)
-            
+
             return rendered
-            
+
         except Exception as e:
-            logger.error(f"Failed to render template: {str(e)}")
+            logger.log(logging.ERROR, f"Failed to render template: {str(e)}")
             return ""
-            
+
     def log_print_job(
         self,
         template_id: int,
@@ -825,7 +855,7 @@ table td {
         user_id: Optional[int] = None,
         copies: int = 1,
         output_type: str = "printer",
-        output_path: str = ""
+        output_path: str = "",
     ) -> Optional[int]:
         """تسجيل عملية طباعة"""
         try:
@@ -834,14 +864,21 @@ table td {
                     template_id, document_type, document_id, user_id,
                     copies, output_type, output_path
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (template_id, document_type, document_id, user_id,
-                 copies, output_type, output_path)
+                (
+                    template_id,
+                    document_type,
+                    document_id,
+                    user_id,
+                    copies,
+                    output_type,
+                    output_path,
+                ),
             )
-            
+
             return cursor.lastrowid
-            
+
         except Exception as e:
-            logger.error(f"Failed to log print job: {str(e)}")
+            logger.log(logging.ERROR, f"Failed to log print job: {str(e)}")
             return None
 
 

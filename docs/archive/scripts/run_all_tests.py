@@ -39,30 +39,4 @@ with open('test_results.txt', 'w', encoding='utf-8') as f:
         f.write("\n\n" + "="*80 + "\n")
         f.write("STDERR:\n")
         f.write(result.stderr)
-        elif 'db_manager=' in content:
-            errors_found.append(f"{test_file}: استخدام db_manager بدلاً من db")
-            
-        # التحقق من استيرادات pytest
-        if 'import pytest' not in content:
-            warnings_found.append(f"{test_file}: مفقود import pytest")
-            
-        print(f"   ✅ تم الفحص بنجاح")
-        
-    except Exception as e:
-        errors_found.append(f"{test_file}: {str(e)}")
-        print(f"   ❌ خطأ: {e}")
 
-print("\n" + "=" * 80)
-print("📊 نتائج الفحص:")
-print("=" * 80)
-
-if errors_found:
-    print(f"\n❌ أخطاء ({len(errors_found)}):")
-    for error in errors_found:
-
-print("\n💾 تم حفظ النتائج في: test_results.txt")
-
-sys.exit(0 if result.returncode == 0 else 1)
-else:
-    print("\n⚠️ توجد مشاكل تحتاج إلى إصلاح")
-    sys.exit(1)

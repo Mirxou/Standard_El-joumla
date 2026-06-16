@@ -14,7 +14,7 @@ from datetime import datetime
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.core.database_manager import DatabaseManager
+from src.core.local_database_manager import LocalDatabaseManager
 
 def fix_database(db_path: Path, backup_path: Path = None):
     """إصلاح قاعدة البيانات التالفة"""
@@ -38,7 +38,7 @@ def fix_database(db_path: Path, backup_path: Path = None):
         print("محاولة إصلاح قاعدة البيانات...")
         
         # محاولة فتح قاعدة البيانات التالفة
-        old_db_manager = DatabaseManager(str(db_path))
+        old_db_manager = LocalDatabaseManager(str(db_path))
         old_db_manager.initialize()
         
         # محاولة استخراج البيانات
@@ -55,7 +55,7 @@ def fix_database(db_path: Path, backup_path: Path = None):
         
         # محاولة نسخ البيانات
         try:
-            new_db_manager = DatabaseManager(str(new_db_path))
+            new_db_manager = LocalDatabaseManager(str(new_db_path))
             new_db_manager.initialize()
             old_db_manager.connection.backup(new_db_manager.connection)
             new_db_manager.connection.close()
@@ -68,7 +68,7 @@ def fix_database(db_path: Path, backup_path: Path = None):
         old_db_manager.connection.close()
         
         # التحقق من قاعدة البيانات الجديدة
-        test_db_manager = DatabaseManager(str(new_db_path))
+        test_db_manager = LocalDatabaseManager(str(new_db_path))
         test_db_manager.initialize()
         test_cursor = test_db_manager.connection.cursor()
         test_cursor.execute("PRAGMA integrity_check")
@@ -99,7 +99,7 @@ def create_new_database(db_path: Path):
         db_path.unlink()
     
     # إنشاء قاعدة بيانات جديدة فارغة
-    db_manager = DatabaseManager(str(db_path))
+    db_manager = LocalDatabaseManager(str(db_path))
     db_manager.initialize()
     db_manager.connection.execute("PRAGMA journal_mode=WAL")
     db_manager.connection.close()
@@ -116,7 +116,7 @@ if __name__ == "__main__":
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
     
     project_root = Path(__file__).parent.parent
-    db_path = project_root / "data" / "logical_release.db"
+    db_path = project_root / "data" / "standard_eljoumla.db"
     
     print("إصلاح قاعدة البيانات...")
     print(f"   المسار: {db_path}")

@@ -21,7 +21,7 @@ export function getSecurityHeaders(): HeadersInit {
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: https:",
       "font-src 'self' data:",
-      "connect-src 'self' http://localhost:8000",
+      "connect-src 'self' http://localhost:8000 http://127.0.0.1:8000",
     ].join('; '),
   }
 }

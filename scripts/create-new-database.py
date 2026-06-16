@@ -50,7 +50,7 @@ def create_new_database(db_path: Path):
 
 if __name__ == "__main__":
     project_root = Path(__file__).parent.parent
-    db_path = project_root / "data" / "logical_release.db"
+    db_path = project_root / "data" / "standard_eljoumla.db"
     
     print("=" * 50)
     print("إنشاء قاعدة بيانات جديدة")

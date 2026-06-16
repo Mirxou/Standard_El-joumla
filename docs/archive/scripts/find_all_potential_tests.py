@@ -35,7 +35,7 @@ for dirpath, dirnames, filenames in os.walk(root_dir):
                         if pattern.search(content):
                             found_files.append((filepath, f"Content matches pattern: {pattern.pattern}"))
                             break
-            except Exception as e:
+            except Exception as e:  # noqa: F841
                 pass
 
 for path, reason in found_files:

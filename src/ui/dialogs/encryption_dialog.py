@@ -5,144 +5,108 @@
 إدارة تشفير قاعدة البيانات وكلمات المرور
 """
 
-from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
-    QPushButton, QGroupBox, QCheckBox, QProgressBar,
-    QMessageBox, QTextEdit, QTabWidget, QWidget,
-    QFormLayout, QSpacerItem, QSizePolicy,
-    QFrame, QGraphicsDropShadowEffect
-)
-from PySide6.QtCore import Qt, Signal, QThread
-from PySide6.QtGui import QFont, QIcon, QPixmap, QColor
 import sys
-
-from src.ui.widgets.custom_title_bar import CustomTitleBar
-from src.ui.widgets.quantum_notification import NotificationManager
-import os
 from pathlib import Path
+
+from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
+
+from src.ui.widgets.base_dialog import BaseDialog
+from src.ui.widgets.quantum_notification import NotificationManager
 
 project_root = Path(__file__).parent.parent.parent.parent
 
 from src.core.encryption_manager import EncryptionManager
+from src.core.local_database_manager import LocalDatabaseManager
 
 
 class EncryptionWorker(QThread):
     """عامل التشفير في خيط منفصل"""
+
     progress_updated = Signal(int, str)
     operation_completed = Signal(bool, str)
-    
-    def __init__(self, operation: str, db_manager, **kwargs):
+
+    def __init__(self, operation: str, db_manager: LocalDatabaseManager, **kwargs):
         super().__init__()
         self.operation = operation
         self.db_manager = db_manager
         self.kwargs = kwargs
-    
+
     def run(self):
         """تنفيذ عملية التشفير"""
         try:
             self.progress_updated.emit(10, "بدء العملية...")
-            
+
             if self.operation == "enable":
                 self.progress_updated.emit(30, "تفعيل التشفير...")
-                success = self.db_manager.enable_encryption(self.kwargs['password'])
-                
+                success = self.db_manager.enable_encryption(self.kwargs["password"])
+
             elif self.operation == "disable":
                 self.progress_updated.emit(30, "إلغاء التشفير...")
-                success = self.db_manager.disable_encryption(self.kwargs['password'])
-                
+                success = self.db_manager.disable_encryption(self.kwargs["password"])
+
             elif self.operation == "change_password":
                 self.progress_updated.emit(30, "تغيير كلمة المرور...")
                 success = self.db_manager.change_encryption_password(
-                    self.kwargs['old_password'], 
-                    self.kwargs['new_password']
+                    self.kwargs["old_password"], self.kwargs["new_password"]
                 )
-            
+
             self.progress_updated.emit(90, "إنهاء العملية...")
-            
+
             if success:
                 self.progress_updated.emit(100, "تمت العملية بنجاح")
                 self.operation_completed.emit(True, "تمت العملية بنجاح")
             else:
                 self.operation_completed.emit(False, "فشلت العملية")
-                
+
         except Exception as e:
             self.operation_completed.emit(False, f"خطأ: {str(e)}")
 
 
-class EncryptionDialog(QDialog):
+class EncryptionDialog(BaseDialog):
     """واجهة إدارة التشفير"""
-    
-    def __init__(self, db_manager, parent=None):
-        super().__init__(parent)
+
+    def __init__(self, db_manager: LocalDatabaseManager, parent=None):
+        super().__init__(title="", parent=parent)
         self.db_manager = db_manager
         self.encryption_worker = None
-        
+
         # self.setWindowTitle("إدارة تشفير قاعدة البيانات")
         # self.setFixedSize(500, 600)
         # self.setModal(True)
-        
+
         # --- Quantum Window Setup ---
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        
         # Notifications
         self.notify = NotificationManager(self)
-        
-        self.resize(550, 650) # Slightly larger
-        
+
+        self.resize(550, 650)  # Slightly larger
+
         self.title_text = "إدارة تشفير قاعدة البيانات"
-        
+
         self.setup_ui()
         self.setup_connections()
         self.update_encryption_status()
         self.apply_styles()
-    
+
     def setup_ui(self):
         """إعداد واجهة المستخدم"""
-        # تخطيط جذري شفاف
-        root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(10, 10, 10, 10)
-        root_layout.setSpacing(0)
-        
-        # الإطار الرئيسي
-        self.main_frame = QFrame()
-        self.main_frame.setStyleSheet("""
-            QFrame#MainFrame {
-                background-color: #f5f5f5;
-                border: 1px solid #3498db;
-                border-radius: 10px;
-            }
-        """)
-        self.main_frame.setObjectName("MainFrame")
-        
-        # Shadow
-        shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(20)
-        shadow.setColor(QColor("#3498db"))
-        shadow.setOffset(0, 0)
-        self.main_frame.setGraphicsEffect(shadow)
-        
-        root_layout.addWidget(self.main_frame)
-        
-        # تخطيط النافذة الداخلية
-        main_layout = QVBoxLayout(self.main_frame)
-        main_layout.setContentsMargins(0, 0, 0, 10)
-        main_layout.setSpacing(0)
-        
-        # 1. Custom Title Bar
-        self.title_bar = CustomTitleBar(self, title=self.title_text, is_dialog=True)
-        main_layout.addWidget(self.title_bar)
-        
-        # Container for content
-        content_widget = QWidget()
-        content_layout = QVBoxLayout(content_widget)
-        content_layout.setSpacing(10)
-        content_layout.setContentsMargins(15, 15, 15, 15)
-        main_layout.addWidget(content_widget)
-        
-        # Re-assign layout to content_layout for the existing widget helpers
-        layout = content_layout
-        
+        layout = self.content_layout
+
         # العنوان الرئيسي
         title_label = QLabel("إدارة تشفير قاعدة البيانات")
         title_label.setAlignment(Qt.AlignCenter)
@@ -151,65 +115,65 @@ class EncryptionDialog(QDialog):
         title_font.setBold(True)
         title_label.setFont(title_font)
         layout.addWidget(title_label)
-        
+
         # التبويبات
         self.tab_widget = QTabWidget()
         layout.addWidget(self.tab_widget)
-        
+
         # تبويب الحالة
         self.setup_status_tab()
-        
+
         # تبويب التشفير
         self.setup_encryption_tab()
-        
+
         # تبويب إدارة كلمة المرور
         self.setup_password_tab()
-        
+
         # شريط التقدم
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
         layout.addWidget(self.progress_bar)
-        
+
         # رسالة الحالة
         self.status_label = QLabel()
         self.status_label.setAlignment(Qt.AlignCenter)
         self.status_label.setVisible(False)
         layout.addWidget(self.status_label)
-        
+
         # أزرار الإغلاق
         button_layout = QHBoxLayout()
         button_layout.addStretch()
-        
+
         self.close_button = QPushButton("إغلاق")
         self.close_button.setMinimumWidth(100)
         button_layout.addWidget(self.close_button)
-        
+
         layout.addLayout(button_layout)
-    
+
     def setup_status_tab(self):
         """إعداد تبويب الحالة"""
         status_widget = QWidget()
         layout = QVBoxLayout(status_widget)
-        
+
         # معلومات الحالة
         status_group = QGroupBox("حالة التشفير")
         status_layout = QFormLayout(status_group)
-        
+
         self.encryption_status_label = QLabel()
         status_layout.addRow("حالة التشفير:", self.encryption_status_label)
-        
+
         self.database_size_label = QLabel()
         status_layout.addRow("حجم قاعدة البيانات:", self.database_size_label)
-        
+
         self.last_backup_label = QLabel()
         status_layout.addRow("آخر نسخة احتياطية:", self.last_backup_label)
-        
+
         layout.addWidget(status_group)
-        
+
         # معلومات الأمان
         security_group = QGroupBox("معلومات الأمان")
         security_layout = QVBoxLayout(security_group)
-        
+
         security_info = QTextEdit()
         security_info.setReadOnly(True)
         security_info.setMaximumHeight(150)
@@ -221,114 +185,114 @@ class EncryptionDialog(QDialog):
             "• فقدان كلمة المرور يعني فقدان الوصول للبيانات"
         )
         security_layout.addWidget(security_info)
-        
+
         layout.addWidget(security_group)
         layout.addStretch()
-        
+
         self.tab_widget.addTab(status_widget, "الحالة")
-    
+
     def setup_encryption_tab(self):
         """إعداد تبويب التشفير"""
         encryption_widget = QWidget()
         layout = QVBoxLayout(encryption_widget)
-        
+
         # تفعيل التشفير
         enable_group = QGroupBox("تفعيل التشفير")
         enable_layout = QFormLayout(enable_group)
-        
+
         self.enable_password_input = QLineEdit()
         self.enable_password_input.setEchoMode(QLineEdit.Password)
         self.enable_password_input.setPlaceholderText("أدخل كلمة مرور قوية")
         enable_layout.addRow("كلمة المرور:", self.enable_password_input)
-        
+
         self.confirm_password_input = QLineEdit()
         self.confirm_password_input.setEchoMode(QLineEdit.Password)
         self.confirm_password_input.setPlaceholderText("تأكيد كلمة المرور")
         enable_layout.addRow("تأكيد كلمة المرور:", self.confirm_password_input)
-        
+
         self.backup_checkbox = QCheckBox("إنشاء نسخة احتياطية قبل التشفير")
         self.backup_checkbox.setChecked(True)
         enable_layout.addRow(self.backup_checkbox)
-        
+
         self.enable_button = QPushButton("تفعيل التشفير")
         self.enable_button.setMinimumHeight(35)
         enable_layout.addRow(self.enable_button)
-        
+
         layout.addWidget(enable_group)
-        
+
         # إلغاء التشفير
         disable_group = QGroupBox("إلغاء التشفير")
         disable_layout = QFormLayout(disable_group)
-        
+
         self.disable_password_input = QLineEdit()
         self.disable_password_input.setEchoMode(QLineEdit.Password)
         self.disable_password_input.setPlaceholderText("كلمة مرور التشفير الحالية")
         disable_layout.addRow("كلمة المرور:", self.disable_password_input)
-        
+
         self.disable_button = QPushButton("إلغاء التشفير")
         self.disable_button.setMinimumHeight(35)
         disable_layout.addRow(self.disable_button)
-        
+
         layout.addWidget(disable_group)
         layout.addStretch()
-        
+
         self.tab_widget.addTab(encryption_widget, "التشفير")
-    
+
     def setup_password_tab(self):
         """إعداد تبويب إدارة كلمة المرور"""
         password_widget = QWidget()
         layout = QVBoxLayout(password_widget)
-        
+
         # تغيير كلمة المرور
         change_group = QGroupBox("تغيير كلمة مرور التشفير")
         change_layout = QFormLayout(change_group)
-        
+
         self.old_password_input = QLineEdit()
         self.old_password_input.setEchoMode(QLineEdit.Password)
         self.old_password_input.setPlaceholderText("كلمة المرور الحالية")
         change_layout.addRow("كلمة المرور الحالية:", self.old_password_input)
-        
+
         self.new_password_input = QLineEdit()
         self.new_password_input.setEchoMode(QLineEdit.Password)
         self.new_password_input.setPlaceholderText("كلمة المرور الجديدة")
         change_layout.addRow("كلمة المرور الجديدة:", self.new_password_input)
-        
+
         self.confirm_new_password_input = QLineEdit()
         self.confirm_new_password_input.setEchoMode(QLineEdit.Password)
         self.confirm_new_password_input.setPlaceholderText("تأكيد كلمة المرور الجديدة")
         change_layout.addRow("تأكيد كلمة المرور الجديدة:", self.confirm_new_password_input)
-        
+
         self.change_password_button = QPushButton("تغيير كلمة المرور")
         self.change_password_button.setMinimumHeight(35)
         change_layout.addRow(self.change_password_button)
-        
+
         layout.addWidget(change_group)
-        
+
         # توليد كلمة مرور قوية
         generate_group = QGroupBox("توليد كلمة مرور قوية")
         generate_layout = QVBoxLayout(generate_group)
-        
+
         generate_button_layout = QHBoxLayout()
         self.generate_button = QPushButton("توليد كلمة مرور")
         self.copy_button = QPushButton("نسخ")
         self.copy_button.setEnabled(False)
-        
+
         generate_button_layout.addWidget(self.generate_button)
         generate_button_layout.addWidget(self.copy_button)
         generate_button_layout.addStretch()
-        
+
         generate_layout.addLayout(generate_button_layout)
-        
+
         self.generated_password_display = QLineEdit()
         self.generated_password_display.setReadOnly(True)
         self.generated_password_display.setPlaceholderText("كلمة المرور المولدة ستظهر هنا")
         generate_layout.addWidget(self.generated_password_display)
-        
+
         layout.addWidget(generate_group)
         layout.addStretch()
-        
+
         self.tab_widget.addTab(password_widget, "كلمة المرور")
-    
+
     def setup_connections(self):
         """إعداد الاتصالات"""
         self.close_button.clicked.connect(self.accept)
@@ -337,7 +301,7 @@ class EncryptionDialog(QDialog):
         self.change_password_button.clicked.connect(self.change_password)
         self.generate_button.clicked.connect(self.generate_password)
         self.copy_button.clicked.connect(self.copy_password)
-    
+
     def update_encryption_status(self):
         """تحديث حالة التشفير"""
         if self.db_manager.is_encrypted:
@@ -352,140 +316,142 @@ class EncryptionDialog(QDialog):
             self.enable_button.setEnabled(True)
             self.disable_button.setEnabled(False)
             self.change_password_button.setEnabled(False)
-        
+
         # تحديث حجم قاعدة البيانات
         try:
             db_info = self.db_manager.get_database_info()
-            size_mb = db_info.get('size_mb', 0)
+            size_mb = db_info.get("size_mb", 0)
             self.database_size_label.setText(f"{size_mb} ميجابايت")
-        except:
+        except Exception:
             self.database_size_label.setText("غير متاح")
-    
+
     def enable_encryption(self):
         """تفعيل التشفير"""
         password = self.enable_password_input.text()
         confirm_password = self.confirm_password_input.text()
-        
+
         if not password:
             self.notify.show_warning("تحذير", "يرجى إدخال كلمة مرور")
             return
-        
+
         if len(password) < 8:
             self.notify.show_warning("تحذير", "كلمة المرور يجب أن تكون 8 أحرف على الأقل")
             return
-        
+
         if password != confirm_password:
             self.notify.show_warning("تحذير", "كلمات المرور غير متطابقة")
             return
-        
+
         # تأكيد العملية
         reply = QMessageBox.question(
-            self, "تأكيد", 
+            self,
+            "تأكيد",
             "هل أنت متأكد من تفعيل التشفير؟\nسيتم إنشاء نسخة احتياطية تلقائياً.",
-            QMessageBox.Yes | QMessageBox.No
+            QMessageBox.Yes | QMessageBox.No,
         )
-        
+
         if reply == QMessageBox.Yes:
             self.start_encryption_operation("enable", password=password)
-    
+
     def disable_encryption(self):
         """إلغاء التشفير"""
         password = self.disable_password_input.text()
-        
+
         if not password:
             self.notify.show_warning("تحذير", "يرجى إدخال كلمة مرور التشفير")
             return
-        
+
         # تأكيد العملية
         reply = QMessageBox.question(
-            self, "تأكيد", 
+            self,
+            "تأكيد",
             "هل أنت متأكد من إلغاء التشفير؟\nستصبح قاعدة البيانات غير محمية.",
-            QMessageBox.Yes | QMessageBox.No
+            QMessageBox.Yes | QMessageBox.No,
         )
-        
+
         if reply == QMessageBox.Yes:
             self.start_encryption_operation("disable", password=password)
-    
+
     def change_password(self):
         """تغيير كلمة مرور التشفير"""
         old_password = self.old_password_input.text()
         new_password = self.new_password_input.text()
         confirm_new_password = self.confirm_new_password_input.text()
-        
+
         if not old_password or not new_password:
             self.notify.show_warning("تحذير", "يرجى إدخال كلمات المرور المطلوبة")
             return
-        
+
         if len(new_password) < 8:
             self.notify.show_warning("تحذير", "كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل")
             return
-        
+
         if new_password != confirm_new_password:
             self.notify.show_warning("تحذير", "كلمات المرور الجديدة غير متطابقة")
             return
-        
+
         # تأكيد العملية
         reply = QMessageBox.question(
-            self, "تأكيد", 
+            self,
+            "تأكيد",
             "هل أنت متأكد من تغيير كلمة مرور التشفير؟",
-            QMessageBox.Yes | QMessageBox.No
+            QMessageBox.Yes | QMessageBox.No,
         )
-        
+
         if reply == QMessageBox.Yes:
-            self.start_encryption_operation("change_password", 
-                                          old_password=old_password, 
-                                          new_password=new_password)
-    
+            self.start_encryption_operation("change_password", old_password=old_password, new_password=new_password)
+
     def generate_password(self):
         """توليد كلمة مرور قوية"""
         password = EncryptionManager.generate_secure_password(16)
         self.generated_password_display.setText(password)
         self.copy_button.setEnabled(True)
-    
+
     def copy_password(self):
         """نسخ كلمة المرور المولدة"""
         from PySide6.QtWidgets import QApplication
+
         clipboard = QApplication.clipboard()
         clipboard.setText(self.generated_password_display.text())
         self.notify.show_info("تم", "تم نسخ كلمة المرور إلى الحافظة")
-    
+
     def start_encryption_operation(self, operation: str, **kwargs):
         """بدء عملية التشفير"""
         self.progress_bar.setVisible(True)
         self.status_label.setVisible(True)
         self.progress_bar.setValue(0)
-        
+
         # تعطيل الأزرار
         self.enable_button.setEnabled(False)
         self.disable_button.setEnabled(False)
         self.change_password_button.setEnabled(False)
-        
+
         # بدء العامل
         self.encryption_worker = EncryptionWorker(operation, self.db_manager, **kwargs)
         self.encryption_worker.progress_updated.connect(self.on_progress_updated)
         self.encryption_worker.operation_completed.connect(self.on_operation_completed)
         self.encryption_worker.start()
-    
+
     def on_progress_updated(self, value: int, message: str):
         """تحديث شريط التقدم"""
         self.progress_bar.setValue(value)
         self.status_label.setText(message)
-    
+
     def on_operation_completed(self, success: bool, message: str):
         """إنهاء العملية"""
         self.progress_bar.setVisible(False)
         self.status_label.setVisible(False)
-        
+
         if success:
             self.notify.show_success("نجح", message)
             self.update_encryption_status()
             self.clear_inputs()
         else:
             self.notify.show_error("خطأ", message)
-        
+
         # إعادة تفعيل الأزرار
         self.update_encryption_status()
-    
+
     def clear_inputs(self):
         """مسح المدخلات"""
         self.enable_password_input.clear()
@@ -494,14 +460,15 @@ class EncryptionDialog(QDialog):
         self.old_password_input.clear()
         self.new_password_input.clear()
         self.confirm_new_password_input.clear()
-    
+
     def apply_styles(self):
         """تطبيق الأنماط"""
         self.setStyleSheet("""
             QDialog {
-                background-color: #f5f5f5;
+
+                color: #f8fafc;
             }
-            
+
             QGroupBox {
                 font-weight: bold;
                 border: 2px solid #cccccc;
@@ -509,13 +476,13 @@ class EncryptionDialog(QDialog):
                 margin-top: 10px;
                 padding-top: 10px;
             }
-            
+
             QGroupBox::title {
                 subcontrol-origin: margin;
                 left: 10px;
                 padding: 0 5px 0 5px;
             }
-            
+
             QPushButton {
                 background-color: #0078d4;
                 color: white;
@@ -524,36 +491,36 @@ class EncryptionDialog(QDialog):
                 padding: 8px 16px;
                 font-weight: bold;
             }
-            
+
             QPushButton:hover {
                 background-color: #106ebe;
             }
-            
+
             QPushButton:pressed {
                 background-color: #005a9e;
             }
-            
+
             QPushButton:disabled {
                 background-color: #cccccc;
                 color: #666666;
             }
-            
+
             QLineEdit {
                 border: 1px solid #cccccc;
                 border-radius: 4px;
                 padding: 8px;
                 font-size: 12px;
             }
-            
+
             QLineEdit:focus {
                 border-color: #0078d4;
             }
-            
+
             QTabWidget::pane {
                 border: 1px solid #cccccc;
                 border-radius: 4px;
             }
-            
+
             QTabBar::tab {
                 background-color: #e1e1e1;
                 padding: 8px 16px;
@@ -561,18 +528,18 @@ class EncryptionDialog(QDialog):
                 border-top-left-radius: 4px;
                 border-top-right-radius: 4px;
             }
-            
+
             QTabBar::tab:selected {
-                background-color: white;
+                background-color: transparent;
                 border-bottom: 2px solid #0078d4;
             }
-            
+
             QProgressBar {
                 border: 1px solid #cccccc;
                 border-radius: 4px;
                 text-align: center;
             }
-            
+
             QProgressBar::chunk {
                 background-color: #0078d4;
                 border-radius: 3px;
@@ -582,15 +549,16 @@ class EncryptionDialog(QDialog):
 
 if __name__ == "__main__":
     from PySide6.QtWidgets import QApplication
-    from src.core.database_manager import DatabaseManager
-    
+
+    from src.core.local_database_manager import LocalDatabaseManager
+
     app = QApplication(sys.argv)
-    
+
     # إنشاء مدير قاعدة البيانات للاختبار
-    db_manager = DatabaseManager()
+    db_manager = LocalDatabaseManager()
     db_manager.initialize()
-    
+
     dialog = EncryptionDialog(db_manager)
     dialog.show()
-    
+
     sys.exit(app.exec())

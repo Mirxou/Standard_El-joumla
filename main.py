@@ -8,11 +8,9 @@ Main Application - Inventory and Sales Management System
 
 import sys
 import os
-import logging
 import warnings
 from pathlib import Path
 from typing import Optional
-from datetime import datetime
 
 # قمع تحذيرات WeasyPrint قبل أي استيراد
 warnings.filterwarnings('ignore', category=UserWarning, module='weasyprint')
@@ -32,15 +30,16 @@ project_root = Path(__file__).parent
 src_path = project_root / "src"
 sys.path.insert(0, str(src_path))
 
+# ضبط مجلد العمل الحالي إلى جذر المشروع دائماً
+# هذا ضروري لضمان صحة جميع المسارات النسبية (models/, data/, etc.)
+os.chdir(project_root)
+
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QMenuBar, QMenu, QToolBar, QStatusBar, QLabel,
-    QMessageBox, QDialog, QSplashScreen, QProgressBar,
-    QSystemTrayIcon, QStyle, QFrame, QGridLayout, QPushButton,
-    QGroupBox, QTextEdit, QTabWidget, QStackedWidget
+    QApplication, QLabel, QMessageBox, QDialog, QSplashScreen,
+    QProgressBar
 )
-from PySide6.QtCore import Qt, QTimer, Signal, QThread, QSettings, QSize, QLoggingCategory
-from PySide6.QtGui import QFont, QPixmap, QIcon, QPalette, QColor, QAction
+from PySide6.QtCore import Qt, QTimer, Signal, QThread, QLoggingCategory
+from PySide6.QtGui import QFont, QPixmap, QIcon, QColor, QFontDatabase
 
 _TEST_MODE = bool(os.environ.get("PYTEST_CURRENT_TEST")) or getattr(QApplication, "__name__", "") == "MockQApplication"
 
@@ -49,7 +48,7 @@ qt_style_logger = QLoggingCategory("qt.qpa.qss")
 qt_style_logger.setFilterRules("*.warning=false")
 
 # استيراد المكونات الأساسية
-# from src.core.local_database_manager import LocalDatabaseManager
+from src.core.local_database_manager import LocalDatabaseManager
 from src.core.database_manager import DatabaseManager
 from src.core.config_manager import ConfigManager
 from src.utils.logger import setup_logger
@@ -103,62 +102,62 @@ class DatabaseInitWorker(QThread):
     """عامل تهيئة قاعدة البيانات"""
     progress_updated = Signal(int, str)
     initialization_completed = Signal(bool, str)
-    
+
     def __init__(self, db_manager):
         super().__init__()
         self.db_manager = db_manager
         self.logger = setup_logger(__name__)
-    
+
     def run(self):
         try:
             # التحقق من طلب الإنهاء قبل كل خطوة
             if self.isInterruptionRequested():
                 return
-            
+
             self.progress_updated.emit(10, "تهيئة قاعدة البيانات...")
-            
+
             # تهيئة قاعدة البيانات
             success = self.db_manager.initialize()
             if not success:
                 self.initialization_completed.emit(False, "فشل في تهيئة قاعدة البيانات")
                 return
-            
+
             if self.isInterruptionRequested():
                 return
-            
+
             self.progress_updated.emit(30, "إنشاء الجداول...")
-            
+
             # إنشاء الجداول الأساسية
             # الجداول يتم إنشاؤها تلقائياً في initialize()
-            
+
             if self.isInterruptionRequested():
                 return
-            
+
             self.progress_updated.emit(50, "تحميل البيانات الأولية...")
-            
+
             # تحميل البيانات الأولية إذا لزم الأمر
             self.load_initial_data()
-            
+
             if self.isInterruptionRequested():
                 return
-            
+
             self.progress_updated.emit(80, "التحقق من سلامة البيانات...")
-            
+
             # التحقق من سلامة قاعدة البيانات
             if not self.verify_database_integrity():
                 self.initialization_completed.emit(False, "فشل في التحقق من سلامة قاعدة البيانات")
                 return
-            
+
             if self.isInterruptionRequested():
                 return
-            
+
             self.progress_updated.emit(100, "تم الانتهاء من التهيئة")
             self.initialization_completed.emit(True, "تم تهيئة قاعدة البيانات بنجاح")
-            
+
         except Exception as e:
             self.logger.error(f"خطأ في تهيئة قاعدة البيانات: {str(e)}")
             self.initialization_completed.emit(False, f"خطأ في التهيئة: {str(e)}")
-    
+
     def load_initial_data(self):
         """تحميل البيانات الأولية"""
         try:
@@ -166,7 +165,7 @@ class DatabaseInitWorker(QThread):
             from src.models.user import UserManager, User, UserRole
             from datetime import datetime
             user_manager = UserManager(self.db_manager, self.logger)
-            
+
             # التحقق من وجود مستخدمين
             users = user_manager.get_all_users()
             if not users:
@@ -179,7 +178,7 @@ class DatabaseInitWorker(QThread):
                         role=UserRole.ADMIN.value,
                         created_at=datetime.now()
                     )
-                    
+
                     # تعيين الصلاحيات الأساسية للمدير
                     admin_permissions = [
                         'users_create', 'users_read', 'users_update', 'users_delete',
@@ -190,10 +189,10 @@ class DatabaseInitWorker(QThread):
                         'settings_create', 'settings_read', 'settings_update', 'settings_delete'
                     ]
                     admin_user.set_permissions(admin_permissions)
-                    
+
                     self.logger.info(f"محاولة إنشاء المستخدم: {admin_user.username}")
                     self.logger.info(f"البيانات: {admin_user.to_dict()}")
-                    
+
                     user_id = user_manager.create_user(admin_user, "admin123")
                     if user_id:
                         self.logger.info(f"تم إنشاء مستخدم المدير الافتراضي بنجاح - ID: {user_id}")
@@ -203,11 +202,11 @@ class DatabaseInitWorker(QThread):
                     self.logger.error(f"خطأ في إنشاء مستخدم المدير الافتراضي: {str(e)}")
                     import traceback
                     self.logger.error(f"تفاصيل الخطأ: {traceback.format_exc()}")
-            
+
             # إنشاء فئات افتراضية
             from src.models.category import CategoryManager
             category_manager = CategoryManager(self.db_manager)
-            
+
             categories = category_manager.get_all_categories()
             if not categories:
                 # إنشاء فئات افتراضية
@@ -218,7 +217,7 @@ class DatabaseInitWorker(QThread):
                     {"name": "كتب وقرطاسية", "description": "الكتب والأدوات المكتبية"},
                     {"name": "منزل وحديقة", "description": "أدوات المنزل والحديقة"}
                 ]
-                
+
                 for cat_data in default_categories:
                     from src.models.category import Category
                     category = Category(
@@ -226,92 +225,109 @@ class DatabaseInitWorker(QThread):
                         description=cat_data["description"]
                     )
                     category_manager.create_category(category)
-                
+
                 self.logger.info("تم إنشاء الفئات الافتراضية")
-            
+
         except Exception as e:
             self.logger.error(f"خطأ في تحميل البيانات الأولية: {str(e)}")
-    
+
     def verify_database_integrity(self) -> bool:
         """التحقق من سلامة قاعدة البيانات"""
         try:
             # التحقق من وجود الجداول الأساسية
             required_tables = [
-                'users', 'categories', 'products', 'customers', 
-                'suppliers', 'sales', 'sale_items', 'purchases', 
+                'users', 'categories', 'products', 'customers',
+                'suppliers', 'sales', 'sale_items', 'purchases',
                 'purchase_items', 'stock_movements'
             ]
-            
+
             for table in required_tables:
                 if not self.db_manager.table_exists(table):
                     self.logger.error(f"الجدول المطلوب غير موجود: {table}")
                     return False
-            
+
             return True
-            
+
         except Exception as e:
             self.logger.error(f"خطأ في التحقق من سلامة قاعدة البيانات: {str(e)}")
             return False
 
 
 class SplashScreen(QSplashScreen):
-    """شاشة البداية"""
-    
+    """شاشة البداية - مع دعم الخطوط العربية والأنماط الصلبة"""
+
     def __init__(self):
-        # إنشاء صورة بسيطة للشاشة
-        pixmap = QPixmap(400, 300)
-        pixmap.fill(QColor(52, 152, 219))  # لون أزرق
-        
+        # إنشاء صورة بسيطة للشاشة (Solid Charcoal)
+        pixmap = QPixmap(400, 320)
+        pixmap.fill(QColor(15, 23, 42))  # #0f172a
+
         super().__init__(pixmap)
-        
-        # إعداد النص
         self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint)
-        
-        # شريط التقدم
-        self.progress_bar = QProgressBar(self)
-        self.progress_bar.setGeometry(50, 250, 300, 20)
-        self.progress_bar.setStyleSheet("""
-            QProgressBar {
-                border: 2px solid #34495e;
-                border-radius: 5px;
-                text-align: center;
-                background-color: white;
-            }
-            QProgressBar::chunk {
-                background-color: #2ecc71;
-                border-radius: 3px;
-            }
-        """)
-        
-        # تسمية الحالة
+
+        # تسمية الحالة (جاري التحميل)
         self.status_label = QLabel("جاري التحميل...", self)
-        self.status_label.setGeometry(50, 220, 300, 20)
+        self.status_label.setGeometry(50, 240, 300, 25)
         self.status_label.setStyleSheet("""
-            color: white;
+            color: #cbd5e1;
             font-size: 14px;
             font-weight: bold;
+            font-family: 'Segoe UI', 'Arial', sans-serif;
+            background: transparent;
         """)
         self.status_label.setAlignment(Qt.AlignCenter)
-        
-        # عنوان التطبيق
-        title_label = QLabel("نظام إدارة المخزون والمبيعات", self)
-        title_label.setGeometry(50, 100, 300, 40)
+
+        # إضافة الشعار الرئيسي
+        self.logo_label = QLabel(self)
+        self.logo_label.setGeometry(125, 30, 150, 150)
+        logo_path = Path(__file__).parent / "assets" / "images" / "standard_eljoumla_logo.png"
+        if logo_path.exists():
+            logo_pixmap = QPixmap(str(logo_path))
+            self.logo_label.setPixmap(logo_pixmap.scaled(150, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        else:
+            self.logo_label.setText("🛒")
+            self.logo_label.setStyleSheet("font-size: 80px; color: #06b6d4; background: transparent;")
+        self.logo_label.setAlignment(Qt.AlignCenter)
+
+        # عنوان التطبيق الرئيسي
+        title_label = QLabel("ستاندرد الجملة", self)
+        title_label.setGeometry(50, 185, 300, 40)
         title_label.setStyleSheet("""
-            color: white;
-            font-size: 20px;
-            font-weight: bold;
+            color: #06b6d4;
+            font-size: 24px;
+            font-weight: 800;
+            font-family: 'Segoe UI', 'Arial', sans-serif;
+            background: transparent;
         """)
         title_label.setAlignment(Qt.AlignCenter)
-        
+
         # معلومات الإصدار
-        version_label = QLabel("الإصدار 1.0.0", self)
-        version_label.setGeometry(50, 140, 300, 20)
+        version_label = QLabel("الإصدار 6.0 Professional", self)
+        version_label.setGeometry(50, 150, 300, 20)
         version_label.setStyleSheet("""
-            color: white;
+            color: #94a3b8;
             font-size: 12px;
+            font-family: 'Segoe UI', 'Arial', sans-serif;
+            background: transparent;
         """)
         version_label.setAlignment(Qt.AlignCenter)
-    
+
+        # شريط التقدم (تصميم صلب)
+        self.progress_bar = QProgressBar(self)
+        self.progress_bar.setGeometry(50, 270, 300, 8)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #1e293b;
+                border-radius: 4px;
+                background-color: #1e293b;
+                text-align: center;
+            }
+            QProgressBar::chunk {
+                background-color: #06b6d4;
+                border-radius: 2px;
+            }
+        """)
+        self.progress_bar.setTextVisible(False)
+
     def update_progress(self, value: int, message: str):
         """تحديث شريط التقدم والرسالة"""
         self.progress_bar.setValue(value)
@@ -321,50 +337,48 @@ class SplashScreen(QSplashScreen):
 
 class InventoryManagementApp(QApplication):
     """التطبيق الرئيسي لإدارة المخزون والمبيعات"""
-    
+
     def __init__(self, argv):
         super().__init__(argv)
         self._test_mode = getattr(QApplication, "__name__", "") == "MockQApplication"
-        
+
         # إعداد التطبيق
         self.setApplicationName("نظام إدارة المخزون والمبيعات")
-        self.setApplicationVersion("5.3.0")  # 🔥 FIX: تحديث الإصدار لتطابق VERSION.txt
+        self.setApplicationVersion("6.0")
         self.setOrganizationName("شركة التطوير")
         self.setOrganizationDomain("development.com")
-        
+
         # تعيين أيقونة التطبيق الرئيسية
         icon_path = project_root / "assets" / "icons" / "app_icon.ico"
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
-        
-        # إعداد الخط العربي - مطابق لتطبيق الويب
-        font = QFont("Cairo", 10)
-        font.setWeight(QFont.Weight.Normal)
+
+        # إعداد الخط العربي مع بدائل قوية لتجنب الرموز غير المفهومة
+        font = QFont("Segoe UI", 10)
+        if "Cairo" in QFontDatabase.families():
+            font = QFont("Cairo", 10)
+
+        font.setStyleHint(QFont.SansSerif)
         self.setFont(font)
-        
+
         # إعداد اتجاه النص
         self.setLayoutDirection(Qt.RightToLeft)
-        
-        # تطبيق السمة المحفوظة والأنماط فقط في التشغيل الفعلي
+
+        # تطبيق سمة Quantum Dark الثابتة (الهوية الدائمة للنظام)
         if not self._test_mode:
-            theme = self.apply_saved_theme()
             try:
-                from src.ui.styles.main import apply_style_to_app
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")
-                    apply_style_to_app(self, theme='dark')
-            except Exception:
-                pass
-        else:
-            theme = 'light'
-        
+                from src.ui.modern_theme import get_style_manager
+                get_style_manager().apply_theme()
+            except Exception as e:
+                print(f"تحذير: فشل تطبيق السمة: {e}")
+
         # إعداد المتغيرات
         self.logger = setup_logger(__name__)
         self.config_manager = ConfigManager()
         self.config_manager.load_config()  # تحميل الإعدادات من الملف
-        self.db_manager: Optional[DatabaseManager] = None
+        self.db_manager: Optional[LocalDatabaseManager] = None
         self.current_user = None
-        
+
         # الخدمات
         self.inventory_service: Optional[InventoryService] = None
         self.sales_service: Optional[SalesService] = None
@@ -382,92 +396,81 @@ class InventoryManagementApp(QApplication):
         self.mfa_service = None
         self.encryption_service = None
         self.support_service = None
-        
+
         # عميل API الهجين
         self.api_client: Optional[APIClient] = None
         self.hybrid_service: Optional[HybridDataService] = None
-        
+
         # النوافذ
         self.main_window: Optional[MainWindow] = None
         self.reports_window: Optional[ReportsWindow] = None
-        
+
         # شاشة البداية
         self.splash_screen: Optional[SplashScreen] = None
-        
+
         # عامل التهيئة
         self.init_worker: Optional[DatabaseInitWorker] = None
-        
+
         # إعداد معالج الإغلاق
         self.aboutToQuit.connect(self.cleanup)
-    
-    def apply_saved_theme(self) -> str:
-        """تطبيق السمة المحفوظة"""
-        try:
-            from src.ui.theme_manager import get_theme_manager
-            theme_manager = get_theme_manager()
-            saved_theme = theme_manager.get_current_theme()
-            theme_manager.apply_theme(saved_theme)
-            return saved_theme
-        except Exception as e:
-            print(f"تحذير: فشل تحميل السمة: {e}")
-            return 'light'  # السمة الافتراضية
-    
+
+
+
     def run(self):
         """تشغيل التطبيق"""
         try:
             self.logger.info("بدء تشغيل التطبيق")
-            
+
             # عرض شاشة البداية
             self.show_splash_screen()
-            
+
             # تهيئة قاعدة البيانات
             self.initialize_database()
-            
+
         except Exception as e:
             self.logger.error(f"خطأ في تشغيل التطبيق: {str(e)}")
             self.show_error_message("خطأ في التشغيل", f"فشل في تشغيل التطبيق: {str(e)}")
             return False
-        
+
         return True
-    
+
     def show_splash_screen(self):
         """عرض شاشة البداية"""
         self.splash_screen = SplashScreen()
         self.splash_screen.show()
         self.processEvents()
-    
+
     def initialize_database(self):
         """تهيئة قاعدة البيانات"""
         try:
             # إنشاء مدير قاعدة البيانات مع Backend abstraction
             db_path = self.config_manager.get_database_path()
-            db_backend_type = self.config_manager.get_database_backend()
-            
-            # استخدام مدير القاعدة للتطبيق المكتبي
-            # (DatabaseManager يتولى إنشاء الجداول وتطبيق المهاجرات)
-            self.db_manager = DatabaseManager(db_path=db_path)
-            
+            db_backend_type = self.config_manager.get_database_backend()  # noqa: F841
+
+            # استخدام مدير القاعدة للتطبيق المكتبي المخصص
+            self.db_manager = LocalDatabaseManager(db_path=db_path)
+
             # بدء تهيئة قاعدة البيانات في خيط منفصل
             self.init_worker = DatabaseInitWorker(self.db_manager)
             self.init_worker.progress_updated.connect(self.on_init_progress)
             self.init_worker.initialization_completed.connect(self.on_init_completed)
             self.init_worker.start()
-            
+
         except Exception as e:
             self.logger.error(f"خطأ في تهيئة قاعدة البيانات: {str(e)}")
             self.show_error_message("خطأ في قاعدة البيانات", f"فشل في تهيئة قاعدة البيانات: {str(e)}")
-    
+
     def on_init_progress(self, value: int, message: str):
         """معالجة تقدم التهيئة"""
         if self.splash_screen:
             self.splash_screen.update_progress(value, message)
-    
+
     def on_init_completed(self, success: bool, message: str):
         """معالجة اكتمال التهيئة"""
         if self.splash_screen:
             self.splash_screen.close()
             self.splash_screen = None
-        
+
         if success:
             self.logger.info("تم تهيئة قاعدة البيانات بنجاح")
             self.initialize_services()
@@ -477,7 +480,7 @@ class InventoryManagementApp(QApplication):
             self.logger.error(f"فشل في تهيئة قاعدة البيانات: {message}")
             self.show_error_message("خطأ في التهيئة", message)
             self.quit()
-    
+
     def initialize_services(self):
         """تهيئة الخدمات (محسّنة لتجنب التجميد)"""
         try:
@@ -486,7 +489,7 @@ class InventoryManagementApp(QApplication):
             self.sales_service = SalesService(self.db_manager, self.logger)
             self.reports_service = ReportExporter(self.db_manager)
             self.user_service = UserService(self.db_manager)
-            
+
             # تهيئة خدمة المدفوعات
             try:
                 from src.services.payment_service import PaymentService
@@ -494,7 +497,7 @@ class InventoryManagementApp(QApplication):
             except Exception as e:
                 self.logger.warning(f"تعذر تهيئة خدمة المدفوعات: {e}")
                 self.payment_service = None
-            
+
             # تهيئة خدمة لوحات المعلومات
             try:
                 from src.services.dashboard_service import DashboardService
@@ -502,16 +505,16 @@ class InventoryManagementApp(QApplication):
             except Exception as e:
                 self.logger.warning(f"تعذر تهيئة خدمة لوحات المعلومات: {e}")
                 self.dashboard_service = None
-            
+
             self.logger.info("تم تهيئة جميع الخدمات الأساسية بنجاح")
-            
+
             # تهيئة الخدمات الثقيلة في الخلفية (async)
             QTimer.singleShot(100, self._initialize_heavy_services)
 
         except Exception as e:
             self.logger.error(f"خطأ في تهيئة الخدمات: {str(e)}")
             self.show_error_message("خطأ في الخدمات", f"فشل في تهيئة الخدمات: {str(e)}")
-    
+
     def _initialize_heavy_services(self):
         """تهيئة الخدمات الثقيلة في الخلفية (لتجنب التجميد)"""
         try:
@@ -554,7 +557,9 @@ class InventoryManagementApp(QApplication):
 
             # تهيئة البريد + التذكيرات + المجدول (اختياري)
             try:
-                self.email_service = EmailService()
+                from src.services.print_service import PrintService
+                print_service = PrintService(db_manager=self.db_manager)
+                self.email_service = EmailService(print_service=print_service)
                 self.reminder_service = init_reminder_service(self.db_manager, self.email_service)
                 self.task_scheduler = init_task_scheduler(self.db_manager, self.reminder_service)
                 self.logger.info("✓ المجدول والتذكيرات")
@@ -563,60 +568,60 @@ class InventoryManagementApp(QApplication):
 
             # تهيئة عميل API الهجين
             try:
-                
-                api_url = self.config_manager.get_api_url()
-                
 
-                
+                api_url = self.config_manager.get_api_url()
+
+
+
                 self.api_client = APIClient(base_url=api_url, timeout=5)
                 self.hybrid_service = HybridDataService(self.db_manager, self.api_client)
-                
 
-                
+
+
                 is_online = self.api_client.is_online()
-                
 
-                
+
+
                 if is_online:
                     self.logger.info(f"✅ الاتصال بـ API متاح: {api_url}")
                 else:
                     self.logger.info("⚠️ الوضع المحلي: API غير متاح")
             except Exception as e:
                 self.logger.warning(f"تعذر تهيئة عميل API الهجين: {e}")
-            
+
             # تهيئة نظام الإشعارات
             try:
                 self.notifications_manager = get_notifications_manager(self.db_manager)
                 self.logger.info("✓ نظام الإشعارات الذكية")
             except Exception as e:
                 self.logger.warning(f"تعذرت تهيئة نظام الإشعارات: {e}")
-                
+
         except Exception as e:
             self.logger.error(f"خطأ في تهيئة الخدمات الثقيلة: {str(e)}")
-    
+
     def show_mandatory_login_dialog(self):
         """عرض نافذة تسجيل الدخول الإجباري مع إدارة جلسات محسنة"""
         max_attempts = 3
         current_attempt = 0
-        
+
         while current_attempt < max_attempts:
             try:
                 login_dialog = LoginDialog(self.user_service)
                 login_dialog.setWindowTitle("تسجيل الدخول الإجباري - الإصدار المنطقي")
-                
+
                 # إضافة رسالة تحذيرية للمحاولات المتبقية
                 if current_attempt > 0:
                     remaining_attempts = max_attempts - current_attempt
                     login_dialog.set_warning_message(f"تحذير: متبقي {remaining_attempts} محاولة/محاولات قبل إغلاق التطبيق")
-                
+
                 # التأكد من ظهور الحوار بشكل صحيح
                 login_dialog.raise_()
                 login_dialog.activateWindow()
                 login_dialog.show()
                 self.processEvents()
-                
+
                 result = login_dialog.exec()
-                
+
                 if result == QDialog.Accepted:
                     session = login_dialog.get_current_session()
                     if session and self._validate_session_security(session):
@@ -624,13 +629,13 @@ class InventoryManagementApp(QApplication):
                         from src.models.user import UserManager
                         user_manager = UserManager(self.db_manager, self.logger)
                         self.current_user = user_manager.get_user_by_id(session.user_id)
-                        
+
                         if self.current_user:
                             self.logger.info(f"تم تسجيل دخول المستخدم بنجاح: {self.current_user.username}")
-                            
+
                             # بدء مراقبة الجلسة
                             self._start_session_monitoring(session)
-                            
+
                             # عرض النافذة الرئيسية
                             self.show_main_window()
                             return
@@ -646,7 +651,7 @@ class InventoryManagementApp(QApplication):
                     if current_attempt >= max_attempts:
                         self.logger.warning("تم تجاوز الحد الأقصى لمحاولات تسجيل الدخول")
                         self.show_error_message(
-                            "تم تجاوز الحد الأقصى", 
+                            "تم تجاوز الحد الأقصى",
                             "تم تجاوز الحد الأقصى لمحاولات تسجيل الدخول.\nسيتم إغلاق التطبيق."
                         )
                         self.quit()
@@ -660,114 +665,114 @@ class InventoryManagementApp(QApplication):
                             QMessageBox.Yes | QMessageBox.No,
                             QMessageBox.Yes
                         )
-                        
+
                         if reply == QMessageBox.No:
                             self.quit()
                             return
-                            
+
             except Exception as e:
                 self.logger.error(f"خطأ في نافذة تسجيل الدخول: {str(e)}")
                 self.show_error_message("خطأ في تسجيل الدخول", f"فشل في عرض نافذة تسجيل الدخول: {str(e)}")
                 current_attempt += 1
-        
+
         # إذا وصلنا هنا، فقد فشلت جميع المحاولات
         self.quit()
-    
-    def _validate_session_security(self, session: 'UserSession') -> bool:  # pyright: ignore[reportUndefinedVariable]
+
+    def _validate_session_security(self, session: 'UserSession') -> bool:  # pyright: ignore[reportUndefinedVariable]  # noqa: F821
         """التحقق من أمان الجلسة"""
         try:
             # التحقق من صحة الجلسة
             is_valid, validated_session = self.user_service.validate_session(session.session_id)
-            
+
             if not is_valid or not validated_session:
                 return False
-            
+
             # التحقق من عدم انتهاء صلاحية الجلسة
             from datetime import datetime, timedelta
             session_timeout = timedelta(minutes=self.user_service.security_settings.session_timeout_minutes)
-            
+
             if datetime.now() - session.last_activity > session_timeout:
                 self.logger.warning("انتهت صلاحية الجلسة")
                 return False
-            
+
             # التحقق من صحة المستخدم
             if not session.user_id or session.user_id <= 0:
                 return False
-            
+
             return True
-            
+
         except Exception as e:
             self.logger.error(f"خطأ في التحقق من أمان الجلسة: {e}")
             return False
-    
-    def _start_session_monitoring(self, session: 'UserSession'):  # pyright: ignore[reportUndefinedVariable]
+
+    def _start_session_monitoring(self, session: 'UserSession'):  # pyright: ignore[reportUndefinedVariable]  # noqa: F821
         """بدء مراقبة الجلسة"""
         try:
             # إنشاء مؤقت لمراقبة الجلسة
             self.session_monitor_timer = QTimer()
             self.session_monitor_timer.timeout.connect(lambda: self._check_session_validity(session))
-            
+
             # فحص الجلسة كل دقيقة
             self.session_monitor_timer.start(60000)  # 60 ثانية
-            
+
             # إنشاء مؤقت لتحديث نشاط الجلسة
             self.activity_timer = QTimer()
             self.activity_timer.timeout.connect(lambda: self._update_session_activity(session))
-            
+
             # تحديث النشاط كل 5 دقائق
             self.activity_timer.start(300000)  # 5 دقائق
-            
+
             self.logger.info("تم بدء مراقبة الجلسة")
-            
+
         except Exception as e:
             self.logger.error(f"خطأ في بدء مراقبة الجلسة: {e}")
-    
-    def _check_session_validity(self, session: 'UserSession'):  # pyright: ignore[reportUndefinedVariable]
+
+    def _check_session_validity(self, session: 'UserSession'):  # pyright: ignore[reportUndefinedVariable]  # noqa: F821
         """فحص صحة الجلسة بشكل دوري"""
         try:
             is_valid, validated_session = self.user_service.validate_session(session.session_id)
-            
+
             if not is_valid:
                 self.logger.warning("الجلسة غير صحيحة - سيتم تسجيل الخروج")
                 self._force_logout("انتهت صلاحية الجلسة")
-                
+
         except Exception as e:
             self.logger.error(f"خطأ في فحص صحة الجلسة: {e}")
-    
-    def _update_session_activity(self, session: 'UserSession'):  # pyright: ignore[reportUndefinedVariable]
+
+    def _update_session_activity(self, session: 'UserSession'):  # pyright: ignore[reportUndefinedVariable]  # noqa: F821
         """تحديث نشاط الجلسة"""
         try:
             self.user_service.update_session_activity(session.session_id)
-            
+
         except Exception as e:
             self.logger.error(f"خطأ في تحديث نشاط الجلسة: {e}")
-    
+
     def _force_logout(self, reason: str):
         """إجبار تسجيل الخروج"""
         try:
             self.logger.info(f"إجبار تسجيل الخروج: {reason}")
-            
+
             # إيقاف مراقبة الجلسة
             if hasattr(self, 'session_monitor_timer') and self.session_monitor_timer:
                 self.session_monitor_timer.stop()
-            
+
             if hasattr(self, 'activity_timer') and self.activity_timer:
                 self.activity_timer.stop()
-            
+
             # عرض رسالة للمستخدم
             QMessageBox.warning(
                 self.main_window if self.main_window else None,
                 "تسجيل خروج إجباري",
                 f"تم تسجيل خروجك من النظام.\nالسبب: {reason}"
             )
-            
+
             # تسجيل الخروج
             self.handle_logout()
-            
+
         except Exception as e:
             self.logger.error(f"خطأ في إجبار تسجيل الخروج: {e}")
             self.quit()
-    
+
     def show_main_window(self):
         """عرض النافذة الرئيسية (محسّنة لتجنب التجميد)"""
         try:
@@ -775,7 +780,7 @@ class InventoryManagementApp(QApplication):
             modern_theme = get_modern_theme()
             modern_theme.apply_theme()
             self.logger.info("✅ تم تطبيق نظام التصميم الحديث (Modern Theme)")
-            
+
             # عرض النافذة فورًا (بدون انتظار) مع تمرير الخدمات
             self.main_window = MainWindow(
                 config_manager=self.config_manager,
@@ -790,37 +795,43 @@ class InventoryManagementApp(QApplication):
                 notifications_manager=self.notifications_manager,
                 hybrid_service=self.hybrid_service
             )
-            
+
             self.main_window.show()
             self.logger.info("تم عرض النافذة الرئيسية")
-            
+
+            # توصيل إشارات النافذة الرئيسية
+            self.main_window.logout_requested.connect(self.handle_logout)
+
             # بدء نظام الإشعارات بعد عرض النافذة (في الخلفية)
             QTimer.singleShot(500, self._start_notifications_system)
-            
+
         except Exception as e:
             self.logger.error(f"خطأ في عرض النافذة الرئيسية: {str(e)}")
             self.show_error_message("خطأ في النافذة الرئيسية", f"فشل في عرض النافذة الرئيسية: {str(e)}")
-    
+
     def _start_notifications_system(self):
         """بدء نظام الإشعارات (في الخلفية لتجنب التجميد)"""
-        # 🔥 نظام الإشعارات معطّل لمنع التجميد
-        self.logger.info("⚠️ نظام الإشعارات معطّل مؤقتاً")
-        return
-    
+        try:
+            if hasattr(self, 'notifications_manager') and self.notifications_manager:
+                self.notifications_manager.start()
+                self.logger.info("✅ تم بدء نظام الإشعارات بنجاح")
+        except Exception as e:
+            self.logger.error(f"خطأ في بدء الإشعارات: {e}")
+
     def show_reports_window(self):
         """عرض نافذة التقارير"""
         try:
             if not self.reports_window:
                 self.reports_window = ReportsWindow(self.db_manager)
-            
+
             self.reports_window.show()
             self.reports_window.raise_()
             self.reports_window.activateWindow()
-            
+
         except Exception as e:
             self.logger.error(f"خطأ في عرض نافذة التقارير: {str(e)}")
             self.show_error_message("خطأ في التقارير", f"فشل في عرض نافذة التقارير: {str(e)}")
-    
+
     def handle_logout(self):
         """معالجة تسجيل الخروج"""
         try:
@@ -828,28 +839,28 @@ class InventoryManagementApp(QApplication):
             if self.main_window:
                 self.main_window.close()
                 self.main_window = None
-            
+
             if self.reports_window:
                 self.reports_window.close()
                 self.reports_window = None
-            
+
             # إنهاء جلسة المستخدم
             if self.current_user and self.user_service:
                 self.user_service.logout_user(self.current_user.id)
-            
+
             self.current_user = None
-            
+
             # عرض نافذة تسجيل الدخول الإجباري مرة أخرى
             self.show_mandatory_login_dialog()
-            
+
         except Exception as e:
             self.logger.error(f"خطأ في تسجيل الخروج: {str(e)}")
             self.show_error_message("خطأ في تسجيل الخروج", f"فشل في تسجيل الخروج: {str(e)}")
-    
+
     def show_error_message(self, title: str, message: str):
         """عرض رسالة خطأ"""
         QMessageBox.critical(None, title, message)
-    
+
     def cleanup(self):
         """تنظيف الموارد عند الإغلاق (محسّن لتجنب التجميد)"""
         try:
@@ -868,7 +879,7 @@ class InventoryManagementApp(QApplication):
                     QTimer.singleShot(0, lambda: self.task_scheduler.stop() if hasattr(self.task_scheduler, 'stop') else None)
                 except Exception:
                     pass
-            
+
             # إيقاف العمال بشكل صحيح
             if self.init_worker:
                 try:
@@ -883,7 +894,7 @@ class InventoryManagementApp(QApplication):
                             if not self.init_worker.wait(500):
                                 if self.logger:
                                     self.logger.warning("init_worker لم ينتهِ بعد الإنهاء القسري")
-                    
+
                     # تنظيف الـ thread فقط بعد التأكد من أنه قد انتهى
                     if not self.init_worker.isRunning():
                         # استخدام deleteLater() لتنظيف آمن
@@ -906,51 +917,74 @@ class InventoryManagementApp(QApplication):
                             self.init_worker = None
                     except Exception:
                         pass
-            
+
             # إنهاء جلسة المستخدم (سريع)
             if self.current_user and self.user_service:
                 try:
                     QTimer.singleShot(0, lambda: self.user_service.logout_user(self.current_user.id))
                 except Exception:
                     pass
-            
+
             # إغلاق قاعدة البيانات (سريع)
             if self.db_manager:
                 try:
                     QTimer.singleShot(0, self.db_manager.close)
                 except Exception:
                     pass
-            
+
             # معالجة الأحداث لضمان تنظيف threads (deleteLater)
             from PySide6.QtWidgets import QApplication
             QApplication.processEvents()
-            
+
             self.logger.info("✓ تم تنظيف الموارد")
-            
+
         except Exception as e:
             self.logger.error(f"خطأ في تنظيف الموارد: {str(e)}")
 
 
 def setup_exception_handler():
-    """إعداد معالج الاستثناءات العام"""
+    """إعداد معالج الاستثناءات العام مع حفظ تقارير الانهيار (Crash Dumps)"""
     def handle_exception(exc_type, exc_value, exc_traceback):
         if issubclass(exc_type, KeyboardInterrupt):
             sys.__excepthook__(exc_type, exc_value, exc_traceback)
             return
-        
+
         logger = setup_logger("exception_handler")
         logger.critical(
-            "استثناء غير معالج",
+            "استثناء غير معالج (توقف مفاجئ)",
             exc_info=(exc_type, exc_value, exc_traceback)
         )
-        
-        # عرض رسالة خطأ للمستخدم
+
+        import traceback
+        from datetime import datetime
+
+        # إنشاء مسار لحفظ الأخطاء
+        dump_dir = Path("logs/crash_dumps")
+        dump_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        dump_file = dump_dir / f"crash_{timestamp}.log"
+
+        try:
+            with open(dump_file, "w", encoding="utf-8") as f:
+                f.write("--- تقرير انهيار النظام (Crash Dump) ---\n")
+                f.write(f"الوقت: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"نوع الخطأ: {exc_type.__name__}\n")
+                f.write(f"الرسالة: {str(exc_value)}\n")
+                f.write("-" * 40 + "\n")
+                traceback.print_exception(exc_type, exc_value, exc_traceback, file=f)
+        except Exception:
+            pass
+
+        # عرض رسالة خطأ للمستخدم (واجهة رسومية)
         QMessageBox.critical(
             None,
-            "خطأ غير متوقع",
-            f"حدث خطأ غير متوقع في التطبيق:\n{str(exc_value)}\n\nيرجى إعادة تشغيل التطبيق."
+            "خطأ حرج في النظام",
+            "نعتذر، حدث خطأ غير متوقع في التطبيق وتوقف عن العمل.\n\n"
+            f"تم حفظ تفاصيل الخطأ في:\n{dump_file}\n\n"
+            f"الرسالة: {str(exc_value)}\n\n"
+            "الرجاء إعادة تشغيل التطبيق أو الاتصال بالدعم الفني."
         )
-    
+
     sys.excepthook = handle_exception
 
 
@@ -960,10 +994,10 @@ def main():
     try:
         # إعداد معالج الاستثناءات
         setup_exception_handler()
-        
+
         # إنشاء التطبيق
         app = InventoryManagementApp(sys.argv)
-        
+
         # تشغيل التطبيق
         if app.run():
             # تشغيل حلقة الأحداث
@@ -972,7 +1006,7 @@ def main():
             return 0 if exit_code == 0 else exit_code
         else:
             return 1
-            
+
     except KeyboardInterrupt:
         print("\n✓ تم إيقاف التطبيق بواسطة المستخدم")
         return 0

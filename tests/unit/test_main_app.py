@@ -1,45 +1,46 @@
-import pytest
-from unittest.mock import MagicMock, patch, ANY
-import sys
-
 # تأكد من أن مسار src متاح للاستيراد
-import sys
-import os
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
 # الوصول إلى جذر المشروع
 project_root = str(Path(__file__).resolve().parents[2])
+
+
 class MockQApplication:
     """Mock QApplication that serves as a base class but avoids MagicMock inheritance recursion"""
+
     def __init__(self, *args, **kwargs):
         self._mock_attrs = {}
         # Simulate expected Qt methods that might be called in __init__
         self.primaryScreen = MagicMock()
-        
+
     def __getattr__(self, name):
         if name not in self._mock_attrs:
             self._mock_attrs[name] = MagicMock()
         return self._mock_attrs[name]
-        
+
     def exec(self):
         return 0
-        
+
     @staticmethod
     def instance():
         return None
 
+
 @pytest.fixture
 def app():
     """إنشاء نسخة من التطبيق الرئيسي للاختبار"""
-    with patch('PySide6.QtWidgets.QApplication', new=MockQApplication):
+    with patch("PySide6.QtWidgets.QApplication", new=MockQApplication):
         # Patch QMessageBox globally for the app initialization to prevent any popups
-        with patch('PySide6.QtWidgets.QMessageBox'):
+        with patch("PySide6.QtWidgets.QMessageBox"):
             # نحتاج لاستيراد main هنا بعد الـ patch
-            import main
             from main import InventoryManagementApp
 
-        with patch('main.setup_logger', return_value=MagicMock()), \
-             patch('main.ConfigManager', return_value=MagicMock()), \
-             patch('main.DatabaseManager') as mock_db_manager:
+        with patch("main.setup_logger", return_value=MagicMock()), patch(
+            "main.ConfigManager", return_value=MagicMock()
+        ), patch("main.DatabaseManager") as mock_db_manager:
             # محاكاة نجاح تهيئة قاعدة البيانات
             mock_db_manager.return_value.initialize.return_value = True
 
@@ -90,19 +91,20 @@ class TestInventoryManagementApp:
         app.config_manager.get_database_path.return_value = "test.db"
 
         # Patch inside the test to handle module reload in fixture
-        with patch('main.DatabaseInitWorker') as mock_init_worker, \
-             patch.object(app, 'show_splash_screen') as mock_splash:
-            
+        with patch("main.DatabaseInitWorker") as mock_init_worker, patch.object(
+            app, "show_splash_screen"
+        ) as mock_splash:  # noqa: F841
+
             # إعداد mock worker
             mock_worker_instance = mock_init_worker.return_value
-            
+
             # تشغيل التطبيق
             app.run()
-            
+
             # التحقق من أن worker تم إنشاؤه وبدء تشغيله
             mock_init_worker.assert_called_once_with(app.db_manager)
             mock_worker_instance.start.assert_called_once()
-            
+
             # التحقق من ربط الإشارات
             mock_worker_instance.progress_updated.connect.assert_called_with(app.on_init_progress)
             mock_worker_instance.initialization_completed.connect.assert_called_with(app.on_init_completed)
@@ -116,13 +118,14 @@ class TestInventoryManagementApp:
         mock_session.user_id = 1
         # Set last_activity to now to pass timeout check
         from datetime import datetime
+
         mock_session.last_activity = datetime.now()
         mock_session.session_id = "test_session_id"
-        
+
         mock_login_instance.get_current_session.return_value = mock_session
-        
+
         mock_user_manager = MagicMock()
-        mock_user_manager.get_user_by_id.return_value = MagicMock(username='testuser', id=1)
+        mock_user_manager.get_user_by_id.return_value = MagicMock(username="testuser", id=1)
 
         # Prepare service mocks
         mock_user_service = MagicMock()
@@ -138,30 +141,33 @@ class TestInventoryManagementApp:
             app.sales_service = MagicMock()
 
         # Patch dependencies
-        # Patch QMessageBox specifically if needed, though global one in fixture covers init. 
+        # Patch QMessageBox specifically if needed, though global one in fixture covers init.
         # But we reload main, so we might need to patch it again inside test scope references?
         # Actually patch('PySide6.QtWidgets.QMessageBox') handles the import globally.
-        
-        with patch('main.LoginDialog', return_value=mock_login_instance) as mock_login_dialog, \
-             patch('main.MainWindow') as mock_main_window, \
-             patch.object(app, 'initialize_services', side_effect=side_effect_init_services) as mock_init_services, \
-             patch('src.models.user.UserManager', return_value=mock_user_manager):
-            
-            with patch.object(app, '_start_session_monitoring'):
+
+        with patch("main.LoginDialog", return_value=mock_login_instance) as mock_login_dialog, patch(
+            "main.MainWindow"
+        ) as mock_main_window, patch.object(
+            app, "initialize_services", side_effect=side_effect_init_services
+        ) as mock_init_services, patch(
+            "src.models.user.UserManager", return_value=mock_user_manager
+        ):
+
+            with patch.object(app, "_start_session_monitoring"):
                 # استدعاء الدالة مباشرة
                 app.on_init_completed(True, "Success")
 
             # Check calls
             mock_login_dialog.assert_called()
-            
+
             # The logic: if login exec returns Accepted -> calls setup_session -> calls initialize_services
             # If exec returns 1, it should proceed.
             # If it's failing here, it means something in show_login_dialog or setup_session crashed/stopped.
             # But the popup suggested session error.
-            
+
             # We verify expected calls
             mock_init_services.assert_called_once()
-            
+
             # Now verify main window was shown
             mock_main_window.assert_called()
             # Since we patched main.MainWindow, app.main_window should hold the instance
@@ -169,18 +175,13 @@ class TestInventoryManagementApp:
 
     def test_on_init_completed_failure(self, app, qtbot):
         """اختبار ما يحدث عند فشل تهيئة قاعدة البيانات"""
-        with patch.object(app, 'quit') as mock_quit, \
-             patch('main.QMessageBox.critical') as mock_critical:
-                
+        with patch.object(app, "quit") as mock_quit, patch("main.QMessageBox.critical") as mock_critical:
+
             # استدعاء الدالة مع حالة فشل
             app.on_init_completed(False, "Database connection failed")
 
             # التحقق من عرض رسالة خطأ
             mock_critical.assert_called()
-            
+
             # التحقق من أن التطبيق يحاول الخروج
             mock_quit.assert_called_once()
-
-
-
-

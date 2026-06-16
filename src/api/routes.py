@@ -1,60 +1,58 @@
-#!/usr/bin/env python3
+import logging
+import json
+
+from src.services.inventory_service import InventoryService
+
+#!/usr/bin/env python3  # noqa: E265
 # -*- coding: utf-8 -*-
 """
 API Routes - REST API Endpoints
 مسارات API للـ REST API
 """
 
+from datetime import date, datetime, timezone
+from typing import Any, Dict, List, Optional
+
 from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
-    status,
+    Query,
     Request,
     Response,
     WebSocket,
     WebSocketDisconnect,
-    Query,
+    status,
 )
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional, Dict, Any, List
-import sys
-from pathlib import Path
-
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.api.auth import JWTAuthManager
+from src.api.cache_manager import cached, invalidate_cache
 from src.api.websocket_manager import get_websocket_manager
-from src.api.cache_manager import get_cache_manager, cached, invalidate_cache
-from src.api.metrics import get_metrics_output
 from src.core.database_manager import DatabaseManager
-from src.core.keyring_manager import KeyringManager
-from src.core.remote_logger import RemoteLogger
+from src.models.category import CategoryManager
 from src.models.product import Product, ProductManager
-from src.models.sale import Sale, SaleItem, SaleManager, SaleStatus, PaymentMethod
-from src.models.purchase import (
-    Purchase,
-    PurchaseItem,
-    PurchaseManager,
-    PurchaseStatus,
-    PaymentStatus as PurchasePaymentStatus,
-)
+from src.models.purchase import PaymentStatus as PurchasePaymentStatus
+from src.models.purchase import Purchase, PurchaseItem, PurchaseManager, PurchaseStatus
+from src.models.reports import ReportManager
+from src.models.return_invoice import ReturnManager
+from src.models.sale import PaymentMethod, Sale, SaleItem, SaleManager, SaleStatus
+from src.models.supplier import SupplierManager
 from src.models.user import UserManager
 from src.models.warehouse import WarehouseManager
-from src.models.supplier import SupplierManager
-from src.models.return_invoice import ReturnManager
-from src.models.reports import ReportManager
-from src.models.category import CategoryManager
 from src.utils.logger import setup_logger
-from datetime import date, datetime, timezone
 
 # Router
 router = APIRouter()
+
 
 # Health check endpoint for production readiness
 @router.get("/health")
 async def health():
     return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
 from decimal import Decimal
 
 # Security
@@ -340,7 +338,7 @@ class PurchaseCreate(BaseModel):
     items: List[Dict[str, Any]]  # Simplified for now, should be PurchaseItemCreate
 
 
-class ReturnResponse(BaseModel):
+class ReturnResponse(BaseModel):  # noqa: F811
     id: int
     return_number: str
     return_type: str
@@ -352,7 +350,7 @@ class ReturnResponse(BaseModel):
     items_count: int = 0
 
 
-class ReturnCreate(BaseModel):
+class ReturnCreate(BaseModel):  # noqa: F811
     return_type: str = "SALE_RETURN"
     original_sale_id: Optional[int] = None
     original_purchase_id: Optional[int] = None
@@ -563,6 +561,13 @@ def get_current_user(
     Returns:
         بيانات المستخدم
     """
+    # التحقق مما إذا كان AuthMiddleware قد قام بالمصادقة بالفعل
+    if hasattr(request.state, "user_id") and request.state.user_id:
+        return {
+            "sub": request.state.user_id,
+            "username": getattr(request.state, "username", "unknown"),
+            "company_id": getattr(request.state, "company_id", None),
+        }
     token = credentials.credentials
 
     user = auth_manager.get_current_user(token)
@@ -600,9 +605,7 @@ async def login(
         LoginResponse مع Tokens
     """
     # مصادقة المستخدم
-    result = auth_manager.authenticate_user(
-        username=login_data.username, password=login_data.password
-    )
+    result = auth_manager.authenticate_user(username=login_data.username, password=login_data.password)
 
     if not result:
         raise HTTPException(
@@ -673,9 +676,7 @@ async def logout(
     return {"message": "تم تسجيل الخروج بنجاح"}
 
 
-@router.post(
-    "/auth/refresh", response_model=RefreshTokenResponse, tags=["Authentication"]
-)
+@router.post("/auth/refresh", response_model=RefreshTokenResponse, tags=["Authentication"])
 async def refresh_token(
     refresh_data: RefreshTokenRequest,
     auth_manager: JWTAuthManager = Depends(get_auth_manager),
@@ -786,7 +787,7 @@ async def get_user_companies(
             {
                 "id": company.id,
                 "name": company.name,
-                "is_default": company.is_default,  # This refers to company.is_default not user_company.is_default strictly but acceptable for now
+                "is_default": company.is_default,  # This refers to company.is_default not user_company.is_default strictly but acceptable for now  # noqa: E501
                 "role": "user",  # Placeholder until we map UserCompany roles properly
             }
         )
@@ -810,9 +811,7 @@ async def _old_get_warehouses(
     """
     الحصول على قائمة المستودعات
     """
-    warehouses_data = warehouse_manager.get_all_warehouses(
-        include_inactive=include_inactive
-    )
+    warehouses_data = warehouse_manager.get_all_warehouses(include_inactive=include_inactive)
 
     # Convert to response model
     result = []
@@ -875,9 +874,7 @@ async def _old_create_warehouse(
     warehouse_id = warehouse_manager.create_warehouse(new_warehouse)
 
     if not warehouse_id:
-        raise HTTPException(
-            status_code=400, detail="فشل إنشاء المستودع. ربما الرمز مكرر؟"
-        )
+        raise HTTPException(status_code=400, detail="فشل إنشاء المستودع. ربما الرمز مكرر؟")
 
     return {"message": "تم إنشاء المستودع بنجاح", "id": warehouse_id}
 
@@ -893,9 +890,7 @@ async def _old_delete_warehouse(
     """
     success = warehouse_manager.delete_warehouse(warehouse_id)
     if not success:
-        raise HTTPException(
-            status_code=400, detail="فشل حذف المستودع. قد يحتوي على مخزون."
-        )
+        raise HTTPException(status_code=400, detail="فشل حذف المستودع. قد يحتوي على مخزون.")
 
     return {"message": "تم حذف المستودع بنجاح"}
 
@@ -945,7 +940,7 @@ async def get_server_time():
 async def api_info():
     """معلومات API"""
     return {
-        "name": "الإصدار المنطقي - REST API",
+        "name": "ستاندرد الجملة - REST API",
         "version": "1.0.0",
         "api_version": "v1",
         "description": "REST API للتكامل الخارجي مع نظام ERP",
@@ -977,7 +972,7 @@ async def get_cache_stats(current_user: Dict[str, Any] = Depends(get_current_use
         stats = cache_manager.get_stats()
         return stats
     except Exception as e:
-        logger.error(f"خطأ في جلب إحصائيات Cache: {e}")
+        logger.log(logging.ERROR, f"خطأ في جلب إحصائيات Cache: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطأ في جلب إحصائيات Cache: {str(e)}",
@@ -994,10 +989,7 @@ async def get_warehouses(
 ):
     """الحصول على قائمة المستودعات"""
     warehouses = warehouse_manager.get_all_warehouses(include_inactive=True)
-    return [
-        {**w.to_dict(), "status": "نشط" if w.is_active else "غير نشط"}
-        for w in warehouses
-    ]
+    return [{**w.to_dict(), "status": "نشط" if w.is_active else "غير نشط"} for w in warehouses]
 
 
 @router.post("/warehouses", response_model=Dict[str, Any], tags=["Warehouses"])
@@ -1016,9 +1008,7 @@ async def create_warehouse(
     warehouse_id = warehouse_manager.create_warehouse(new_warehouse)
 
     if not warehouse_id:
-        raise HTTPException(
-            status_code=400, detail="فشل إنشاء المستودع (تحقق من الرمز)"
-        )
+        raise HTTPException(status_code=400, detail="فشل إنشاء المستودع (تحقق من الرمز)")
 
     return {"id": warehouse_id, "message": "تم إنشاء المستودع بنجاح"}
 
@@ -1032,9 +1022,7 @@ async def delete_warehouse(
     """حذف مستودع"""
     success = warehouse_manager.delete_warehouse(warehouse_id)
     if not success:
-        raise HTTPException(
-            status_code=400, detail="لا يمكن حذف المستودع (قد يحتوي على مخزون)"
-        )
+        raise HTTPException(status_code=400, detail="لا يمكن حذف المستودع (قد يحتوي على مخزون)")
     return {"message": "تم حذف المستودع بنجاح"}
 
 
@@ -1124,14 +1112,16 @@ async def _old_create_purchase(
     # Create Purchase Object
     new_purchase = Purchase(
         supplier_id=purchase_data.supplier_id,
-        purchase_date=datetime.strptime(purchase_data.purchase_date, "%Y-%m-%d").date()
-        if purchase_data.purchase_date
-        else date.today(),
-        expected_delivery_date=datetime.strptime(
-            purchase_data.expected_delivery_date, "%Y-%m-%d"
-        ).date()
-        if purchase_data.expected_delivery_date
-        else None,
+        purchase_date=(
+            datetime.strptime(purchase_data.purchase_date, "%Y-%m-%d").date()
+            if purchase_data.purchase_date
+            else date.today()
+        ),
+        expected_delivery_date=(
+            datetime.strptime(purchase_data.expected_delivery_date, "%Y-%m-%d").date()
+            if purchase_data.expected_delivery_date
+            else None
+        ),
         payment_terms=purchase_data.payment_terms,
         notes=purchase_data.notes,
         created_by=current_user["user_id"],
@@ -1210,10 +1200,7 @@ async def get_products(
 
         # تحويل إلى ProductResponse ثم Serialize للـ Frontend
         product_dicts = [product.to_dict() for product in products]
-        product_responses = [
-            ProductResponse(**serialize_product_for_frontend(pd))
-            for pd in product_dicts
-        ]
+        product_responses = [ProductResponse(**serialize_product_for_frontend(pd)) for pd in product_dicts]
         return ProductListResponse(
             products=product_responses,
             page=page,
@@ -1223,7 +1210,7 @@ async def get_products(
         )
 
     except Exception as e:
-        logger.error(
+        logger.log(logging.ERROR, 
             f"خطأ في جلب المنتجات: {e}",
             exc_info=True,
             extra={
@@ -1271,11 +1258,7 @@ async def get_product(
 
         # التحقق من Multi-Company
         company_id = current_user.get("company_id")
-        if (
-            company_id
-            and hasattr(product, "company_id")
-            and product.company_id != company_id
-        ):
+        if company_id and hasattr(product, "company_id") and product.company_id != company_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="ليس لديك صلاحية للوصول إلى هذا المنتج",
@@ -1288,7 +1271,7 @@ async def get_product(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"خطأ في جلب المنتج {product_id}: {e}")
+        logger.log(logging.ERROR, f"خطأ في جلب المنتج {product_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطأ في جلب المنتج: {str(e)}",
@@ -1343,9 +1326,7 @@ async def create_product(
         product_id = product_manager.create_product(product)
 
         if not product_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="فشل إنشاء المنتج"
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="فشل إنشاء المنتج")
 
         # جلب المنتج المُنشأ
         created_product = product_manager.get_product_by_id(product_id)
@@ -1367,7 +1348,7 @@ async def create_product(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"خطأ في إنشاء المنتج: {e}")
+        logger.log(logging.ERROR, f"خطأ في إنشاء المنتج: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطأ في إنشاء المنتج: {str(e)}",
@@ -1405,11 +1386,7 @@ async def update_product(
 
         # التحقق من Multi-Company
         company_id = current_user.get("company_id")
-        if (
-            company_id
-            and hasattr(product, "company_id")
-            and product.company_id != company_id
-        ):
+        if company_id and hasattr(product, "company_id") and product.company_id != company_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="ليس لديك صلاحية لتحديث هذا المنتج",
@@ -1445,9 +1422,7 @@ async def update_product(
         success = product_manager.update_product(product)
 
         if not success:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="فشل تحديث المنتج"
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="فشل تحديث المنتج")
 
         # جلب المنتج المحدث
         updated_product = product_manager.get_product_by_id(product_id)
@@ -1458,9 +1433,7 @@ async def update_product(
                 detail="فشل جلب المنتج المحدث",
             )
 
-        logger.info(
-            f"تم تحديث المنتج: {updated_product.name} (ID: {product_id}) بواسطة {current_user.get('username')}"
-        )
+        logger.info(f"تم تحديث المنتج: {updated_product.name} (ID: {product_id}) بواسطة {current_user.get('username')}")
 
         # Serialize للـ Frontend
         product_dict = updated_product.to_dict()
@@ -1469,16 +1442,14 @@ async def update_product(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"خطأ في تحديث المنتج {product_id}: {e}")
+        logger.log(logging.ERROR, f"خطأ في تحديث المنتج {product_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطأ في تحديث المنتج: {str(e)}",
         )
 
 
-@router.delete(
-    "/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Products"]
-)
+@router.delete("/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Products"])
 @invalidate_cache("api:products:*")  # Invalidate products cache on delete
 async def delete_product(
     product_id: int,
@@ -1510,11 +1481,7 @@ async def delete_product(
 
         # التحقق من Multi-Company
         company_id = current_user.get("company_id")
-        if (
-            company_id
-            and hasattr(product, "company_id")
-            and product.company_id != company_id
-        ):
+        if company_id and hasattr(product, "company_id") and product.company_id != company_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="ليس لديك صلاحية لحذف هذا المنتج",
@@ -1524,12 +1491,10 @@ async def delete_product(
         success = product_manager.delete_product(product_id, soft_delete=soft_delete)
 
         if not success:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="فشل حذف المنتج"
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="فشل حذف المنتج")
 
         logger.info(
-            f"تم حذف المنتج: {product.name} (ID: {product_id}) بواسطة {current_user.get('username')} (soft_delete={soft_delete})"
+            f"تم حذف المنتج: {product.name} (ID: {product_id}) بواسطة {current_user.get('username')} (soft_delete={soft_delete})"  # noqa: E501
         )
 
         return None
@@ -1537,7 +1502,7 @@ async def delete_product(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"خطأ في حذف المنتج {product_id}: {e}")
+        logger.log(logging.ERROR, f"خطأ في حذف المنتج {product_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطأ في حذف المنتج: {str(e)}",
@@ -1554,9 +1519,7 @@ class SaleItemCreate(BaseModel):
     quantity: int = Field(..., ge=1, description="الكمية")
     unit_price: float = Field(..., ge=0, description="سعر الوحدة")
     discount_amount: Optional[float] = Field(0.0, ge=0, description="مبلغ الخصم")
-    discount_percentage: Optional[float] = Field(
-        0.0, ge=0, le=100, description="نسبة الخصم"
-    )
+    discount_percentage: Optional[float] = Field(0.0, ge=0, le=100, description="نسبة الخصم")
     tax_amount: Optional[float] = Field(0.0, ge=0, description="مبلغ الضريبة")
     tax_percentage: Optional[float] = Field(0.0, ge=0, description="نسبة الضريبة")
 
@@ -1569,16 +1532,10 @@ class SaleCreate(BaseModel):
     due_date: Optional[str] = Field(None, description="تاريخ الاستحقاق (YYYY-MM-DD)")
     status: Optional[str] = Field("مسودة", description="الحالة")
     payment_method: Optional[str] = Field("نقدي", description="طريقة الدفع")
-    discount_amount: Optional[float] = Field(
-        0.0, ge=0, description="مبلغ الخصم الإجمالي"
-    )
-    discount_percentage: Optional[float] = Field(
-        0.0, ge=0, le=100, description="نسبة الخصم الإجمالية"
-    )
+    discount_amount: Optional[float] = Field(0.0, ge=0, description="مبلغ الخصم الإجمالي")
+    discount_percentage: Optional[float] = Field(0.0, ge=0, le=100, description="نسبة الخصم الإجمالية")
     tax_amount: Optional[float] = Field(0.0, ge=0, description="مبلغ الضريبة الإجمالية")
-    tax_percentage: Optional[float] = Field(
-        0.0, ge=0, description="نسبة الضريبة الإجمالية"
-    )
+    tax_percentage: Optional[float] = Field(0.0, ge=0, description="نسبة الضريبة الإجمالية")
     paid_amount: Optional[float] = Field(0.0, ge=0, description="المبلغ المدفوع")
     currency_id: Optional[int] = Field(None, description="معرف العملة")
     notes: Optional[str] = Field(None, description="ملاحظات")
@@ -1594,9 +1551,7 @@ class SaleUpdate(BaseModel):
     status: Optional[str] = Field(None, description="الحالة")
     payment_method: Optional[str] = Field(None, description="طريقة الدفع")
     discount_amount: Optional[float] = Field(None, ge=0, description="مبلغ الخصم")
-    discount_percentage: Optional[float] = Field(
-        None, ge=0, le=100, description="نسبة الخصم"
-    )
+    discount_percentage: Optional[float] = Field(None, ge=0, le=100, description="نسبة الخصم")
     tax_amount: Optional[float] = Field(None, ge=0, description="مبلغ الضريبة")
     tax_percentage: Optional[float] = Field(None, ge=0, description="نسبة الضريبة")
     paid_amount: Optional[float] = Field(None, ge=0, description="المبلغ المدفوع")
@@ -1721,11 +1676,7 @@ async def get_sales(
         # تطبيق Multi-Company filter
         company_id = current_user.get("company_id")
         if company_id:
-            all_sales = [
-                s
-                for s in all_sales
-                if hasattr(s, "company_id") and s.company_id == company_id
-            ]
+            all_sales = [s for s in all_sales if hasattr(s, "company_id") and s.company_id == company_id]
 
         # Pagination
         total = len(all_sales)
@@ -1745,7 +1696,7 @@ async def get_sales(
         )
 
     except Exception as e:
-        logger.error(f"خطأ في جلب المبيعات: {e}")
+        logger.log(logging.ERROR, f"خطأ في جلب المبيعات: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطأ في جلب المبيعات: {str(e)}",
@@ -1791,10 +1742,119 @@ async def get_sale(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"خطأ في جلب الفاتورة {sale_id}: {e}")
+        logger.log(logging.ERROR, f"خطأ في جلب الفاتورة {sale_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطأ في جلب الفاتورة: {str(e)}",
+        )
+
+
+@router.get("/sales/{sale_id}/pdf", tags=["Sales"])
+async def download_invoice_pdf(
+    sale_id: int,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    sale_manager: SaleManager = Depends(get_sale_manager),
+):
+    """
+    تحميل فاتورة مبيعات بصيغة PDF
+    """
+    try:
+        sale = sale_manager.get_sale_by_id(sale_id)
+
+        if not sale:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"الفاتورة غير موجودة (ID: {sale_id})",
+            )
+
+        # التحقق من Multi-Company
+        company_id = current_user.get("company_id")
+        if company_id and hasattr(sale, "company_id") and sale.company_id != company_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="ليس لديك صلاحية للوصول إلى هذه الفاتورة",
+            )
+
+        # تجهيز بيانات العميل
+        customer_data = {
+            "name": sale.customer_name or "عميل نقدي",
+            "phone": sale.customer_phone
+        }
+        if sale.customer_id:
+            try:
+                from src.models.customer import CustomerManager
+                cust_manager = CustomerManager(sale_manager.db_manager)
+                customer = cust_manager.get_customer_by_id(sale.customer_id)
+                if customer:
+                    customer_data["name"] = customer.name
+                    customer_data["phone"] = customer.phone
+            except Exception:
+                pass
+
+        # تنسيق التاريخ
+        sale_date_str = ""
+        if getattr(sale, "sale_date", None):
+            if hasattr(sale.sale_date, "strftime"):
+                sale_date_str = sale.sale_date.strftime("%Y-%m-%d")
+            else:
+                sale_date_str = str(sale.sale_date)
+        else:
+            from datetime import datetime
+            sale_date_str = datetime.now().strftime("%Y-%m-%d")
+
+        # تجهيز القاموس الكامل لـ Jinja2
+        invoice_data = {
+            "invoice": {
+                "id": str(sale.id),
+                "reference": sale.invoice_number,
+                "created_at": sale_date_str,
+                "payment_method": sale.payment_method.value if hasattr(sale.payment_method, "value") else str(sale.payment_method),
+                "subtotal": str(sale.subtotal),
+                "discount_amount": str(sale.discount_amount),
+                "final_amount": str(sale.final_amount),
+                "paid_amount": str(sale.paid_amount),
+                "remaining_amount": str(sale.remaining_amount),
+                "notes": sale.notes,
+                "items": [
+                    {
+                        "product_name": item.product_name,
+                        "quantity": float(item.quantity),
+                        "unit_price": str(item.unit_price),
+                        "discount": str(item.discount),
+                        "total_amount": str(item.total_amount)
+                    }
+                    for item in sale.items
+                ]
+            },
+            "customer": customer_data
+        }
+
+        # توليد الـ PDF باستخدام الخدمة
+        from src.services.pdf_service import PDFService, GTKNotFoundError
+        from fastapi import Response
+
+        pdf_service = PDFService()
+        pdf_bytes = pdf_service.generate_invoice_pdf(invoice_data)
+
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename=Invoice_{sale_id}.pdf"}
+        )
+
+    except GTKNotFoundError as e:
+        # إرجاع استجابة تفصيلية مخصصة تشرح للمستخدم كيفية تحميل وتثبيت حزمة GTK+ لتمكين الطباعة
+        raise HTTPException(
+            status_code=status.HTTP_424_FAILED_DEPENDENCY,
+            detail=str(e)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.log(logging.ERROR, f"خطأ في توليد PDF الفاتورة {sale_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في توليد ملف PDF: {str(e)}",
         )
 
 
@@ -1824,18 +1884,12 @@ async def create_sale(
         # إنشاء Sale object
         sale = Sale(
             customer_id=sale_data.customer_id,
-            sale_date=datetime.fromisoformat(sale_data.sale_date).date()
-            if sale_data.sale_date
-            else date.today(),
-            due_date=datetime.fromisoformat(sale_data.due_date).date()
-            if sale_data.due_date
-            else None,
-            status=SaleStatus(sale_data.status)
-            if sale_data.status
-            else SaleStatus.DRAFT,
-            payment_method=PaymentMethod(sale_data.payment_method)
-            if sale_data.payment_method
-            else PaymentMethod.CASH,
+            sale_date=(datetime.fromisoformat(sale_data.sale_date).date() if sale_data.sale_date else date.today()),
+            due_date=(datetime.fromisoformat(sale_data.due_date).date() if sale_data.due_date else None),
+            status=(SaleStatus(sale_data.status) if sale_data.status else SaleStatus.DRAFT),
+            payment_method=(
+                PaymentMethod(sale_data.payment_method) if sale_data.payment_method else PaymentMethod.CASH
+            ),
             discount_amount=Decimal(str(sale_data.discount_amount)),
             discount_percentage=Decimal(str(sale_data.discount_percentage)),
             tax_amount=Decimal(str(sale_data.tax_amount)),
@@ -1868,9 +1922,7 @@ async def create_sale(
         sale_id = sale_manager.create_sale(sale)
 
         if not sale_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="فشل إنشاء الفاتورة"
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="فشل إنشاء الفاتورة")
 
         # جلب الفاتورة المُنشأة
         created_sale = sale_manager.get_sale_by_id(sale_id)
@@ -1882,7 +1934,7 @@ async def create_sale(
             )
 
         logger.info(
-            f"تم إنشاء فاتورة مبيعات جديدة: {created_sale.invoice_number} (ID: {sale_id}) بواسطة {current_user.get('username')}"
+            f"تم إنشاء فاتورة مبيعات جديدة: {created_sale.invoice_number} (ID: {sale_id}) بواسطة {current_user.get('username')}"  # noqa: E501
         )
 
         return SaleResponse(**created_sale.to_dict())
@@ -1890,13 +1942,13 @@ async def create_sale(
     except HTTPException:
         raise
     except ValueError as e:
-        logger.error(f"خطأ في بيانات الفاتورة: {e}")
+        logger.log(logging.ERROR, f"خطأ في بيانات الفاتورة: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"بيانات غير صحيحة: {str(e)}",
         )
     except Exception as e:
-        logger.error(f"خطأ في إنشاء الفاتورة: {e}")
+        logger.log(logging.ERROR, f"خطأ في إنشاء الفاتورة: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطأ في إنشاء الفاتورة: {str(e)}",
@@ -1973,9 +2025,7 @@ async def update_sale(
         success = sale_manager.update_sale(sale)
 
         if not success:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="فشل تحديث الفاتورة"
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="فشل تحديث الفاتورة")
 
         # جلب الفاتورة المحدثة
         updated_sale = sale_manager.get_sale_by_id(sale_id)
@@ -1987,7 +2037,7 @@ async def update_sale(
             )
 
         logger.info(
-            f"تم تحديث فاتورة مبيعات: {updated_sale.invoice_number} (ID: {sale_id}) بواسطة {current_user.get('username')}"
+            f"تم تحديث فاتورة مبيعات: {updated_sale.invoice_number} (ID: {sale_id}) بواسطة {current_user.get('username')}"  # noqa: E501
         )
 
         # إرسال تحديث فوري عبر WebSocket
@@ -2005,22 +2055,20 @@ async def update_sale(
     except HTTPException:
         raise
     except ValueError as e:
-        logger.error(f"خطأ في بيانات التحديث: {e}")
+        logger.log(logging.ERROR, f"خطأ في بيانات التحديث: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"بيانات غير صحيحة: {str(e)}",
         )
     except Exception as e:
-        logger.error(f"خطأ في تحديث الفاتورة {sale_id}: {e}")
+        logger.log(logging.ERROR, f"خطأ في تحديث الفاتورة {sale_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطأ في تحديث الفاتورة: {str(e)}",
         )
 
 
-@router.delete(
-    "/sales/{sale_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Sales"]
-)
+@router.delete("/sales/{sale_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Sales"])
 async def delete_sale(
     sale_id: int,
     current_user: Dict[str, Any] = Depends(get_current_user),
@@ -2059,9 +2107,7 @@ async def delete_sale(
         success = sale_manager.update_sale_status(sale_id, SaleStatus.CANCELLED)
 
         if not success:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="فشل حذف الفاتورة"
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="فشل حذف الفاتورة")
 
         logger.info(
             f"تم حذف فاتورة مبيعات: {sale.invoice_number} (ID: {sale_id}) بواسطة {current_user.get('username')}"
@@ -2072,7 +2118,7 @@ async def delete_sale(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"خطأ في حذف الفاتورة {sale_id}: {e}")
+        logger.log(logging.ERROR, f"خطأ في حذف الفاتورة {sale_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطأ في حذف الفاتورة: {str(e)}",
@@ -2088,14 +2134,10 @@ class PurchaseItemCreate(BaseModel):
     product_id: int = Field(..., description="معرف المنتج")
     quantity_ordered: float = Field(..., ge=0.01, description="الكمية المطلوبة")
     unit_cost: float = Field(..., ge=0, description="تكلفة الوحدة")
-    discount_percent: Optional[float] = Field(
-        0.0, ge=0, le=100, description="نسبة الخصم"
-    )
+    discount_percent: Optional[float] = Field(0.0, ge=0, le=100, description="نسبة الخصم")
     discount_amount: Optional[float] = Field(0.0, ge=0, description="مبلغ الخصم")
     tax_percent: Optional[float] = Field(15.0, ge=0, description="نسبة الضريبة")
-    expiry_date: Optional[str] = Field(
-        None, description="تاريخ انتهاء الصلاحية (YYYY-MM-DD)"
-    )
+    expiry_date: Optional[str] = Field(None, description="تاريخ انتهاء الصلاحية (YYYY-MM-DD)")
     batch_number: Optional[str] = Field(None, description="رقم الدفعة")
     notes: Optional[str] = Field(None, description="ملاحظات")
 
@@ -2104,39 +2146,27 @@ class PurchaseCreate(BaseModel):
     """نموذج إنشاء فاتورة مشتريات"""
 
     supplier_id: int = Field(..., description="معرف المورد")
-    supplier_invoice_number: Optional[str] = Field(
-        None, description="رقم فاتورة المورد"
-    )
+    supplier_invoice_number: Optional[str] = Field(None, description="رقم فاتورة المورد")
     purchase_date: Optional[str] = Field(None, description="تاريخ الشراء (YYYY-MM-DD)")
-    expected_delivery_date: Optional[str] = Field(
-        None, description="تاريخ الاستلام المتوقع (YYYY-MM-DD)"
-    )
+    expected_delivery_date: Optional[str] = Field(None, description="تاريخ الاستلام المتوقع (YYYY-MM-DD)")
     status: Optional[str] = Field("معلقة", description="الحالة")
     payment_status: Optional[str] = Field("غير مدفوعة", description="حالة الدفع")
     payment_terms: Optional[str] = Field("نقدي", description="شروط الدفع")
-    discount_amount: Optional[float] = Field(
-        0.0, ge=0, description="مبلغ الخصم الإجمالي"
-    )
+    discount_amount: Optional[float] = Field(0.0, ge=0, description="مبلغ الخصم الإجمالي")
     shipping_cost: Optional[float] = Field(0.0, ge=0, description="تكلفة الشحن")
     paid_amount: Optional[float] = Field(0.0, ge=0, description="المبلغ المدفوع")
     currency_id: Optional[int] = Field(None, description="معرف العملة")
     notes: Optional[str] = Field(None, description="ملاحظات")
-    items: List[PurchaseItemCreate] = Field(
-        ..., min_length=1, description="عناصر الفاتورة"
-    )
+    items: List[PurchaseItemCreate] = Field(..., min_length=1, description="عناصر الفاتورة")
 
 
 class PurchaseUpdate(BaseModel):
     """نموذج تحديث فاتورة مشتريات"""
 
     supplier_id: Optional[int] = Field(None, description="معرف المورد")
-    supplier_invoice_number: Optional[str] = Field(
-        None, description="رقم فاتورة المورد"
-    )
+    supplier_invoice_number: Optional[str] = Field(None, description="رقم فاتورة المورد")
     purchase_date: Optional[str] = Field(None, description="تاريخ الشراء")
-    expected_delivery_date: Optional[str] = Field(
-        None, description="تاريخ الاستلام المتوقع"
-    )
+    expected_delivery_date: Optional[str] = Field(None, description="تاريخ الاستلام المتوقع")
     received_date: Optional[str] = Field(None, description="تاريخ الاستلام")
     status: Optional[str] = Field(None, description="الحالة")
     payment_status: Optional[str] = Field(None, description="حالة الدفع")
@@ -2148,7 +2178,7 @@ class PurchaseUpdate(BaseModel):
     notes: Optional[str] = Field(None, description="ملاحظات")
 
 
-class PurchaseItemResponse(BaseModel):
+class PurchaseItemResponse(BaseModel):  # noqa: F811
     """نموذج استجابة عنصر مشتريات"""
 
     id: Optional[int]
@@ -2276,11 +2306,7 @@ async def get_purchases(
         # تطبيق Multi-Company filter
         company_id = current_user.get("company_id")
         if company_id:
-            all_purchases = [
-                p
-                for p in all_purchases
-                if hasattr(p, "company_id") and p.company_id == company_id
-            ]
+            all_purchases = [p for p in all_purchases if hasattr(p, "company_id") and p.company_id == company_id]
 
         # Pagination
         total = len(all_purchases)
@@ -2289,9 +2315,7 @@ async def get_purchases(
         paginated_purchases = all_purchases[offset : offset + page_size]
 
         # تحويل إلى PurchaseResponse
-        purchase_responses = [
-            PurchaseResponse(**purchase.to_dict()) for purchase in paginated_purchases
-        ]
+        purchase_responses = [PurchaseResponse(**purchase.to_dict()) for purchase in paginated_purchases]
 
         return PurchaseListResponse(
             purchases=purchase_responses,
@@ -2302,16 +2326,14 @@ async def get_purchases(
         )
 
     except Exception as e:
-        logger.error(f"خطأ في جلب المشتريات: {e}")
+        logger.log(logging.ERROR, f"خطأ في جلب المشتريات: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطأ في جلب المشتريات: {str(e)}",
         )
 
 
-@router.get(
-    "/purchases/{purchase_id}", response_model=PurchaseResponse, tags=["Purchases"]
-)
+@router.get("/purchases/{purchase_id}", response_model=PurchaseResponse, tags=["Purchases"])
 async def get_purchase(
     purchase_id: int,
     current_user: Dict[str, Any] = Depends(get_current_user),
@@ -2339,11 +2361,7 @@ async def get_purchase(
 
         # التحقق من Multi-Company
         company_id = current_user.get("company_id")
-        if (
-            company_id
-            and hasattr(purchase, "company_id")
-            and purchase.company_id != company_id
-        ):
+        if company_id and hasattr(purchase, "company_id") and purchase.company_id != company_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="ليس لديك صلاحية للوصول إلى هذه الفاتورة",
@@ -2354,7 +2372,7 @@ async def get_purchase(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"خطأ في جلب الفاتورة {purchase_id}: {e}")
+        logger.log(logging.ERROR, f"خطأ في جلب الفاتورة {purchase_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطأ في جلب الفاتورة: {str(e)}",
@@ -2388,17 +2406,18 @@ async def create_purchase(
         purchase = Purchase(
             supplier_id=purchase_data.supplier_id,
             supplier_invoice_number=purchase_data.supplier_invoice_number,
-            purchase_date=datetime.fromisoformat(purchase_data.purchase_date).date()
-            if purchase_data.purchase_date
-            else date.today(),
-            expected_delivery_date=datetime.fromisoformat(
-                purchase_data.expected_delivery_date
-            ).date()
-            if purchase_data.expected_delivery_date
-            else None,
+            purchase_date=(
+                datetime.fromisoformat(purchase_data.purchase_date).date()
+                if purchase_data.purchase_date
+                else date.today()
+            ),
+            expected_delivery_date=(
+                datetime.fromisoformat(purchase_data.expected_delivery_date).date()
+                if purchase_data.expected_delivery_date
+                else None
+            ),
             status=purchase_data.status or PurchaseStatus.PENDING.value,
-            payment_status=purchase_data.payment_status
-            or PurchasePaymentStatus.UNPAID.value,
+            payment_status=purchase_data.payment_status or PurchasePaymentStatus.UNPAID.value,
             payment_terms=purchase_data.payment_terms or "نقدي",
             discount_amount=Decimal(str(purchase_data.discount_amount)),
             shipping_cost=Decimal(str(purchase_data.shipping_cost)),
@@ -2422,9 +2441,7 @@ async def create_purchase(
                 discount_percent=Decimal(str(item_data.discount_percent or 0)),
                 discount_amount=Decimal(str(item_data.discount_amount or 0)),
                 tax_percent=Decimal(str(item_data.tax_percent or 15.0)),
-                expiry_date=datetime.fromisoformat(item_data.expiry_date).date()
-                if item_data.expiry_date
-                else None,
+                expiry_date=(datetime.fromisoformat(item_data.expiry_date).date() if item_data.expiry_date else None),
                 batch_number=item_data.batch_number,
                 notes=item_data.notes,
             )
@@ -2434,9 +2451,7 @@ async def create_purchase(
         purchase_id = purchase_manager.create_purchase(purchase)
 
         if not purchase_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="فشل إنشاء الفاتورة"
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="فشل إنشاء الفاتورة")
 
         # جلب الفاتورة المُنشأة
         created_purchase = purchase_manager.get_purchase_by_id(purchase_id)
@@ -2448,7 +2463,7 @@ async def create_purchase(
             )
 
         logger.info(
-            f"تم إنشاء فاتورة مشتريات جديدة: {created_purchase.invoice_number} (ID: {purchase_id}) بواسطة {current_user.get('username')}"
+            f"تم إنشاء فاتورة مشتريات جديدة: {created_purchase.invoice_number} (ID: {purchase_id}) بواسطة {current_user.get('username')}"  # noqa: E501
         )
 
         return PurchaseResponse(**created_purchase.to_dict())
@@ -2456,22 +2471,20 @@ async def create_purchase(
     except HTTPException:
         raise
     except ValueError as e:
-        logger.error(f"خطأ في بيانات الفاتورة: {e}")
+        logger.log(logging.ERROR, f"خطأ في بيانات الفاتورة: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"بيانات غير صحيحة: {str(e)}",
         )
     except Exception as e:
-        logger.error(f"خطأ في إنشاء الفاتورة: {e}")
+        logger.log(logging.ERROR, f"خطأ في إنشاء الفاتورة: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطأ في إنشاء الفاتورة: {str(e)}",
         )
 
 
-@router.put(
-    "/purchases/{purchase_id}", response_model=PurchaseResponse, tags=["Purchases"]
-)
+@router.put("/purchases/{purchase_id}", response_model=PurchaseResponse, tags=["Purchases"])
 async def update_purchase(
     purchase_id: int,
     purchase_data: PurchaseUpdate,
@@ -2502,11 +2515,7 @@ async def update_purchase(
 
         # التحقق من Multi-Company
         company_id = current_user.get("company_id")
-        if (
-            company_id
-            and hasattr(purchase, "company_id")
-            and purchase.company_id != company_id
-        ):
+        if company_id and hasattr(purchase, "company_id") and purchase.company_id != company_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="ليس لديك صلاحية لتحديث هذه الفاتورة",
@@ -2518,17 +2527,11 @@ async def update_purchase(
         if purchase_data.supplier_invoice_number is not None:
             purchase.supplier_invoice_number = purchase_data.supplier_invoice_number
         if purchase_data.purchase_date is not None:
-            purchase.purchase_date = datetime.fromisoformat(
-                purchase_data.purchase_date
-            ).date()
+            purchase.purchase_date = datetime.fromisoformat(purchase_data.purchase_date).date()
         if purchase_data.expected_delivery_date is not None:
-            purchase.expected_delivery_date = datetime.fromisoformat(
-                purchase_data.expected_delivery_date
-            ).date()
+            purchase.expected_delivery_date = datetime.fromisoformat(purchase_data.expected_delivery_date).date()
         if purchase_data.received_date is not None:
-            purchase.received_date = datetime.fromisoformat(
-                purchase_data.received_date
-            ).date()
+            purchase.received_date = datetime.fromisoformat(purchase_data.received_date).date()
         if purchase_data.status is not None:
             purchase.status = purchase_data.status
         if purchase_data.payment_status is not None:
@@ -2553,9 +2556,7 @@ async def update_purchase(
         success = purchase_manager.update_purchase(purchase)
 
         if not success:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="فشل تحديث الفاتورة"
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="فشل تحديث الفاتورة")
 
         # جلب الفاتورة المحدثة
         updated_purchase = purchase_manager.get_purchase_by_id(purchase_id)
@@ -2567,7 +2568,7 @@ async def update_purchase(
             )
 
         logger.info(
-            f"تم تحديث فاتورة مشتريات: {updated_purchase.invoice_number} (ID: {purchase_id}) بواسطة {current_user.get('username')}"
+            f"تم تحديث فاتورة مشتريات: {updated_purchase.invoice_number} (ID: {purchase_id}) بواسطة {current_user.get('username')}"  # noqa: E501
         )
 
         return PurchaseResponse(**updated_purchase.to_dict())
@@ -2575,13 +2576,13 @@ async def update_purchase(
     except HTTPException:
         raise
     except ValueError as e:
-        logger.error(f"خطأ في بيانات التحديث: {e}")
+        logger.log(logging.ERROR, f"خطأ في بيانات التحديث: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"بيانات غير صحيحة: {str(e)}",
         )
     except Exception as e:
-        logger.error(f"خطأ في تحديث الفاتورة {purchase_id}: {e}")
+        logger.log(logging.ERROR, f"خطأ في تحديث الفاتورة {purchase_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطأ في تحديث الفاتورة: {str(e)}",
@@ -2621,11 +2622,7 @@ async def delete_purchase(
 
         # التحقق من Multi-Company
         company_id = current_user.get("company_id")
-        if (
-            company_id
-            and hasattr(purchase, "company_id")
-            and purchase.company_id != company_id
-        ):
+        if company_id and hasattr(purchase, "company_id") and purchase.company_id != company_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="ليس لديك صلاحية لحذف هذه الفاتورة",
@@ -2636,12 +2633,10 @@ async def delete_purchase(
         success = purchase_manager.update_purchase(purchase)
 
         if not success:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="فشل حذف الفاتورة"
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="فشل حذف الفاتورة")
 
         logger.info(
-            f"تم حذف فاتورة مشتريات: {purchase.invoice_number} (ID: {purchase_id}) بواسطة {current_user.get('username')}"
+            f"تم حذف فاتورة مشتريات: {purchase.invoice_number} (ID: {purchase_id}) بواسطة {current_user.get('username')}"  # noqa: E501
         )
 
         return None
@@ -2649,7 +2644,7 @@ async def delete_purchase(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"خطأ في حذف الفاتورة {purchase_id}: {e}")
+        logger.log(logging.ERROR, f"خطأ في حذف الفاتورة {purchase_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطأ في حذف الفاتورة: {str(e)}",
@@ -2689,15 +2684,13 @@ async def _old_websocket_endpoint(websocket: WebSocket):
                 # الاشتراك في Room محدد
                 room = data.get("room", "default")
                 await ws_manager.connect(websocket, room=room)
-                await ws_manager.send_personal_message(
-                    {"type": "subscribed", "room": room}, websocket
-                )
+                await ws_manager.send_personal_message({"type": "subscribed", "room": room}, websocket)
 
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket, room="default")
         logger.info("WebSocket منقطع")
     except Exception as e:
-        logger.error(f"خطأ في WebSocket: {e}", exc_info=True)
+        logger.log(logging.ERROR, f"خطأ في WebSocket: {e}", exc_info=True)
         ws_manager.disconnect(websocket, room="default")
 
 
@@ -2765,7 +2758,7 @@ async def get_notifications(
         }
 
     except Exception as e:
-        logger.error(f"خطأ في الحصول على الإشعارات: {e}", exc_info=True)
+        logger.log(logging.ERROR, f"خطأ في الحصول على الإشعارات: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطأ في الحصول على الإشعارات: {str(e)}",
@@ -2796,9 +2789,7 @@ async def mark_notification_read(
         )
 
         if not notification:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="الإشعار غير موجود"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="الإشعار غير موجود")
 
         # تحديث حالة القراءة
         db_manager.execute(
@@ -2811,7 +2802,7 @@ async def mark_notification_read(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"خطأ في تحديد الإشعار كمقروء: {e}", exc_info=True)
+        logger.log(logging.ERROR, f"خطأ في تحديد الإشعار كمقروء: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطأ في تحديد الإشعار كمقروء: {str(e)}",
@@ -2843,7 +2834,7 @@ async def websocket_room_endpoint(websocket: WebSocket, room: str):
         ws_manager.disconnect(websocket, room=room)
         logger.info(f"WebSocket منقطع من room: {room}")
     except Exception as e:
-        logger.error(f"خطأ في WebSocket room {room}: {e}", exc_info=True)
+        logger.log(logging.ERROR, f"خطأ في WebSocket room {room}: {e}", exc_info=True)
         ws_manager.disconnect(websocket, room=room)
 
 
@@ -2869,9 +2860,7 @@ async def create_return(
             # Note: Explicit casting to Decimal is handled in ReturnItem.__post_init__
             # Helper to get field from dict or object
             def get_field(obj, field):
-                return getattr(
-                    obj, field, obj.get(field) if isinstance(obj, dict) else None
-                )
+                return getattr(obj, field, obj.get(field) if isinstance(obj, dict) else None)
 
             items.append(
                 ReturnItem(
@@ -2899,7 +2888,7 @@ async def create_return(
 
         return {"id": return_id, "message": "تم إنشاء المرتجع بنجاح"}
     except Exception as e:
-        logger.error(f"Error creating return: {e}")
+        logger.log(logging.ERROR, f"Error creating return: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -2986,9 +2975,7 @@ async def get_inventory_transactions(
     الحصول على حركات المخزون (Inventory Transactions)
     """
     try:
-        movements = inventory_service.get_stock_movements(
-            product_id=product_id, limit=limit
-        )
+        movements = inventory_service.get_stock_movements(product_id=product_id, limit=limit)
 
         # تحويل كائنات StockMovement إلى موديل Pydantic
         result = []
@@ -3008,10 +2995,8 @@ async def get_inventory_transactions(
             )
         return result
     except Exception as e:
-        logger.error(f"Error fetching inventory transactions: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail=f"خطأ في جلب حركات المخزون: {str(e)}"
-        )
+        logger.log(logging.ERROR, f"Error fetching inventory transactions: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"خطأ في جلب حركات المخزون: {str(e)}")
 
 
 # ==================== Categories Routes ====================
@@ -3032,15 +3017,13 @@ async def get_categories(
         category_manager: Category Manager
     """
     try:
-        categories = category_manager.get_all_categories(
-            active_only=active_only, include_products_count=True
-        )
+        categories = category_manager.get_all_categories(active_only=active_only, include_products_count=True)
         return {
             "categories": [cat.to_dict() for cat in categories],
             "total": len(categories),
         }
     except Exception as e:
-        logger.error(f"Error getting categories: {e}", exc_info=True)
+        logger.log(logging.ERROR, f"Error getting categories: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطأ في الحصول على الفئات: {str(e)}",
@@ -3089,7 +3072,7 @@ async def get_report_templates(
 
         return {"templates": templates, "total": len(templates)}
     except Exception as e:
-        logger.error(f"Error getting report templates: {e}", exc_info=True)
+        logger.log(logging.ERROR, f"Error getting report templates: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطأ في الحصول على قوالب التقارير: {str(e)}",
@@ -3109,7 +3092,7 @@ async def get_scheduled_reports(
         # يمكن إضافة جدول scheduled_reports لاحقاً
         return {"scheduled_reports": [], "total": 0}
     except Exception as e:
-        logger.error(f"Error getting scheduled reports: {e}", exc_info=True)
+        logger.log(logging.ERROR, f"Error getting scheduled reports: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطأ في الحصول على التقارير المجدولة: {str(e)}",
@@ -3162,7 +3145,7 @@ async def get_ai_forecast(
             if product_id:
                 # تنبؤ لمنتج محدد
                 query = """
-                SELECT 
+                SELECT
                     p.id,
                     p.name,
                     p.current_stock,
@@ -3188,9 +3171,7 @@ async def get_ai_forecast(
                             "predicted_demand": round(predicted, 2),
                             "avg_daily_demand": round(avg_daily, 2),
                             "days_ahead": period,
-                            "confidence": "medium"
-                            if result.get("days_with_sales", 0) > 7
-                            else "low",
+                            "confidence": ("medium" if result.get("days_with_sales", 0) > 7 else "low"),
                         },
                         "period": period,
                         "product_id": product_id,
@@ -3199,7 +3180,7 @@ async def get_ai_forecast(
             else:
                 # تنبؤ لجميع المنتجات
                 query = """
-                SELECT 
+                SELECT
                     p.id,
                     p.name,
                     p.current_stock,
@@ -3227,9 +3208,7 @@ async def get_ai_forecast(
                             "current_stock": int(row.get("current_stock", 0) or 0),
                             "predicted_demand": round(predicted, 2),
                             "avg_daily_demand": round(avg_daily, 2),
-                            "confidence": "medium"
-                            if row.get("days_with_sales", 0) > 7
-                            else "low",
+                            "confidence": ("medium" if row.get("days_with_sales", 0) > 7 else "low"),
                         }
                     )
 
@@ -3240,7 +3219,7 @@ async def get_ai_forecast(
                     "generated_at": datetime.now().isoformat(),
                 }
         except Exception as e:
-            logger.error(f"Error generating simple forecast: {e}", exc_info=True)
+            logger.log(logging.ERROR, f"Error generating simple forecast: {e}", exc_info=True)
             return {
                 "forecast": [],
                 "period": period,
@@ -3249,7 +3228,7 @@ async def get_ai_forecast(
                 "generated_at": datetime.now().isoformat(),
             }
     except Exception as e:
-        logger.error(f"Error getting AI forecast: {e}", exc_info=True)
+        logger.log(logging.ERROR, f"Error getting AI forecast: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطأ في الحصول على التنبؤ: {str(e)}",
@@ -3301,13 +3280,8 @@ async def get_devices(
                     from datetime import datetime, timedelta
 
                     if last_sync_str:
-                        last_sync_dt = datetime.fromisoformat(
-                            last_sync_str.replace("Z", "+00:00")
-                        )
-                        time_diff = (
-                            datetime.now().replace(tzinfo=last_sync_dt.tzinfo)
-                            - last_sync_dt
-                        )
+                        last_sync_dt = datetime.fromisoformat(last_sync_str.replace("Z", "+00:00"))
+                        time_diff = datetime.now().replace(tzinfo=last_sync_dt.tzinfo) - last_sync_dt
                         if time_diff < timedelta(minutes=5):
                             status = "online"
                         elif time_diff < timedelta(hours=1):
@@ -3327,9 +3301,11 @@ async def get_devices(
                         "last_sync": last_sync_str or datetime.now().isoformat(),
                         "status": status,
                         "ip_address": session.get("ip_address"),
-                        "os": session.get("user_agent", "").split("(")[1].split(")")[0]
-                        if "(" in (session.get("user_agent") or "")
-                        else "Unknown",
+                        "os": (
+                            session.get("user_agent", "").split("(")[1].split(")")[0]
+                            if "(" in (session.get("user_agent") or "")
+                            else "Unknown"
+                        ),
                         "session_count": session.get("session_count", 0),
                     }
                 )
@@ -3340,7 +3316,7 @@ async def get_devices(
 
         return devices
     except Exception as e:
-        logger.error(f"خطأ في جلب الأجهزة: {e}")
+        logger.log(logging.ERROR, f"خطأ في جلب الأجهزة: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -3386,7 +3362,7 @@ async def trigger_sync(
                         await ws_manager.send_personal_message(message, websocket)
                         sent_count += 1
                     except Exception:
-                        pass
+                        logging.getLogger(__name__).warning("Ignored exception in routes.py")
 
             if sent_count > 0:
                 return {
@@ -3412,7 +3388,7 @@ async def trigger_sync(
                 "warning": "الجهاز قد لا يكون متصلاً حالياً",
             }
     except Exception as e:
-        logger.error(f"خطأ في إرسال أمر Sync: {e}")
+        logger.log(logging.ERROR, f"خطأ في إرسال أمر Sync: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -3447,7 +3423,7 @@ async def get_dashboard_stats(
             "top_products": top_products,
         }
     except Exception as e:
-        logger.error(f"Error fetching dashboard stats: {e}")
+        logger.log(logging.ERROR, f"Error fetching dashboard stats: {e}")
         raise HTTPException(status_code=500, detail="فشل تحميل بيانات لوحة التحكم")
 
 
@@ -3466,17 +3442,27 @@ async def websocket_endpoint(
     ws_manager = get_websocket_manager()
     user_id = None
 
-    # التحقق من Token (اختياري)
-    if token:
-        try:
-            from src.api.app import auth_manager
+    # التحقق من Token (إجباري للحماية)
+    if not token:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
 
-            if auth_manager:
-                payload = auth_manager.verify_token(token, token_type="access")
-                if payload:
-                    user_id = int(payload.get("sub"))
-        except Exception as e:
-            logger.warning(f"Invalid token in WebSocket connection: {e}")
+    try:
+        from src.api.app import auth_manager
+
+        if not auth_manager:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        payload = auth_manager.verify_token(token, token_type="access")
+        if not payload:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+        user_id = int(payload.get("sub"))
+    except Exception as e:
+        logger.warning(f"Invalid token in WebSocket connection: {e}")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
 
     # الاتصال
     await ws_manager.connect(websocket, room=room, user_id=user_id)
@@ -3499,9 +3485,7 @@ async def websocket_endpoint(
 
                 # معالجة الرسائل الواردة (مثل ping/pong)
                 if data.get("type") == "ping":
-                    await websocket.send_json(
-                        {"type": "pong", "timestamp": datetime.now().isoformat()}
-                    )
+                    await websocket.send_json({"type": "pong", "timestamp": datetime.now().isoformat()})
                 elif data.get("type") == "subscribe":
                     # يمكن إضافة logic للـ subscription هنا
                     await websocket.send_json({"type": "subscribed", "rooms": [room]})
@@ -3512,13 +3496,13 @@ async def websocket_endpoint(
                 # Break on test exit signals
                 if "Exit loop" in str(e):
                     break
-                logger.error(f"Error in WebSocket message handling: {e}")
+                logger.log(logging.ERROR, f"Error in WebSocket message handling: {e}")
                 await websocket.send_json({"type": "error", "message": str(e)})
 
     except WebSocketDisconnect:
-        pass
+        logging.getLogger(__name__).warning("Ignored exception in routes.py")
     except Exception as e:
-        logger.error(f"WebSocket error: {e}")
+        logger.log(logging.ERROR, f"WebSocket error: {e}")
     finally:
         # قطع الاتصال
         ws_manager.disconnect(websocket, room=room, user_id=user_id)
@@ -3551,19 +3535,17 @@ async def websocket_data_updates(websocket: WebSocket):
                 # استقبال ping messages
                 data = await websocket.receive_json()
                 if data.get("type") == "ping":
-                    await websocket.send_json(
-                        {"type": "pong", "timestamp": datetime.now().isoformat()}
-                    )
+                    await websocket.send_json({"type": "pong", "timestamp": datetime.now().isoformat()})
             except WebSocketDisconnect:
                 break
             except Exception as e:
-                logger.error(f"Error in data-updates WebSocket: {e}")
+                logger.log(logging.ERROR, f"Error in data-updates WebSocket: {e}")
                 break
 
     except WebSocketDisconnect:
-        pass
+        logging.getLogger(__name__).warning("Ignored exception in routes.py")
     except Exception as e:
-        logger.error(f"Data-updates WebSocket error: {e}")
+        logger.log(logging.ERROR, f"Data-updates WebSocket error: {e}")
     finally:
         ws_manager.disconnect(websocket, room="data_updates")
 

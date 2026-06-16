@@ -6,7 +6,6 @@ import subprocess
 import sys
 import os
 import re
-from pathlib import Path
 
 os.chdir(r'c:\Users\aboun\Desktop\Logical Version trae')
 sys.path.insert(0, r'c:\Users\aboun\Desktop\Logical Version trae')

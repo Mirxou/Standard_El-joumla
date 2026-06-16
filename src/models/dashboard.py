@@ -2,14 +2,16 @@
 نماذج لوحات المعلومات ومؤشرات الأداء
 Dashboard Models & KPIs
 """
+
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any
 from datetime import date, datetime
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
 class KPI:
     """مؤشر أداء رئيسي"""
+
     key: str
     title: str
     value: float | int

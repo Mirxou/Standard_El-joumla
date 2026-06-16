@@ -1,6 +1,5 @@
 import sys
 from pathlib import Path
-import hashlib
 
 # Setup path to import src
 project_root = Path(__file__).parent

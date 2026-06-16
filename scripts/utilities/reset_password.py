@@ -1,4 +1,7 @@
-from src.core.database_manager import DatabaseManager
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path.cwd()))
+from src.core.local_database_manager import LocalDatabaseManager
 from src.core.security_service import AdvancedSecurityService
 import os
 
@@ -14,7 +17,7 @@ def reset_admin_password():
         print("❌ Error: Password must be at least 8 characters")
         return
     
-    db_manager = DatabaseManager()
+    db_manager = LocalDatabaseManager()
     if not db_manager.initialize():
         print("Failed to init DB")
         return

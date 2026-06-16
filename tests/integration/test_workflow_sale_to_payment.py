@@ -1,21 +1,20 @@
-import pytest
-from decimal import Decimal
+import sys  # noqa: F811
 from datetime import datetime
-import sys
-from pathlib import Path
+from decimal import Decimal
+from pathlib import Path  # noqa: F811
 
-import sys
-import os
-from pathlib import Path
+import pytest
+
 # الوصول إلى جذر المشروع
 project_root = str(Path(__file__).resolve().parents[2])
 from src.core.database_manager import DatabaseManager
-from src.models.product import Product, ProductManager
 from src.models.customer import Customer, CustomerManager
+from src.models.product import Product, ProductManager
 from src.models.sale import Sale, SaleItem, SaleStatus
-from src.services.sales_service import SalesService
-from src.services.inventory_service import InventoryService
 from src.services.accounting_service import AccountingService
+from src.services.inventory_service import InventoryService
+from src.services.sales_service import SalesService
+
 
 @pytest.mark.integration
 @pytest.mark.requires_db
@@ -47,7 +46,7 @@ class TestSaleToPaymentWorkflow:
             barcode="INT-TEST-LP-01",
             cost_price=Decimal("1000.00"),
             selling_price=Decimal("1500.00"),
-            category_id=1
+            category_id=1,
         )
         product_id = product_manager.create_product(product)
         assert product_id is not None
@@ -56,62 +55,61 @@ class TestSaleToPaymentWorkflow:
         inventory_service.adjust_stock(product_id, 10, "initial_stock")
 
         # 3. إنشاء عميل
-        customer = Customer(
-            name="عميل اختبار التكامل",
-            phone="123456789"
-        )
+        customer = Customer(name="عميل اختبار التكامل", phone="123456789")
         customer_id = customer_manager.create_customer(customer)
         assert customer_id is not None
 
         # 4. إنشاء الحسابات المحاسبية المطلوبة (إذا لم تكن موجودة)
         from src.models.account import Account
         from src.services.accounting_service import AccountingService
+
         accounting_service = AccountingService(db_manager)
-        
+
         # حساب العملاء (أصول)
         if not accounting_service.get_account_by_code("1010"):
             accounts_receivable = Account(
                 account_code="1010",
                 account_name="حسابات العملاء",
                 account_type="Asset",
-                parent_account_id=None
+                parent_account_id=None,
             )
             accounting_service.create_account(accounts_receivable)
-        
-        # حساب إيرادات المبيعات 
+
+        # حساب إيرادات المبيعات
         if not accounting_service.get_account_by_code("4001"):
             sales_revenue = Account(
                 account_code="4001",
                 account_name="إيرادات المبيعات",
                 account_type="Revenue",
-                parent_account_id=None
+                parent_account_id=None,
             )
             accounting_service.create_account(sales_revenue)
-        
+
         # حساب ضريبة القيمة المضافة
         if not accounting_service.get_account_by_code("2010"):
             vat_payable = Account(
                 account_code="2010",
                 account_name="ضريبة القيمة المضافة المستحقة",
                 account_type="Liability",
-                parent_account_id=None
+                parent_account_id=None,
             )
             accounting_service.create_account(vat_payable)
 
         return {
             "product_id": product_id,
             "customer_id": customer_id,
-            "initial_stock": 10
+            "initial_stock": 10,
         }
 
     @pytest.fixture(scope="class")
     def logger(self):
         """Logger Configuration"""
         import logging
+
         logger = logging.getLogger("TestLogger")
         logger.setLevel(logging.DEBUG)
         handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(logging.Formatter('%(levelname)s - %(message)s'))
+        handler.setFormatter(logging.Formatter("%(levelname)s - %(message)s"))
         logger.addHandler(handler)
         return logger
 
@@ -122,7 +120,7 @@ class TestSaleToPaymentWorkflow:
         # 1. إعداد
         sales_service = SalesService(db_manager, logger=logger)
         inventory_service = InventoryService(db_manager, logger=logger)
-        accounting_service = AccountingService(db_manager)
+        accounting_service = AccountingService(db_manager)  # noqa: F841
 
         product_id = setup_data["product_id"]
         customer_id = setup_data["customer_id"]
@@ -133,13 +131,15 @@ class TestSaleToPaymentWorkflow:
         sale = Sale(
             customer_id=customer_id,
             sale_date=datetime.now(),
-            status=SaleStatus.CONFIRMED
+            status=SaleStatus.CONFIRMED,
         )
-        sale.items.append(SaleItem(
-            product_id=product_id,
-            quantity=sale_quantity,
-            unit_price=Decimal("1500.00")
-        ))
+        sale.items.append(
+            SaleItem(
+                product_id=product_id,
+                quantity=sale_quantity,
+                unit_price=Decimal("1500.00"),
+            )
+        )
 
         sale_id = sales_service.create_sale(sale)
         assert sale_id is not None
@@ -165,7 +165,3 @@ class TestSaleToPaymentWorkflow:
         # customer = customer_manager.get_customer_by_id(customer_id)
         # assert customer.balance == sale.total_amount, "رصيد العميل لم يتم تحديثه بشكل صحيح"
         # ملاحظة: السجلات تظهر أن الرصيد تم تحديثه بنجاح في قاعدة البيانات
-
-
-
-

@@ -1,8 +1,8 @@
 global:
   smtp_smarthost: 'smtp.gmail.com:587'
-  smtp_from: 'alerts@unifiedcommerce2030.com'
-  smtp_auth_username: 'alerts@unifiedcommerce2030.com'
-  smtp_auth_password: 'your-app-password'
+  smtp_from: 'alerts@standard-eljoumla.com'
+  smtp_auth_username: 'alerts@standard-eljoumla.com'
+  smtp_auth_password: '${SMTP_PASSWORD}'
 
 route:
   group_by: ['alertname']
@@ -21,19 +21,19 @@ route:
 receivers:
 - name: 'email-notifications'
   email_configs:
-  - to: 'admin@unifiedcommerce2030.com'
+  - to: 'admin@standard-eljoumla.com'
     send_resolved: true
 
 - name: 'critical-email'
   email_configs:
-  - to: 'admin@unifiedcommerce2030.com,manager@unifiedcommerce2030.com'
+  - to: 'admin@standard-eljoumla.com,manager@standard-eljoumla.com'
     send_resolved: true
     headers:
       Subject: 'CRITICAL: {{ .GroupLabels.alertname }}'
 
 - name: 'warning-email'
   email_configs:
-  - to: 'admin@unifiedcommerce2030.com'
+  - to: 'admin@standard-eljoumla.com'
     send_resolved: true
     headers:
       Subject: 'WARNING: {{ .GroupLabels.alertname }}'

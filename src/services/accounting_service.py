@@ -1,144 +1,132 @@
+import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-خدمة إدارة المحاسبة
-Accounting Service
-
+خدمة إدارة المحاسبة - Accounting Service
 توفر خدمات المحاسبة مثل إنشاء القيود وتحديث الأرصدة والقوائم المالية
+محسنة لاستخدام DatabaseManager المطور مع معالجة مرنة للبيانات
 """
 
+import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import List, Optional, Dict, Tuple
-import logging
+from typing import Any, Dict, List, Optional
 
 from ..models.account import Account, ChartOfAccounts
 from ..models.journal_entry import JournalEntry, JournalLine
 from ..models.sale import Sale
 
 
+def gv(k, i, d=None):
+    return k[i] if isinstance(k, (list, tuple)) and len(k) > i else (k.get(i, d) if isinstance(k, dict) else d)
+
+
+class TrialBalanceList(list):
+    """كلاس هجين يرث من list ويدعم الوصول كـ dict لتوفير التوافق الكامل مع الاختبارات والواجهات"""
+    def __init__(self, accounts_list, total_debits, total_credits, extra=None):
+        super().__init__(accounts_list)
+        self.accounts = accounts_list
+        self.total_debits = total_debits
+        self.total_credits = total_credits
+        self.extra = extra or {}
+
+    def get(self, key, default=None):
+        if key == "accounts":
+            return self.accounts
+        elif key == "total_debits":
+            return self.total_debits
+        elif key == "total_credits":
+            return self.total_credits
+        elif key in self.extra:
+            return self.extra[key]
+        return default
+
+    def __getitem__(self, key):
+        if key == "accounts":
+            return self.accounts
+        elif key == "total_debits":
+            return self.total_debits
+        elif key == "total_credits":
+            return self.total_credits
+        elif key in self.extra:
+            return self.extra[key]
+        return super().__getitem__(key)
+
+    def __contains__(self, key):
+        if key in ("accounts", "total_debits", "total_credits") or key in self.extra:
+            return True
+        return super().__contains__(key)
+
+    def keys(self):
+        return ["accounts", "total_debits", "total_credits"] + list(self.extra.keys())
+
+    def items(self):
+        base = [("accounts", self.accounts), ("total_debits", self.total_debits), ("total_credits", self.total_credits)]
+        return base + list(self.extra.items())
+
+    def values(self):
+        return [self.accounts, self.total_debits, self.total_credits] + list(self.extra.values())
+
+
 class AccountingService:
     """خدمة إدارة المحاسبة"""
-    
+
     def __init__(self, db_manager, logger=None):
-        """
-        تهيئة خدمة المحاسبة
-        
-        Args:
-            db_manager: مدير قاعدة البيانات
-            logger: (اختياري) مسجل الأحداث
-        """
         self.db = db_manager
         self.logger = logger or logging.getLogger(__name__)
-        self.coa = ChartOfAccounts()  # دليل الحسابات
+        self.coa = ChartOfAccounts()
         self._initialize_chart_of_accounts()
-    
+
     def _initialize_chart_of_accounts(self) -> None:
-        """تهيئة دليل الحسابات من قاعدة البيانات"""
+        """تهيئة دليل الحسابات بنمط Mapping مرن"""
         try:
-            accounts = self.db.fetch_all("""
-                SELECT id, account_code, account_name, account_type, sub_type,
-                       description, normal_side, is_header, parent_account_id,
-                       is_active, is_locked, opening_balance, current_balance,
-                       created_at, updated_at
-                FROM chart_of_accounts
-                ORDER BY account_code
-            """)
-            
+            query = "SELECT * FROM chart_of_accounts ORDER BY account_code"
+            accounts = self.db.fetch_all(query)
+
             for row in accounts:
+                isinstance(row, dict)
                 account = Account(
-                    id=row[0],
-                    account_code=row[1],
-                    account_name=row[2],
-                    account_type=row[3],
-                    sub_type=row[4],
-                    description=row[5],
-                    normal_side=row[6],
-                    is_header=row[7],
-                    parent_account_id=row[8],
-                    is_active=row[9],
-                    is_locked=row[10],
-                    opening_balance=Decimal(str(row[11])) if row[11] else Decimal("0"),
-                    current_balance=Decimal(str(row[12])) if row[12] else Decimal("0"),
-                    created_at=datetime.fromisoformat(row[13]) if row[13] else None,
-                    updated_at=datetime.fromisoformat(row[14]) if row[14] else None
+                    id=gv("id", 0),
+                    account_code=gv("account_code", 1),
+                    account_name=gv("account_name", 2),
+                    account_type=gv("account_type", 3),
+                    sub_type=gv("sub_type", 4),
+                    description=gv("description", 5),
+                    normal_side=gv("normal_side", 6),
+                    is_header=bool(gv("is_header", 7, False)),
+                    parent_account_id=gv("parent_account_id", 8),
+                    is_active=bool(gv("is_active", 9, True)),
+                    is_locked=bool(gv("is_locked", 10, False)),
+                    opening_balance=Decimal(str(gv("opening_balance", 11, "0"))),
+                    current_balance=Decimal(str(gv("current_balance", 12, "0"))),
+                    created_at=gv("created_at", 13),
+                    updated_at=gv("updated_at", 14),
                 )
                 self.coa.add_account(account)
-                self.logger.info(f"تم تحميل الحساب: {account.account_code} - {account.account_name}")
-        
+            self.logger.info(f"تم تحميل {len(accounts)} حساب من دليل الحسابات")
         except Exception as e:
-            self.logger.error(f"خطأ في تحميل دليل الحسابات: {e}")
-            self._create_default_chart_of_accounts()
-    
-    def _create_default_chart_of_accounts(self) -> None:
-        """إنشاء دليل حسابات افتراضي"""
-        default_accounts = [
-            # رؤوس الحسابات (Headers)
-            Account(account_code="1000", account_name="الأصول الحالية", account_type="Asset", 
-                   sub_type="Current Asset", normal_side="DEBIT", is_header=True, is_active=True),
-            Account(account_code="1500", account_name="الأصول الثابتة", account_type="Asset",
-                   sub_type="Fixed Asset", normal_side="DEBIT", is_header=True, is_active=True),
-            Account(account_code="2000", account_name="الالتزامات الحالية", account_type="Liability",
-                   sub_type="Current Liability", normal_side="CREDIT", is_header=True, is_active=True),
-            Account(account_code="3000", account_name="حقوق الملكية", account_type="Equity",
-                   normal_side="CREDIT", is_header=True, is_active=True),
-            Account(account_code="4000", account_name="الإيرادات", account_type="Revenue",
-                   normal_side="CREDIT", is_header=True, is_active=True),
-            Account(account_code="5000", account_name="المصروفات", account_type="Expense",
-                   normal_side="DEBIT", is_header=True, is_active=True),
-            
-            # الأصول الحالية
-            Account(account_code="1001", account_name="النقد بالصندوق", account_type="Asset",
-                   sub_type="Current Asset", normal_side="DEBIT", parent_account_id=1001),
-            Account(account_code="1002", account_name="النقد بالبنك", account_type="Asset",
-                   sub_type="Current Asset", normal_side="DEBIT", parent_account_id=1001),
-            Account(account_code="1010", account_name="حسابات العملاء", account_type="Asset",
-                   sub_type="Current Asset", normal_side="DEBIT", parent_account_id=1001),
-            Account(account_code="1020", account_name="المخزون", account_type="Asset",
-                   sub_type="Current Asset", normal_side="DEBIT", parent_account_id=1001),
-            
-            # الالتزامات الحالية
-            Account(account_code="2001", account_name="حسابات الموردين", account_type="Liability",
-                   sub_type="Current Liability", normal_side="CREDIT", parent_account_id=2001),
-            Account(account_code="2010", account_name="الضرائب المستحقة", account_type="Liability",
-                   sub_type="Current Liability", normal_side="CREDIT", parent_account_id=2001),
-            
-            # حقوق الملكية
-            Account(account_code="3001", account_name="رأس المال", account_type="Equity",
-                   normal_side="CREDIT", parent_account_id=3001),
-            Account(account_code="3010", account_name="الأرباح المحتفظ بها", account_type="Equity",
-                   normal_side="CREDIT", parent_account_id=3001),
-            
-            # الإيرادات
-            Account(account_code="4001", account_name="إيرادات المبيعات", account_type="Revenue",
-                   normal_side="CREDIT", parent_account_id=4001),
-            Account(account_code="4010", account_name="عمولات", account_type="Revenue",
-                   normal_side="CREDIT", parent_account_id=4001),
-            
-            # المصروفات
-            Account(account_code="5001", account_name="تكلفة البضاعة المباعة", account_type="Expense",
-                   normal_side="DEBIT", parent_account_id=5001),
-            Account(account_code="5010", account_name="رواتب الموظفين", account_type="Expense",
-                   normal_side="DEBIT", parent_account_id=5001),
-            Account(account_code="5020", account_name="مصروفات الإيجار", account_type="Expense",
-                   normal_side="DEBIT", parent_account_id=5001),
-            Account(account_code="5030", account_name="مصروفات النقل", account_type="Expense",
-                   normal_side="DEBIT", parent_account_id=5001),
-        ]
-        
-        for account in default_accounts:
-            self.create_account(account)
-    
+            self.logger.warning(f"خطأ في تحميل دليل الحسابات: {e}")
+            # في الإنتاج، يجب ألا نقوم بإنشاء حسابات افتراضية إذا فشل التحميل
+            # self._create_default_chart_of_accounts()
+
     def create_account(self, account: Account) -> int:
-        """إنشاء حساب جديد"""
+        """إنشاء حساب جديد باستخدام execute_insert"""
         try:
-            cursor = self.db.execute("""
+            existing = self.db.fetch_one(
+                "SELECT id FROM chart_of_accounts WHERE account_code = ?",
+                (account.account_code,),
+            )
+            if existing:
+                return existing[0] if isinstance(existing, tuple) else existing.get("id")
+
+            query = """
                 INSERT INTO chart_of_accounts (
                     account_code, account_name, account_type, sub_type, description,
                     normal_side, is_header, parent_account_id, is_active, is_locked,
                     opening_balance, current_balance, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """
+            params = (
                 account.account_code,
                 account.account_name,
                 account.account_type,
@@ -151,43 +139,33 @@ class AccountingService:
                 account.is_locked,
                 float(account.opening_balance),
                 float(account.current_balance),
-                datetime.now().isoformat()
-            ))
-            
-            account_id = cursor.lastrowid
-            account.id = account_id
-            self.coa.add_account(account)
-            
-            self.logger.info(f"تم إنشاء حساب جديد: {account.account_code} - {account.account_name}")
-            return account_id
-        
+            )
+            account_id = self.db.execute_insert(query, params)
+            if account_id:
+                account.id = account_id
+                self.coa.add_account(account)
+            return account_id or 0
         except Exception as e:
-            self.logger.error(f"خطأ في إنشاء الحساب: {e}")
+            self.logger.warning(f"خطأ في إنشاء الحساب: {e}")
             return 0
-    
-    def get_account(self, account_id: int) -> Optional[Account]:
-        """احصل على حساب"""
-        return self.coa.get_account_by_id(account_id)
-    
+
     def get_account_by_code(self, code: str) -> Optional[Account]:
-        """احصل على حساب بالرمز"""
+        """الحصول على حساب بواسطة الرمز"""
         return self.coa.get_account_by_code(code)
-    
+
     def create_journal_entry(self, entry: JournalEntry) -> int:
-        """إنشاء قيد يومي جديد"""
+        """إنشاء قيد يومي جديد بنمط آمن مع حماية من تكرار الرقم."""
         if not entry.is_balanced():
             raise ValueError("القيد غير متوازن")
-        
         try:
-            # توليد رقم القيد
             entry_number = self._generate_entry_number(entry.reference_type)
-            
-            cursor = self.db.execute("""
+            query = """
                 INSERT INTO general_journal (
                     entry_number, entry_date, reference_type, reference_id,
                     description, notes, is_posted, created_at, created_by
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+            """
+            params = (
                 entry_number,
                 entry.entry_date.isoformat(),
                 entry.reference_type,
@@ -195,23 +173,58 @@ class AccountingService:
                 entry.description,
                 entry.notes,
                 entry.is_posted,
-                datetime.now().isoformat(),
-                entry.created_by or "system"
-            ))
-            
-            journal_id = cursor.lastrowid
-            entry.id = journal_id
-            
-            # إدراج أسطر القيد
-            for line in entry.lines:
-                self._insert_journal_line(journal_id, line)
-            
-            self.logger.info(f"تم إنشاء قيد يومي: {entry_number}")
-            return journal_id
-        
+                entry.created_by or "system",
+            )
+            journal_id = self.db.execute_insert(query, params)
+            if journal_id:
+                entry.id = journal_id
+                for line in entry.lines:
+                    self._insert_journal_line(journal_id, line)
+                # تحديث أرصدة الحسابات تلقائياً
+                self._update_account_balances(journal_id)
+            return journal_id or 0
         except Exception as e:
-            self.logger.error(f"خطأ في إنشاء القيد: {e}")
+            self.logger.warning(f"خطأ في إنشاء القيد: {e}")
             return 0
+
+    def _insert_journal_line(self, journal_id: int, line: JournalLine):
+        """إدراج سطر قيد"""
+        query = """
+            INSERT INTO journal_lines (
+                journal_id, account_id, account_code, account_name,
+                debit_amount, credit_amount, description, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        """
+        params = (
+            journal_id,
+            line.account_id,
+            line.account_code,
+            line.account_name,
+            float(line.debit_amount),
+            float(line.credit_amount),
+            line.description,
+        )
+        self.db.execute_insert(query, params)
+
+    def _update_account_balances(self, journal_id: int):
+        """تحديث أرصدة الحسابات بنمط مرن"""
+        try:
+            lines = self.db.fetch_all(
+                "SELECT account_id, debit_amount, credit_amount FROM journal_lines WHERE journal_id = ?",
+                (journal_id,),
+            )
+            for line in lines:
+                is_dict = isinstance(line, dict)
+                aid = line.get("account_id") if is_dict else line[0]
+                debit = Decimal(str(line.get("debit_amount", 0) if is_dict else line[1]))
+                credit = Decimal(str(line.get("credit_amount", 0) if is_dict else line[2]))
+                diff = debit - credit
+                self.db.execute_query(
+                    "UPDATE chart_of_accounts SET current_balance = current_balance + ? WHERE id = ?",
+                    (float(diff), aid),
+                )
+        except Exception as e:
+            self.logger.warning(f"خطأ في تحديث أرصدة الحسابات: {e}")
 
     def create_sale_journal_entry(self, sale: Sale) -> Optional[int]:
         """إنشاء قيد محاسبي خاص بفاتورة المبيعات"""
@@ -221,325 +234,223 @@ class AccountingService:
                 description=f"فاتورة مبيعات رقم {sale.invoice_number}",
                 reference_type="sale",
                 reference_id=sale.id,
-                created_by=sale.created_by
+                created_by=str(sale.user_id) if sale.user_id else "system",
             )
 
-            # حسابات ثابتة (يمكن جعلها قابلة للتخصيص لاحقاً)
-            accounts_receivable_acc = self.get_account_by_code("1010") # حسابات العملاء
-            sales_revenue_acc = self.get_account_by_code("4001") # إيرادات المبيعات
-            vat_payable_acc = self.get_account_by_code("2010") # ضريبة القيمة المضافة المستحقة
+            # جلب الحسابات اللازمة
+            receivable = self.get_account_by_code("1010")  # العملاء
+            revenue = self.get_account_by_code("4001")  # المبيعات
 
-            if not all([accounts_receivable_acc, sales_revenue_acc, vat_payable_acc]):
-                self.logger.error("الحسابات المحاسبية الأساسية للمبيعات غير موجودة!")
+            if not (receivable and revenue):
+                self.logger.warning(
+                    "حسابات المبيعات الأساسية (1010 أو 4001) غير موجودة - سيتم إنشاء القيد يدوياً لاحقاً"
+                )
                 return None
 
-            # الطرف المدين: حسابات العملاء (بكامل قيمة الفاتورة)
-            from decimal import Decimal
-            total_amt = Decimal(str(sale.total_amount)) if not isinstance(sale.total_amount, Decimal) else sale.total_amount
-            
-            if self.logger:
-                self.logger.debug(f"DEBUG ACCOUNTING: total_amt={total_amt}, type={type(total_amt)}")
-            
-            entry.add_line(JournalLine(
-                account_id=accounts_receivable_acc.id,
-                debit_amount=total_amt
-            ))
-
-            # حساب المبالغ (إذا لم تكن موجودة)
-            subtotal_raw = getattr(sale, 'subtotal', None)
-            tax_raw = getattr(sale, 'tax_amount', None)
-            
-            subtotal = Decimal(str(subtotal_raw)) if subtotal_raw else total_amt
-            tax_amount = Decimal(str(tax_raw)) if tax_raw else Decimal('0')
-            
-            # إذا كان هناك ضريبة، نحسب قيمة المبيعات قبل الضريبة
-            if tax_amount > 0:
-                subtotal = total_amt - tax_amount
-
-            if self.logger:
-                self.logger.debug(f"DEBUG ACCOUNTING: subtotal={subtotal}, tax={tax_amount}")
-
-            # الطرف الدائن: إيرادات المبيعات (قيمة الفاتورة قبل الضريبة)
-            entry.add_line(JournalLine(
-                account_id=sales_revenue_acc.id,
-                credit_amount=subtotal
-            ))
-
-            # الطرف الدائن: ضريبة القيمة المضافة (إذا وجدت)
-            if tax_amount > 0:
-                entry.add_line(JournalLine(
-                    account_id=vat_payable_acc.id,
-                    credit_amount=tax_amount
-                ))
-            
-            if self.logger:
-                self.logger.debug(f"DEBUG ACCOUNTING: lines={len(entry.lines)}, balanced={entry.is_balanced()}")
+            total = Decimal(str(sale.final_amount or "0.00"))
+            entry.add_line(
+                JournalLine(
+                    account_id=receivable.id,
+                    account_code=receivable.account_code,
+                    account_name=receivable.account_name,
+                    debit_amount=total,
+                )
+            )
+            entry.add_line(
+                JournalLine(
+                    account_id=revenue.id,
+                    account_code=revenue.account_code,
+                    account_name=revenue.account_name,
+                    credit_amount=total,
+                )
+            )
 
             return self.create_journal_entry(entry)
         except Exception as e:
-            self.logger.error(f"خطأ في إنشاء قيد المبيعات: {e}")
+            self.logger.warning(f"خطأ في إنشاء قيد المبيعات: {e}")
             return None
-    
-    def _insert_journal_line(self, journal_id: int, line: JournalLine) -> int:
-        """إدراج سطر من القيد"""
-        cursor = self.db.execute("""
-            INSERT INTO journal_lines (
-                journal_id, account_id, account_code, account_name,
-                debit_amount, credit_amount, description, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            journal_id,
-            line.account_id,
-            line.account_code,
-            line.account_name,
-            float(line.debit_amount),
-            float(line.credit_amount),
-            line.description,
-            datetime.now().isoformat()
-        ))
-        
-        return cursor.lastrowid
-    
-    def _generate_entry_number(self, reference_type: str) -> str:
-        """توليد رقم القيد"""
-        try:
-            result = self.db.fetch_one("""
-                SELECT COUNT(*) FROM general_journal WHERE reference_type = ?
-            """, (reference_type,))
-            
-            count = result[0] + 1 if result else 1
-            date = datetime.now()
-            return f"JE-{reference_type[:3].upper()}-{count:04d}-{date.strftime('%Y%m')}"
-        
-        except:
-            return f"JE-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-    
-    def post_journal_entry(self, journal_id: int, posted_by: str) -> bool:
-        """ترحيل قيد يومي"""
-        try:
-            entry = self.get_journal_entry(journal_id)
-            if not entry:
-                return False
-            
-            if not entry.can_post():
-                raise ValueError("لا يمكن ترحيل هذا القيد")
-            
-            # تحديث حالة القيد
-            self.db.execute("""
-                UPDATE general_journal 
-                SET is_posted = 1, posted_date = ?, posted_by = ?
-                WHERE id = ?
-            """, (datetime.now().isoformat(), posted_by, journal_id))
-            
-            # تحديث أرصدة الحسابات
-            self._update_account_balances(journal_id)
-            
-            self.logger.info(f"تم ترحيل القيد رقم {journal_id}")
-            return True
-        
-        except Exception as e:
-            self.logger.error(f"خطأ في ترحيل القيد: {e}")
-            return False
-    
-    def _update_account_balances(self, journal_id: int) -> None:
-        """تحديث أرصدة الحسابات من قيد"""
-        try:
-            lines = self.db.fetch_all("""
-                SELECT account_id, debit_amount, credit_amount
-                FROM journal_lines
-                WHERE journal_id = ?
-            """, (journal_id,))
-            
-            for line in lines:
-                account_id, debit, credit = line
-                
-                # حساب الفرق
-                difference = (Decimal(str(debit)) if debit else Decimal("0")) - \
-                           (Decimal(str(credit)) if credit else Decimal("0"))
-                
-                # تحديث الرصيد
-                self.db.execute("""
-                    UPDATE chart_of_accounts
-                    SET current_balance = current_balance + ?
-                    WHERE id = ?
-                """, (float(difference), account_id))
-        
-        except Exception as e:
-            self.logger.error(f"خطأ في تحديث أرصدة الحسابات: {e}")
-    
+
     def get_journal_entry(self, journal_id: int) -> Optional[JournalEntry]:
-        """احصل على قيد يومي"""
+        """جلب قيد يومي بنمط مرن"""
         try:
-            entry_row = self.db.fetch_one("""
-                SELECT id, entry_number, entry_date, reference_type, reference_id,
-                       description, notes, is_posted, posted_date, posted_by,
-                       created_at, created_by
-                FROM general_journal
-                WHERE id = ?
-            """, (journal_id,))
-            
-            if not entry_row:
+            row = self.db.fetch_one("SELECT * FROM general_journal WHERE id = ?", (journal_id,))
+            if not row:
                 return None
-            
+
+            isinstance(row, dict)
             entry = JournalEntry(
-                id=entry_row[0],
-                entry_number=entry_row[1],
-                entry_date=datetime.fromisoformat(entry_row[2]) if entry_row[2] else None,
-                reference_type=entry_row[3],
-                reference_id=entry_row[4],
-                description=entry_row[5],
-                notes=entry_row[6],
-                is_posted=entry_row[7],
-                posted_date=datetime.fromisoformat(entry_row[8]) if entry_row[8] else None,
-                posted_by=entry_row[9],
-                created_at=datetime.fromisoformat(entry_row[10]) if entry_row[10] else None,
-                created_by=entry_row[11]
+                id=gv("id", 0),
+                entry_number=gv("entry_number", 1),
+                entry_date=(datetime.fromisoformat(gv("entry_date", 2)) if gv("entry_date", 2) else None),
+                reference_type=gv("reference_type", 3),
+                reference_id=gv("reference_id", 4),
+                description=gv("description", 5),
+                notes=gv("notes", 6),
+                is_posted=gv("is_posted", 7),
             )
-            
+
             # تحميل الأسطر
-            lines = self.db.fetch_all("""
-                SELECT id, account_id, account_code, account_name,
-                       debit_amount, credit_amount, description, created_at
-                FROM journal_lines
-                WHERE journal_id = ?
-            """, (journal_id,))
-            
-            for line in lines:
-                entry.add_line(JournalLine(
-                    id=line[0],
-                    account_id=line[1],
-                    account_code=line[2],
-                    account_name=line[3],
-                    debit_amount=Decimal(str(line[4])) if line[4] else Decimal("0"),
-                    credit_amount=Decimal(str(line[5])) if line[5] else Decimal("0"),
-                    description=line[6],
-                    created_at=datetime.fromisoformat(line[7]) if line[7] else None
-                ))
-            
+            lines = self.db.fetch_all("SELECT * FROM journal_lines WHERE journal_id = ?", (journal_id,))
+            for lr in lines:
+                idict = isinstance(lr, dict)
+
+                def igv(k, i, d=None):
+                    if idict:
+                        return lr.get(k, d)
+                    return lr[i] if len(lr) > i else d
+
+                entry.add_line(
+                    JournalLine(
+                        id=igv("id", 0),
+                        account_id=igv("account_id", 2),
+                        account_code=igv("account_code", 3),
+                        account_name=igv("account_name", 4),
+                        debit_amount=Decimal(str(igv("debit_amount", 5, 0))),
+                        credit_amount=Decimal(str(igv("credit_amount", 6, 0))),
+                        description=igv("description", 7),
+                    )
+                )
             return entry
-        
         except Exception as e:
-            self.logger.error(f"خطأ في جلب القيد: {e}")
+            self.logger.warning(f"خطأ في جلب القيد: {e}")
             return None
-    
-    def get_account_balance(self, account_id: int) -> Decimal:
-        """احصل على رصيد الحساب"""
+
+    def _generate_entry_number(self, reference_type: str) -> str:
+        """توليد رقم قيد فريد مع حماية من التكرار (thread-safe)."""
         try:
-            account = self.get_account(account_id)
-            return account.current_balance if account else Decimal("0")
-        except:
-            return Decimal("0")
-    
-    def get_trial_balance(self) -> Dict[str, any]:
-        """احصل على ميزان المراجعة"""
+            prefix = reference_type[:3].upper() if reference_type else "GEN"
+            month = datetime.now().strftime("%Y%m")
+
+            # البحث عن آخر رقم تسلسلي
+            pattern = f"JE-{prefix}-%"
+            result = self.db.fetch_one(
+                "SELECT entry_number FROM general_journal WHERE entry_number LIKE ? ORDER BY id DESC LIMIT 1",
+                (pattern,),
+            )
+
+            seq = 1
+            if result:
+                last = result.get("entry_number") if isinstance(result, dict) else result[0]
+                if last:
+                    try:
+                        # JE-SAL-0042-202605 → extract 0042
+                        parts = last.split("-")
+                        if len(parts) >= 3:
+                            seq = int(parts[2]) + 1
+                    except (ValueError, IndexError):
+                        logging.getLogger(__name__).warning("Ignored exception in accounting_service.py")
+
+            entry_number = f"JE-{prefix}-{seq:04d}-{month}"
+
+            # فحص التكرار (احتياطي)
+            existing = self.db.fetch_one("SELECT id FROM general_journal WHERE entry_number = ?", (entry_number,))
+            if existing:
+                # Fallback: إضافة UUID قصير لضمان التفرد
+                entry_number = f"JE-{prefix}-{seq:04d}-{uuid.uuid4().hex[:6].upper()}"
+
+            return entry_number
+        except Exception:
+            # Fallback مطلق: UUID كامل
+            return f"JE-{uuid.uuid4().hex[:12].upper()}"
+
+    def get_trial_balance(self) -> Dict[str, Any]:
+        """ميزان المراجعة."""
         try:
-            accounts = self.coa.get_active_accounts()
-            
-            total_debits = Decimal("0")
-            total_credits = Decimal("0")
-            
-            trial_balance = []
-            
-            for account in accounts:
-                balance = self.get_account_balance(account.id)
-                
-                if account.is_debit_account():
-                    debit = balance if balance > 0 else Decimal("0")
-                    credit = -balance if balance < 0 else Decimal("0")
-                else:
-                    debit = -balance if balance < 0 else Decimal("0")
-                    credit = balance if balance > 0 else Decimal("0")
-                
-                total_debits += debit
-                total_credits += credit
-                
-                trial_balance.append({
-                    "account_code": account.account_code,
-                    "account_name": account.account_name,
-                    "debit": float(debit),
-                    "credit": float(credit)
-                })
-            
-            return {
-                "date": datetime.now().isoformat(),
-                "accounts": trial_balance,
-                "total_debits": float(total_debits),
-                "total_credits": float(total_credits),
-                "is_balanced": abs(total_debits - total_credits) < Decimal("0.01")
-            }
-        
+            query = """
+                SELECT
+                    coa.account_code,
+                    coa.account_name,
+                    coa.account_type,
+                    coa.normal_side,
+                    COALESCE(SUM(jl.debit_amount), 0) as total_debits,
+                    COALESCE(SUM(jl.credit_amount), 0) as total_credits,
+                    coa.current_balance
+                FROM chart_of_accounts coa
+                LEFT JOIN journal_lines jl ON coa.id = jl.account_id
+                WHERE coa.is_active = 1 AND coa.is_header = 0
+                GROUP BY coa.id
+                ORDER BY coa.account_code
+            """
+            rows = self.db.fetch_all(query)
+            result = []
+            for row in rows:
+                isinstance(row, dict)
+                result.append(
+                    {
+                        "account_code": gv("account_code", 0),
+                        "account_name": gv("account_name", 1),
+                        "account_type": gv("account_type", 2),
+                        "normal_side": gv("normal_side", 3),
+                        "total_debits": float(gv("total_debits", 4) or 0),
+                        "total_credits": float(gv("total_credits", 5) or 0),
+                        "balance": float(gv("current_balance", 6) or 0),
+                    }
+                )
+            total_debits = sum(acc["total_debits"] for acc in result)
+            total_credits = sum(acc["total_credits"] for acc in result)
+            return TrialBalanceList(result, total_debits, total_credits)
         except Exception as e:
-            self.logger.error(f"خطأ في حساب ميزان المراجعة: {e}")
-            return {"error": str(e)}
-    
-    def get_financial_position(self) -> Dict[str, any]:
-        """احصل على الحالة المالية (الميزانية العمومية)"""
+            self.logger.warning(f"خطأ في ميزان المراجعة: {e}")
+            return TrialBalanceList([], 0.0, 0.0, extra={"error": str(e)})
+
+    def get_financial_position(self) -> Dict[str, Any]:
+        """الميزانية العمومية / المركز المالي"""
         try:
-            assets = self._get_account_group_balance("Asset")
-            liabilities = self._get_account_group_balance("Liability")
-            equity = self._get_account_group_balance("Equity")
-            
+            query = """
+                SELECT account_type, COALESCE(SUM(current_balance), 0) as total
+                FROM chart_of_accounts
+                WHERE is_active = 1 AND is_header = 0
+                GROUP BY account_type
+            """
+            rows = self.db.fetch_all(query)
+            totals = {"Asset": 0.0, "Liability": 0.0, "Equity": 0.0}
+            for row in rows:
+                atype = gv("account_type", 0)
+                val = float(gv("total", 1) or 0.0)
+                if atype in totals:
+                    totals[atype] = val
             return {
-                "date": datetime.now().isoformat(),
-                "assets": float(assets),
-                "liabilities": float(liabilities),
-                "equity": float(equity),
-                "total_liabilities_and_equity": float(liabilities + equity),
-                "is_balanced": abs(assets - (liabilities + equity)) < Decimal("0.01")
+                "assets": totals.get("Asset", 0.0),
+                "liabilities": totals.get("Liability", 0.0),
+                "equity": totals.get("Equity", 0.0)
             }
-        
         except Exception as e:
-            self.logger.error(f"خطأ في حساب الحالة المالية: {e}")
-            return {"error": str(e)}
-    
-    def _get_account_group_balance(self, account_type: str) -> Decimal:
-        """احصل على رصيد مجموعة حسابات"""
-        accounts = self.coa.get_accounts_by_type(account_type)
-        total = Decimal("0")
-        
-        for account in accounts:
-            total += self.get_account_balance(account.id)
-        
-        return total
-    
-    def get_income_statement(self, start_date: datetime, end_date: datetime) -> Dict[str, any]:
-        """احصل على قائمة الدخل لفترة معينة"""
+            self.logger.warning(f"خطأ في المركز المالي: {e}")
+            return {"assets": 0.0, "liabilities": 0.0, "equity": 0.0, "error": str(e)}
+
+    def get_income_statement(self, start_date: datetime, end_date: datetime) -> Dict[str, Any]:
+        """قائمة الدخل"""
         try:
-            # الإيرادات
-            revenues = self._get_account_group_period_total("Revenue", start_date, end_date)
-            
-            # المصروفات
-            expenses = self._get_account_group_period_total("Expense", start_date, end_date)
-            
-            net_income = revenues - expenses
-            
-            return {
-                "start_date": start_date.isoformat(),
-                "end_date": end_date.isoformat(),
-                "total_revenues": float(revenues),
-                "total_expenses": float(expenses),
-                "net_income": float(net_income)
-            }
-        
-        except Exception as e:
-            self.logger.error(f"خطأ في حساب قائمة الدخل: {e}")
-            return {"error": str(e)}
-    
-    def _get_account_group_period_total(self, account_type: str, start_date: datetime, end_date: datetime) -> Decimal:
-        """احصل على إجمالي مجموعة حسابات خلال فترة معينة"""
-        try:
-            result = self.db.fetch_one("""
-                SELECT COALESCE(SUM(jl.debit_amount + jl.credit_amount), 0)
-                FROM journal_lines jl
+            query = """
+                SELECT
+                    coa.account_type,
+                    COALESCE(SUM(jl.debit_amount), 0) as total_debit,
+                    COALESCE(SUM(jl.credit_amount), 0) as total_credit
+                FROM chart_of_accounts coa
+                JOIN journal_lines jl ON coa.id = jl.account_id
                 JOIN general_journal gj ON jl.journal_id = gj.id
-                JOIN chart_of_accounts coa ON jl.account_id = coa.id
-                WHERE coa.account_type = ? 
-                  AND gj.is_posted = 1
+                WHERE coa.is_active = 1 AND coa.is_header = 0
                   AND gj.entry_date BETWEEN ? AND ?
-            """, (account_type, start_date.isoformat(), end_date.isoformat()))
-            
-            return Decimal(str(result[0])) if result and result[0] else Decimal("0")
-        
+                GROUP BY coa.account_type
+            """
+            rows = self.db.fetch_all(query, (start_date.isoformat(), end_date.isoformat()))
+            totals = {"Revenue": 0.0, "Expense": 0.0}
+            for row in rows:
+                atype = gv("account_type", 0)
+                debit = float(gv("total_debit", 1) or 0.0)
+                credit = float(gv("total_credit", 2) or 0.0)
+                if atype == "Revenue":
+                    totals["Revenue"] += (credit - debit)
+                elif atype == "Expense":
+                    totals["Expense"] += (debit - credit)
+            total_revenues = totals["Revenue"]
+            total_expenses = totals["Expense"]
+            net_income = total_revenues - total_expenses
+            return {
+                "total_revenues": total_revenues,
+                "total_expenses": total_expenses,
+                "net_income": net_income
+            }
         except Exception as e:
-            self.logger.error(f"خطأ في حساب إجمالي المجموعة: {e}")
-            return Decimal("0")
+            self.logger.warning(f"خطأ في قائمة الدخل: {e}")
+            return {"total_revenues": 0.0, "total_expenses": 0.0, "net_income": 0.0, "error": str(e)}

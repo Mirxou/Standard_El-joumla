@@ -10,13 +10,16 @@ Advanced Reports Models
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, date
-from typing import List, Optional, Dict, Any, Union
+from datetime import date, datetime
 from enum import Enum
+from typing import Any, Dict, List, Optional, Union
 
 
 class ReportType(Enum):
     """أنواع التقارير"""
+
+    INVENTORY = "inventory"
+    FINANCIAL = "financial"
 
     SALES_SUMMARY = "sales_summary"  # ملخص المبيعات
     SALES_DETAILED = "sales_detailed"  # المبيعات التفصيلية
@@ -148,6 +151,7 @@ class ReportFilter:
     include_quotes: bool = False
     only_approved: bool = True
     include_zero_balances: bool = True
+    low_stock_only: bool = False
 
     # التجميع والترتيب
     group_by: Optional[str] = None
@@ -239,6 +243,7 @@ class InventoryReportLine:
 
     status: str = "active"
     last_movement_date: Optional[date] = None
+    is_low_stock: bool = False
 
 
 @dataclass

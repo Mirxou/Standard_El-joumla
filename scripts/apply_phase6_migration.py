@@ -5,7 +5,6 @@ Database Migration Script
 """
 
 import sys
-import os
 import logging
 from pathlib import Path
 
@@ -14,7 +13,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / 'src'))
 
-from src.core.database_manager import DatabaseManager
+from src.core.local_database_manager import LocalDatabaseManager
 from src.core.config_manager import ConfigManager
 
 # Configure logging
@@ -32,7 +31,7 @@ def apply_migration():
         # Initialize managers
         config_manager = ConfigManager()
         db_path = config_manager.get('database.path', 'data/erp_system.db')
-        db_manager = DatabaseManager(db_path=db_path)
+        db_manager = LocalDatabaseManager(db_path=db_path)
         db_manager.initialize()
 
         # Read migration file

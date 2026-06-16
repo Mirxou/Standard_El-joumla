@@ -3,12 +3,13 @@
 مكونات ذكية - AI Components
 """
 
-from PySide6.QtWidgets import QPushButton, QLineEdit, QTextEdit, QVBoxLayout, QWidget
 from PySide6.QtCore import Signal
+from PySide6.QtWidgets import QLineEdit, QPushButton, QTextEdit
 
 
 class AIButton(QPushButton):
     """زر ذكي"""
+
     ai_clicked = Signal(str)
 
     def __init__(self, text="", parent=None):
@@ -21,6 +22,7 @@ class AIButton(QPushButton):
 
 class AIPromptInput(QLineEdit):
     """حقل إدخال ذكي"""
+
     ai_submitted = Signal(str)
 
     def __init__(self, placeholder="", parent=None):
@@ -37,6 +39,7 @@ class AIPromptInput(QLineEdit):
 
 class AIRichTextEditor(QTextEdit):
     """محرر نص غني ذكي"""
+
     ai_content_changed = Signal(str)
 
     def __init__(self, parent=None):
@@ -45,9 +48,6 @@ class AIRichTextEditor(QTextEdit):
 
     def _on_text_changed(self):
         self.ai_content_changed.emit(self.toPlainText())
-
-
-
 
 
 def create_ai_button(text="AI", parent=None):

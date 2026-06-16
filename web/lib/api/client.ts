@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 /**
  * Helper function to get a cookie value by name
  */
-function getCookie(name: string): string | null {
+export function getCookie(name: string): string | null {
   if (typeof window === 'undefined') return null;
   
   const matches = document.cookie.match(new RegExp(
@@ -40,7 +40,7 @@ function setCookie(name: string, value: string, days: number = 1): void {
 /**
  * Helper function to delete a cookie
  */
-function deleteCookie(name: string): void {
+export function deleteCookie(name: string): void {
   if (typeof window === 'undefined') return;
   document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
 }

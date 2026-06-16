@@ -6,13 +6,13 @@ Repositories Package
 """
 
 from .base_repository import BaseRepository
+from .customer_repository import CustomerRepository
 from .product_repository import ProductRepository
 from .sale_repository import SaleRepository
-from .customer_repository import CustomerRepository
 
 __all__ = [
-    'BaseRepository',
-    'ProductRepository',
-    'SaleRepository',
-    'CustomerRepository',
+    "BaseRepository",
+    "ProductRepository",
+    "SaleRepository",
+    "CustomerRepository",
 ]

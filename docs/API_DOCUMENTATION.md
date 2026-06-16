@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document provides API documentation for the core components of the Logical Version ERP System.
+This document provides API documentation for the core components of the Standard El-Joumla ERP System.
 
 ---
 

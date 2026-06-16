@@ -5,7 +5,6 @@
 يحذف ملفات السجلات القديمة (أكبر من 30 يوم) أو يضغطها
 """
 
-import os
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -58,7 +57,7 @@ def cleanup_logs(logs_dir: str = "logs", days_to_keep: int = 30):
                     crash_size += size
                     crash_count += 1
                     crash_file.unlink()
-            except:
+            except Exception:
                 pass
         
         if crash_count > 0:

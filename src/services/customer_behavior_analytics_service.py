@@ -1,3 +1,4 @@
+import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -5,29 +6,27 @@
 خدمة متخصصة في تحليل سلوك العملاء وتوقع احتياجاتهم
 """
 
-from typing import Dict, List, Any, Optional, Tuple
-from decimal import Decimal
-from datetime import datetime, timedelta
 from dataclasses import dataclass
-import sys
-from pathlib import Path
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
+
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
-from sklearn.metrics import silhouette_score
+from sklearn.preprocessing import StandardScaler
+
 import networkx as nx
-
-
-from src.core.database_manager import DatabaseManager
 from src.core.config_manager import ConfigManager
+from src.core.database_manager import DatabaseManager
 from src.services.ai_analytics_engine import AIAnalyticsEngine
 from src.utils.logger import setup_logger
+
 
 @dataclass
 class CustomerSegment:
     """شريحة عميل"""
+
     segment_id: str
     segment_name: str
     customer_count: int
@@ -36,9 +35,11 @@ class CustomerSegment:
     recommended_actions: List[str]
     created_at: datetime
 
+
 @dataclass
 class CustomerJourney:
     """رحلة العميل"""
+
     customer_id: int
     journey_stages: List[Dict[str, Any]]
     current_stage: str
@@ -47,9 +48,11 @@ class CustomerJourney:
     bottlenecks: List[str]
     generated_at: datetime
 
+
 @dataclass
 class ChurnPrediction:
     """تنبؤ بالخسارة"""
+
     customer_id: int
     churn_probability: float
     risk_level: str  # 'low', 'medium', 'high', 'critical'
@@ -59,9 +62,11 @@ class ChurnPrediction:
     confidence_score: float
     generated_at: datetime
 
+
 @dataclass
 class CustomerLifetimeValue:
     """قيمة عمر العميل"""
+
     customer_id: int
     clv_value: float
     clv_category: str  # 'low', 'medium', 'high', 'vip'
@@ -71,14 +76,16 @@ class CustomerLifetimeValue:
     growth_potential: float
     calculated_at: datetime
 
+
 class CustomerBehaviorAnalyticsService:
     """خدمة تحليل سلوك العملاء المتقدمة"""
 
     def __init__(self, db_manager: DatabaseManager, ai_engine: AIAnalyticsEngine):
-        self.db = db_manager
+        self.logger = setup_logger(__name__)
+        from src.utils.db_utils import SafeDatabaseWrapper
+        self.db = SafeDatabaseWrapper(db_manager, self.logger)
         self.ai_engine = ai_engine
         self.config = ConfigManager()
-        self.logger = setup_logger(__name__)
 
         # نماذج التعلم الآلي
         self.segmentation_model = None
@@ -88,10 +95,12 @@ class CustomerBehaviorAnalyticsService:
         self.pca = PCA(n_components=0.95)
 
         # معلمات التكوين
-        self.min_customers_for_segmentation = self.config.get('analytics.min_customers_segmentation', 50)
-        self.churn_prediction_window_days = self.config.get('analytics.churn_window_days', 90)
-        self.customer_journey_stages = self.config.get('analytics.journey_stages',
-            ['awareness', 'consideration', 'purchase', 'retention', 'advocacy'])
+        self.min_customers_for_segmentation = self.config.get("analytics.min_customers_segmentation", 50)
+        self.churn_prediction_window_days = self.config.get("analytics.churn_window_days", 90)
+        self.customer_journey_stages = self.config.get(
+            "analytics.journey_stages",
+            ["awareness", "consideration", "purchase", "retention", "advocacy"],
+        )
 
         # تحميل النماذج المدربة
         self._load_analytics_models()
@@ -176,7 +185,7 @@ class CustomerBehaviorAnalyticsService:
                 next_predicted_stage=next_stage,
                 journey_score=journey_score,
                 bottlenecks=bottlenecks,
-                generated_at=datetime.now()
+                generated_at=datetime.now(),
             )
 
         except Exception as e:
@@ -184,11 +193,11 @@ class CustomerBehaviorAnalyticsService:
             return CustomerJourney(
                 customer_id=customer_id,
                 journey_stages=[],
-                current_stage='unknown',
-                next_predicted_stage='unknown',
+                current_stage="unknown",
+                next_predicted_stage="unknown",
                 journey_score=0,
                 bottlenecks=[],
-                generated_at=datetime.now()
+                generated_at=datetime.now(),
             )
 
     def predict_churn(self, customer_id: int) -> ChurnPrediction:
@@ -231,20 +240,20 @@ class CustomerBehaviorAnalyticsService:
                 risk_factors=risk_factors,
                 retention_recommendations=retention_recommendations,
                 confidence_score=confidence_score,
-                generated_at=datetime.now()
+                generated_at=datetime.now(),
             )
 
         except Exception as e:
             self.logger.error(f"Error predicting churn: {e}", exc_info=True)
             return ChurnPrediction(
                 customer_id=customer_id,
-                churn_probability=0,
-                risk_level='low',
+                churn_probability=0.0,
+                risk_level="low",
                 predicted_churn_date=None,
                 risk_factors=[],
                 retention_recommendations=[],
-                confidence_score=0,
-                generated_at=datetime.now()
+                confidence_score=0.0,
+                generated_at=datetime.now(),
             )
 
     def calculate_customer_lifetime_value(self, customer_id: int) -> CustomerLifetimeValue:
@@ -271,7 +280,7 @@ class CustomerBehaviorAnalyticsService:
             predicted_lifetime = self._predict_customer_lifetime(customer_data)
 
             # حساب الإيراد الشهري
-            monthly_revenue = customer_data.get('avg_monthly_revenue', 0)
+            monthly_revenue = customer_data.get("avg_monthly_revenue", 0)
 
             # احتمالية الاحتفاظ
             retention_probability = self._calculate_retention_probability(customer_data)
@@ -287,20 +296,20 @@ class CustomerBehaviorAnalyticsService:
                 monthly_revenue=monthly_revenue,
                 retention_probability=retention_probability,
                 growth_potential=growth_potential,
-                calculated_at=datetime.now()
+                calculated_at=datetime.now(),
             )
 
         except Exception as e:
             self.logger.error(f"Error calculating CLV: {e}", exc_info=True)
             return CustomerLifetimeValue(
                 customer_id=customer_id,
-                clv_value=0,
-                clv_category='unknown',
+                clv_value=0.0,
+                clv_category="unknown",
                 predicted_lifetime_months=0,
-                monthly_revenue=0,
-                retention_probability=0,
-                growth_potential=0,
-                calculated_at=datetime.now()
+                monthly_revenue=0.0,
+                retention_probability=0.0,
+                growth_potential=0.0,
+                calculated_at=datetime.now(),
             )
 
     def analyze_customer_network(self) -> Dict[str, Any]:
@@ -316,11 +325,13 @@ class CustomerBehaviorAnalyticsService:
 
             # حساب المقاييس الأساسية
             network_metrics = {
-                'number_of_nodes': G.number_of_nodes(),
-                'number_of_edges': G.number_of_edges(),
-                'average_degree': sum(dict(G.degree()).values()) / G.number_of_nodes() if G.number_of_nodes() > 0 else 0,
-                'density': nx.density(G),
-                'connected_components': nx.number_connected_components(G)
+                "number_of_nodes": G.number_of_nodes(),
+                "number_of_edges": G.number_of_edges(),
+                "average_degree": (
+                    sum(dict(G.degree()).values()) / G.number_of_nodes() if G.number_of_nodes() > 0 else 0
+                ),
+                "density": nx.density(G),
+                "connected_components": nx.number_connected_components(G),
             }
 
             # تحديد العملاء المؤثرين
@@ -331,15 +342,15 @@ class CustomerBehaviorAnalyticsService:
             communities = self._detect_communities(G)
 
             return {
-                'network_metrics': network_metrics,
-                'influential_customers': influential_customers,
-                'communities': communities,
-                'generated_at': datetime.now().isoformat()
+                "network_metrics": network_metrics,
+                "influential_customers": influential_customers,
+                "communities": communities,
+                "generated_at": datetime.now().isoformat(),
             }
 
         except Exception as e:
             self.logger.error(f"Error analyzing customer network: {e}", exc_info=True)
-            return {'error': str(e)}
+            return {"error": str(e)}
 
     def _get_customer_segmentation_data(self) -> List[Dict[str, Any]]:
         """جمع بيانات العملاء للتقسيم"""
@@ -367,18 +378,20 @@ class CustomerBehaviorAnalyticsService:
             for row in data:
                 customer_age_days = row[7] or 1  # تجنب القسمة على صفر
 
-                customers.append({
-                    'customer_id': row[0],
-                    'order_count': row[1] or 0,
-                    'total_spent': float(row[2] or 0),
-                    'avg_order_value': float(row[3] or 0),
-                    'last_order_date': row[4],
-                    'first_order_date': row[5],
-                    'unique_products': row[6] or 0,
-                    'customer_age_days': customer_age_days,
-                    'avg_order_frequency': (row[1] or 0) / customer_age_days * 30,  # مرات الشراء شهرياً
-                    'recency_days': (datetime.now() - row[4]).days if row[4] else 999
-                })
+                customers.append(
+                    {
+                        "customer_id": row[0],
+                        "order_count": row[1] or 0,
+                        "total_spent": float(row[2] or 0),
+                        "avg_order_value": float(row[3] or 0),
+                        "last_order_date": row[4],
+                        "first_order_date": row[5],
+                        "unique_products": row[6] or 0,
+                        "customer_age_days": customer_age_days,
+                        "avg_order_frequency": (row[1] or 0) / customer_age_days * 30,  # مرات الشراء شهرياً
+                        "recency_days": ((datetime.now() - row[4]).days if row[4] else 999),
+                    }
+                )
 
             return customers
 
@@ -393,8 +406,13 @@ class CustomerBehaviorAnalyticsService:
 
             # اختيار الميزات الرقمية
             features = [
-                'order_count', 'total_spent', 'avg_order_value',
-                'unique_products', 'customer_age_days', 'avg_order_frequency', 'recency_days'
+                "order_count",
+                "total_spent",
+                "avg_order_value",
+                "unique_products",
+                "customer_age_days",
+                "avg_order_frequency",
+                "recency_days",
             ]
 
             X = df[features].values
@@ -415,12 +433,12 @@ class CustomerBehaviorAnalyticsService:
 
             # حساب المقاييس المتوسطة
             average_metrics = {
-                'avg_order_count': float(df['order_count'].mean()),
-                'avg_total_spent': float(df['total_spent'].mean()),
-                'avg_order_value': float(df['avg_order_value'].mean()),
-                'avg_unique_products': float(df['unique_products'].mean()),
-                'avg_order_frequency': float(df['avg_order_frequency'].mean()),
-                'avg_recency_days': float(df['recency_days'].mean())
+                "avg_order_count": float(df["order_count"].mean()),
+                "avg_total_spent": float(df["total_spent"].mean()),
+                "avg_order_value": float(df["avg_order_value"].mean()),
+                "avg_unique_products": float(df["unique_products"].mean()),
+                "avg_order_frequency": float(df["avg_order_frequency"].mean()),
+                "avg_recency_days": float(df["recency_days"].mean()),
             }
 
             # تحديد الخصائص
@@ -439,7 +457,7 @@ class CustomerBehaviorAnalyticsService:
                 characteristics=characteristics,
                 average_metrics=average_metrics,
                 recommended_actions=recommended_actions,
-                created_at=datetime.now()
+                created_at=datetime.now(),
             )
 
         except Exception as e:
@@ -451,7 +469,7 @@ class CustomerBehaviorAnalyticsService:
                 characteristics={},
                 average_metrics={},
                 recommended_actions=[],
-                created_at=datetime.now()
+                created_at=datetime.now(),
             )
 
     def _create_default_segment(self, customer_data: List[Dict[str, Any]]) -> CustomerSegment:
@@ -460,10 +478,10 @@ class CustomerBehaviorAnalyticsService:
             segment_id="default_segment",
             segment_name="All Customers",
             customer_count=len(customer_data),
-            characteristics={'data_limited': True},
+            characteristics={"data_limited": True},
             average_metrics={},
             recommended_actions=["Collect more customer data for better segmentation"],
-            created_at=datetime.now()
+            created_at=datetime.now(),
         )
 
     def _determine_segment_characteristics(self, metrics: Dict[str, float]) -> Dict[str, Any]:
@@ -471,28 +489,28 @@ class CustomerBehaviorAnalyticsService:
         characteristics = {}
 
         # تحليل الإنفاق
-        if metrics['avg_total_spent'] > 10000:
-            characteristics['spending_level'] = 'high'
-        elif metrics['avg_total_spent'] > 1000:
-            characteristics['spending_level'] = 'medium'
+        if metrics["avg_total_spent"] > 10000:
+            characteristics["spending_level"] = "high"
+        elif metrics["avg_total_spent"] > 1000:
+            characteristics["spending_level"] = "medium"
         else:
-            characteristics['spending_level'] = 'low'
+            characteristics["spending_level"] = "low"
 
         # تحليل التكرار
-        if metrics['avg_order_frequency'] > 2:
-            characteristics['purchase_frequency'] = 'frequent'
-        elif metrics['avg_order_frequency'] > 0.5:
-            characteristics['purchase_frequency'] = 'regular'
+        if metrics["avg_order_frequency"] > 2:
+            characteristics["purchase_frequency"] = "frequent"
+        elif metrics["avg_order_frequency"] > 0.5:
+            characteristics["purchase_frequency"] = "regular"
         else:
-            characteristics['purchase_frequency'] = 'occasional'
+            characteristics["purchase_frequency"] = "occasional"
 
         # تحليل الولاء
-        if metrics['avg_recency_days'] < 30:
-            characteristics['loyalty_level'] = 'high'
-        elif metrics['avg_recency_days'] < 90:
-            characteristics['loyalty_level'] = 'medium'
+        if metrics["avg_recency_days"] < 30:
+            characteristics["loyalty_level"] = "high"
+        elif metrics["avg_recency_days"] < 90:
+            characteristics["loyalty_level"] = "medium"
         else:
-            characteristics['loyalty_level'] = 'low'
+            characteristics["loyalty_level"] = "low"
 
         return characteristics
 
@@ -500,44 +518,38 @@ class CustomerBehaviorAnalyticsService:
         """توليد توصيات للشريحة"""
         recommendations = []
 
-        spending = characteristics.get('spending_level', 'medium')
-        frequency = characteristics.get('purchase_frequency', 'regular')
-        loyalty = characteristics.get('loyalty_level', 'medium')
+        spending = characteristics.get("spending_level", "medium")
+        frequency = characteristics.get("purchase_frequency", "regular")
+        loyalty = characteristics.get("loyalty_level", "medium")
 
-        if spending == 'high' and loyalty == 'high':
-            recommendations.extend([
-                "برنامج ولاء VIP",
-                "عروض حصرية وعالية القيمة",
-                "خدمة عملاء مخصصة"
-            ])
-        elif spending == 'high' and loyalty == 'low':
-            recommendations.extend([
-                "حملات إعادة جذب",
-                "تحليل أسباب الابتعاد",
-                "عروض محدودة الوقت"
-            ])
-        elif spending == 'low' and frequency == 'frequent':
-            recommendations.extend([
-                "تشجيع على شراء منتجات أغلى",
-                "برامج ترقية المنتجات",
-                "خصومات على الكميات الكبيرة"
-            ])
+        if spending == "high" and loyalty == "high":
+            recommendations.extend(["برنامج ولاء VIP", "عروض حصرية وعالية القيمة", "خدمة عملاء مخصصة"])
+        elif spending == "high" and loyalty == "low":
+            recommendations.extend(["حملات إعادة جذب", "تحليل أسباب الابتعاد", "عروض محدودة الوقت"])
+        elif spending == "low" and frequency == "frequent":
+            recommendations.extend(
+                [
+                    "تشجيع على شراء منتجات أغلى",
+                    "برامج ترقية المنتجات",
+                    "خصومات على الكميات الكبيرة",
+                ]
+            )
 
         return recommendations
 
     def _name_customer_segment(self, characteristics: Dict[str, Any]) -> str:
         """تسمية الشريحة"""
-        spending = characteristics.get('spending_level', 'medium')
-        frequency = characteristics.get('purchase_frequency', 'regular')
-        loyalty = characteristics.get('loyalty_level', 'medium')
+        spending = characteristics.get("spending_level", "medium")
+        frequency = characteristics.get("purchase_frequency", "regular")
+        loyalty = characteristics.get("loyalty_level", "medium")
 
-        if spending == 'high' and loyalty == 'high':
+        if spending == "high" and loyalty == "high":
             return "عملاء VIP مخلصين"
-        elif spending == 'high' and loyalty == 'low':
+        elif spending == "high" and loyalty == "low":
             return "عملاء عالي القيمة غير مخلصين"
-        elif spending == 'low' and frequency == 'frequent':
+        elif spending == "low" and frequency == "frequent":
             return "عملاء متكررون منخفضي القيمة"
-        elif loyalty == 'low':
+        elif loyalty == "low":
             return "عملاء غير نشطين"
         else:
             return "عملاء عاديون"
@@ -559,12 +571,14 @@ class CustomerBehaviorAnalyticsService:
 
             journey_events = []
             for row in data:
-                journey_events.append({
-                    'date': row[0],
-                    'amount': float(row[1] or 0),
-                    'item_count': row[2] or 0,
-                    'categories': row[3].split(',') if row[3] else []
-                })
+                journey_events.append(
+                    {
+                        "date": row[0],
+                        "amount": float(row[1] or 0),
+                        "item_count": row[2] or 0,
+                        "categories": row[3].split(",") if row[3] else [],
+                    }
+                )
 
             return journey_events
 
@@ -579,21 +593,23 @@ class CustomerBehaviorAnalyticsService:
         try:
             for event in journey_data:
                 # تحديد المرحلة بناءً على الخصائص
-                if event['item_count'] == 1 and event['amount'] < 100:
-                    stage = 'awareness'
-                elif event['item_count'] <= 3 and event['amount'] < 500:
-                    stage = 'consideration'
-                elif event['amount'] >= 500 or event['item_count'] > 5:
-                    stage = 'purchase'
+                if event["item_count"] == 1 and event["amount"] < 100:
+                    stage = "awareness"
+                elif event["item_count"] <= 3 and event["amount"] < 500:
+                    stage = "consideration"
+                elif event["amount"] >= 500 or event["item_count"] > 5:
+                    stage = "purchase"
                 else:
-                    stage = 'retention'
+                    stage = "retention"
 
-                stages.append({
-                    'date': event['date'],
-                    'stage': stage,
-                    'amount': event['amount'],
-                    'item_count': event['item_count']
-                })
+                stages.append(
+                    {
+                        "date": event["date"],
+                        "stage": stage,
+                        "amount": event["amount"],
+                        "item_count": event["item_count"],
+                    }
+                )
 
         except Exception as e:
             self.logger.error(f"Error identifying journey stages: {e}", exc_info=True)
@@ -603,22 +619,22 @@ class CustomerBehaviorAnalyticsService:
     def _determine_current_stage(self, journey_stages: List[Dict[str, Any]]) -> str:
         """تحديد المرحلة الحالية"""
         if not journey_stages:
-            return 'awareness'
+            return "awareness"
 
         # المرحلة الحالية هي مرحلة آخر حدث
-        return journey_stages[-1]['stage']
+        return journey_stages[-1]["stage"]
 
     def _predict_next_stage(self, journey_stages: List[Dict[str, Any]], current_stage: str) -> str:
         """التنبؤ بالمرحلة التالية"""
         stage_progression = {
-            'awareness': 'consideration',
-            'consideration': 'purchase',
-            'purchase': 'retention',
-            'retention': 'advocacy',
-            'advocacy': 'advocacy'
+            "awareness": "consideration",
+            "consideration": "purchase",
+            "purchase": "retention",
+            "retention": "advocacy",
+            "advocacy": "advocacy",
         }
 
-        return stage_progression.get(current_stage, 'unknown')
+        return stage_progression.get(current_stage, "unknown")
 
     def _calculate_journey_score(self, journey_stages: List[Dict[str, Any]]) -> float:
         """حساب درجة الرحلة"""
@@ -626,7 +642,7 @@ class CustomerBehaviorAnalyticsService:
             return 0
 
         # حساب بناءً على التقدم والإنفاق
-        total_amount = sum(stage['amount'] for stage in journey_stages)
+        total_amount = sum(stage["amount"] for stage in journey_stages)
         stage_count = len(journey_stages)
         avg_amount = total_amount / stage_count
 
@@ -644,13 +660,13 @@ class CustomerBehaviorAnalyticsService:
 
         # فحص الفجوات الزمنية الطويلة
         for i in range(1, len(journey_stages)):
-            days_diff = (journey_stages[i]['date'] - journey_stages[i-1]['date']).days
+            days_diff = (journey_stages[i]["date"] - journey_stages[i - 1]["date"]).days
             if days_diff > 90:
                 bottlenecks.append(f"فجوة زمنية طويلة ({days_diff} يوم) بين المشتريات")
 
         # فحص الانخفاض في القيمة
         for i in range(1, len(journey_stages)):
-            if journey_stages[i]['amount'] < journey_stages[i-1]['amount'] * 0.5:
+            if journey_stages[i]["amount"] < journey_stages[i - 1]["amount"] * 0.5:
                 bottlenecks.append("انخفاض كبير في قيمة المشتريات")
 
         return bottlenecks
@@ -677,18 +693,18 @@ class CustomerBehaviorAnalyticsService:
                 return {}
 
             features = {
-                'order_count': base_data[0] or 0,
-                'total_spent': float(base_data[1] or 0),
-                'avg_order_value': float(base_data[2] or 0),
-                'days_since_last_order': base_data[5] or 0,
-                'customer_age_days': (datetime.now() - base_data[4]).days if base_data[4] else 0
+                "order_count": base_data[0] or 0,
+                "total_spent": float(base_data[1] or 0),
+                "avg_order_value": float(base_data[2] or 0),
+                "days_since_last_order": base_data[5] or 0,
+                "customer_age_days": ((datetime.now() - base_data[4]).days if base_data[4] else 0),
             }
 
             # معدل الشراء الشهري
-            if features['customer_age_days'] > 0:
-                features['monthly_purchase_rate'] = features['order_count'] / (features['customer_age_days'] / 30)
+            if features["customer_age_days"] > 0:
+                features["monthly_purchase_rate"] = features["order_count"] / (features["customer_age_days"] / 30)
             else:
-                features['monthly_purchase_rate'] = 0
+                features["monthly_purchase_rate"] = 0
 
             return features
 
@@ -699,26 +715,26 @@ class CustomerBehaviorAnalyticsService:
     def _calculate_churn_probability(self, features: Dict[str, Any]) -> float:
         """حساب احتمالية الخسارة"""
         if not features:
-            return 0
+            return 0.0
 
-        probability = 0
+        probability = 0.0
 
         # عامل فترة الخمول
-        days_since_last = features.get('days_since_last_order', 0)
+        days_since_last = features.get("days_since_last_order", 0)
         if days_since_last > 90:
             probability += 0.4
         elif days_since_last > 30:
             probability += 0.2
 
         # عامل عدد الطلبات
-        order_count = features.get('order_count', 0)
+        order_count = features.get("order_count", 0)
         if order_count < 3:
             probability += 0.3
         elif order_count < 10:
             probability += 0.1
 
         # عامل معدل الشراء
-        monthly_rate = features.get('monthly_purchase_rate', 0)
+        monthly_rate = features.get("monthly_purchase_rate", 0)
         if monthly_rate < 0.5:
             probability += 0.2
         elif monthly_rate < 1:
@@ -729,20 +745,20 @@ class CustomerBehaviorAnalyticsService:
     def _determine_risk_level(self, probability: float) -> str:
         """تحديد مستوى الخطر"""
         if probability > 0.7:
-            return 'critical'
+            return "critical"
         elif probability > 0.5:
-            return 'high'
+            return "high"
         elif probability > 0.3:
-            return 'medium'
+            return "medium"
         else:
-            return 'low'
+            return "low"
 
     def _predict_churn_date(self, features: Dict[str, Any], probability: float) -> Optional[datetime]:
         """التنبؤ بتاريخ الخسارة المحتمل"""
         if probability < 0.3:
             return None
 
-        days_since_last = features.get('days_since_last_order', 0)
+        features.get("days_since_last_order", 0)
 
         # تقدير بناءً على النمط الحالي
         if probability > 0.7:
@@ -758,13 +774,13 @@ class CustomerBehaviorAnalyticsService:
         """تحديد عوامل الخطر"""
         factors = []
 
-        if features.get('days_since_last_order', 0) > 90:
+        if features.get("days_since_last_order", 0) > 90:
             factors.append("فترة خمول طويلة")
-        if features.get('order_count', 0) < 3:
+        if features.get("order_count", 0) < 3:
             factors.append("عدد طلبات قليل")
-        if features.get('monthly_purchase_rate', 0) < 0.5:
+        if features.get("monthly_purchase_rate", 0) < 0.5:
             factors.append("معدل شراء منخفض")
-        if features.get('avg_order_value', 0) < 50:
+        if features.get("avg_order_value", 0) < 50:
             factors.append("قيمة طلب متوسطة منخفضة")
 
         return factors
@@ -773,7 +789,7 @@ class CustomerBehaviorAnalyticsService:
         """توليد توصيات الاحتفاظ"""
         recommendations = []
 
-        if risk_level in ['high', 'critical']:
+        if risk_level in ["high", "critical"]:
             recommendations.append("اتصال فوري من خدمة العملاء")
             recommendations.append("عرض خاص لإعادة الجذب")
 
@@ -790,6 +806,9 @@ class CustomerBehaviorAnalyticsService:
 
     def _calculate_prediction_confidence(self, features: Dict[str, Any]) -> float:
         """حساب ثقة التنبؤ"""
+        if not features:
+            return 0.2
+
         # ثقة أساسية بناءً على كمية البيانات
         data_completeness = sum(1 for v in features.values() if v is not None and v != 0) / len(features)
 
@@ -818,13 +837,13 @@ class CustomerBehaviorAnalyticsService:
             customer_age_days = data[5] or 1
 
             return {
-                'order_count': data[0] or 0,
-                'total_spent': float(data[1] or 0),
-                'avg_order_value': float(data[2] or 0),
-                'last_order_date': data[3],
-                'first_order_date': data[4],
-                'customer_age_days': customer_age_days,
-                'avg_monthly_revenue': float(data[1] or 0) / max(1, customer_age_days / 30)
+                "order_count": data[0] or 0,
+                "total_spent": float(data[1] or 0),
+                "avg_order_value": float(data[2] or 0),
+                "last_order_date": data[3],
+                "first_order_date": data[4],
+                "customer_age_days": customer_age_days,
+                "avg_monthly_revenue": float(data[1] or 0) / max(1, customer_age_days / 30),
             }
 
         except Exception as e:
@@ -834,11 +853,11 @@ class CustomerBehaviorAnalyticsService:
     def _calculate_clv_value(self, customer_data: Dict[str, Any]) -> float:
         """حساب قيمة عمر العميل"""
         if not customer_data:
-            return 0
+            return 0.0
 
         # نموذج CLV بسيط
-        avg_monthly_revenue = customer_data.get('avg_monthly_revenue', 0)
-        customer_age_months = customer_data.get('customer_age_days', 0) / 30
+        avg_monthly_revenue = customer_data.get("avg_monthly_revenue", 0)
+        customer_data.get("customer_age_days", 0) / 30
 
         # افتراض عمر متوقع إضافي (متوسط 24 شهر)
         expected_additional_months = 24
@@ -847,30 +866,30 @@ class CustomerBehaviorAnalyticsService:
         discount_rate = 0.01
 
         # حساب CLV
-        clv = 0
+        clv = 0.0
         for month in range(1, int(expected_additional_months) + 1):
             monthly_value = avg_monthly_revenue / ((1 + discount_rate) ** month)
             clv += monthly_value
 
-        return clv
+        return float(clv)
 
     def _categorize_clv(self, clv_value: float) -> str:
         """تصنيف قيمة عمر العميل"""
         if clv_value > 10000:
-            return 'vip'
+            return "vip"
         elif clv_value > 1000:
-            return 'high'
+            return "high"
         elif clv_value > 100:
-            return 'medium'
+            return "medium"
         else:
-            return 'low'
+            return "low"
 
     def _predict_customer_lifetime(self, customer_data: Dict[str, Any]) -> int:
         """التنبؤ بطول عمر العميل بالأشهر"""
         base_lifetime = 24  # 24 شهر كأساس
 
         # تعديل بناءً على النشاط
-        order_count = customer_data.get('order_count', 0)
+        order_count = customer_data.get("order_count", 0)
         if order_count > 50:
             base_lifetime += 12
         elif order_count > 20:
@@ -883,7 +902,7 @@ class CustomerBehaviorAnalyticsService:
         probability = 0.5  # أساس
 
         # تعديل بناءً على النشاط
-        order_count = customer_data.get('order_count', 0)
+        order_count = customer_data.get("order_count", 0)
         if order_count > 20:
             probability += 0.3
         elif order_count > 10:
@@ -892,7 +911,7 @@ class CustomerBehaviorAnalyticsService:
             probability += 0.1
 
         # تعديل بناءً على العمر
-        customer_age_days = customer_data.get('customer_age_days', 0)
+        customer_age_days = customer_data.get("customer_age_days", 0)
         if customer_age_days > 365:
             probability += 0.1
 
@@ -903,14 +922,14 @@ class CustomerBehaviorAnalyticsService:
         potential = 0
 
         # بناءً على متوسط قيمة الطلب
-        avg_order_value = customer_data.get('avg_order_value', 0)
+        avg_order_value = customer_data.get("avg_order_value", 0)
         if avg_order_value < 200:
             potential += 0.4  # إمكانية زيادة كبيرة
         elif avg_order_value < 500:
             potential += 0.2
 
         # بناءً على عدد الطلبات
-        order_count = customer_data.get('order_count', 0)
+        order_count = customer_data.get("order_count", 0)
         if order_count < 10:
             potential += 0.3  # إمكانية زيادة التكرار
 
@@ -957,6 +976,7 @@ class CustomerBehaviorAnalyticsService:
         try:
             # استخدام خوارزمية Louvain إذا كانت متوفرة
             from community import community_louvain
+
             partition = community_louvain.best_partition(G)
 
             communities = {}

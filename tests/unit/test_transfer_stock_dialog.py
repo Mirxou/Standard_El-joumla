@@ -1,102 +1,85 @@
 #!/usr/bin/env python3
 """
-اختبارات Transfer Stock Dialog
+اختبارات Transfer Stock Dialog المحدثة
 """
 
+from unittest.mock import Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from PySide6.QtWidgets import QApplication, QDialog, QComboBox, QSpinBox, QLineEdit, QPushButton, QTextEdit
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication
+
 from src.ui.dialogs.transfer_stock_dialog import TransferStockDialog
 
+# إنشاء تطبيق Qt للاختبارات
 app = QApplication.instance() or QApplication([])
 
 
 class TestTransferStockDialog:
     """اختبارات نافذة نقل المخزون"""
-    
+
     @pytest.fixture
     def dialog(self):
         """إنشاء نافذة للاختبارات"""
         inventory_service = Mock()
-        product = {"id": 1, "name": "منتج تجريبي", "current_stock": 100}
-        return TransferStockDialog(inventory_service, product)
-    
+        # محاكاة قائمة المنتجات
+        product1 = Mock()
+        product1.id = 1
+        product1.name = "منتج 1"
+        product1.current_stock = 100
+
+        product2 = Mock()
+        product2.id = 2
+        product2.name = "منتج 2"
+        product2.current_stock = 50
+
+        inventory_service.product_manager.get_all_products.return_value = [
+            product1,
+            product2,
+        ]
+
+        with patch("src.utils.i18n_api.I18n") as mock_i18n:
+            mock_i18n.return_value.get_message.side_effect = lambda key, **kwargs: f"msg_{key}"
+            dialog = TransferStockDialog(inventory_service)
+            return dialog
+
     def test_initialization(self, dialog):
         """اختبار تهيئة النافذة"""
         assert dialog is not None
-        assert hasattr(dialog, 'product_name_label')
-        assert hasattr(dialog, 'from_warehouse_combo')
-        assert hasattr(dialog, 'to_warehouse_combo')
-    
-    def test_from_warehouse_combo(self, dialog):
-        """اختبار قائمة المستودع المصدر"""
-        assert dialog.from_warehouse_combo is not None
-        assert isinstance(dialog.from_warehouse_combo, QComboBox)
-    
-    def test_to_warehouse_combo(self, dialog):
-        """اختبار قائمة المستودع الهدف"""
-        assert dialog.to_warehouse_combo is not None
-        assert isinstance(dialog.to_warehouse_combo, QComboBox)
-    
+        assert hasattr(dialog, "from_combo")
+        assert hasattr(dialog, "to_combo")
+        assert hasattr(dialog, "quantity_spin")
+        assert hasattr(dialog, "reason_input")
+
+    def test_combos_populated(self, dialog):
+        """اختبار ملء القوائم المنسدلة"""
+        assert dialog.from_combo.count() == 2
+        assert dialog.to_combo.count() == 2
+
     def test_quantity_spin(self, dialog):
         """اختبار حقل الكمية"""
-        dialog.quantity_spin.setValue(50)
-        assert dialog.quantity_spin.value() == 50
-    
-    def test_load_warehouses(self, dialog):
-        """اختبار تحميل المستودعات"""
-        warehouses = [
-            {"id": 1, "name": "مستودع رئيسي"},
-            {"id": 2, "name": "مستودع فرعي"}
-        ]
-        dialog.inventory_service.get_warehouses.return_value = warehouses
-        
-        result = dialog.load_warehouses()
-        
-        assert result is not None
-    
-    def test_validate_transfer(self, dialog):
-        """اختبار التحقق من صحة النقل"""
-        dialog.from_warehouse_combo.setCurrentIndex(0)
-        dialog.to_warehouse_combo.setCurrentIndex(1)
-        dialog.quantity_spin.setValue(30)
-        
-        assert dialog.validate_transfer() is True
-    
-    def test_validate_transfer_same_warehouse(self, dialog):
-        """اختبار التحقق عند اختيار نفس المستودع"""
-        dialog.from_warehouse_combo.setCurrentIndex(0)
-        dialog.to_warehouse_combo.setCurrentIndex(0)
-        
-        assert dialog.validate_transfer() is False
-    
-    def test_get_transfer_data(self, dialog):
-        """اختبار الحصول على بيانات النقل"""
-        dialog.quantity_spin.setValue(40)
-        dialog.notes_input.setPlainText("ملاحظات النقل")
-        
-        data = dialog.get_transfer_data()
-        
-        assert isinstance(data, dict)
-        assert data.get("quantity") == 40
-        assert data.get("notes") == "ملاحظات النقل"
-    
-    def test_on_transfer(self, dialog):
-        """اختبار تنفيذ النقل"""
-        result = dialog.on_transfer()
-        
-        assert result is not None
-    
-    def test_update_stock_levels(self, dialog):
-        """اختبار تحديث مستويات المخزون"""
-        result = dialog.update_stock_levels()
-        
-        assert result is not None
+        dialog.quantity_spin.setValue(10.5)
+        assert dialog.quantity_spin.value() == 10.5
+
+    def test_handle_transfer_same_product(self, dialog):
+        """اختبار محاولة النقل لنفس المنتج"""
+        dialog.from_combo.setCurrentIndex(0)
+        dialog.to_combo.setCurrentIndex(0)
+        dialog.quantity_spin.setValue(10)
+
+        with patch.object(dialog.notify, "show_warning") as mock_notify:
+            dialog._handle_transfer()
+            assert mock_notify.called
+
+    def test_handle_transfer_invalid_quantity(self, dialog):
+        """اختبار محاولة النقل بكمية غير صالحة"""
+        dialog.from_combo.setCurrentIndex(0)
+        dialog.to_combo.setCurrentIndex(1)
+        dialog.quantity_spin.setValue(0)
+
+        with patch.object(dialog.notify, "show_warning") as mock_notify:
+            dialog._handle_transfer()
+            assert mock_notify.called
 
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-
-
-

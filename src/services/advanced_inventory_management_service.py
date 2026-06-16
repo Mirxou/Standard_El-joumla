@@ -1,3 +1,4 @@
+import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -5,23 +6,21 @@
 نظام إدارة مخزون متقدم مع تتبع الدفعات والصلاحية
 """
 
-from typing import Dict, List, Any, Optional, Tuple
-from decimal import Decimal
-from datetime import datetime, timedelta
 from dataclasses import dataclass
-import sys
-from pathlib import Path
-import json
+from datetime import datetime, timedelta
+from decimal import Decimal
+from typing import Any, Dict, List, Optional
 
-
-from src.core.database_manager import DatabaseManager
 from src.core.config_manager import ConfigManager
+from src.core.database_manager import DatabaseManager
 from src.services.sales_prediction_service import SalesPredictionService
 from src.utils.logger import setup_logger
+
 
 @dataclass
 class InventoryItem:
     """عنصر مخزون"""
+
     product_id: int
     warehouse_id: int
     batch_id: str
@@ -32,9 +31,11 @@ class InventoryItem:
     status: str  # 'active', 'reserved', 'damaged', 'expired'
     created_at: datetime
 
+
 @dataclass
 class InventoryAlert:
     """تنبيه مخزون"""
+
     alert_id: str
     product_id: int
     alert_type: str  # 'low_stock', 'expiry_warning', 'overstock', 'damaged'
@@ -43,9 +44,11 @@ class InventoryAlert:
     suggested_action: str
     created_at: datetime
 
+
 @dataclass
 class InventoryTransaction:
     """معاملة مخزون"""
+
     transaction_id: str
     product_id: int
     transaction_type: str  # 'inbound', 'outbound', 'adjustment', 'transfer'
@@ -58,9 +61,11 @@ class InventoryTransaction:
     notes: str
     created_at: datetime
 
+
 @dataclass
 class Warehouse:
     """مستودع"""
+
     warehouse_id: int
     name: str
     location: str
@@ -69,9 +74,11 @@ class Warehouse:
     status: str  # 'active', 'inactive', 'maintenance'
     manager_id: Optional[int]
 
+
 @dataclass
 class InventoryOptimization:
     """تحسين المخزون"""
+
     product_id: int
     current_stock: int
     optimal_stock: int
@@ -80,6 +87,7 @@ class InventoryOptimization:
     recommended_action: str
     expected_savings: Decimal
     confidence_score: float
+
 
 class AdvancedInventoryManagementService:
     """خدمة إدارة المخزون المتقدمة"""
@@ -91,17 +99,25 @@ class AdvancedInventoryManagementService:
         self.logger = setup_logger(__name__)
 
         # معلمات التكوين
-        self.low_stock_threshold = self.config.get('inventory.low_stock_threshold', 0.2)  # 20% من الحد الأدنى
-        self.expiry_warning_days = self.config.get('inventory.expiry_warning_days', 30)
-        self.overstock_threshold = self.config.get('inventory.overstock_threshold', 1.5)  # 150% من الحد الأقصى
-        self.auto_reorder_enabled = self.config.get('inventory.auto_reorder_enabled', True)
+        self.low_stock_threshold = self.config.get("inventory.low_stock_threshold", 0.2)  # 20% من الحد الأدنى
+        self.expiry_warning_days = self.config.get("inventory.expiry_warning_days", 30)
+        self.overstock_threshold = self.config.get("inventory.overstock_threshold", 1.5)  # 150% من الحد الأقصى
+        self.auto_reorder_enabled = self.config.get("inventory.auto_reorder_enabled", True)
 
         # تحميل بيانات المستودعات
         self._load_warehouses()
 
-    def add_inventory_item(self, product_id: int, warehouse_id: int, batch_id: str,
-                          quantity: int, unit_cost: Decimal, expiry_date: Optional[datetime] = None,
-                          location: str = "default", performed_by: int = 1) -> str:
+    def add_inventory_item(
+        self,
+        product_id: int,
+        warehouse_id: int,
+        batch_id: str,
+        quantity: int,
+        unit_cost: Decimal,
+        expiry_date: Optional[datetime] = None,
+        location: str = "default",
+        performed_by: int = 1,
+    ) -> str:
         """
         إضافة عنصر مخزون جديد
 
@@ -123,29 +139,29 @@ class AdvancedInventoryManagementService:
 
             # إدراج في جدول المخزون
             inventory_data = {
-                'product_id': product_id,
-                'warehouse_id': warehouse_id,
-                'batch_id': batch_id,
-                'quantity': quantity,
-                'unit_cost': str(unit_cost),
-                'expiry_date': expiry_date.isoformat() if expiry_date else None,
-                'location': location,
-                'status': 'active',
-                'created_at': datetime.now().isoformat()
+                "product_id": product_id,
+                "warehouse_id": warehouse_id,
+                "batch_id": batch_id,
+                "quantity": quantity,
+                "unit_cost": str(unit_cost),
+                "expiry_date": expiry_date.isoformat() if expiry_date else None,
+                "location": location,
+                "status": "active",
+                "created_at": datetime.now().isoformat(),
             }
 
             # إدراج معاملة المخزون
             transaction_data = {
-                'transaction_id': transaction_id,
-                'product_id': product_id,
-                'transaction_type': 'inbound',
-                'quantity': quantity,
-                'unit_cost': str(unit_cost),
-                'reference_id': batch_id,
-                'warehouse_to': warehouse_id,
-                'performed_by': performed_by,
-                'notes': f'إضافة دفعة {batch_id} للمخزون',
-                'created_at': datetime.now().isoformat()
+                "transaction_id": transaction_id,
+                "product_id": product_id,
+                "transaction_type": "inbound",
+                "quantity": quantity,
+                "unit_cost": str(unit_cost),
+                "reference_id": batch_id,
+                "warehouse_to": warehouse_id,
+                "performed_by": performed_by,
+                "notes": f"إضافة دفعة {batch_id} للمخزون",
+                "created_at": datetime.now().isoformat(),
             }
 
             # تحديث كمية المنتج في المستودع
@@ -160,9 +176,16 @@ class AdvancedInventoryManagementService:
             self.logger.error(f"Error adding inventory item: {e}", exc_info=True)
             raise
 
-    def remove_inventory_item(self, product_id: int, warehouse_id: int, batch_id: str,
-                             quantity: int, reason: str = "sale", reference_id: str = "",
-                             performed_by: int = 1) -> str:
+    def remove_inventory_item(
+        self,
+        product_id: int,
+        warehouse_id: int,
+        batch_id: str,
+        quantity: int,
+        reason: str = "sale",
+        reference_id: str = "",
+        performed_by: int = 1,
+    ) -> str:
         """
         إزالة عنصر من المخزون
 
@@ -188,16 +211,16 @@ class AdvancedInventoryManagementService:
 
             # إدراج معاملة المخزون
             transaction_data = {
-                'transaction_id': transaction_id,
-                'product_id': product_id,
-                'transaction_type': 'outbound',
-                'quantity': -quantity,  # سالب للإخراج
-                'unit_cost': str(self._get_batch_cost(product_id, batch_id)),
-                'reference_id': reference_id,
-                'warehouse_from': warehouse_id,
-                'performed_by': performed_by,
-                'notes': f'{reason}: إزالة {quantity} من دفعة {batch_id}',
-                'created_at': datetime.now().isoformat()
+                "transaction_id": transaction_id,
+                "product_id": product_id,
+                "transaction_type": "outbound",
+                "quantity": -quantity,  # سالب للإخراج
+                "unit_cost": str(self._get_batch_cost(product_id, batch_id)),
+                "reference_id": reference_id,
+                "warehouse_from": warehouse_id,
+                "performed_by": performed_by,
+                "notes": f"{reason}: إزالة {quantity} من دفعة {batch_id}",
+                "created_at": datetime.now().isoformat(),
             }
 
             # تحديث كمية الدفعة
@@ -215,8 +238,15 @@ class AdvancedInventoryManagementService:
             self.logger.error(f"Error removing inventory item: {e}", exc_info=True)
             raise
 
-    def transfer_inventory(self, product_id: int, batch_id: str, from_warehouse: int,
-                          to_warehouse: int, quantity: int, performed_by: int = 1) -> str:
+    def transfer_inventory(
+        self,
+        product_id: int,
+        batch_id: str,
+        from_warehouse: int,
+        to_warehouse: int,
+        quantity: int,
+        performed_by: int = 1,
+    ) -> str:
         """
         نقل مخزون بين المستودعات
 
@@ -237,21 +267,23 @@ class AdvancedInventoryManagementService:
             # التحقق من توفر الكمية في المستودع المصدر
             available_quantity = self._get_batch_quantity(product_id, from_warehouse, batch_id)
             if available_quantity < quantity:
-                raise ValueError(f"الكمية المتاحة في المستودع المصدر ({available_quantity}) أقل من الكمية المطلوبة ({quantity})")
+                raise ValueError(
+                    f"الكمية المتاحة في المستودع المصدر ({available_quantity}) أقل من الكمية المطلوبة ({quantity})"
+                )
 
             # إدراج معاملة النقل
             transaction_data = {
-                'transaction_id': transaction_id,
-                'product_id': product_id,
-                'transaction_type': 'transfer',
-                'quantity': quantity,
-                'unit_cost': str(self._get_batch_cost(product_id, batch_id)),
-                'reference_id': f"{from_warehouse}->{to_warehouse}",
-                'warehouse_from': from_warehouse,
-                'warehouse_to': to_warehouse,
-                'performed_by': performed_by,
-                'notes': f'نقل {quantity} من دفعة {batch_id} من مستودع {from_warehouse} إلى {to_warehouse}',
-                'created_at': datetime.now().isoformat()
+                "transaction_id": transaction_id,
+                "product_id": product_id,
+                "transaction_type": "transfer",
+                "quantity": quantity,
+                "unit_cost": str(self._get_batch_cost(product_id, batch_id)),
+                "reference_id": f"{from_warehouse}->{to_warehouse}",
+                "warehouse_from": from_warehouse,
+                "warehouse_to": to_warehouse,
+                "performed_by": performed_by,
+                "notes": f"نقل {quantity} من دفعة {batch_id} من مستودع {from_warehouse} إلى {to_warehouse}",
+                "created_at": datetime.now().isoformat(),
             }
 
             # تحديث الكميات في المستودعات
@@ -332,9 +364,12 @@ class AdvancedInventoryManagementService:
             self.logger.error(f"Error optimizing inventory: {e}", exc_info=True)
             return []
 
-    def get_inventory_report(self, warehouse_id: Optional[int] = None,
-                           start_date: Optional[datetime] = None,
-                           end_date: Optional[datetime] = None) -> Dict[str, Any]:
+    def get_inventory_report(
+        self,
+        warehouse_id: Optional[int] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
         """
         الحصول على تقرير المخزون
 
@@ -348,28 +383,28 @@ class AdvancedInventoryManagementService:
         """
         try:
             report = {
-                'summary': {},
-                'by_product': [],
-                'by_warehouse': [],
-                'transactions': [],
-                'alerts': [],
-                'generated_at': datetime.now().isoformat()
+                "summary": {},
+                "by_product": [],
+                "by_warehouse": [],
+                "transactions": [],
+                "alerts": [],
+                "generated_at": datetime.now().isoformat(),
             }
 
             # ملخص المخزون
-            report['summary'] = self._generate_inventory_summary(warehouse_id)
+            report["summary"] = self._generate_inventory_summary(warehouse_id)
 
             # تفصيل بالمنتج
-            report['by_product'] = self._generate_product_inventory_report(warehouse_id)
+            report["by_product"] = self._generate_product_inventory_report(warehouse_id)
 
             # تفصيل بالمستودع
-            report['by_warehouse'] = self._generate_warehouse_inventory_report()
+            report["by_warehouse"] = self._generate_warehouse_inventory_report()
 
             # معاملات المخزون
-            report['transactions'] = self._generate_transaction_report(warehouse_id, start_date, end_date)
+            report["transactions"] = self._generate_transaction_report(warehouse_id, start_date, end_date)
 
             # التنبيهات
-            report['alerts'] = [alert.__dict__ for alert in self.get_inventory_alerts(warehouse_id)]
+            report["alerts"] = [alert.__dict__ for alert in self.get_inventory_alerts(warehouse_id)]
 
             return report
 
@@ -414,16 +449,18 @@ class AdvancedInventoryManagementService:
 
             expiring_items = []
             for row in data:
-                expiring_items.append({
-                    'product_id': row[0],
-                    'product_name': row[1],
-                    'batch_id': row[2],
-                    'quantity': row[3],
-                    'expiry_date': row[4],
-                    'warehouse_id': row[5],
-                    'warehouse_name': row[6],
-                    'days_until_expiry': (datetime.fromisoformat(row[4]) - datetime.now()).days
-                })
+                expiring_items.append(
+                    {
+                        "product_id": row[0],
+                        "product_name": row[1],
+                        "batch_id": row[2],
+                        "quantity": row[3],
+                        "expiry_date": row[4],
+                        "warehouse_id": row[5],
+                        "warehouse_name": row[6],
+                        "days_until_expiry": (datetime.fromisoformat(row[4]) - datetime.now()).days,
+                    }
+                )
 
             return expiring_items
 
@@ -460,12 +497,12 @@ class AdvancedInventoryManagementService:
             data = self.db.execute_query(query, params, fetch_one=True)
 
             valuation = {
-                'total_value': float(data[0] or 0) if data else 0,
-                'average_cost': float(data[1] or 0) if data else 0,
-                'product_count': data[2] or 0 if data else 0,
-                'total_quantity': data[3] or 0 if data else 0,
-                'warehouse_id': warehouse_id,
-                'calculated_at': datetime.now().isoformat()
+                "total_value": float(data[0] or 0) if data else 0,
+                "average_cost": float(data[1] or 0) if data else 0,
+                "product_count": data[2] or 0 if data else 0,
+                "total_quantity": data[3] or 0 if data else 0,
+                "warehouse_id": warehouse_id,
+                "calculated_at": datetime.now().isoformat(),
             }
 
             return valuation
@@ -483,10 +520,10 @@ class AdvancedInventoryManagementService:
 
             for row in data:
                 self.warehouses[row[0]] = {
-                    'name': row[1],
-                    'location': row[2],
-                    'capacity': row[3],
-                    'status': row[4]
+                    "name": row[1],
+                    "location": row[2],
+                    "capacity": row[3],
+                    "status": row[4],
                 }
 
         except Exception as e:
@@ -516,11 +553,11 @@ class AdvancedInventoryManagementService:
                 ORDER BY created_at DESC LIMIT 1
             """
             data = self.db.execute_query(query, (product_id, batch_id), fetch_one=True)
-            return Decimal(str(data[0])) if data else Decimal('0')
+            return Decimal(str(data[0])) if data else Decimal("0")
 
         except Exception as e:
             self.logger.error(f"Error getting batch cost: {e}", exc_info=True)
-            return Decimal('0')
+            return Decimal("0")
 
     def _update_batch_quantity(self, product_id: int, warehouse_id: int, batch_id: str, quantity_change: int):
         """تحديث كمية دفعة محددة"""
@@ -576,17 +613,20 @@ class AdvancedInventoryManagementService:
                 (product_id, warehouse_id, batch_id, quantity, unit_cost, expiry_date, location, status, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
-            self.db.execute_query(inventory_query, (
-                inventory_data['product_id'],
-                inventory_data['warehouse_id'],
-                inventory_data['batch_id'],
-                inventory_data['quantity'],
-                inventory_data['unit_cost'],
-                inventory_data['expiry_date'],
-                inventory_data['location'],
-                inventory_data['status'],
-                inventory_data['created_at']
-            ))
+            self.db.execute_query(
+                inventory_query,
+                (
+                    inventory_data["product_id"],
+                    inventory_data["warehouse_id"],
+                    inventory_data["batch_id"],
+                    inventory_data["quantity"],
+                    inventory_data["unit_cost"],
+                    inventory_data["expiry_date"],
+                    inventory_data["location"],
+                    inventory_data["status"],
+                    inventory_data["created_at"],
+                ),
+            )
 
             # إدراج المعاملة
             self._insert_transaction_data(transaction_data)
@@ -604,19 +644,22 @@ class AdvancedInventoryManagementService:
                  warehouse_from, warehouse_to, performed_by, notes, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
-            self.db.execute_query(transaction_query, (
-                transaction_data['transaction_id'],
-                transaction_data['product_id'],
-                transaction_data['transaction_type'],
-                transaction_data['quantity'],
-                transaction_data['unit_cost'],
-                transaction_data['reference_id'],
-                transaction_data.get('warehouse_from'),
-                transaction_data.get('warehouse_to'),
-                transaction_data['performed_by'],
-                transaction_data['notes'],
-                transaction_data['created_at']
-            ))
+            self.db.execute_query(
+                transaction_query,
+                (
+                    transaction_data["transaction_id"],
+                    transaction_data["product_id"],
+                    transaction_data["transaction_type"],
+                    transaction_data["quantity"],
+                    transaction_data["unit_cost"],
+                    transaction_data["reference_id"],
+                    transaction_data.get("warehouse_from"),
+                    transaction_data.get("warehouse_to"),
+                    transaction_data["performed_by"],
+                    transaction_data["notes"],
+                    transaction_data["created_at"],
+                ),
+            )
 
         except Exception as e:
             self.logger.error(f"Error inserting transaction data: {e}", exc_info=True)
@@ -643,16 +686,22 @@ class AdvancedInventoryManagementService:
             for row in data:
                 product_id, name, current_stock, min_stock, wh_id = row
                 if min_stock and current_stock <= min_stock * self.low_stock_threshold:
-                    severity = 'critical' if current_stock <= min_stock * 0.5 else 'high' if current_stock <= min_stock else 'medium'
+                    severity = (
+                        "critical"
+                        if current_stock <= min_stock * 0.5
+                        else "high" if current_stock <= min_stock else "medium"
+                    )
 
                     alert = InventoryAlert(
                         alert_id=f"LOW_STOCK_{product_id}_{wh_id}",
                         product_id=product_id,
-                        alert_type='low_stock',
+                        alert_type="low_stock",
                         severity=severity,
                         message=f"مخزون منخفض للمنتج {name}: {current_stock} (الحد الأدنى: {min_stock})",
-                        suggested_action="إعادة طلب المنتج فوراً" if severity == 'critical' else "مراجعة مستوى المخزون",
-                        created_at=datetime.now()
+                        suggested_action=(
+                            "إعادة طلب المنتج فوراً" if severity == "critical" else "مراجعة مستوى المخزون"
+                        ),
+                        created_at=datetime.now(),
                     )
                     alerts.append(alert)
 
@@ -669,16 +718,22 @@ class AdvancedInventoryManagementService:
             expiring_items = self.get_expiring_items(self.expiry_warning_days, warehouse_id)
 
             for item in expiring_items:
-                severity = 'critical' if item['days_until_expiry'] <= 7 else 'high' if item['days_until_expiry'] <= 14 else 'medium'
+                severity = (
+                    "critical"
+                    if item["days_until_expiry"] <= 7
+                    else "high" if item["days_until_expiry"] <= 14 else "medium"
+                )
 
                 alert = InventoryAlert(
                     alert_id=f"EXPIRY_{item['product_id']}_{item['batch_id']}",
-                    product_id=item['product_id'],
-                    alert_type='expiry_warning',
+                    product_id=item["product_id"],
+                    alert_type="expiry_warning",
                     severity=severity,
-                    message=f"ينتهي صلاحية {item['product_name']} (دفعة {item['batch_id']}) خلال {item['days_until_expiry']} يوم",
-                    suggested_action="ترتيب بيع المنتج أو التخلص منه" if severity == 'critical' else "مراجعة خطة البيع",
-                    created_at=datetime.now()
+                    message=f"ينتهي صلاحية {item['product_name']} (دفعة {item['batch_id']}) خلال {item['days_until_expiry']} يوم",  # noqa: E501
+                    suggested_action=(
+                        "ترتيب بيع المنتج أو التخلص منه" if severity == "critical" else "مراجعة خطة البيع"
+                    ),
+                    created_at=datetime.now(),
                 )
                 alerts.append(alert)
 
@@ -711,11 +766,11 @@ class AdvancedInventoryManagementService:
                     alert = InventoryAlert(
                         alert_id=f"OVERSTOCK_{product_id}_{wh_id}",
                         product_id=product_id,
-                        alert_type='overstock',
-                        severity='medium',
+                        alert_type="overstock",
+                        severity="medium",
                         message=f"زيادة في مخزون {name}: {current_stock} (الحد الأقصى: {max_stock})",
                         suggested_action="مراجعة خطة البيع أو التخفيضات",
-                        created_at=datetime.now()
+                        created_at=datetime.now(),
                     )
                     alerts.append(alert)
 
@@ -750,11 +805,11 @@ class AdvancedInventoryManagementService:
                 alert = InventoryAlert(
                     alert_id=f"DAMAGED_{product_id}_{wh_id}",
                     product_id=product_id,
-                    alert_type='damaged',
-                    severity='high',
+                    alert_type="damaged",
+                    severity="high",
                     message=f"منتجات تالفة: {damaged_quantity} من {name}",
                     suggested_action="مراجعة المنتجات التالفة واتخاذ الإجراء المناسب",
-                    created_at=datetime.now()
+                    created_at=datetime.now(),
                 )
                 alerts.append(alert)
 
@@ -781,14 +836,16 @@ class AdvancedInventoryManagementService:
 
             products = []
             for row in data:
-                products.append({
-                    'id': row[0],
-                    'name': row[1],
-                    'current_stock': row[2] or 0,
-                    'min_stock': row[3] or 0,
-                    'max_stock': row[4] or 0,
-                    'selling_price': float(row[5] or 0)
-                })
+                products.append(
+                    {
+                        "id": row[0],
+                        "name": row[1],
+                        "current_stock": row[2] or 0,
+                        "min_stock": row[3] or 0,
+                        "max_stock": row[4] or 0,
+                        "selling_price": float(row[5] or 0),
+                    }
+                )
 
             return products
 
@@ -799,10 +856,10 @@ class AdvancedInventoryManagementService:
     def _calculate_inventory_optimization(self, product: Dict[str, Any]) -> Optional[InventoryOptimization]:
         """حساب تحسين مخزون منتج محدد"""
         try:
-            product_id = product['id']
-            current_stock = product['current_stock']
-            min_stock = product['min_stock']
-            max_stock = product['max_stock']
+            product_id = product["id"]
+            current_stock = product["current_stock"]
+            product["min_stock"]
+            max_stock = product["max_stock"]
 
             # الحصول على تنبؤ الطلب
             forecast = self.prediction_service.forecast_demand(product_id, days_ahead=90)
@@ -823,14 +880,14 @@ class AdvancedInventoryManagementService:
                 recommended_action = "المخزون متوازن"
 
             # حساب التوفير المتوقع
-            expected_savings = Decimal('0')
+            expected_savings = Decimal("0")
             if current_stock < reorder_point:
                 # تكلفة نقص المخزون
-                stockout_cost = (reorder_point - current_stock) * product['selling_price'] * Decimal('0.1')
+                stockout_cost = (reorder_point - current_stock) * product["selling_price"] * Decimal("0.1")
                 expected_savings = -stockout_cost  # توفير سلبي = خسارة
             elif current_stock > max_stock:
                 # تكلفة الزيادة في المخزون
-                holding_cost = (current_stock - optimal_stock) * product['selling_price'] * Decimal('0.05')
+                holding_cost = (current_stock - optimal_stock) * product["selling_price"] * Decimal("0.05")
                 expected_savings = holding_cost
 
             return InventoryOptimization(
@@ -841,7 +898,7 @@ class AdvancedInventoryManagementService:
                 safety_stock=int(safety_stock),
                 recommended_action=recommended_action,
                 expected_savings=expected_savings,
-                confidence_score=forecast.confidence_score
+                confidence_score=forecast.confidence_score,
             )
 
         except Exception as e:
@@ -871,12 +928,12 @@ class AdvancedInventoryManagementService:
             data = self.db.execute_query(query, params, fetch_one=True)
 
             summary = {
-                'total_products': data[0] or 0 if data else 0,
-                'total_quantity': data[1] or 0 if data else 0,
-                'active_items': data[2] or 0 if data else 0,
-                'damaged_items': data[3] or 0 if data else 0,
-                'total_value': valuation.get('total_value', 0),
-                'warehouse_id': warehouse_id
+                "total_products": data[0] or 0 if data else 0,
+                "total_quantity": data[1] or 0 if data else 0,
+                "active_items": data[2] or 0 if data else 0,
+                "damaged_items": data[3] or 0 if data else 0,
+                "total_value": valuation.get("total_value", 0),
+                "warehouse_id": warehouse_id,
             }
 
             return summary
@@ -910,16 +967,18 @@ class AdvancedInventoryManagementService:
 
             products = []
             for row in data:
-                products.append({
-                    'product_id': row[0],
-                    'product_name': row[1],
-                    'current_stock': row[2] or 0,
-                    'min_stock': row[3] or 0,
-                    'max_stock': row[4] or 0,
-                    'inventory_quantity': row[5] or 0,
-                    'avg_cost': float(row[6] or 0),
-                    'batch_count': row[7] or 0
-                })
+                products.append(
+                    {
+                        "product_id": row[0],
+                        "product_name": row[1],
+                        "current_stock": row[2] or 0,
+                        "min_stock": row[3] or 0,
+                        "max_stock": row[4] or 0,
+                        "inventory_quantity": row[5] or 0,
+                        "avg_cost": float(row[6] or 0),
+                        "batch_count": row[7] or 0,
+                    }
+                )
 
             return products
 
@@ -936,13 +995,13 @@ class AdvancedInventoryManagementService:
                 summary = self._generate_inventory_summary(wh_id)
 
                 warehouse_info = {
-                    'warehouse_id': wh_id,
-                    'name': wh_data['name'],
-                    'location': wh_data['location'],
-                    'capacity': wh_data['capacity'],
-                    'status': wh_data['status'],
+                    "warehouse_id": wh_id,
+                    "name": wh_data["name"],
+                    "location": wh_data["location"],
+                    "capacity": wh_data["capacity"],
+                    "status": wh_data["status"],
                     **summary,
-                    **valuation
+                    **valuation,
                 }
                 warehouses.append(warehouse_info)
 
@@ -952,9 +1011,12 @@ class AdvancedInventoryManagementService:
             self.logger.error(f"Error generating warehouse inventory report: {e}", exc_info=True)
             return []
 
-    def _generate_transaction_report(self, warehouse_id: Optional[int] = None,
-                                   start_date: Optional[datetime] = None,
-                                   end_date: Optional[datetime] = None) -> List[Dict[str, Any]]:
+    def _generate_transaction_report(
+        self,
+        warehouse_id: Optional[int] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+    ) -> List[Dict[str, Any]]:
         """توليد تقرير المعاملات"""
         try:
             query = """
@@ -983,19 +1045,21 @@ class AdvancedInventoryManagementService:
 
             transactions = []
             for row in data:
-                transactions.append({
-                    'transaction_id': row[0],
-                    'product_id': row[1],
-                    'transaction_type': row[2],
-                    'quantity': row[3],
-                    'unit_cost': float(row[4] or 0),
-                    'reference_id': row[5],
-                    'warehouse_from': row[6],
-                    'warehouse_to': row[7],
-                    'performed_by': row[8],
-                    'notes': row[9],
-                    'created_at': row[10]
-                })
+                transactions.append(
+                    {
+                        "transaction_id": row[0],
+                        "product_id": row[1],
+                        "transaction_type": row[2],
+                        "quantity": row[3],
+                        "unit_cost": float(row[4] or 0),
+                        "reference_id": row[5],
+                        "warehouse_from": row[6],
+                        "warehouse_to": row[7],
+                        "performed_by": row[8],
+                        "notes": row[9],
+                        "created_at": row[10],
+                    }
+                )
 
             return transactions
 

@@ -48,9 +48,9 @@ def get_database_path() -> Path:
     
     # البحث في المجلدات الشائعة
     possible_paths = [
-        project_root / "data" / "logical_release.db",
+        project_root / "data" / "standard_eljoumla.db",
         project_root / "database.db",
-        Path("data/logical_release.db"),
+        Path("data/standard_eljoumla.db"),
     ]
     
     for path in possible_paths:
@@ -58,7 +58,7 @@ def get_database_path() -> Path:
             return path
     
     # إنشاء مسار افتراضي
-    return project_root / "data" / "logical_release.db"
+    return project_root / "data" / "standard_eljoumla.db"
 
 
 def get_category_ids(conn: sqlite3.Connection) -> List[int]:

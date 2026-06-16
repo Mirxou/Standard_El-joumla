@@ -4,12 +4,11 @@
 نظام تحليلات ذكي يقدم رؤى عميقة عن البيانات
 """
 
-from datetime import datetime, timedelta
-import random
-from typing import Dict, List, Any, Optional, Tuple
+import random  # nosec B311
 import statistics
-import math
-from collections import defaultdict, Counter
+from collections import Counter, defaultdict
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
 
 
 class AdvancedAnalyticsEngine:
@@ -34,11 +33,10 @@ class AdvancedAnalyticsEngine:
             "total_sales": sales_analysis["summary"]["total_sales"],
             "sales_analysis": sales_analysis,
             "customer_analysis": customer_analysis,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
     def analyze_sales_performance(self, start_date: datetime = None, end_date: datetime = None) -> Dict[str, Any]:
-
         """تحليل أداء المبيعات المتقدم"""
         if not start_date:
             start_date = datetime.now() - timedelta(days=30)
@@ -52,19 +50,19 @@ class AdvancedAnalyticsEngine:
             "period": {
                 "start": start_date.isoformat(),
                 "end": end_date.isoformat(),
-                "days": (end_date - start_date).days
+                "days": (end_date - start_date).days,
             },
             "summary": {
                 "total_sales": sum(sale["amount"] for sale in sales_data),
                 "total_transactions": len(sales_data),
-                "average_transaction": statistics.mean([sale["amount"] for sale in sales_data]) if sales_data else 0,
-                "median_transaction": statistics.median([sale["amount"] for sale in sales_data]) if sales_data else 0
+                "average_transaction": (statistics.mean([sale["amount"] for sale in sales_data]) if sales_data else 0),
+                "median_transaction": (statistics.median([sale["amount"] for sale in sales_data]) if sales_data else 0),
             },
             "trends": self._analyze_trends(sales_data),
             "segmentation": self._customer_segmentation(sales_data),
             "forecasting": self._sales_forecasting(sales_data),
             "insights": self._generate_insights(sales_data),
-            "recommendations": self._generate_recommendations(sales_data)
+            "recommendations": self._generate_recommendations(sales_data),
         }
 
         return analysis
@@ -79,7 +77,7 @@ class AdvancedAnalyticsEngine:
             "behavior_patterns": {},
             "lifetime_value": {},
             "churn_risk": {},
-            "personalization": {}
+            "personalization": {},
         }
 
         if customer_id:
@@ -110,7 +108,7 @@ class AdvancedAnalyticsEngine:
             "anomaly_percentage": (len(anomalies) / len(data)) * 100 if data else 0,
             "anomalies": anomalies,
             "severity_levels": self._categorize_anomalies(anomalies),
-            "recommendations": self._anomaly_recommendations(anomalies, data_type)
+            "recommendations": self._anomaly_recommendations(anomalies, data_type),
         }
 
     def generate_predictive_insights(self, prediction_type: str) -> Dict[str, Any]:
@@ -127,7 +125,7 @@ class AdvancedAnalyticsEngine:
     def _get_sales_data(self, start_date: datetime = None, end_date: datetime = None) -> List[Dict[str, Any]]:
         """الحصول على بيانات المبيعات"""
         # محاكاة بيانات المبيعات
-        import random
+
         days = 30 if not start_date else (end_date - start_date).days
 
         sales = []
@@ -143,7 +141,7 @@ class AdvancedAnalyticsEngine:
                     "customer_id": f"CUST_{random.randint(1, 100)}",
                     "items": random.randint(1, 10),
                     "payment_method": random.choice(["cash", "card", "transfer"]),
-                    "category": random.choice(["electronics", "clothing", "food", "other"])
+                    "category": random.choice(["electronics", "clothing", "food", "other"]),
                 }
                 sales.append(sale)
 
@@ -161,7 +159,7 @@ class AdvancedAnalyticsEngine:
                 "total_spent": random.uniform(500, 10000),
                 "last_purchase": (datetime.now() - timedelta(days=random.randint(1, 365))).isoformat(),
                 "preferred_category": random.choice(["electronics", "clothing", "food", "other"]),
-                "loyalty_tier": random.choice(["bronze", "silver", "gold", "platinum"])
+                "loyalty_tier": random.choice(["bronze", "silver", "gold", "platinum"]),
             }
             customers.append(customer)
 
@@ -184,7 +182,7 @@ class AdvancedAnalyticsEngine:
                     "date": date.isoformat(),
                     "stock_level": random.randint(0, 100),
                     "sales_velocity": random.uniform(0.5, 5.0),
-                    "reorder_point": 20
+                    "reorder_point": 20,
                 }
                 inventory.append(record)
 
@@ -221,7 +219,7 @@ class AdvancedAnalyticsEngine:
             "volatility": statistics.stdev(amounts) if len(amounts) > 1 else 0,
             "growth_rate": self._calculate_growth_rate(list(daily_sales.values())),
             "peak_days": sorted(daily_sales.items(), key=lambda x: x[1], reverse=True)[:5],
-            "low_days": sorted(daily_sales.items(), key=lambda x: x[1])[:5]
+            "low_days": sorted(daily_sales.items(), key=lambda x: x[1])[:5],
         }
 
         return trend_analysis
@@ -231,11 +229,11 @@ class AdvancedAnalyticsEngine:
         if len(values) < 2:
             return 0.0
 
-        first_half = statistics.mean(values[:len(values)//2])
-        second_half = statistics.mean(values[len(values)//2:])
+        first_half = statistics.mean(values[: len(values) // 2])
+        second_half = statistics.mean(values[len(values) // 2 :])
 
         if first_half == 0:
-            return float('inf') if second_half > 0 else 0.0
+            return float("inf") if second_half > 0 else 0.0
 
         return ((second_half - first_half) / first_half) * 100
 
@@ -257,12 +255,7 @@ class AdvancedAnalyticsEngine:
             customer_frequency[customer_id] += 1
 
         # تصنيف العملاء
-        segments = {
-            "high_value": [],
-            "regular": [],
-            "occasional": [],
-            "new": []
-        }
+        segments = {"high_value": [], "regular": [], "occasional": [], "new": []}
 
         for customer_id, total_spent in customer_spending.items():
             frequency = customer_frequency[customer_id]
@@ -298,7 +291,7 @@ class AdvancedAnalyticsEngine:
 
         # حساب المتوسط المرجح
         recent_avg = statistics.mean(values[-7:])  # آخر أسبوع
-        overall_avg = statistics.mean(values)
+        statistics.mean(values)
 
         # توقع بسيط
         forecast = {
@@ -306,7 +299,7 @@ class AdvancedAnalyticsEngine:
             "next_month": recent_avg * 30 * 1.08,  # 8% نمو شهري
             "confidence": 0.75,
             "method": "weighted_average",
-            "factors": ["seasonal_trend", "recent_performance", "market_conditions"]
+            "factors": ["seasonal_trend", "recent_performance", "market_conditions"],
         }
 
         return forecast
@@ -377,12 +370,14 @@ class AdvancedAnalyticsEngine:
         recommendations.append(f"التركيز على فئة {top_category[0]} لزيادة المبيعات")
 
         # توصيات عامة
-        recommendations.extend([
-            "تحسين خدمة العملاء لزيادة الولاء",
-            "تنويع طرق الدفع المتاحة",
-            "تطوير برامج الولاء للعملاء",
-            "مراقبة المخزون بانتظام"
-        ])
+        recommendations.extend(
+            [
+                "تحسين خدمة العملاء لزيادة الولاء",
+                "تنويع طرق الدفع المتاحة",
+                "تطوير برامج الولاء للعملاء",
+                "مراقبة المخزون بانتظام",
+            ]
+        )
 
         return recommendations
 
@@ -390,11 +385,11 @@ class AdvancedAnalyticsEngine:
         """تحليل عميل واحد"""
         return {
             "customer_id": customer_data["id"],
-            "spending_pattern": "regular" if customer_data["total_purchases"] > 10 else "occasional",
+            "spending_pattern": ("regular" if customer_data["total_purchases"] > 10 else "occasional"),
             "loyalty_score": min(customer_data["total_purchases"] / 50 * 100, 100),
             "next_purchase_prediction": (datetime.now() + timedelta(days=30)).isoformat(),
             "recommended_products": [customer_data["preferred_category"]],
-            "risk_level": "low" if customer_data["total_spent"] > 1000 else "medium"
+            "risk_level": "low" if customer_data["total_spent"] > 1000 else "medium",
         }
 
     def _analyze_behavior_patterns(self, customers_data: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -402,7 +397,7 @@ class AdvancedAnalyticsEngine:
         patterns = {
             "preferred_payment_methods": Counter(),
             "purchase_frequency": defaultdict(int),
-            "spending_ranges": {"low": 0, "medium": 0, "high": 0}
+            "spending_ranges": {"low": 0, "medium": 0, "high": 0},
         }
 
         for customer in customers_data:
@@ -439,8 +434,8 @@ class AdvancedAnalyticsEngine:
             "segments": {
                 "high_value": len([c for c in customers_data if c["total_spent"] > 5000]),
                 "medium_value": len([c for c in customers_data if 1000 <= c["total_spent"] <= 5000]),
-                "low_value": len([c for c in customers_data if c["total_spent"] < 1000])
-            }
+                "low_value": len([c for c in customers_data if c["total_spent"] < 1000]),
+            },
         }
 
     def _statistical_anomaly_detection(self, data: List[Dict[str, Any]], threshold: float) -> List[Dict[str, Any]]:
@@ -480,7 +475,7 @@ class AdvancedAnalyticsEngine:
                     "value": value,
                     "z_score": z_score,
                     "deviation": value - mean,
-                    "severity": "high" if z_score > 3 else "medium"
+                    "severity": "high" if z_score > 3 else "medium",
                 }
                 anomalies.append(anomaly)
 
@@ -524,15 +519,15 @@ class AdvancedAnalyticsEngine:
             "short_term": {
                 "prediction": "استمرار النمو بنسبة 8-12%",
                 "confidence": 0.8,
-                "timeframe": "الأسابيع الـ3 القادمة"
+                "timeframe": "الأسابيع الـ3 القادمة",
             },
             "long_term": {
                 "prediction": "نمو مستقر بنسبة 15-20%",
                 "confidence": 0.6,
-                "timeframe": "الأشهر الـ6 القادمة"
+                "timeframe": "الأشهر الـ6 القادمة",
             },
             "seasonal_factors": ["عيد الفطر", "العودة للمدارس", "الأعياد"],
-            "risk_factors": ["تقلبات اقتصادية", "منافسة", "تغييرات في الطلب"]
+            "risk_factors": ["تقلبات اقتصادية", "منافسة", "تغييرات في الطلب"],
         }
 
     def _predict_inventory_needs(self) -> Dict[str, Any]:
@@ -541,16 +536,16 @@ class AdvancedAnalyticsEngine:
             "recommended_stock_levels": {
                 "Product_A": {"current": 45, "recommended": 60, "urgency": "high"},
                 "Product_B": {"current": 30, "recommended": 40, "urgency": "medium"},
-                "Product_C": {"current": 80, "recommended": 70, "urgency": "low"}
+                "Product_C": {"current": 80, "recommended": 70, "urgency": "low"},
             },
             "reorder_schedule": {
                 "next_week": ["Product_A", "Product_D"],
-                "next_month": ["Product_B", "Product_E"]
+                "next_month": ["Product_B", "Product_E"],
             },
             "optimization_opportunities": [
                 "تقليل المخزون الزائد لـ Product_C",
-                "زيادة مخزون Product_A لتلبية الطلب"
-            ]
+                "زيادة مخزون Product_A لتلبية الطلب",
+            ],
         }
 
     def _predict_customer_behavior(self) -> Dict[str, Any]:
@@ -559,16 +554,16 @@ class AdvancedAnalyticsEngine:
             "churn_prediction": {
                 "at_risk_customers": 15,
                 "retention_rate": 85,
-                "recommended_actions": ["برامج ولاء", "خصومات خاصة", "تواصل منتظم"]
+                "recommended_actions": ["برامج ولاء", "خصومات خاصة", "تواصل منتظم"],
             },
             "purchase_predictions": {
                 "expected_new_customers": 25,
                 "repeat_purchase_rate": 65,
-                "average_order_value": 175.50
+                "average_order_value": 175.50,
             },
             "segment_evolution": {
                 "high_value_growth": "+5%",
                 "medium_value_stability": "0%",
-                "low_value_churn": "-3%"
-            }
+                "low_value_churn": "-3%",
+            },
         }

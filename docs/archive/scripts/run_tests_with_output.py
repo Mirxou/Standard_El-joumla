@@ -5,7 +5,6 @@
 import subprocess
 import sys
 import os
-import time
 
 os.chdir(r'c:\Users\aboun\Desktop\Logical Version trae')
 sys.path.insert(0, r'c:\Users\aboun\Desktop\Logical Version trae')

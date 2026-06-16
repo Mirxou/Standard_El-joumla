@@ -1,4 +1,4 @@
-# 📖 دليل المستخدم الشامل - الإصدار المنطقي
+# 📖 دليل المستخدم الشامل - ستاندرد الجملة
 
 <div align="center">
 
@@ -2610,7 +2610,7 @@ curl -X POST "http://localhost:8000/api/products" \
 ### هيكل المشروع
 
 ```
-الإصدار المنطقي trae/
+ستاندرد الجملة trae/
 ├── main.py                 # نقطة الدخول الرئيسية
 ├── requirements.txt        # المتطلبات
 ├── config/                 # ملفات الإعدادات
@@ -2640,13 +2640,13 @@ curl -X POST "http://localhost:8000/api/products" \
 
 <div align="center">
 
-**تم إنشاء هذا الدليل بواسطة:** Logical Version Team  
+**تم إنشاء هذا الدليل بواسطة:** Standard El-Joumla Team  
 **التاريخ:** 2025-11-30  
 **الإصدار:** 1.0.0
 
 **صُنع بـ ❤️ في الجزائر**
 
-© 2025 Logical Version Team. جميع الحقوق محفوظة.
+© 2025 Standard El-Joumla Team. جميع الحقوق محفوظة.
 
 </div>
 

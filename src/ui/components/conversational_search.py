@@ -3,8 +3,8 @@
 بحث محادثي - Conversational Search
 """
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QListWidgetItem
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QLabel, QListWidget, QListWidgetItem, QVBoxLayout, QWidget
 
 
 class ConversationalSearch(QWidget):

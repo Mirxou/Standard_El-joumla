@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Production packaging helper"""
-import subprocess, sys
+import subprocess
+import os
 
 def run(cmd: str):
     print(f"$ {cmd}")
@@ -14,7 +15,7 @@ def main():
     run("npm run build --prefix web")
     # Desktop packaging (PyInstaller) - attempt to create a Windows executable if PyInstaller is available
     try:
-        import PyInstaller  # type: ignore
+        import PyInstaller  # type: ignore  # noqa: F401
         try:
             import PyInstaller.__main__ as pyinst  # type: ignore
             desktop_launcher = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'desktop_launcher.py'))

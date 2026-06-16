@@ -1,6 +1,5 @@
-from PySide6.QtWidgets import QTableWidget, QAbstractItemView, QHeaderView
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QObject
-from PySide6.QtGui import QColor, QBrush, QPen
+from PySide6.QtWidgets import QAbstractItemView, QHeaderView, QTableWidget
+
 
 class AnimatedTableWidget(QTableWidget):
     """
@@ -8,20 +7,24 @@ class AnimatedTableWidget(QTableWidget):
     Animations: Hover Glow, Smooth Selection
     Styling: Transparent, Neon Accents
     """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
+
         # Basic Setup
         self.setShowGrid(False)
         self.setAlternatingRowColors(True)
         self.verticalHeader().setVisible(False)
         self.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.setMouseTracking(True) # Enable hover tracking
-        
+        self.setMouseTracking(True)  # Enable hover tracking
+
         # Header Styling
         header = self.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.Stretch)
+        header.setSectionResizeMode(QHeaderView.Interactive)
+        header.setMinimumSectionSize(120)
+        header.setDefaultSectionSize(150)
+        header.setStretchLastSection(True)
         header.setStyleSheet("""
             QHeaderView::section {
                 background-color: #0f172a;
@@ -34,7 +37,7 @@ class AnimatedTableWidget(QTableWidget):
                 font-size: 13px;
             }
         """)
-        
+
         # Table Styling (Base)
         self.setStyleSheet("""
             QTableWidget {

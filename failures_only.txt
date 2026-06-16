@@ -1,7 +1,0 @@
-﻿
-Line                                                                                    
-----                                                                                    
-Error in sys.excepthook:                                                                
-Failed: Application logged an ERROR in test: استثناء غير معالج: AttributeError: __name__
-
-

@@ -21,10 +21,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.core.database_manager import DatabaseManager
+from src.core.local_database_manager import LocalDatabaseManager
 from src.core.config_manager import ConfigManager
 from src.models.user import UserManager, User, UserRole
-from src.core.security_service import AdvancedSecurityService
 from src.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -57,7 +56,7 @@ def reset_admin_password(new_password: str = None):
         return False
     
     config = ConfigManager()
-    db = DatabaseManager(config.get_database_path())
+    db = LocalDatabaseManager(config.get_database_path())
     
     if not db.initialize():
         print("❌ فشل تهيئة قاعدة البيانات")
@@ -95,7 +94,7 @@ def create_user(username: str, email: str, password: str):
         return False
     
     config = ConfigManager()
-    db = DatabaseManager(config.get_database_path())
+    db = LocalDatabaseManager(config.get_database_path())
     
     if not db.initialize():
         print("❌ فشل تهيئة قاعدة البيانات")

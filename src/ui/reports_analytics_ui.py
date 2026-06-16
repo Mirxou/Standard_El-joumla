@@ -1,31 +1,47 @@
+import logging
+import numpy as np
+
 """
 واجهة المستخدم للتقارير والتحليلات - Phase 8
 Reports & Analytics UI for Unified Commerce 2030 ERP
 """
 
-import sys
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QTableWidget, QTableWidgetItem, QTabWidget, QComboBox,
-    QDateEdit, QGroupBox, QTextEdit, QProgressBar, QSplitter,
-    QTreeWidget, QTreeWidgetItem, QScrollArea,
-    QFrame, QSizePolicy
-)
-from PySide6.QtCore import Qt, QDate, Signal, QThread, QTimer
+from datetime import datetime
+
 from PySide6.QtCharts import (
-    QChart, QLineSeries, QBarSeries, QBarSet, QPieSeries,
-    QValueAxis, QBarCategoryAxis, QDateTimeAxis, QChartView
+    QBarCategoryAxis,
+    QBarSeries,
+    QBarSet,
+    QChart,
+    QChartView,
+    QLineSeries,
+    QPieSeries,
+    QValueAxis,
 )
-from PySide6.QtGui import QFont, QPalette, QColor, QIcon
+from PySide6.QtCore import QDate, Qt
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import (
+    QComboBox,
+    QDateEdit,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
+    QTextEdit,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 from src.core.database_manager import DatabaseManager
+from src.services.advanced_analytics_service import AdvancedAnalyticsService
 from src.services.advanced_reporting_service import AdvancedReportingService
 from src.services.business_intelligence_service import BusinessIntelligenceService
-from src.services.advanced_analytics_service import AdvancedAnalyticsService
-from src.ui.styles import apply_style_to_widget
 from src.utils.logger import setup_logger
+
 
 class ReportsAnalyticsUI(QWidget):
     """
@@ -52,7 +68,6 @@ class ReportsAnalyticsUI(QWidget):
         """إعداد واجهة المستخدم"""
         self.setWindowTitle("التقارير والتحليلات المتقدمة")
         self.setMinimumSize(1400, 900)
-        apply_style_to_widget(self)
 
         # تخطيط رئيسي
         main_layout = QHBoxLayout(self)
@@ -215,11 +230,20 @@ class ReportsAnalyticsUI(QWidget):
         toolbar_layout.addWidget(period_label)
 
         self.period_combo = QComboBox()
-        self.period_combo.addItems([
-            "اليوم", "الأسبوع الحالي", "الشهر الحالي", "الربع الحالي", "السنة الحالية",
-            "الأسبوع الماضي", "الشهر الماضي", "الربع الماضي", "السنة الماضية",
-            "فترة مخصصة"
-        ])
+        self.period_combo.addItems(
+            [
+                "اليوم",
+                "الأسبوع الحالي",
+                "الشهر الحالي",
+                "الربع الحالي",
+                "السنة الحالية",
+                "الأسبوع الماضي",
+                "الشهر الماضي",
+                "الربع الماضي",
+                "السنة الماضية",
+                "فترة مخصصة",
+            ]
+        )
         toolbar_layout.addWidget(self.period_combo)
 
         # تاريخ البداية
@@ -286,10 +310,16 @@ class ReportsAnalyticsUI(QWidget):
         reports_toolbar.addWidget(report_type_label)
 
         self.report_type_combo = QComboBox()
-        self.report_type_combo.addItems([
-            "تقرير المبيعات", "تقرير المخزون", "تقرير العملاء",
-            "التقرير المالي", "تقرير الأداء", "تقرير مخصص"
-        ])
+        self.report_type_combo.addItems(
+            [
+                "تقرير المبيعات",
+                "تقرير المخزون",
+                "تقرير العملاء",
+                "التقرير المالي",
+                "تقرير الأداء",
+                "تقرير مخصص",
+            ]
+        )
         reports_toolbar.addWidget(self.report_type_combo)
 
         # زر إنشاء التقرير
@@ -303,9 +333,7 @@ class ReportsAnalyticsUI(QWidget):
         # جدول التقارير
         self.reports_table = QTableWidget()
         self.reports_table.setColumnCount(5)
-        self.reports_table.setHorizontalHeaderLabels([
-            "اسم التقرير", "النوع", "تاريخ الإنشاء", "الحالة", "الإجراءات"
-        ])
+        self.reports_table.setHorizontalHeaderLabels(["اسم التقرير", "النوع", "تاريخ الإنشاء", "الحالة", "الإجراءات"])
         self.reports_table.horizontalHeader().setStretchLastSection(True)
         reports_layout.addWidget(self.reports_table)
 
@@ -323,9 +351,7 @@ class ReportsAnalyticsUI(QWidget):
         dashboard_selector.addWidget(dashboard_label)
 
         self.dashboard_combo = QComboBox()
-        self.dashboard_combo.addItems([
-            "لوحة المبيعات", "لوحة المخزون", "لوحة العملاء", "اللوحة المالية"
-        ])
+        self.dashboard_combo.addItems(["لوحة المبيعات", "لوحة المخزون", "لوحة العملاء", "اللوحة المالية"])
         dashboard_selector.addWidget(self.dashboard_combo)
 
         # زر تحديث اللوحة
@@ -359,10 +385,15 @@ class ReportsAnalyticsUI(QWidget):
         bi_toolbar.addWidget(analysis_type_label)
 
         self.analysis_type_combo = QComboBox()
-        self.analysis_type_combo.addItems([
-            "الرؤى التجارية", "الرؤى التنبؤية", "تقسيم العملاء",
-            "كشف الشذوذ", "تحليل الاتجاهات"
-        ])
+        self.analysis_type_combo.addItems(
+            [
+                "الرؤى التجارية",
+                "الرؤى التنبؤية",
+                "تقسيم العملاء",
+                "كشف الشذوذ",
+                "تحليل الاتجاهات",
+            ]
+        )
         bi_toolbar.addWidget(self.analysis_type_combo)
 
         # زر تشغيل التحليل
@@ -381,9 +412,7 @@ class ReportsAnalyticsUI(QWidget):
         # جدول الرؤى
         self.insights_table = QTableWidget()
         self.insights_table.setColumnCount(4)
-        self.insights_table.setHorizontalHeaderLabels([
-            "نوع الرؤية", "الوصف", "مستوى التأثير", "تاريخ التوليد"
-        ])
+        self.insights_table.setHorizontalHeaderLabels(["نوع الرؤية", "الوصف", "مستوى التأثير", "تاريخ التوليد"])
         self.insights_table.horizontalHeader().setStretchLastSection(True)
         bi_layout.addWidget(self.insights_table)
 
@@ -402,11 +431,15 @@ class ReportsAnalyticsUI(QWidget):
         analytics_toolbar.addWidget(advanced_type_label)
 
         self.advanced_type_combo = QComboBox()
-        self.advanced_type_combo.addItems([
-            "النماذج التنبؤية", "الاختبارات الإحصائية",
-            "تحليل السلاسل الزمنية", "تحسين المخزون",
-            "كشف الشذوذ المتقدم"
-        ])
+        self.advanced_type_combo.addItems(
+            [
+                "النماذج التنبؤية",
+                "الاختبارات الإحصائية",
+                "تحليل السلاسل الزمنية",
+                "تحسين المخزون",
+                "كشف الشذوذ المتقدم",
+            ]
+        )
         analytics_toolbar.addWidget(self.advanced_type_combo)
 
         # زر تشغيل التحليل المتقدم
@@ -425,9 +458,15 @@ class ReportsAnalyticsUI(QWidget):
         # جدول النتائج المتقدمة
         self.advanced_table = QTableWidget()
         self.advanced_table.setColumnCount(5)
-        self.advanced_table.setHorizontalHeaderLabels([
-            "نوع التحليل", "المتغير المستهدف", "دقة النموذج", "تاريخ التشغيل", "الحالة"
-        ])
+        self.advanced_table.setHorizontalHeaderLabels(
+            [
+                "نوع التحليل",
+                "المتغير المستهدف",
+                "دقة النموذج",
+                "تاريخ التشغيل",
+                "الحالة",
+            ]
+        )
         self.advanced_table.horizontalHeader().setStretchLastSection(True)
         analytics_layout.addWidget(self.advanced_table)
 
@@ -603,7 +642,7 @@ class ReportsAnalyticsUI(QWidget):
 
         try:
             if analysis_type == "تحليل السلاسل الزمنية":
-                result = self.analytics_service.perform_time_series_analysis('sales')
+                result = self.analytics_service.perform_time_series_analysis("sales")
                 self.display_time_series_results(result)
             elif analysis_type == "تحسين المخزون":
                 result = self.analytics_service.optimize_inventory_levels()
@@ -621,8 +660,8 @@ class ReportsAnalyticsUI(QWidget):
         row_count = self.reports_table.rowCount()
         self.reports_table.insertRow(row_count)
 
-        self.reports_table.setItem(row_count, 0, QTableWidgetItem(report.get('title', 'تقرير')))
-        self.reports_table.setItem(row_count, 1, QTableWidgetItem(report.get('type', 'غير محدد')))
+        self.reports_table.setItem(row_count, 0, QTableWidgetItem(report.get("title", "تقرير")))
+        self.reports_table.setItem(row_count, 1, QTableWidgetItem(report.get("type", "غير محدد")))
         self.reports_table.setItem(row_count, 2, QTableWidgetItem(str(datetime.now())))
         self.reports_table.setItem(row_count, 3, QTableWidgetItem("مكتمل"))
         self.reports_table.setItem(row_count, 4, QTableWidgetItem("عرض | تصدير"))
@@ -1022,7 +1061,7 @@ class ReportsAnalyticsUI(QWidget):
         sample_reports = [
             ("تقرير المبيعات الشهري", "مبيعات", "2024-01-15", "مكتمل"),
             ("تقرير المخزون", "مخزون", "2024-01-14", "مكتمل"),
-            ("تقرير العملاء", "عملاء", "2024-01-13", "قيد المراجعة")
+            ("تقرير العملاء", "عملاء", "2024-01-13", "قيد المراجعة"),
         ]
 
         for report in sample_reports:
@@ -1055,7 +1094,7 @@ class ReportsAnalyticsUI(QWidget):
         sample_insights = [
             ("اتجاه", "ارتفاع في المبيعات بنسبة 15%", "عالي", "2024-01-15"),
             ("شذوذ", "انخفاض غير متوقع في المخزون", "متوسط", "2024-01-14"),
-            ("فرصة", "إمكانية زيادة المبيعات في فئة معينة", "عالي", "2024-01-13")
+            ("فرصة", "إمكانية زيادة المبيعات في فئة معينة", "عالي", "2024-01-13"),
         ]
 
         for insight in sample_insights:

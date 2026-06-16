@@ -1,4 +1,4 @@
-# الإصدار المنطقي - Logical Version
+# ستاندرد الجملة - Standard El-Joumla
 # Production Dependencies
 # Generated: December 2024
 # Python: 3.13.9
@@ -147,6 +147,17 @@ cffi>=2.0.0                  # C Foreign Function Interface
 dnspython>=2.8.0             # DNS toolkit
 Pygments>=2.19.2             # Syntax highlighting
 pycparser>=2.23              # C parser in Python
+
+# ============================================
+# AI & ML (Advanced Modules - Optional)
+# ============================================
+pyautogui>=0.9.54              # RPA desktop automation
+keyboard>=0.13.5               # Keyboard automation
+mouse>=0.7.1                   # Mouse automation
+pyperclip>=1.11.0              # Clipboard access
+opencv-python-headless>=4.13.0 # Computer Vision
+networkx>=3.6.1                # Graph / Process mining
+matplotlib>=3.10.9             # Process mining visualization
 
 # ============================================
 # Notes

@@ -33,7 +33,7 @@ export default function RootLayout({
             </NotificationProvider>
           </AuthProvider>
         </ErrorBoundary>
-        <Toaster position="top-center" richColors />
+        <Toaster position="bottom-left" richColors theme="dark" />
       </body>
     </html>
   )

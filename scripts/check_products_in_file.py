@@ -13,7 +13,7 @@ import io
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.core.database_manager import DatabaseManager
+from src.core.local_database_manager import LocalDatabaseManager
 
 # لضمان عرض الأحرف العربية بشكل صحيح في PowerShell
 if sys.platform == 'win32':
@@ -32,7 +32,7 @@ def check_products_in_file(db_path: str):
     print(f"📊 حجم الملف: {db_file.stat().st_size / 1024 / 1024:.2f} MB\n")
     
     try:
-        db_manager = DatabaseManager(str(db_file))
+        db_manager = LocalDatabaseManager(str(db_file))
         db_manager.initialize()
         db_manager.connection.row_factory = sqlite3.Row
         cursor = db_manager.connection.cursor()
@@ -50,7 +50,7 @@ def check_products_in_file(db_path: str):
             cursor.execute("SELECT COUNT(*) FROM products WHERE is_active = 1")
             active_products = cursor.fetchone()[0]
             print(f"المنتجات النشطة: {active_products:,}")
-        except:
+        except Exception:
             print("المنتجات النشطة: غير متاح")
         
         # فحص المبيعات
@@ -62,14 +62,14 @@ def check_products_in_file(db_path: str):
             cursor.execute("SELECT COUNT(*) FROM sales")
             total_sales = cursor.fetchone()[0]
             print(f"إجمالي المبيعات: {total_sales:,}")
-        except:
+        except Exception:
             print("إجمالي المبيعات: غير متاح")
         
         try:
             cursor.execute("SELECT COUNT(*) FROM sale_items")
             total_items = cursor.fetchone()[0]
             print(f"إجمالي عناصر المبيعات: {total_items:,}")
-        except:
+        except Exception:
             print("إجمالي عناصر المبيعات: غير متاح")
         
         # فحص أكبر الجداول
@@ -88,7 +88,7 @@ def check_products_in_file(db_path: str):
                 count = cursor.fetchone()[0]
                 if count > 0:
                     table_counts.append((table_name, count))
-            except:
+            except Exception:
                 pass
         
         table_counts.sort(key=lambda x: x[1], reverse=True)
@@ -118,7 +118,7 @@ if __name__ == "__main__":
     base_path = Path(__file__).parent.parent / "data"
     
     files_to_check = [
-        "logical_release.db",
+        "standard_eljoumla.db",
         "logical_release_new.db",
         "backups/logical_release_old_20251231_103627.db",
         "backups/logical_release_corrupted_20251231_103600.db"

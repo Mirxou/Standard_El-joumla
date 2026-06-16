@@ -1,9 +1,11 @@
 from datetime import datetime
 
+
 class ApprovalService:
     """
     The 'Shenpi' Engine: Manages approval workflows (Digital Signatures).
     """
+
     def __init__(self, db_manager, notification_manager=None):
         self.db = db_manager
         self.notify = notification_manager
@@ -22,13 +24,13 @@ class ApprovalService:
             "summary": summary,
             "status": "Pending",
             "created_at": datetime.now(),
-            "approver_id": None
+            "approver_id": None,
         }
         self.requests.append(request)
-        
+
         if self.notify:
             self.notify.show_info(f"📋 New Approval Request: {summary}")
-            
+
         return request["id"]
 
     def approve_request(self, request_id, approver_id):
@@ -40,7 +42,7 @@ class ApprovalService:
                 req["status"] = "Approved"
                 req["approver_id"] = approver_id
                 req["approved_at"] = datetime.now()
-                
+
                 if self.notify:
                     self.notify.show_success(f"✅ Request #{request_id} Approved!")
                 return True

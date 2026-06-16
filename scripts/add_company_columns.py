@@ -12,7 +12,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.core.database_manager import DatabaseManager
+from src.core.local_database_manager import LocalDatabaseManager
 
 def column_exists(cursor, table_name: str, column_name: str) -> bool:
     """التحقق من وجود عمود في جدول"""
@@ -31,7 +31,7 @@ def table_exists(cursor, table_name: str) -> bool:
 def add_company_columns(db_path: str):
     """إضافة company_id إلى جميع الجداول الرئيسية"""
     
-    db_manager = DatabaseManager(db_path)
+    db_manager = LocalDatabaseManager(db_path)
     db_manager.initialize()
     db_manager.connection.execute("PRAGMA foreign_keys = ON")
     cursor = db_manager.connection.cursor()
@@ -178,7 +178,7 @@ if __name__ == "__main__":
         db_path = sys.argv[1]
     else:
         project_root = Path(__file__).parent.parent
-        db_path = str(project_root / "data" / "logical_release.db")
+        db_path = str(project_root / "data" / "standard_eljoumla.db")
     
     print(f"📁 قاعدة البيانات: {db_path}")
     print("=" * 60)

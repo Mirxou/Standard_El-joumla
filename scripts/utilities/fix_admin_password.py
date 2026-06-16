@@ -35,7 +35,7 @@ if len(new_password) < 8:
     sys.exit(1)
 
 sys.path.insert(0, str(Path.cwd()))
-from src.core.database_manager import DatabaseManager
+from src.core.local_database_manager import LocalDatabaseManager
 from src.core.config_manager import ConfigManager
 
 def hash_password_pbkdf2(password: str, salt: str) -> str:
@@ -43,7 +43,7 @@ def hash_password_pbkdf2(password: str, salt: str) -> str:
     return hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000).hex()
 
 config = ConfigManager()
-db = DatabaseManager(config.get_database_path())
+db = LocalDatabaseManager(config.get_database_path())
 db.initialize()
 
 print("=== إعادة تعيين كلمة سر admin (الطريقة الصحيحة) ===\n")

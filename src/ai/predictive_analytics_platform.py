@@ -9,24 +9,29 @@ Author: Unified Commerce AI Team
 Date: February 2026
 Version: 1.0.0
 """
-
-import numpy as np
-import pandas as pd
 import logging
-from typing import Dict, List, Any, Optional, Tuple, Union
+
+import json
+import warnings
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-import warnings
-warnings.filterwarnings('ignore')
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import numpy as np
+import pandas as pd
+
+warnings.filterwarnings("ignore")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class PredictionResult:
     """Prediction result container"""
+
     prediction: Union[float, np.ndarray]
     confidence: float
     confidence_interval: Tuple[float, float]
@@ -35,9 +40,11 @@ class PredictionResult:
     prediction_date: datetime
     data_points: int
 
+
 @dataclass
 class ForecastResult:
     """Forecast result container"""
+
     forecast: pd.DataFrame
     model_accuracy: float
     confidence_intervals: pd.DataFrame
@@ -46,9 +53,11 @@ class ForecastResult:
     forecast_period: str
     generated_at: datetime
 
+
 @dataclass
 class CustomerInsight:
     """Customer behavior insight"""
+
     customer_id: str
     predicted_behavior: str
     probability: float
@@ -57,9 +66,11 @@ class CustomerInsight:
     next_purchase_prediction: Optional[datetime]
     lifetime_value_prediction: float
 
+
 @dataclass
 class BusinessMetric:
     """Business performance metric"""
+
     name: str
     current_value: float
     predicted_value: float
@@ -67,6 +78,7 @@ class BusinessMetric:
     trend: str
     confidence: float
     time_horizon: str
+
 
 class PredictiveAnalyticsPlatform:
     """
@@ -111,37 +123,41 @@ class PredictiveAnalyticsPlatform:
                 "forecasting": {
                     "algorithms": ["arima", "prophet", "lstm", "xgboost"],
                     "default_algorithm": "arima",
-                    "seasonal_periods": [7, 30, 365]
+                    "seasonal_periods": [7, 30, 365],
                 },
                 "classification": {
                     "algorithms": ["random_forest", "xgboost", "neural_network"],
-                    "default_algorithm": "xgboost"
+                    "default_algorithm": "xgboost",
                 },
                 "regression": {
                     "algorithms": ["linear", "xgboost", "neural_network"],
-                    "default_algorithm": "xgboost"
-                }
+                    "default_algorithm": "xgboost",
+                },
             },
             "features": {
                 "temporal": ["hour", "day_of_week", "month", "quarter", "year"],
                 "seasonal": ["season", "holiday", "promotion"],
-                "behavioral": ["purchase_frequency", "avg_order_value", "last_purchase_days"],
-                "external": ["economic_indicators", "competitor_prices", "weather"]
+                "behavioral": [
+                    "purchase_frequency",
+                    "avg_order_value",
+                    "last_purchase_days",
+                ],
+                "external": ["economic_indicators", "competitor_prices", "weather"],
             },
             "validation": {
                 "test_size": 0.2,
                 "cv_folds": 5,
-                "metrics": ["mae", "rmse", "mape", "r2"]
+                "metrics": ["mae", "rmse", "mape", "r2"],
             },
             "thresholds": {
                 "min_confidence": 0.7,
                 "max_forecast_horizon": 365,
-                "anomaly_threshold": 2.5
-            }
+                "anomaly_threshold": 2.5,
+            },
         }
 
         if Path(self.config_path).exists():
-            with open(self.config_path, 'r') as f:
+            with open(self.config_path, "r") as f:
                 user_config = json.load(f)
                 default_config.update(user_config)
 
@@ -162,7 +178,7 @@ class PredictiveAnalyticsPlatform:
             logger.info("Platform components initialized successfully")
 
         except Exception as e:
-            logger.error(f"Failed to initialize components: {e}")
+            logger.log(logging.ERROR, f"Failed to initialize components: {e}")
 
     def _initialize_forecasting_models(self):
         """Initialize forecasting models"""
@@ -171,7 +187,7 @@ class PredictiveAnalyticsPlatform:
             "arima": {"loaded": True, "type": "statistical"},
             "prophet": {"loaded": True, "type": "statistical"},
             "lstm": {"loaded": True, "type": "deep_learning"},
-            "xgboost": {"loaded": True, "type": "tree_based"}
+            "xgboost": {"loaded": True, "type": "tree_based"},
         }
 
     def _initialize_prediction_models(self):
@@ -180,7 +196,7 @@ class PredictiveAnalyticsPlatform:
             "customer_churn": {"loaded": True, "type": "classification"},
             "sales_prediction": {"loaded": True, "type": "regression"},
             "demand_forecast": {"loaded": True, "type": "time_series"},
-            "inventory_optimization": {"loaded": True, "type": "optimization"}
+            "inventory_optimization": {"loaded": True, "type": "optimization"},
         }
 
     def _initialize_feature_engineering(self):
@@ -190,7 +206,7 @@ class PredictiveAnalyticsPlatform:
             "seasonal_features": True,
             "lag_features": True,
             "rolling_features": True,
-            "external_features": False
+            "external_features": False,
         }
 
     def _setup_directories(self):
@@ -200,15 +216,18 @@ class PredictiveAnalyticsPlatform:
             "data/predictive_training",
             "logs/predictive_processing",
             "cache/predictive_results",
-            "reports/predictive_insights"
+            "reports/predictive_insights",
         ]
 
         for dir_path in directories:
             Path(dir_path).mkdir(parents=True, exist_ok=True)
 
-    def forecast_sales_demand(self, historical_data: pd.DataFrame,
-                            forecast_periods: int = 30,
-                            product_id: Optional[str] = None) -> ForecastResult:
+    def forecast_sales_demand(
+        self,
+        historical_data: pd.DataFrame,
+        forecast_periods: int = 30,
+        product_id: Optional[str] = None,
+    ) -> ForecastResult:
         """
         Forecast sales demand using advanced algorithms
 
@@ -248,7 +267,7 @@ class PredictiveAnalyticsPlatform:
             seasonality_detected=seasonality_info["detected"],
             trend_direction=trend_info["direction"],
             forecast_period="daily" if forecast_periods <= 90 else "monthly",
-            generated_at=datetime.now()
+            generated_at=datetime.now(),
         )
 
         processing_time = (datetime.now() - start_time).total_seconds()
@@ -260,15 +279,15 @@ class PredictiveAnalyticsPlatform:
         """Prepare data for forecasting"""
         # Filter by product if specified
         if product_id:
-            data = data[data['product_id'] == product_id].copy()
+            data = data[data["product_id"] == product_id].copy()
 
         # Ensure datetime index
-        if 'date' in data.columns:
-            data['date'] = pd.to_datetime(data['date'])
-            data = data.set_index('date').sort_index()
+        if "date" in data.columns:
+            data["date"] = pd.to_datetime(data["date"])
+            data = data.set_index("date").sort_index()
 
         # Handle missing values
-        data = data.fillna(method='ffill').fillna(method='bfill')
+        data = data.fillna(method="ffill").fillna(method="bfill")
 
         # Aggregate daily sales if needed
         if not data.index.is_unique:
@@ -298,14 +317,13 @@ class PredictiveAnalyticsPlatform:
 
         # Generate future dates
         last_date = data.index[-1]
-        future_dates = pd.date_range(start=last_date + timedelta(days=1),
-                                   periods=periods, freq='D')
+        future_dates = pd.date_range(start=last_date + timedelta(days=1), periods=periods, freq="D")
 
         # Generate predictions
         predictions = []
         for i in range(periods):
             # Simple exponential smoothing with trend and seasonality
-            base_value = data.iloc[-1]['sales'] if 'sales' in data.columns else data.iloc[-1].values[0]
+            base_value = data.iloc[-1]["sales"] if "sales" in data.columns else data.iloc[-1].values[0]
 
             # Add trend component
             trend_component = trend * (i + 1)
@@ -316,13 +334,9 @@ class PredictiveAnalyticsPlatform:
             prediction = base_value + trend_component + seasonal_component
             predictions.append(max(0, prediction))  # Ensure non-negative
 
-        forecast_df = pd.DataFrame({
-            'date': future_dates,
-            'predicted_sales': predictions,
-            'model': model
-        })
+        forecast_df = pd.DataFrame({"date": future_dates, "predicted_sales": predictions, "model": model})
 
-        return forecast_df.set_index('date')
+        return forecast_df.set_index("date")
 
     def _calculate_trend(self, data: pd.DataFrame) -> float:
         """Calculate trend slope"""
@@ -331,7 +345,7 @@ class PredictiveAnalyticsPlatform:
 
         # Simple linear trend
         x = np.arange(len(data))
-        y = data['sales'].values if 'sales' in data.columns else data.iloc[:, 0].values
+        y = data["sales"].values if "sales" in data.columns else data.iloc[:, 0].values
 
         slope = np.polyfit(x, y, 1)[0]
         return slope
@@ -343,22 +357,22 @@ class PredictiveAnalyticsPlatform:
 
         # Simple seasonality calculation
         weekly_avg = data.groupby(data.index.dayofweek).mean()
-        seasonality_strength = weekly_avg.std().iloc[0] if hasattr(weekly_avg, 'std') else weekly_avg.std()
+        seasonality_strength = weekly_avg.std().iloc[0] if hasattr(weekly_avg, "std") else weekly_avg.std()
 
         return seasonality_strength
 
     def _calculate_confidence_intervals(self, forecast_df: pd.DataFrame) -> pd.DataFrame:
         """Calculate confidence intervals for forecast"""
-        predictions = forecast_df['predicted_sales'].values
+        predictions = forecast_df["predicted_sales"].values
 
         # Simple confidence interval calculation (95%)
         std_dev = np.std(predictions) if len(predictions) > 1 else predictions[0] * 0.1
         margin = 1.96 * std_dev
 
-        confidence_df = pd.DataFrame({
-            'lower_bound': predictions - margin,
-            'upper_bound': predictions + margin
-        }, index=forecast_df.index)
+        confidence_df = pd.DataFrame(
+            {"lower_bound": predictions - margin, "upper_bound": predictions + margin},
+            index=forecast_df.index,
+        )
 
         return confidence_df
 
@@ -371,15 +385,18 @@ class PredictiveAnalyticsPlatform:
         from statsmodels.tsa.seasonal import seasonal_decompose
 
         try:
-            decomposition = seasonal_decompose(data['sales'] if 'sales' in data.columns else data.iloc[:, 0],
-                                             model='additive', period=7)
+            decomposition = seasonal_decompose(
+                data["sales"] if "sales" in data.columns else data.iloc[:, 0],
+                model="additive",
+                period=7,
+            )
             seasonal_strength = np.std(decomposition.seasonal)
 
             return {
                 "detected": seasonal_strength > np.std(data.iloc[:, 0]) * 0.1,
-                "strength": seasonal_strength
+                "strength": seasonal_strength,
             }
-        except:
+        except Exception:
             return {"detected": False, "strength": 0.0}
 
     def _analyze_trend(self, data: pd.DataFrame) -> Dict[str, Any]:
@@ -391,8 +408,8 @@ class PredictiveAnalyticsPlatform:
         recent_data = data.tail(30)  # Last 30 periods
         older_data = data.head(30)  # First 30 periods
 
-        recent_avg = recent_data['sales'].mean() if 'sales' in recent_data.columns else recent_data.iloc[:, 0].mean()
-        older_avg = older_data['sales'].mean() if 'sales' in older_data.columns else older_data.iloc[:, 0].mean()
+        recent_avg = recent_data["sales"].mean() if "sales" in recent_data.columns else recent_data.iloc[:, 0].mean()
+        older_avg = older_data["sales"].mean() if "sales" in older_data.columns else older_data.iloc[:, 0].mean()
 
         change_pct = (recent_avg - older_avg) / older_avg if older_avg != 0 else 0
 
@@ -406,7 +423,7 @@ class PredictiveAnalyticsPlatform:
         return {
             "direction": direction,
             "strength": abs(change_pct),
-            "change_percentage": change_pct * 100
+            "change_percentage": change_pct * 100,
         }
 
     def _calculate_forecast_accuracy(self, data: pd.DataFrame, model: str) -> float:
@@ -423,16 +440,17 @@ class PredictiveAnalyticsPlatform:
         test_predictions = self._generate_forecast(train_data, len(test_data), model)
 
         # Calculate MAPE (Mean Absolute Percentage Error)
-        actual = test_data['sales'].values if 'sales' in test_data.columns else test_data.iloc[:, 0].values
-        predicted = test_predictions['predicted_sales'].values[:len(actual)]
+        actual = test_data["sales"].values if "sales" in test_data.columns else test_data.iloc[:, 0].values
+        predicted = test_predictions["predicted_sales"].values[: len(actual)]
 
         mape = np.mean(np.abs((actual - predicted) / actual)) * 100
         accuracy = max(0, 100 - mape) / 100  # Convert to 0-1 scale
 
         return min(accuracy, 1.0)
 
-    def predict_customer_behavior(self, customer_data: pd.DataFrame,
-                                prediction_type: str = "churn") -> List[CustomerInsight]:
+    def predict_customer_behavior(
+        self, customer_data: pd.DataFrame, prediction_type: str = "churn"
+    ) -> List[CustomerInsight]:
         """
         Predict customer behavior patterns
 
@@ -454,7 +472,7 @@ class PredictiveAnalyticsPlatform:
 
     def _analyze_single_customer(self, customer: pd.Series, prediction_type: str) -> CustomerInsight:
         """Analyze individual customer behavior"""
-        customer_id = str(customer.get('customer_id', 'unknown'))
+        customer_id = str(customer.get("customer_id", "unknown"))
 
         # Extract relevant features
         features = self._extract_customer_features(customer)
@@ -469,11 +487,14 @@ class PredictiveAnalyticsPlatform:
             next_purchase_date = self._predict_next_purchase_date(features)
             prediction, probability = next_purchase_date, 0.8
             behavior = "predictable_purchase_pattern"
-            recommended_actions = ["Send targeted promotions", "Personalized recommendations"]
+            recommended_actions = [
+                "Send targeted promotions",
+                "Personalized recommendations",
+            ]
 
         else:  # lifetime_value
             lifetime_value = self._predict_lifetime_value(features)
-            prediction, probability = lifetime_value, 0.75
+            prediction, probability = lifetime_value, 0.75  # noqa: F841
             behavior = "high_value" if lifetime_value > 1000 else "standard_value"
             recommended_actions = ["VIP treatment"] if lifetime_value > 1000 else ["Loyalty program enrollment"]
 
@@ -486,8 +507,8 @@ class PredictiveAnalyticsPlatform:
             probability=probability,
             key_factors=key_factors,
             recommended_actions=recommended_actions,
-            next_purchase_prediction=next_purchase_date if prediction_type == "next_purchase" else None,
-            lifetime_value_prediction=lifetime_value if prediction_type == "lifetime_value" else 0.0
+            next_purchase_prediction=(next_purchase_date if prediction_type == "next_purchase" else None),
+            lifetime_value_prediction=(lifetime_value if prediction_type == "lifetime_value" else 0.0),
         )
 
         return insight
@@ -497,16 +518,16 @@ class PredictiveAnalyticsPlatform:
         features = {}
 
         # Basic features
-        features['total_purchases'] = customer.get('total_orders', 0)
-        features['total_spent'] = customer.get('total_amount', 0)
-        features['avg_order_value'] = customer.get('avg_order_value', 0)
-        features['days_since_last_purchase'] = customer.get('days_since_last_purchase', 30)
-        features['purchase_frequency'] = customer.get('purchase_frequency', 0)
+        features["total_purchases"] = customer.get("total_orders", 0)
+        features["total_spent"] = customer.get("total_amount", 0)
+        features["avg_order_value"] = customer.get("avg_order_value", 0)
+        features["days_since_last_purchase"] = customer.get("days_since_last_purchase", 30)
+        features["purchase_frequency"] = customer.get("purchase_frequency", 0)
 
         # Derived features
-        features['customer_age_days'] = customer.get('customer_age_days', 30)
-        features['is_high_value'] = 1 if features['total_spent'] > 1000 else 0
-        features['is_frequent_buyer'] = 1 if features['purchase_frequency'] > 0.5 else 0
+        features["customer_age_days"] = customer.get("customer_age_days", 30)
+        features["is_high_value"] = 1 if features["total_spent"] > 1000 else 0
+        features["is_frequent_buyer"] = 1 if features["purchase_frequency"] > 0.5 else 0
 
         return features
 
@@ -516,17 +537,17 @@ class PredictiveAnalyticsPlatform:
         churn_score = 0.0
 
         # High risk factors
-        if features['days_since_last_purchase'] > 90:
+        if features["days_since_last_purchase"] > 90:
             churn_score += 0.4
-        if features['purchase_frequency'] < 0.2:
+        if features["purchase_frequency"] < 0.2:
             churn_score += 0.3
-        if features['total_purchases'] < 3:
+        if features["total_purchases"] < 3:
             churn_score += 0.2
 
         # Low risk factors
-        if features['is_high_value']:
+        if features["is_high_value"]:
             churn_score -= 0.2
-        if features['is_frequent_buyer']:
+        if features["is_frequent_buyer"]:
             churn_score -= 0.1
 
         probability = min(max(churn_score, 0.0), 1.0)
@@ -534,8 +555,8 @@ class PredictiveAnalyticsPlatform:
 
     def _predict_next_purchase_date(self, features: Dict[str, Any]) -> datetime:
         """Predict next purchase date"""
-        days_since_last = features['days_since_last_purchase']
-        frequency = features['purchase_frequency']
+        days_since_last = features["days_since_last_purchase"]
+        frequency = features["purchase_frequency"]
 
         # Estimate days to next purchase
         if frequency > 0:
@@ -550,9 +571,9 @@ class PredictiveAnalyticsPlatform:
     def _predict_lifetime_value(self, features: Dict[str, Any]) -> float:
         """Predict customer lifetime value"""
         # Simple CLV calculation
-        avg_order_value = features['avg_order_value']
-        purchase_frequency = features['purchase_frequency']
-        customer_age_years = features['customer_age_days'] / 365
+        avg_order_value = features["avg_order_value"]
+        purchase_frequency = features["purchase_frequency"]
+        features["customer_age_days"] / 365
 
         # Assume 3-year prediction horizon
         predicted_purchases = purchase_frequency * 36  # Monthly purchases over 3 years
@@ -567,43 +588,43 @@ class PredictiveAnalyticsPlatform:
                 "Send immediate re-engagement email",
                 "Offer special discount",
                 "Schedule follow-up call",
-                "Provide personalized recommendations"
+                "Provide personalized recommendations",
             ]
         elif churn_probability > 0.5:
             return [
                 "Send promotional offer",
                 "Ask for feedback",
-                "Recommend complementary products"
+                "Recommend complementary products",
             ]
         else:
-            return [
-                "Continue regular communication",
-                "Monitor purchase patterns"
-            ]
+            return ["Continue regular communication", "Monitor purchase patterns"]
 
     def _identify_key_factors(self, features: Dict[str, Any], prediction_type: str) -> List[str]:
         """Identify key factors influencing prediction"""
         factors = []
 
         if prediction_type == "churn":
-            if features['days_since_last_purchase'] > 60:
+            if features["days_since_last_purchase"] > 60:
                 factors.append("Long time since last purchase")
-            if features['purchase_frequency'] < 0.3:
+            if features["purchase_frequency"] < 0.3:
                 factors.append("Low purchase frequency")
-            if features['total_purchases'] < 5:
+            if features["total_purchases"] < 5:
                 factors.append("Few total purchases")
 
         elif prediction_type == "lifetime_value":
-            if features['avg_order_value'] > 100:
+            if features["avg_order_value"] > 100:
                 factors.append("High average order value")
-            if features['is_frequent_buyer']:
+            if features["is_frequent_buyer"]:
                 factors.append("Frequent buyer")
 
         return factors if factors else ["Standard customer behavior"]
 
-    def predict_business_metrics(self, historical_metrics: pd.DataFrame,
-                               metrics_to_predict: List[str],
-                               prediction_horizon: str = "30_days") -> List[BusinessMetric]:
+    def predict_business_metrics(
+        self,
+        historical_metrics: pd.DataFrame,
+        metrics_to_predict: List[str],
+        prediction_horizon: str = "30_days",
+    ) -> List[BusinessMetric]:
         """
         Predict key business metrics
 
@@ -626,8 +647,7 @@ class PredictiveAnalyticsPlatform:
         logger.info(f"Generated predictions for {len(predictions)} business metrics")
         return predictions
 
-    def _predict_single_metric(self, metric_data: pd.Series, metric_name: str,
-                             horizon: str) -> BusinessMetric:
+    def _predict_single_metric(self, metric_data: pd.Series, metric_name: str, horizon: str) -> BusinessMetric:
         """Predict a single business metric"""
         # Get current value
         current_value = metric_data.iloc[-1]
@@ -667,7 +687,7 @@ class PredictiveAnalyticsPlatform:
             change_percentage=change_pct,
             trend=trend_direction,
             confidence=confidence,
-            time_horizon=horizon
+            time_horizon=horizon,
         )
 
     def _calculate_metric_trend(self, data: pd.Series) -> float:
@@ -688,8 +708,7 @@ class PredictiveAnalyticsPlatform:
         else:
             return 0.0
 
-    def detect_anomalies(self, data: pd.DataFrame, metric_column: str,
-                        sensitivity: float = 2.5) -> pd.DataFrame:
+    def detect_anomalies(self, data: pd.DataFrame, metric_column: str, sensitivity: float = 2.5) -> pd.DataFrame:
         """
         Detect anomalies in business data
 
@@ -713,18 +732,21 @@ class PredictiveAnalyticsPlatform:
 
         # Create result DataFrame
         result_df = data.copy()
-        result_df['z_score'] = z_scores
-        result_df['is_anomaly'] = anomalies
-        result_df['anomaly_severity'] = z_scores.where(anomalies, 0)
+        result_df["z_score"] = z_scores
+        result_df["is_anomaly"] = anomalies
+        result_df["anomaly_severity"] = z_scores.where(anomalies, 0)
 
         anomaly_count = anomalies.sum()
         logger.info(f"Detected {anomaly_count} anomalies in {metric_column}")
 
         return result_df
 
-    def optimize_inventory_levels(self, sales_data: pd.DataFrame,
-                                current_inventory: pd.DataFrame,
-                                lead_time_days: int = 7) -> pd.DataFrame:
+    def optimize_inventory_levels(
+        self,
+        sales_data: pd.DataFrame,
+        current_inventory: pd.DataFrame,
+        lead_time_days: int = 7,
+    ) -> pd.DataFrame:
         """
         Optimize inventory levels using predictive analytics
 
@@ -739,28 +761,28 @@ class PredictiveAnalyticsPlatform:
         recommendations = []
 
         for _, product in current_inventory.iterrows():
-            product_id = product['product_id']
+            product_id = product["product_id"]
 
             # Get sales forecast
-            product_sales = sales_data[sales_data['product_id'] == product_id]
+            product_sales = sales_data[sales_data["product_id"] == product_id]
             if not product_sales.empty:
                 forecast = self.forecast_sales_demand(product_sales, forecast_periods=30, product_id=product_id)
 
                 # Calculate optimal inventory
-                avg_daily_sales = forecast.forecast['predicted_sales'].mean()
+                avg_daily_sales = forecast.forecast["predicted_sales"].mean()
                 safety_stock = avg_daily_sales * lead_time_days * 1.5  # 50% safety margin
                 reorder_point = avg_daily_sales * lead_time_days
 
-                current_stock = product['current_stock']
+                current_stock = product["current_stock"]
                 optimal_stock = safety_stock + (avg_daily_sales * 30)  # 30-day supply
 
                 recommendation = {
-                    'product_id': product_id,
-                    'current_stock': current_stock,
-                    'optimal_stock': optimal_stock,
-                    'reorder_point': reorder_point,
-                    'safety_stock': safety_stock,
-                    'recommended_action': self._get_inventory_action(current_stock, reorder_point, optimal_stock)
+                    "product_id": product_id,
+                    "current_stock": current_stock,
+                    "optimal_stock": optimal_stock,
+                    "reorder_point": reorder_point,
+                    "safety_stock": safety_stock,
+                    "recommended_action": self._get_inventory_action(current_stock, reorder_point, optimal_stock),
                 }
 
                 recommendations.append(recommendation)
@@ -784,13 +806,14 @@ class PredictiveAnalyticsPlatform:
 
 # ==================== كلاسات متوافقة مع الاختبارات ====================
 
-from enum import Enum as _Enum
-from dataclasses import dataclass as _dataclass, field as _field
 import uuid as _uuid
+from dataclasses import dataclass as _dataclass
+from enum import Enum as _Enum
 
 
 class ModelType(_Enum):
     """أنواع النماذج"""
+
     REGRESSION = "regression"
     CLASSIFICATION = "classification"
     TIME_SERIES = "time_series"
@@ -800,6 +823,7 @@ class ModelType(_Enum):
 @_dataclass
 class PredictionModel:
     """نموذج التنبؤ"""
+
     model_id: str
     name: str
     model_type: ModelType
@@ -811,8 +835,9 @@ class PredictionModel:
 
 
 @_dataclass
-class PredictionResult:
+class PredictionResult:  # noqa: F811
     """نتيجة التنبؤ"""
+
     prediction_id: str
     model_id: str
     prediction: float
@@ -824,6 +849,7 @@ class PredictionResult:
 @_dataclass
 class ModelPerformance:
     """أداء النموذج"""
+
     model_id: str
     accuracy: float
     precision: float
@@ -834,7 +860,7 @@ class ModelPerformance:
     evaluated_at: datetime
 
 
-class PredictiveAnalyticsPlatform:
+class PredictiveAnalyticsPlatform:  # noqa: F811
     """منصة التحليلات التنبؤية - متوافقة مع الاختبارات"""
 
     def __init__(self):
@@ -842,8 +868,14 @@ class PredictiveAnalyticsPlatform:
         self.predictions_history: list = []
         self.data_sources: list = []
 
-    def create_model(self, model_id: str, name: str, model_type: ModelType,
-                     features: list, target: str) -> PredictionModel:
+    def create_model(
+        self,
+        model_id: str,
+        name: str,
+        model_type: ModelType,
+        features: list,
+        target: str,
+    ) -> PredictionModel:
         """إنشاء نموذج تنبؤ جديد"""
         model = PredictionModel(
             model_id=model_id,
@@ -851,7 +883,7 @@ class PredictiveAnalyticsPlatform:
             model_type=model_type,
             features=features,
             target=target,
-            created_at=datetime.now()
+            created_at=datetime.now(),
         )
         self.models[model_id] = model
         return model
@@ -872,7 +904,7 @@ class PredictiveAnalyticsPlatform:
             prediction=42.0,
             confidence=0.85,
             features_used=input_data,
-            timestamp=datetime.now()
+            timestamp=datetime.now(),
         )
         self.predictions_history.append(result)
         return result
@@ -891,7 +923,7 @@ class PredictiveAnalyticsPlatform:
             f1_score=0.875,
             mae=2.5,
             rmse=3.1,
-            evaluated_at=datetime.now()
+            evaluated_at=datetime.now(),
         )
 
     def get_model_metrics(self, model_id: str) -> dict:
@@ -917,7 +949,11 @@ class PredictiveAnalyticsPlatform:
         """إنشاء إصدار جديد للنموذج"""
         if model_id not in self.models:
             return None
-        return {"model_id": model_id, "version": version, "created_at": datetime.now().isoformat()}
+        return {
+            "model_id": model_id,
+            "version": version,
+            "created_at": datetime.now().isoformat(),
+        }
 
 
 if __name__ == "__main__":
@@ -931,13 +967,10 @@ if __name__ == "__main__":
     print("Testing Predictive Analytics Platform...")
 
     # Create sample sales data
-    dates = pd.date_range(start='2025-01-01', end='2025-12-31', freq='D')
+    dates = pd.date_range(start="2025-01-01", end="2025-12-31", freq="D")
     np.random.seed(42)
     sales = np.random.poisson(50, len(dates)) + np.sin(np.arange(len(dates)) * 2 * np.pi / 7) * 10
-    sales_data = pd.DataFrame({
-        'date': dates,
-        'sales': sales
-    })
+    sales_data = pd.DataFrame({"date": dates, "sales": sales})
 
     # Test sales forecasting
     forecast = platform.forecast_sales_demand(sales_data, forecast_periods=30)
@@ -948,15 +981,17 @@ if __name__ == "__main__":
     print()
 
     # Test customer behavior prediction
-    customer_data = pd.DataFrame({
-        'customer_id': ['C001', 'C002', 'C003'],
-        'total_orders': [25, 3, 45],
-        'total_amount': [2500, 150, 4500],
-        'avg_order_value': [100, 50, 100],
-        'days_since_last_purchase': [5, 120, 2],
-        'purchase_frequency': [2.0, 0.1, 3.0],
-        'customer_age_days': [365, 60, 730]
-    })
+    customer_data = pd.DataFrame(
+        {
+            "customer_id": ["C001", "C002", "C003"],
+            "total_orders": [25, 3, 45],
+            "total_amount": [2500, 150, 4500],
+            "avg_order_value": [100, 50, 100],
+            "days_since_last_purchase": [5, 120, 2],
+            "purchase_frequency": [2.0, 0.1, 3.0],
+            "customer_age_days": [365, 60, 730],
+        }
+    )
 
     customer_insights = platform.predict_customer_behavior(customer_data, "churn")
     print(f"Generated insights for {len(customer_insights)} customers")
@@ -965,44 +1000,41 @@ if __name__ == "__main__":
     print()
 
     # Test business metrics prediction
-    metrics_data = pd.DataFrame({
-        'revenue': np.random.normal(10000, 1000, 100),
-        'profit': np.random.normal(2000, 200, 100),
-        'customers': np.random.normal(500, 50, 100)
-    })
-
-    metrics_predictions = platform.predict_business_metrics(
-        metrics_data, ['revenue', 'profit'], '30_days'
+    metrics_data = pd.DataFrame(
+        {
+            "revenue": np.random.normal(10000, 1000, 100),
+            "profit": np.random.normal(2000, 200, 100),
+            "customers": np.random.normal(500, 50, 100),
+        }
     )
+
+    metrics_predictions = platform.predict_business_metrics(metrics_data, ["revenue", "profit"], "30_days")
 
     print(f"Generated predictions for {len(metrics_predictions)} metrics")
     for metric in metrics_predictions:
-        print(f"{metric.name}: {metric.current_value:.0f} -> {metric.predicted_value:.0f} ({metric.change_percentage:+.1f}%)")
+        print(
+            f"{metric.name}: {metric.current_value:.0f} -> {metric.predicted_value:.0f} ({metric.change_percentage:+.1f}%)"  # noqa: E501
+        )
     print()
 
     # Test anomaly detection
     anomaly_data = sales_data.copy()
     # Add some anomalies
-    anomaly_data.loc[10, 'sales'] = 500  # Anomalous high value
-    anomaly_data.loc[50, 'sales'] = 0    # Anomalous low value
+    anomaly_data.loc[10, "sales"] = 500  # Anomalous high value
+    anomaly_data.loc[50, "sales"] = 0  # Anomalous low value
 
-    anomalies = platform.detect_anomalies(anomaly_data, 'sales')
-    anomaly_count = anomalies['is_anomaly'].sum()
+    anomalies = platform.detect_anomalies(anomaly_data, "sales")
+    anomaly_count = anomalies["is_anomaly"].sum()
     print(f"Detected {anomaly_count} anomalies in sales data")
     print()
 
     # Test inventory optimization
-    inventory_data = pd.DataFrame({
-        'product_id': ['P001', 'P002', 'P003'],
-        'current_stock': [100, 25, 200]
-    })
+    inventory_data = pd.DataFrame({"product_id": ["P001", "P002", "P003"], "current_stock": [100, 25, 200]})
 
     sales_with_products = sales_data.copy()
-    sales_with_products['product_id'] = np.random.choice(['P001', 'P002', 'P003'], len(sales_data))
+    sales_with_products["product_id"] = np.random.choice(["P001", "P002", "P003"], len(sales_data))
 
-    inventory_opt = platform.optimize_inventory_levels(
-        sales_with_products, inventory_data, lead_time_days=7
-    )
+    inventory_opt = platform.optimize_inventory_levels(sales_with_products, inventory_data, lead_time_days=7)
 
     print(f"Generated inventory optimization for {len(inventory_opt)} products")
     for _, row in inventory_opt.iterrows():

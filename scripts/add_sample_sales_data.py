@@ -5,7 +5,6 @@
 """
 
 import sys
-import os
 from pathlib import Path
 from datetime import datetime, timedelta
 import random
@@ -15,9 +14,9 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / 'src'))
 
-from src.core.database_manager import DatabaseManager
+from src.core.local_database_manager import LocalDatabaseManager
 
-def generate_sample_sales_data(db_manager: DatabaseManager, num_days: int = 365):
+def generate_sample_sales_data(db_manager: LocalDatabaseManager, num_days: int = 365):
     """توليد بيانات مبيعات تجريبية"""
     print(f"📊 توليد بيانات مبيعات لـ {num_days} يوماً...")
 
@@ -84,7 +83,7 @@ def generate_sample_sales_data(db_manager: DatabaseManager, num_days: int = 365)
 
     return sales_data
 
-def insert_sales_data(db_manager: DatabaseManager, sales_data):
+def insert_sales_data(db_manager: LocalDatabaseManager, sales_data):
     """إدراج بيانات المبيعات في قاعدة البيانات"""
     print(f"💾 إدراج {len(sales_data)} مبيعة في قاعدة البيانات...")
 
@@ -140,7 +139,7 @@ def main():
     print("🚀 إضافة بيانات مبيعات تجريبية للمرحلة 7")
 
     # إعداد قاعدة البيانات
-    db_manager = DatabaseManager()
+    db_manager = LocalDatabaseManager()
     db_manager.initialize()
 
     try:

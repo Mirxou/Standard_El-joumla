@@ -5,5 +5,4 @@ UI Widgets Module
 
 from .sales_chart import SalesChartWidget
 
-__all__ = ['SalesChartWidget']
-
+__all__ = ["SalesChartWidget"]

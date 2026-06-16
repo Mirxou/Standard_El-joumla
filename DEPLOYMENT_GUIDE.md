@@ -9,10 +9,10 @@
 ### Windows PowerShell:
 ```powershell
 # نسخ احتياطي كامل للمشروع
-Copy-Item -Path "C:\Users\pc\Desktop\الإصدار المنطقي trae" -Destination "C:\Users\pc\Desktop\الإصدار المنطقي trae_backup" -Recurse
+Copy-Item -Path "C:\Users\pc\Desktop\ستاندرد الجملة trae" -Destination "C:\Users\pc\Desktop\ستاندرد الجملة trae_backup" -Recurse
 
 # نسخ احتياطي لقاعدة البيانات
-Copy-Item -Path "C:\Users\pc\Desktop\الإصدار المنطقي trae\data\logical_release.db" -Destination "C:\Users\pc\Desktop\الإصدار المنطقي trae\data\logical_release.db.backup"
+Copy-Item -Path "C:\Users\pc\Desktop\ستاندرد الجملة trae\data\logical_release.db" -Destination "C:\Users\pc\Desktop\ستاندرد الجملة trae\data\logical_release.db.backup"
 ```
 
 ### Linux/Mac:
@@ -147,13 +147,13 @@ with open('logs/window_telemetry.json', 'r') as f:
 #### Windows PowerShell:
 ```powershell
 # حذف المشروع الحالي
-Remove-Item -Path "C:\Users\pc\Desktop\الإصدار المنطقي trae" -Recurse -Force
+Remove-Item -Path "C:\Users\pc\Desktop\ستاندرد الجملة trae" -Recurse -Force
 
 # استرجاع النسخة الاحتياطية
-Move-Item -Path "C:\Users\pc\Desktop\الإصدار المنطقي trae_backup" -Destination "C:\Users\pc\Desktop\الإصدار المنطقي trae"
+Move-Item -Path "C:\Users\pc\Desktop\ستاندرد الجملة trae_backup" -Destination "C:\Users\pc\Desktop\ستاندرد الجملة trae"
 
 # استرجاع قاعدة البيانات
-Move-Item -Path "C:\Users\pc\Desktop\الإصدار المنطقي trae\data\logical_release.db.backup" -Destination "C:\Users\pc\Desktop\الإصدار المنطقي trae\data\logical_release.db"
+Move-Item -Path "C:\Users\pc\Desktop\ستاندرد الجملة trae\data\logical_release.db.backup" -Destination "C:\Users\pc\Desktop\ستاندرد الجملة trae\data\logical_release.db"
 ```
 
 #### Linux/Mac:

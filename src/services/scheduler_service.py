@@ -7,22 +7,29 @@ Reminder Scheduler Service
 - SCHEDULER_ENABLED=true|false (افتراضي true)
 - SCHEDULER_INTERVAL_SECONDS=300 (افتراضي 300 ثانية)
 """
+
 from __future__ import annotations
+import logging
+
 import os
 import threading
-import time
-import logging
-from typing import Optional, Callable
+from typing import Optional
 
 from src.services.reminder_service import ReminderService, get_reminder_service
 
 logger = logging.getLogger(__name__)
 
+
 class ReminderScheduler:
     def __init__(self, reminder_service: ReminderService, interval_seconds: Optional[int] = None):
         self.reminder_service = reminder_service
         self.interval = interval_seconds or int(os.getenv("SCHEDULER_INTERVAL_SECONDS", "300"))
-        self.enabled = os.getenv("SCHEDULER_ENABLED", "true").lower() in ("1", "true", "yes", "on")
+        self.enabled = os.getenv("SCHEDULER_ENABLED", "true").lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._running = False
@@ -45,10 +52,10 @@ class ReminderScheduler:
             try:
                 rs = self.reminder_service
                 result = rs.send_due_reminders()
-                if result.get('total'):
+                if result.get("total"):
                     logger.info(f"Sent reminders: {result}")
             except Exception as e:
-                logger.error(f"Scheduler iteration failed: {e}")
+                logger.log(logging.ERROR, f"Scheduler iteration failed: {e}")
             # الانتظار للفترة المحددة أو حتى الإيقاف
             self._stop_event.wait(self.interval)
 
@@ -64,10 +71,14 @@ class ReminderScheduler:
     def is_running(self) -> bool:
         return self._running and not self._stop_event.is_set()
 
+
 # واجهة عامة
 _scheduler_global: Optional[ReminderScheduler] = None
 
-def init_reminder_scheduler(reminder_service: Optional[ReminderService] = None) -> ReminderScheduler:
+
+def init_reminder_scheduler(
+    reminder_service: Optional[ReminderService] = None,
+) -> ReminderScheduler:
     global _scheduler_global
     if reminder_service is None:
         reminder_service = get_reminder_service()
@@ -76,6 +87,7 @@ def init_reminder_scheduler(reminder_service: Optional[ReminderService] = None) 
     _scheduler_global = ReminderScheduler(reminder_service)
     _scheduler_global.start()
     return _scheduler_global
+
 
 def get_reminder_scheduler() -> Optional[ReminderScheduler]:
     return _scheduler_global

@@ -2,9 +2,12 @@
 خدمة سير العمل - WorkflowService
 Rules engine + CRUD wrapper around WorkflowEngine tables.
 """
-from typing import List, Optional, Any, Dict
+import logging
+
 from datetime import datetime
-from src.core.workflow_engine import WorkflowEngine, Workflow, WorkflowStep
+from typing import Any, Dict, List, Optional
+
+from src.core.workflow_engine import Workflow, WorkflowEngine
 from src.utils.logger import setup_logger
 
 
@@ -29,28 +32,26 @@ class WorkflowService:
         Evaluate rules for a given event.
         Events: 'sale_created', 'stock_updated', 'invoice_paid'
         """
-        if event_type == 'stock_updated':
+        if event_type == "stock_updated":
             self._check_low_stock(data)
-        elif event_type == 'sale_created':
+        elif event_type == "sale_created":
             self._check_high_value_sale(data)
 
     def _check_low_stock(self, product_data):
         """Rule: If Stock < Min Stock -> Notify Manager"""
-        current = product_data.get('current_stock', 0)
-        minimum = product_data.get('min_stock', 0)
+        current = product_data.get("current_stock", 0)
+        minimum = product_data.get("min_stock", 0)
         if current <= minimum:
-            msg = (f"⚠️ Low Stock Alert: {product_data.get('name')} "
-                   f"is below minimum ({current}/{minimum})")
+            msg = f"⚠️ Low Stock Alert: {product_data.get('name')} " f"is below minimum ({current}/{minimum})"
             print(f"[Autopilot] {msg}")
             if self.notify:
                 self.notify.show_warning(msg)
 
     def _check_high_value_sale(self, sale_data):
         """Rule: If Sale > 100,000 DA -> Flag as VIP"""
-        total = sale_data.get('total_amount', 0)
+        total = sale_data.get("total_amount", 0)
         if total > 100000:
-            msg = (f"🌟 VIP Sale: Invoice #{sale_data.get('invoice_number')} "
-                   f"is {total:,.2f} DA!")
+            msg = f"🌟 VIP Sale: Invoice #{sale_data.get('invoice_number')} " f"is {total:,.2f} DA!"
             print(f"[Autopilot] {msg}")
             if self.notify:
                 self.notify.show_success(msg)
@@ -59,8 +60,7 @@ class WorkflowService:
     # Workflow CRUD – used by WorkflowDesignerWindow
     # ------------------------------------------------------------------
 
-    def get_workflows_by_entity_type(self, entity_type: str,
-                                     active_only: bool = True) -> List[Workflow]:
+    def get_workflows_by_entity_type(self, entity_type: str, active_only: bool = True) -> List[Workflow]:
         """Return ALL workflows for the given entity type (not just the default)."""
         try:
             query = """
@@ -88,14 +88,19 @@ class WorkflowService:
             if not workflow:
                 return None
             steps = self._engine.get_workflow_steps(workflow_id)
-            return {'workflow': workflow, 'steps': steps}
+            return {"workflow": workflow, "steps": steps}
         except Exception as e:
             self.logger.error(f"get_workflow_with_steps error: {e}")
             return None
 
-    def create_workflow(self, name: str, entity_type: str,
-                        description: str = '', is_active: bool = True,
-                        is_default: bool = False) -> Optional[int]:
+    def create_workflow(
+        self,
+        name: str,
+        entity_type: str,
+        description: str = "",
+        is_active: bool = True,
+        is_default: bool = False,
+    ) -> Optional[int]:
         """Insert a new workflow row. Returns the new ID or None on failure."""
         try:
             now = datetime.now().isoformat()
@@ -105,24 +110,34 @@ class WorkflowService:
                      trigger_condition, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, '', ?, ?)
             """
-            params = (name, description, entity_type,
-                      1 if is_active else 0,
-                      1 if is_default else 0,
-                      now, now)
+            params = (
+                name,
+                description,
+                entity_type,
+                1 if is_active else 0,
+                1 if is_default else 0,
+                now,
+                now,
+            )
             return self.db.execute_insert(query, params)
         except Exception as e:
             self.logger.error(f"create_workflow error: {e}")
             return None
 
-    def add_workflow_step(self, workflow_id: int, step_order: int, name: str,
-                          step_type: str,
-                          approver_type: Optional[str] = None,
-                          approver_id: Optional[int] = None,
-                          approver_role: Optional[str] = None,
-                          timeout_hours: Optional[int] = None,
-                          is_required: bool = True,
-                          can_delegate: bool = False,
-                          auto_approve: bool = False) -> Optional[int]:
+    def add_workflow_step(
+        self,
+        workflow_id: int,
+        step_order: int,
+        name: str,
+        step_type: str,
+        approver_type: Optional[str] = None,
+        approver_id: Optional[int] = None,
+        approver_role: Optional[str] = None,
+        timeout_hours: Optional[int] = None,
+        is_required: bool = True,
+        can_delegate: bool = False,
+        auto_approve: bool = False,
+    ) -> Optional[int]:
         """Insert a workflow step. Returns the new step ID or None on failure."""
         try:
             now = datetime.now().isoformat()
@@ -136,13 +151,19 @@ class WorkflowService:
                 VALUES (?, ?, ?, ?, ?, ?, ?, '', '', ?, ?, ?, ?, ?, ?)
             """
             params = (
-                workflow_id, step_order, name, step_type,
-                approver_type, approver_id, approver_role,
+                workflow_id,
+                step_order,
+                name,
+                step_type,
+                approver_type,
+                approver_id,
+                approver_role,
                 timeout_hours,
                 1 if is_required else 0,
                 1 if can_delegate else 0,
                 1 if auto_approve else 0,
-                now, now,
+                now,
+                now,
             )
             return self.db.execute_insert(query, params)
         except Exception as e:

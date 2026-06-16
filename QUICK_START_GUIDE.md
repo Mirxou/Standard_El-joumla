@@ -5,7 +5,7 @@
 ### 1. النسخ الاحتياطي (موصى به)
 ```bash
 # نسخ احتياطي للمشروع
-cp -r "C:\Users\pc\Desktop\الإصدار المنطقي trae" "C:\Users\pc\Desktop\الإصدار المنطقي trae_backup"
+cp -r "C:\Users\pc\Desktop\ستاندرد الجملة trae" "C:\Users\pc\Desktop\ستاندرد الجملة trae_backup"
 
 # نسخ احتياطي لقاعدة البيانات
 cp "data/logical_release.db" "data/logical_release.db.backup"

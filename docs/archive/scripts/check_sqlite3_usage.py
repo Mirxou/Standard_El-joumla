@@ -4,7 +4,6 @@
 فحص استخدامات sqlite3 المباشرة - Check Direct SQLite3 Usage
 """
 
-import os
 from pathlib import Path
 
 def main():

@@ -21,8 +21,12 @@ CREATE TABLE IF NOT EXISTS user_sessions_temp (
 );
 
 -- نسخ البيانات
-INSERT OR IGNORE INTO user_sessions_temp 
-SELECT * FROM user_sessions WHERE EXISTS (SELECT 1 FROM user_sessions LIMIT 1);
+INSERT OR IGNORE INTO user_sessions_temp (
+    session_id, user_id, login_time, last_activity, ip_address, user_agent
+)
+SELECT 
+    session_id, user_id, login_time, last_activity, ip_address, user_agent
+FROM user_sessions WHERE EXISTS (SELECT 1 FROM user_sessions LIMIT 1);
 
 -- حذف وإعادة تسمية
 DROP TABLE IF EXISTS user_sessions;
@@ -50,8 +54,8 @@ CREATE TABLE IF NOT EXISTS role_permissions_temp (
 );
 
 -- نسخ البيانات
-INSERT OR IGNORE INTO role_permissions_temp 
-SELECT * FROM role_permissions WHERE EXISTS (SELECT 1 FROM role_permissions LIMIT 1);
+INSERT OR IGNORE INTO role_permissions_temp (role_id, permission_id)
+SELECT role_id, permission_id FROM role_permissions WHERE EXISTS (SELECT 1 FROM role_permissions LIMIT 1);
 
 -- حذف وإعادة تسمية
 DROP TABLE IF EXISTS role_permissions;

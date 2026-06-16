@@ -3,8 +3,9 @@
 Vendor Rating Service
 Aligns with existing supplier_evaluations schema and computes scores/grades.
 """
+
 from dataclasses import dataclass
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 from ..core.database_manager import DatabaseManager
 
@@ -45,13 +46,7 @@ class VendorRatingService:
 
     def _compute_overall(self, e: SupplierEvaluation) -> float:
         # Average of five core criteria (1..5)
-        total = (
-            e.quality_score
-            + e.delivery_score
-            + e.pricing_score
-            + e.communication_score
-            + e.reliability_score
-        )
+        total = e.quality_score + e.delivery_score + e.pricing_score + e.communication_score + e.reliability_score
         return round(total / 5.0, 2)
 
     def _grade(self, score: float) -> str:
@@ -99,14 +94,32 @@ class VendorRatingService:
             )
             """,
             (
-                e.supplier_id, e.supplier_name,
-                e.evaluation_period_start, e.evaluation_period_end,
-                e.quality_score, e.delivery_score, e.pricing_score, e.communication_score, e.reliability_score,
-                e.total_orders, e.completed_orders, e.on_time_deliveries, e.late_deliveries, e.rejected_shipments, e.total_value,
-                e.on_time_delivery_rate, e.quality_acceptance_rate, e.average_lead_time_days,
-                overall, grade,
-                1 if e.is_approved else 0, 1 if e.is_preferred else 0, e.notes, e.recommendations,
-                e.evaluated_by, e.evaluation_date,
+                e.supplier_id,
+                e.supplier_name,
+                e.evaluation_period_start,
+                e.evaluation_period_end,
+                e.quality_score,
+                e.delivery_score,
+                e.pricing_score,
+                e.communication_score,
+                e.reliability_score,
+                e.total_orders,
+                e.completed_orders,
+                e.on_time_deliveries,
+                e.late_deliveries,
+                e.rejected_shipments,
+                e.total_value,
+                e.on_time_delivery_rate,
+                e.quality_acceptance_rate,
+                e.average_lead_time_days,
+                overall,
+                grade,
+                1 if e.is_approved else 0,
+                1 if e.is_preferred else 0,
+                e.notes,
+                e.recommendations,
+                e.evaluated_by,
+                e.evaluation_date,
             ),
         )
         con.commit()
@@ -130,4 +143,8 @@ class VendorRatingService:
         row = self.get_latest_evaluation(supplier_id)
         if not row:
             return None
-        return {"supplier_id": supplier_id, "overall_score": row.get("overall_score"), "grade": row.get("grade")}
+        return {
+            "supplier_id": supplier_id,
+            "overall_score": row.get("overall_score"),
+            "grade": row.get("grade"),
+        }

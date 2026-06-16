@@ -1,5 +1,6 @@
-import sqlite3
 import os
+import sqlite3
+
 import pytest
 
 
@@ -27,7 +28,7 @@ def test_ai_models_table_exists():
     cur = conn.cursor()
     cur.execute('SELECT name FROM sqlite_master WHERE type="table" AND name="ai_models"')
     result = cur.fetchone()
-    assert result is not None, f'ai_models table does not exist in {db_path}'
+    assert result is not None, f"ai_models table does not exist in {db_path}"
     conn.close()
 
 
@@ -37,10 +38,7 @@ def test_ai_models_table_has_columns():
         pytest.skip("No database file found for ai_models table column check.")
     conn = sqlite3.connect(db_path)
     cur = conn.cursor()
-    cur.execute('PRAGMA table_info(ai_models)')
+    cur.execute("PRAGMA table_info(ai_models)")
     columns = cur.fetchall()
-    assert len(columns) > 0, f'ai_models table in {db_path} has no columns'
+    assert len(columns) > 0, f"ai_models table in {db_path} has no columns"
     conn.close()
-
-
-

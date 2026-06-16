@@ -15,15 +15,14 @@ Centralized Window Management System
 """
 
 from __future__ import annotations
-
-import weakref
-import json
 import logging
-from typing import Dict, List, Optional, Type, Any, Callable
-from collections import defaultdict
-from functools import partial
 
-from PySide6.QtCore import QObject, QSettings, Slot
+import json
+import weakref
+from collections import defaultdict
+from typing import Any, Callable, Dict, List, Optional, Type
+
+from PySide6.QtCore import QObject, QSettings
 from PySide6.QtWidgets import QWidget
 
 logger = logging.getLogger("window_manager")
@@ -32,12 +31,13 @@ logger = logging.getLogger("window_manager")
 class WindowConfig:
     """
     Minimal config holder for a registered window.
-    
+
     window_key: unique id string (e.g. "products")
     window_class: subclass of QWidget
     singleton: True => only one live instance tracked (by key)
     init_kwargs: default kwargs when creating
     """
+
     def __init__(
         self,
         window_key: str,
@@ -56,7 +56,7 @@ class WindowConfig:
 class WindowManager(QObject):
     """
     Central Window Manager for a Desktop (PySide6) ERP.
-    
+
     - register_window
     - open_window / close_window / close_all
     - supports singleton and multiple instances
@@ -65,14 +65,19 @@ class WindowManager(QObject):
     - provides hooks lists: on_before_open, on_after_open, on_before_close, on_after_close
     """
 
-    def __init__(self, organization: str = "LogicalVersion", appname: str = "ERP", parent: Optional[QObject] = None):
+    def __init__(
+        self,
+        organization: str = "LogicalVersion",
+        appname: str = "ERP",
+        parent: Optional[QObject] = None,
+    ):
         super().__init__(parent)
         self._configs: Dict[str, WindowConfig] = {}
         # dict of key -> list of weakrefs to QWidget
         self._open_refs: Dict[str, List[weakref.ref]] = defaultdict(list)
         self.settings = QSettings(organization, appname)
 
-        # hooks: lists of callables. each callable receives (window_key, instance) where instance may be None on before_open
+        # hooks: lists of callables. each callable receives (window_key, instance) where instance may be None on before_open  # noqa: E501
         self.on_before_open: List[Callable[[str, Optional[QWidget], Dict[str, Any]], None]] = []
         self.on_after_open: List[Callable[[str, QWidget], None]] = []
         self.on_before_close: List[Callable[[str, QWidget], None]] = []
@@ -81,23 +86,32 @@ class WindowManager(QObject):
         # Signals (Qt Signals for better integration)
         # Note: These are optional and can be used by subclasses or wrappers
         # Base WindowManager doesn't inherit QObject signals, but can be extended
-        
+
         # basic logger
         self.logger = logger
 
     # ----- registration -----
-    def register_window(self, *,
-                        window_key: str,
-                        window_class: Type[QWidget],
-                        title: Optional[str] = None,
-                        singleton: bool = True,
-                        init_kwargs: Optional[Dict[str, Any]] = None) -> None:
+    def register_window(
+        self,
+        *,
+        window_key: str,
+        window_class: Type[QWidget],
+        title: Optional[str] = None,
+        singleton: bool = True,
+        init_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> None:
         if not isinstance(window_key, str) or not window_key:
             raise ValueError("window_key must be a non-empty string")
         if not isinstance(window_class, type) or not issubclass(window_class, QWidget):
             raise TypeError("window_class must be a QWidget subclass")
 
-        cfg = WindowConfig(window_key=window_key, window_class=window_class, title=title, singleton=singleton, init_kwargs=init_kwargs)
+        cfg = WindowConfig(
+            window_key=window_key,
+            window_class=window_class,
+            title=title,
+            singleton=singleton,
+            init_kwargs=init_kwargs,
+        )
         self._configs[window_key] = cfg
         self.logger.debug(f"Registered window: {window_key} -> {window_class.__name__}")
 
@@ -121,7 +135,9 @@ class WindowManager(QObject):
                         except Exception:
                             self.logger.exception("on_before_close hook failed")
                 # remove the weakref from tracking
-                self._open_refs[window_key] = [r for r in self._open_refs.get(window_key, []) if r is not wref and r() is not None]
+                self._open_refs[window_key] = [
+                    r for r in self._open_refs.get(window_key, []) if r is not wref and r() is not None
+                ]
                 # call after_close hooks
                 for h in self.on_after_close:
                     try:
@@ -130,6 +146,7 @@ class WindowManager(QObject):
                         self.logger.exception("on_after_close hook failed")
             except Exception:
                 self.logger.exception("error handling destroyed for %s", window_key)
+
         return _handler
 
     # ----- persistence (geometry/state) -----
@@ -141,19 +158,22 @@ class WindowManager(QObject):
                 instance.showNormal()
                 # معالجة الأحداث للتأكد من أن التغيير تم
                 from PySide6.QtWidgets import QApplication
+
                 QApplication.processEvents()
                 geom = instance.geometry()
                 instance.showMaximized()  # إعادة maximized
             else:
                 geom = instance.geometry()
-            
-            data = json.dumps({
-                "x": geom.x(),
-                "y": geom.y(),
-                "w": geom.width(),
-                "h": geom.height(),
-                "maximized": bool(instance.isMaximized())
-            })
+
+            data = json.dumps(
+                {
+                    "x": geom.x(),
+                    "y": geom.y(),
+                    "w": geom.width(),
+                    "h": geom.height(),
+                    "maximized": bool(instance.isMaximized()),
+                }
+            )
             self.settings.setValue(f"{window_key}/geometry", data)
             self.settings.sync()
         except Exception:
@@ -165,7 +185,7 @@ class WindowManager(QObject):
             if not raw:
                 return
             obj = json.loads(raw)
-            
+
             # التحقق من حالة maximized أولاً
             if obj.get("maximized"):
                 # إذا كانت maximized، احفظ الحجم الطبيعي أولاً ثم كبّر
@@ -176,6 +196,7 @@ class WindowManager(QObject):
                 instance.setGeometry(x, y, w, h)
                 # معالجة الأحداث للتأكد من التطبيق
                 from PySide6.QtWidgets import QApplication
+
                 QApplication.processEvents()
                 instance.showMaximized()
             else:
@@ -236,7 +257,7 @@ class WindowManager(QObject):
                 try:
                     inst.setWindowTitle(cfg.title)
                 except Exception:
-                    pass
+                    logging.getLogger(__name__).warning("Ignored exception in window_manager.py")
 
             # restore geometry/state if any
             self._restore_geometry(window_key, inst)
@@ -249,7 +270,7 @@ class WindowManager(QObject):
             inst.destroyed.connect(self._make_on_destroyed(window_key, wref))
 
             # connect close/save hook if we can (safe)
-            # do NOT override closeEvent; instead connect to destroyed & rely on callers to call deleteLater() on close if needed
+            # do NOT override closeEvent; instead connect to destroyed & rely on callers to call deleteLater() on close if needed  # noqa: E501
 
             # call after-open hooks
             for h in self.on_after_open:
@@ -262,39 +283,41 @@ class WindowManager(QObject):
             # إذا كانت النافذة تدعم WindowStateManager
             try:
                 from src.core.window_state_manager import WindowStateManager
+
                 state_manager = WindowStateManager(
                     organization=self.settings.organizationName(),
                     appname=self.settings.applicationName(),
-                    parent=self
+                    parent=self,
                 )
-                
+
                 # استعادة التبويبات
-                if hasattr(inst, 'tab_widgets'):
+                if hasattr(inst, "tab_widgets"):
                     for tab_key, tab_widget in inst.tab_widgets.items():
                         state_manager.restore_tab_state(window_key, tab_widget, tab_key)
-                
+
                 # استعادة الفلاتر
-                if hasattr(inst, 'filter_widgets'):
+                if hasattr(inst, "filter_widgets"):
                     for filter_key, filter_dict in inst.filter_widgets.items():
                         state_manager.restore_filter_state(window_key, filter_dict, filter_key)
-                
+
                 # استعادة الجداول
-                if hasattr(inst, 'table_widgets'):
+                if hasattr(inst, "table_widgets"):
                     for table_key, table_widget in inst.table_widgets.items():
                         state_manager.restore_table_state(window_key, table_widget, table_key)
             except Exception:
                 # لا مشكلة إذا لم تكن النافذة تدعم الحالة المتقدمة
-                pass
+                logging.getLogger(__name__).warning("Ignored exception in window_manager.py")
 
             # show it
             try:
                 inst.show()
                 inst.raise_()
                 inst.activateWindow()
-                
+
                 # Performance optimization: process events once after showing
                 # This ensures the window is rendered before returning
                 from PySide6.QtWidgets import QApplication
+
                 QApplication.processEvents()
             except Exception:
                 self.logger.exception("opening/showing window failed for %s", window_key)
@@ -322,43 +345,50 @@ class WindowManager(QObject):
                 if inst.isVisible():
                     try:
                         self._save_geometry(window_key, inst)
-                        
+
                         # حفظ الحالة المتقدمة (تبويبات، فلاتر، جداول)
                         # إذا كانت النافذة تدعم WindowStateManager
                         try:
                             from src.core.window_state_manager import WindowStateManager
+
                             state_manager = WindowStateManager(
                                 organization=self.settings.organizationName(),
                                 appname=self.settings.applicationName(),
-                                parent=self
+                                parent=self,
                             )
-                            
+
                             # حفظ التبويبات
-                            if hasattr(inst, 'tab_widgets'):
+                            if hasattr(inst, "tab_widgets"):
                                 for tab_key, tab_widget in inst.tab_widgets.items():
                                     state_manager.save_tab_state(window_key, tab_widget, tab_key)
-                            
+
                             # حفظ الفلاتر
-                            if hasattr(inst, 'filter_widgets'):
-                                for filter_key, filter_dict in inst.filter_widgets.items():
+                            if hasattr(inst, "filter_widgets"):
+                                for (
+                                    filter_key,
+                                    filter_dict,
+                                ) in inst.filter_widgets.items():
                                     state_manager.save_filter_state(window_key, filter_dict, filter_key)
-                            
+
                             # حفظ الجداول
-                            if hasattr(inst, 'table_widgets'):
-                                for table_key, table_widget in inst.table_widgets.items():
+                            if hasattr(inst, "table_widgets"):
+                                for (
+                                    table_key,
+                                    table_widget,
+                                ) in inst.table_widgets.items():
                                     state_manager.save_table_state(window_key, table_widget, table_key)
                         except Exception:
                             # لا مشكلة إذا لم تكن النافذة تدعم الحالة المتقدمة
-                            pass
+                            logging.getLogger(__name__).warning("Ignored exception in window_manager.py")
                     except Exception:
                         self.logger.exception("Failed to save state for %s", window_key)
-                
+
                 inst.close()
                 # ensure deletion
                 try:
                     inst.deleteLater()
                 except Exception:
-                    pass
+                    logging.getLogger(__name__).warning("Ignored exception in window_manager.py")
                 closed_any = True
             except Exception:
                 self.logger.exception("Error closing instance for %s", window_key)
@@ -376,17 +406,17 @@ class WindowManager(QObject):
         try:
             # إغلاق جميع النوافذ المفتوحة
             self.close_all()
-            
+
             # تنظيف المراجع الميتة
             for key in list(self._open_refs.keys()):
                 self._clean_dead_refs(key)
-            
+
             # تنظيف الـ hooks (اختياري)
             self.on_before_open.clear()
             self.on_after_open.clear()
             self.on_before_close.clear()
             self.on_after_close.clear()
-            
+
             if self.logger:
                 self.logger.debug("WindowManager cleanup completed")
         except Exception as e:
@@ -416,7 +446,11 @@ class WindowManager(QObject):
                     key = getattr(obj, "window_key")
                     singleton = getattr(obj, "window_singleton", True)
                     title = getattr(obj, "window_title", None)
-                    self.register_window(window_key=key, window_class=obj, title=title, singleton=singleton)
+                    self.register_window(
+                        window_key=key,
+                        window_class=obj,
+                        title=title,
+                        singleton=singleton,
+                    )
             except Exception:
                 self.logger.exception("auto_register error for %r", obj)
-

@@ -4,18 +4,17 @@
 import sys
 import io
 from pathlib import Path
-from datetime import datetime
 
 if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 sys.path.insert(0, str(Path.cwd()))
-from src.core.database_manager import DatabaseManager
+from src.core.local_database_manager import LocalDatabaseManager
 from src.core.config_manager import ConfigManager
 
 config = ConfigManager()
-db = DatabaseManager(config.get_database_path())
+db = LocalDatabaseManager(config.get_database_path())
 db.initialize()
 
 print("=== إعادة إنشاء جدول role_permissions ===")
@@ -33,12 +32,9 @@ try:
         CREATE TABLE role_permissions (
             role_id INTEGER NOT NULL,
             permission_id INTEGER NOT NULL,
-            granted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            granted_by INTEGER,
             PRIMARY KEY (role_id, permission_id),
             FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
-            FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE,
-            FOREIGN KEY (granted_by) REFERENCES users(id)
+            FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE
         )
     ''')
     print("✓ تم إنشاء الجدول الجديد")

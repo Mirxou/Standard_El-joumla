@@ -197,7 +197,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const errorMsg = error.message || "";
 
       if (errorMsg.includes("fetch") || errorMsg.includes("Failed to fetch") || errorMsg.includes("Network request failed")) {
-        errorMessage = "لا يمكن الاتصال بالخادم. تأكد من تشغيل Backend API على http://localhost:8001"
+        errorMessage = "لا يمكن الاتصال بالخادم. تأكد من تشغيل Backend API على http://localhost:8000"
       } else if (error.status === 401) {
         errorMessage = "اسم المستخدم أو كلمة المرور غير صحيحة"
       } else if (error.status === 404) {

@@ -17,17 +17,31 @@ focusing on speed, information density, and data visibility.
 """
 
 import sys
+
+from PySide6.QtCore import QSize
+from PySide6.QtGui import QIcon, Qt
 from PySide6.QtWidgets import (
-    QApplication, QDialog, QWidget, QVBoxLayout, QHBoxLayout, QFrame,
-    QLabel, QLineEdit, QTableWidget, QHeaderView, QPushButton,
-    QTableWidgetItem, QSpacerItem, QSizePolicy, QComboBox, QTextEdit,
-    QMessageBox
+    QApplication,
+    QComboBox,
+    QDialog,
+    QFrame,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtGui import QIcon, Qt, QCursor
-from PySide6.QtCore import QSize, Signal
+
 
 class InsightCard(QFrame):
     """A small card for displaying live customer insights in the header."""
+
     def __init__(self, title, value, icon_path=None):
         super().__init__()
         self.setObjectName("InsightCard")
@@ -56,22 +70,26 @@ class InsightCard(QFrame):
         self.style().unpolish(self.value_label)
         self.style().polish(self.value_label)
 
+
 class WholesaleInvoiceWindow(QDialog):
     """
     ⚠️ DEPRECATED - هذا الكلاس مهمل وغير مستخدم
-    
+
     واجهة فاتورة الجملة
-    
+
     ⚠️ ملاحظة: تم استبدال هذا الكلاس بـ `SalesDialog` في `src/ui/dialogs/sales_dialog.py`
     `SalesDialog` يستخدم نفس التصميم (3-Zone Enterprise Layout) مع تحسينات.
     لا تستخدم هذا الكلاس في الكود الإنتاجي!
     """
+
     def __init__(self, parent=None):
+        if not QApplication.instance():
+            self._app_ref = QApplication([])
         super().__init__(parent)
         self.setWindowTitle("Wholesale Invoice - B2B Trading")
         self.setMinimumSize(1400, 900)
 
-        self.admin_mode = True # To show/hide margin column
+        self.admin_mode = True  # To show/hide margin column
 
         self._setup_ui()
         self._setup_styles()
@@ -89,7 +107,7 @@ class WholesaleInvoiceWindow(QDialog):
 
         # === ZONE 2: The Power Grid ===
         grid_frame = self._create_zone2_power_grid()
-        main_layout.addWidget(grid_frame, 1) # Make the grid stretch
+        main_layout.addWidget(grid_frame, 1)  # Make the grid stretch
 
         # === ZONE 3: The Footer & Logistics ===
         footer_frame = self._create_zone3_footer()
@@ -121,7 +139,7 @@ class WholesaleInvoiceWindow(QDialog):
         self.card_credit = InsightCard("💳 Credit Limit", "$5,000 / $20,000")
         self.card_balance = InsightCard("💰 Current Balance", "$1,250.75")
         self.card_tier = InsightCard("🏷️ Price Tier", "Wholesale Level 2")
-        
+
         shipping_label = QLabel("📍 Shipping To:")
         shipping_label.setStyleSheet("font-weight: 500; color: #64748B; font-size: 13px;")
         self.shipping_address_combo = QComboBox()
@@ -149,8 +167,20 @@ class WholesaleInvoiceWindow(QDialog):
 
         self.product_table = QTableWidget()
         self.product_table.setObjectName("PowerGrid")
-        
-        columns = ["#", "Product Info", "Stock", "Unit", "Quantity", "Unit Price", "Discount %", "Net Price", "Margin %", "Total", ""]
+
+        columns = [
+            "#",
+            "Product Info",
+            "Stock",
+            "Unit",
+            "Quantity",
+            "Unit Price",
+            "Discount %",
+            "Net Price",
+            "Margin %",
+            "Total",
+            "",
+        ]
         self.product_table.setColumnCount(len(columns))
         self.product_table.setHorizontalHeaderLabels(columns)
 
@@ -161,12 +191,12 @@ class WholesaleInvoiceWindow(QDialog):
         self.product_table.setColumnWidth(2, 80)
         self.product_table.setColumnWidth(3, 120)
         self.product_table.setColumnWidth(4, 80)
-        self.product_table.setColumnHidden(8, not self.admin_mode) # Hide Margin for non-admins
+        self.product_table.setColumnHidden(8, not self.admin_mode)  # Hide Margin for non-admins
         self.product_table.setColumnWidth(10, 40)
 
         self.product_table.verticalHeader().setVisible(False)
         self.product_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        
+
         layout.addWidget(self.product_table)
         return grid_container
 
@@ -181,7 +211,7 @@ class WholesaleInvoiceWindow(QDialog):
         # Left Side: Logistics
         logistics_frame = QFrame()
         logistics_layout = QVBoxLayout(logistics_frame)
-        logistics_layout.setContentsMargins(0,0,0,0)
+        logistics_layout.setContentsMargins(0, 0, 0, 0)
         logistics_layout.setSpacing(10)
 
         logistics_title = QLabel("Logistics & Shipping")
@@ -212,13 +242,13 @@ class WholesaleInvoiceWindow(QDialog):
         financials_frame = QFrame()
         financials_frame.setObjectName("FinancialsFrame")
         financials_layout = QVBoxLayout(financials_frame)
-        financials_layout.setContentsMargins(20,20,20,20)
+        financials_layout.setContentsMargins(20, 20, 20, 20)
         financials_layout.setSpacing(15)
 
         financials_layout.addWidget(self._create_summary_row("Subtotal", "145,800.00"))
         financials_layout.addWidget(self._create_summary_row("Bulk Discount (5%)", "-7,290.00", "discount"))
         financials_layout.addWidget(self._create_summary_row("VAT (19%)", "26,316.90"))
-        
+
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
         line.setObjectName("Divider")
@@ -250,7 +280,7 @@ class WholesaleInvoiceWindow(QDialog):
         action_buttons_layout.addStretch()
         action_buttons_layout.addWidget(self.btn_save)
         action_buttons_layout.addWidget(self.btn_print)
-        
+
         layout.addWidget(logistics_frame, 1)
         layout.addWidget(financials_frame)
         layout.addLayout(action_buttons_layout)
@@ -261,7 +291,7 @@ class WholesaleInvoiceWindow(QDialog):
         """Helper to create a row in the financial summary."""
         row = QWidget()
         layout = QHBoxLayout(row)
-        layout.setContentsMargins(0,0,0,0)
+        layout.setContentsMargins(0, 0, 0, 0)
         title_label = QLabel(title)
         value_label = QLabel(value)
         value_label.setAlignment(Qt.AlignmentFlag.AlignRight)
@@ -281,15 +311,15 @@ class WholesaleInvoiceWindow(QDialog):
         # Column 1: Product Info (Name + SKU)
         product_info_widget = QWidget()
         product_layout = QVBoxLayout(product_info_widget)
-        product_layout.setContentsMargins(5,5,5,5)
-        product_layout.addWidget(QLabel(data['name']))
+        product_layout.setContentsMargins(5, 5, 5, 5)
+        product_layout.addWidget(QLabel(data["name"]))
         sku_label = QLabel(f"SKU: {data['sku']}")
         sku_label.setObjectName("SkuLabel")
         product_layout.addWidget(sku_label)
         self.product_table.setCellWidget(row_idx, 1, product_info_widget)
 
         # Column 2: Stock
-        self.product_table.setItem(row_idx, 2, QTableWidgetItem(str(data['stock'])))
+        self.product_table.setItem(row_idx, 2, QTableWidgetItem(str(data["stock"])))
 
         # Column 3: Unit (Dropdown)
         unit_combo = QComboBox()
@@ -297,20 +327,20 @@ class WholesaleInvoiceWindow(QDialog):
         self.product_table.setCellWidget(row_idx, 3, unit_combo)
 
         # Column 4: Quantity
-        self.product_table.setItem(row_idx, 4, QTableWidgetItem(str(data['qty'])))
+        self.product_table.setItem(row_idx, 4, QTableWidgetItem(str(data["qty"])))
 
         # Column 5: Unit Price
         self.product_table.setItem(row_idx, 5, QTableWidgetItem(f"{data['unit_price']:.2f}"))
 
         # Column 6: Discount %
-        self.product_table.setItem(row_idx, 6, QTableWidgetItem(str(data['discount'])))
+        self.product_table.setItem(row_idx, 6, QTableWidgetItem(str(data["discount"])))
 
         # Column 7: Net Price
         self.product_table.setItem(row_idx, 7, QTableWidgetItem(f"{data['net_price']:.2f}"))
 
         # Column 8: Margin %
         margin_item = QTableWidgetItem(f"{data['margin']:.1f}%")
-        margin_item.setForeground(Qt.GlobalColor.darkGreen if data['margin'] > 15 else Qt.GlobalColor.darkRed)
+        margin_item.setForeground(Qt.GlobalColor.darkGreen if data["margin"] > 15 else Qt.GlobalColor.darkRed)
         self.product_table.setItem(row_idx, 8, margin_item)
 
         # Column 9: Total
@@ -336,13 +366,46 @@ class WholesaleInvoiceWindow(QDialog):
 
         # Populate product grid
         products = [
-            {'name': 'Industrial Grade Server Rack (24U)', 'sku': 'SR-24U-IND', 'stock': 15, 'unit': 'Pcs', 'qty': 2, 'unit_price': 45000.00, 'discount': 10, 'net_price': 40500.00, 'margin': 22.5, 'total': 81000.00},
-            {'name': 'Bulk Ethernet Cable CAT6 (305m)', 'sku': 'ETH-C6-305M', 'stock': 250, 'unit': 'Box', 'qty': 10, 'unit_price': 6000.00, 'discount': 0, 'net_price': 6000.00, 'margin': 35.0, 'total': 60000.00},
-            {'name': 'Power Distribution Unit (PDU)', 'sku': 'PDU-16A-C13', 'stock': 88, 'unit': 'Pcs', 'qty': 5, 'unit_price': 960.00, 'discount': 0, 'net_price': 960.00, 'margin': 12.0, 'total': 4800.00},
+            {
+                "name": "Industrial Grade Server Rack (24U)",
+                "sku": "SR-24U-IND",
+                "stock": 15,
+                "unit": "Pcs",
+                "qty": 2,
+                "unit_price": 45000.00,
+                "discount": 10,
+                "net_price": 40500.00,
+                "margin": 22.5,
+                "total": 81000.00,
+            },
+            {
+                "name": "Bulk Ethernet Cable CAT6 (305m)",
+                "sku": "ETH-C6-305M",
+                "stock": 250,
+                "unit": "Box",
+                "qty": 10,
+                "unit_price": 6000.00,
+                "discount": 0,
+                "net_price": 6000.00,
+                "margin": 35.0,
+                "total": 60000.00,
+            },
+            {
+                "name": "Power Distribution Unit (PDU)",
+                "sku": "PDU-16A-C13",
+                "stock": 88,
+                "unit": "Pcs",
+                "qty": 5,
+                "unit_price": 960.00,
+                "discount": 0,
+                "net_price": 960.00,
+                "margin": 12.0,
+                "total": 4800.00,
+            },
         ]
         for p in products:
             self._add_product_row(p)
-    
+
     def _delete_product_row(self, row_idx):
         """Delete a product row from the table."""
         if 0 <= row_idx < self.product_table.rowCount():
@@ -350,7 +413,7 @@ class WholesaleInvoiceWindow(QDialog):
                 self,
                 "Confirm Delete",
                 "Are you sure you want to remove this item?",
-                QMessageBox.Yes | QMessageBox.No
+                QMessageBox.Yes | QMessageBox.No,
             )
             if reply == QMessageBox.Yes:
                 self.product_table.removeRow(row_idx)
@@ -364,7 +427,7 @@ class WholesaleInvoiceWindow(QDialog):
                 font-family: 'Segoe UI', 'Inter', sans-serif;
             }
             /* --- Zone 1: Header --- */
-            #HeaderFrame {
+            # HeaderFrame {
                 background-color: #FFFFFF;
                 border-bottom: 1px solid #E2E8F0;
             }
@@ -394,32 +457,32 @@ class WholesaleInvoiceWindow(QDialog):
                 width: 0;
                 height: 0;
             }
-            #InsightCard {
+            # InsightCard {
                 border: 1px solid #E2E8F0;
                 border-radius: 10px;
                 background-color: #FFFFFF;
                 min-width: 180px;
             }
-            #InsightTitle { 
-                font-weight: 500; 
-                color: #64748B; 
+            # InsightTitle {
+                font-weight: 500;
+                color: #64748B;
                 font-size: 12px;
             }
-            #InsightValue { 
-                font-weight: 700; 
-                color: #1E293B; 
+            # InsightValue {
+                font-weight: 700;
+                color: #1E293B;
                 font-size: 14px;
             }
-            #InsightValue[class="ok"] { color: #10b981; }
-            #InsightValue[class="warn"] { color: #f59e0b; }
-            #InsightValue[class="danger"] { color: #ef4444; }
+            # InsightValue[class="ok"] { color: #10b981; }
+            # InsightValue[class="warn"] { color: #f59e0b; }
+            # InsightValue[class="danger"] { color: #ef4444; }
 
             /* --- Zone 2: Power Grid --- */
-            #GridContainer {
+            # GridContainer {
                 background-color: #FFFFFF;
                 border-bottom: 1px solid #E2E8F0;
             }
-            #PowerGrid {
+            # PowerGrid {
                 border: none;
                 gridline-color: transparent;
                 font-size: 14px;
@@ -427,17 +490,17 @@ class WholesaleInvoiceWindow(QDialog):
                 selection-background-color: #EFF6FF;
                 selection-color: #1E293B;
             }
-            #PowerGrid::item { 
-                padding: 10px 8px; 
+            # PowerGrid::item {
+                padding: 10px 8px;
                 border-bottom: 1px solid #F1F5F9;
             }
-            #PowerGrid::item:selected {
+            # PowerGrid::item:selected {
                 background-color: #EFF6FF;
             }
-            #PowerGrid::item:alternate {
+            # PowerGrid::item:alternate {
                 background-color: #F8FAFC;
             }
-            #PowerGrid QHeaderView::section {
+            # PowerGrid QHeaderView::section {
                 background-color: #F8FAFC;
                 padding: 14px 10px;
                 border: none;
@@ -446,18 +509,18 @@ class WholesaleInvoiceWindow(QDialog):
                 color: #475569;
                 font-size: 13px;
             }
-            #SkuLabel { 
-                color: #94A3B8; 
-                font-size: 11px; 
+            # SkuLabel {
+                color: #94A3B8;
+                font-size: 11px;
                 font-weight: 400;
             }
 
             /* --- Zone 3: Footer --- */
-            #FooterFrame {
+            # FooterFrame {
                 background-color: #F8FAFC;
                 padding: 0;
             }
-            #FinancialsFrame {
+            # FinancialsFrame {
                 background-color: #FFFFFF;
                 border-left: 1px solid #E2E8F0;
             }
@@ -468,13 +531,13 @@ class WholesaleInvoiceWindow(QDialog):
                 background-color: #FFFFFF;
                 font-size: 14px;
             }
-            #Divider { background-color: #E2E8F0; }
-            #FinalTotalTitle {
+            # Divider { background-color: #E2E8F0; }
+            # FinalTotalTitle {
                 font-size: 16px;
                 font-weight: 600;
                 color: #475569;
             }
-            #FinalTotalValue {
+            # FinalTotalValue {
                 font-size: 32px;
                 font-weight: 800;
                 color: #10b981;
@@ -489,29 +552,30 @@ class WholesaleInvoiceWindow(QDialog):
                 font-weight: 600;
                 padding: 10px 16px;
             }
-            #PrimaryButton {
+            # PrimaryButton {
                 background-color: #3b82f6; /* Royal Blue */
                 color: white;
                 border: none;
             }
-            #PrimaryButton:hover { background-color: #2563eb; }
-            #SecondaryButton {
+            # PrimaryButton:hover { background-color: #2563eb; }
+            # SecondaryButton {
                 background-color: white;
                 color: #334155;
                 border: 1px solid #CBD5E1;
             }
-            #SecondaryButton:hover { background-color: #F8FAFC; }
-            #DeleteButton {
+            # SecondaryButton:hover { background-color: #F8FAFC; }
+            # DeleteButton {
                 background-color: transparent;
                 border: none;
                 padding: 0;
             }
-            #DeleteButton:hover {
+            # DeleteButton:hover {
                 background-color: #FEF2F2; /* Light Red */
             }
 """)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = WholesaleInvoiceWindow()
     window.show()

@@ -10,12 +10,12 @@ if sys.platform == 'win32':
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 sys.path.insert(0, str(Path.cwd()))
-from src.core.database_manager import DatabaseManager
+from src.core.local_database_manager import LocalDatabaseManager
 from src.core.config_manager import ConfigManager
 from src.services.user_service import UserService
 
 config = ConfigManager()
-db = DatabaseManager(config.get_database_path())
+db = LocalDatabaseManager(config.get_database_path())
 db.initialize()
 
 # إنشاء UserService
@@ -44,6 +44,13 @@ for user in users:
 
 # التحقق من الصلاحيات الافتراضية للأدوار
 print("\n\n=== صلاحيات الأدوار ===")
-role_perms = db.fetch_all('SELECT * FROM role_permissions ORDER BY role')
+query = '''
+    SELECT r.name as role, p.name as permission
+    FROM role_permissions rp
+    JOIN roles r ON rp.role_id = r.id
+    JOIN permissions p ON rp.permission_id = p.id
+    ORDER BY r.name
+'''
+role_perms = db.fetch_all(query)
 for rp in role_perms:
     print(f"{rp['role']}: {rp['permission']}")

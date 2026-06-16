@@ -1,8 +1,13 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QTableWidget, QTableWidgetItem
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
-from ...services.audit_log_service import AuditLogService
 from ...core.database_manager import DatabaseManager
+from ...services.audit_log_service import AuditLogService
 
 
 class SessionsPanelWidget(QWidget):
@@ -27,14 +32,15 @@ class SessionsPanelWidget(QWidget):
 
     def refresh(self):
         try:
+            # pyrefly: ignore [unexpected-keyword]
             rows = self.audit.get_active_sessions(limit=100)
             self.table.setRowCount(len(rows))
             for i, r in enumerate(rows):
-                self.table.setItem(i, 0, QTableWidgetItem(str(r.get('session_id'))))
-                self.table.setItem(i, 1, QTableWidgetItem(str(r.get('user_id'))))
-                self.table.setItem(i, 2, QTableWidgetItem(str(r.get('ip_address'))))
-                self.table.setItem(i, 3, QTableWidgetItem(str(r.get('last_activity'))))
-                self.table.setItem(i, 4, QTableWidgetItem("نعم" if r.get('is_active') else "لا"))
+                self.table.setItem(i, 0, QTableWidgetItem(str(r.get("session_id"))))
+                self.table.setItem(i, 1, QTableWidgetItem(str(r.get("user_id"))))
+                self.table.setItem(i, 2, QTableWidgetItem(str(r.get("ip_address"))))
+                self.table.setItem(i, 3, QTableWidgetItem(str(r.get("last_activity"))))
+                self.table.setItem(i, 4, QTableWidgetItem("نعم" if r.get("is_active") else "لا"))
         except Exception as e:
             self.table.setRowCount(1)
             self.table.setItem(0, 0, QTableWidgetItem("خطأ"))

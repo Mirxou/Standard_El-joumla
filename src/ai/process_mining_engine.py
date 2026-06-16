@@ -1,24 +1,25 @@
+import logging
 #!/usr/bin/env python3
 """
 محرك استخراج العمليات - Process Mining Engine
 محرك لاستخراج وتحليل العمليات التجارية من البيانات
 """
 
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional, Tuple, Set
+import statistics
+from collections import Counter, defaultdict
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from enum import Enum
-from collections import defaultdict, Counter
-import logging
-import json
-import networkx as nx
+from typing import Any, Dict, List, Optional, Set, Tuple
+
 import matplotlib.pyplot as plt
-import pandas as pd
-from itertools import combinations
+
+import networkx as nx
 
 
 class ProcessType(Enum):
     """نوع العملية"""
+
     ORDER_TO_CASH = "order_to_cash"
     PURCHASE_TO_PAY = "purchase_to_pay"
     HIRE_TO_RETIRE = "hire_to_retire"
@@ -27,6 +28,7 @@ class ProcessType(Enum):
 
 class EventType(Enum):
     """نوع الحدث"""
+
     START = "start"
     COMPLETE = "complete"
     SCHEDULE = "schedule"
@@ -38,6 +40,7 @@ class EventType(Enum):
 @dataclass
 class ProcessEvent:
     """حدث عملية"""
+
     event_id: str
     case_id: str
     activity: str
@@ -54,6 +57,7 @@ class ProcessEvent:
 @dataclass
 class ProcessInstance:
     """مثيل عملية"""
+
     case_id: str
     events: List[ProcessEvent]
     start_time: Optional[datetime] = None
@@ -77,6 +81,7 @@ class ProcessInstance:
 @dataclass
 class ProcessModel:
     """نموذج عملية"""
+
     process_id: str
     process_type: ProcessType
     activities: Set[str]
@@ -114,9 +119,7 @@ class ProcessMiningEngine:
         """إعداد نظام التسجيل"""
         self.logger.setLevel(logging.INFO)
         handler = logging.StreamHandler()
-        formatter = logging.Formatter(
-            '%(asctime)s - Process Mining - %(levelname)s - %(message)s'
-        )
+        formatter = logging.Formatter("%(asctime)s - Process Mining - %(levelname)s - %(message)s")
         handler.setFormatter(formatter)
         self.logger.addHandler(handler)
 
@@ -135,7 +138,7 @@ class ProcessMiningEngine:
             "events_count": len(events),
             "cases_count": analysis["cases_count"],
             "activities_count": analysis["activities_count"],
-            "analysis": analysis
+            "analysis": analysis,
         }
 
     def discover_process_model(self, log_id: str, process_type: ProcessType = ProcessType.CUSTOM) -> str:
@@ -181,7 +184,7 @@ class ProcessMiningEngine:
             "process_id": process_id,
             "performance_metrics": model.performance_metrics,
             "bottlenecks": model.bottlenecks,
-            "recommendations": self._generate_performance_recommendations(model)
+            "recommendations": self._generate_performance_recommendations(model),
         }
 
     def compare_process_variants(self, process_id: str) -> Dict[str, Any]:
@@ -194,7 +197,7 @@ class ProcessMiningEngine:
         return {
             "process_id": process_id,
             "variants": model.variants,
-            "comparison": self._compare_variants(model.variants)
+            "comparison": self._compare_variants(model.variants),
         }
 
     def detect_process_anomalies(self, process_id: str) -> Dict[str, Any]:
@@ -211,7 +214,7 @@ class ProcessMiningEngine:
             "process_id": process_id,
             "anomalies_detected": len(anomalies),
             "anomalies": anomalies,
-            "anomaly_types": self._categorize_anomalies(anomalies)
+            "anomaly_types": self._categorize_anomalies(anomalies),
         }
 
     def visualize_process_model(self, process_id: str, output_path: str = None) -> str:
@@ -237,29 +240,36 @@ class ProcessMiningEngine:
         pos = nx.spring_layout(G)
 
         # رسم العقد
-        nx.draw_networkx_nodes(G, pos, node_color='lightblue', node_size=2000, alpha=0.7)
-        nx.draw_networkx_labels(G, pos, font_size=10, font_weight='bold')
+        nx.draw_networkx_nodes(G, pos, node_color="lightblue", node_size=2000, alpha=0.7)
+        nx.draw_networkx_labels(G, pos, font_size=10, font_weight="bold")
 
         # رسم الحواف
         edges = G.edges()
-        weights = [G[u][v]['weight'] for u, v in edges]
-        nx.draw_networkx_edges(G, pos, width=[w/10 for w in weights], alpha=0.6,
-                             edge_color='gray', arrows=True, arrowsize=20)
+        weights = [G[u][v]["weight"] for u, v in edges]
+        nx.draw_networkx_edges(
+            G,
+            pos,
+            width=[w / 10 for w in weights],
+            alpha=0.6,
+            edge_color="gray",
+            arrows=True,
+            arrowsize=20,
+        )
 
         # إضافة تسميات الحواف
         edge_labels = {(u, v): f"{G[u][v]['weight']}" for u, v in edges}
         nx.draw_networkx_edge_labels(G, pos, edge_labels, font_size=8)
 
         plt.title(f"Process Model: {process_id}")
-        plt.axis('off')
+        plt.axis("off")
 
         if output_path:
-            plt.savefig(output_path, dpi=300, bbox_inches='tight')
+            plt.savefig(output_path, dpi=300, bbox_inches="tight")
             plt.close()
             return output_path
         else:
             output_path = f"process_model_{process_id}_{int(datetime.now().timestamp())}.png"
-            plt.savefig(output_path, dpi=300, bbox_inches='tight')
+            plt.savefig(output_path, dpi=300, bbox_inches="tight")
             plt.close()
             return output_path
 
@@ -277,13 +287,13 @@ class ProcessMiningEngine:
                 "activities_count": len(model.activities),
                 "transitions_count": len(model.transitions),
                 "start_activities": list(model.start_activities),
-                "end_activities": list(model.end_activities)
+                "end_activities": list(model.end_activities),
             },
             "performance": model.performance_metrics,
             "bottlenecks": model.bottlenecks,
             "variants": model.variants,
             "recommendations": self._generate_process_recommendations(model),
-            "generated_at": datetime.now().isoformat()
+            "generated_at": datetime.now().isoformat(),
         }
 
     def _analyze_event_log(self, events: List[ProcessEvent]) -> Dict[str, Any]:
@@ -310,8 +320,8 @@ class ProcessMiningEngine:
             "activities_count": len(activities),
             "events_count": len(events),
             "avg_events_per_case": len(events) / len(cases) if cases else 0,
-            "avg_case_duration": statistics.mean(case_durations) if case_durations else 0,
-            "total_duration": sum(case_durations) if case_durations else 0
+            "avg_case_duration": (statistics.mean(case_durations) if case_durations else 0),
+            "total_duration": sum(case_durations) if case_durations else 0,
         }
 
     def _extract_activities_and_transitions(self, events: List[ProcessEvent], model: ProcessModel):
@@ -383,13 +393,15 @@ class ProcessMiningEngine:
                 avg_time = statistics.mean(times)
                 max_time = max(times)
                 if avg_time > 300:  # أكثر من 5 دقائق
-                    bottlenecks.append({
-                        "activity": activity,
-                        "avg_duration": avg_time,
-                        "max_duration": max_time,
-                        "occurrences": len(times),
-                        "severity": "high" if avg_time > 600 else "medium"
-                    })
+                    bottlenecks.append(
+                        {
+                            "activity": activity,
+                            "avg_duration": avg_time,
+                            "max_duration": max_time,
+                            "occurrences": len(times),
+                            "severity": "high" if avg_time > 600 else "medium",
+                        }
+                    )
 
         return sorted(bottlenecks, key=lambda x: x["avg_duration"], reverse=True)
 
@@ -411,12 +423,14 @@ class ProcessMiningEngine:
 
         # تحليل المتغيرات
         for sequence, case_ids in case_sequences.items():
-            variants.append({
-                "sequence": list(sequence),
-                "frequency": len(case_ids),
-                "percentage": len(case_ids) / len(case_events) * 100,
-                "case_ids": case_ids[:5]  # أول 5 حالات كمثال
-            })
+            variants.append(
+                {
+                    "sequence": list(sequence),
+                    "frequency": len(case_ids),
+                    "percentage": len(case_ids) / len(case_events) * 100,
+                    "case_ids": case_ids[:5],  # أول 5 حالات كمثال
+                }
+            )
 
         return sorted(variants, key=lambda x: x["frequency"], reverse=True)
 
@@ -440,12 +454,12 @@ class ProcessMiningEngine:
         return {
             "total_cases": len(case_events),
             "completed_cases": len([c for c in case_events.values() if len(c) > 1]),
-            "avg_case_duration": statistics.mean(case_durations) if case_durations else 0,
-            "median_case_duration": statistics.median(case_durations) if case_durations else 0,
+            "avg_case_duration": (statistics.mean(case_durations) if case_durations else 0),
+            "median_case_duration": (statistics.median(case_durations) if case_durations else 0),
             "min_case_duration": min(case_durations) if case_durations else 0,
             "max_case_duration": max(case_durations) if case_durations else 0,
-            "avg_events_per_case": statistics.mean(case_event_counts) if case_event_counts else 0,
-            "total_events": len(events)
+            "avg_events_per_case": (statistics.mean(case_event_counts) if case_event_counts else 0),
+            "total_events": len(events),
         }
 
     def _generate_performance_recommendations(self, model: ProcessModel) -> List[str]:
@@ -484,8 +498,8 @@ class ProcessMiningEngine:
             "frequency_distribution": {
                 "min": min(frequencies),
                 "max": max(frequencies),
-                "avg": statistics.mean(frequencies)
-            }
+                "avg": statistics.mean(frequencies),
+            },
         }
 
     def _detect_anomalies(self, events: List[ProcessEvent], model: ProcessModel) -> List[Dict[str, Any]]:
@@ -499,12 +513,14 @@ class ProcessMiningEngine:
         for activity, count in activity_counts.items():
             frequency = count / total_events
             if frequency < 0.01:  # أقل من 1%
-                anomalies.append({
-                    "type": "rare_activity",
-                    "activity": activity,
-                    "frequency": frequency,
-                    "severity": "low"
-                })
+                anomalies.append(
+                    {
+                        "type": "rare_activity",
+                        "activity": activity,
+                        "frequency": frequency,
+                        "severity": "low",
+                    }
+                )
 
         # كشف الانتقالات غير الشائعة
         transition_counts = Counter()
@@ -524,13 +540,15 @@ class ProcessMiningEngine:
         for transition, count in transition_counts.items():
             frequency = count / total_transitions
             if frequency < 0.01:  # أقل من 1%
-                anomalies.append({
-                    "type": "rare_transition",
-                    "from_activity": transition[0],
-                    "to_activity": transition[1],
-                    "frequency": frequency,
-                    "severity": "medium"
-                })
+                anomalies.append(
+                    {
+                        "type": "rare_transition",
+                        "from_activity": transition[0],
+                        "to_activity": transition[1],
+                        "frequency": frequency,
+                        "severity": "medium",
+                    }
+                )
 
         return anomalies
 

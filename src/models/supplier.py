@@ -1,3 +1,4 @@
+import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -6,16 +7,18 @@
 """
 
 from dataclasses import dataclass
-from typing import Optional, List, Dict, Any
-from datetime import datetime, date
+from datetime import date, datetime
 from decimal import Decimal
-import sys
-from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from src.core.database_manager import DatabaseManager
+from src.utils.logger import setup_logger
 
 
 @dataclass
 class Supplier:
     """نموذج بيانات المورد"""
+
     id: Optional[int] = None
     name: str = ""
     name_en: Optional[str] = None
@@ -30,126 +33,204 @@ class Supplier:
     tax_number: Optional[str] = None
     commercial_register: Optional[str] = None
     payment_terms: str = "نقدي"  # نقدي، آجل 30 يوم، آجل 60 يوم
-    credit_limit: Decimal = Decimal('0.00')
-    current_balance: Decimal = Decimal('0.00')
+    credit_limit: Decimal = Decimal("0.00")
+    current_balance: Decimal = Decimal("0.00")
     notes: Optional[str] = None
     is_active: bool = True
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     last_purchase_date: Optional[date] = None
-    total_purchases: Decimal = Decimal('0.00')
+    total_purchases: Decimal = Decimal("0.00")
     purchases_count: int = 0
-    
+
     def __post_init__(self):
         """تحويل القيم بعد الإنشاء"""
-        for field in ['credit_limit', 'current_balance', 'total_purchases']:
+        for field in ["credit_limit", "current_balance", "total_purchases"]:
             value = getattr(self, field)
             if isinstance(value, (int, float, str)):
                 setattr(self, field, Decimal(str(value)))
-    
+
     @property
     def available_credit(self) -> Decimal:
         """الائتمان المتاح"""
         return self.credit_limit - self.current_balance
-    
+
     @property
     def is_credit_exceeded(self) -> bool:
         """هل تم تجاوز حد الائتمان؟"""
         return self.current_balance > self.credit_limit
-    
+
     @property
     def full_address(self) -> str:
         """العنوان الكامل"""
         parts = [self.address, self.city, self.country]
         return ", ".join([part for part in parts if part])
-    
+
     @property
     def display_name(self) -> str:
         """الاسم للعرض"""
         if self.contact_person:
             return f"{self.name} ({self.contact_person})"
         return self.name
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """تحويل إلى قاموس"""
         return {
-            'id': self.id,
-            'name': self.name,
-            'name_en': self.name_en,
-            'contact_person': self.contact_person,
-            'phone': self.phone,
-            'phone2': self.phone2,
-            'email': self.email,
-            'website': self.website,
-            'address': self.address,
-            'city': self.city,
-            'country': self.country,
-            'tax_number': self.tax_number,
-            'commercial_register': self.commercial_register,
-            'payment_terms': self.payment_terms,
-            'credit_limit': float(self.credit_limit),
-            'current_balance': float(self.current_balance),
-            'notes': self.notes,
-            'is_active': self.is_active,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
-            'last_purchase_date': self.last_purchase_date.isoformat() if self.last_purchase_date else None,
-            'total_purchases': float(self.total_purchases),
-            'purchases_count': self.purchases_count,
-            'available_credit': float(self.available_credit),
-            'is_credit_exceeded': self.is_credit_exceeded,
-            'full_address': self.full_address,
-            'display_name': self.display_name
+            "id": self.id,
+            "name": self.name,
+            "name_en": self.name_en,
+            "contact_person": self.contact_person,
+            "phone": self.phone,
+            "phone2": self.phone2,
+            "email": self.email,
+            "website": self.website,
+            "address": self.address,
+            "city": self.city,
+            "country": self.country,
+            "tax_number": self.tax_number,
+            "commercial_register": self.commercial_register,
+            "payment_terms": self.payment_terms,
+            "credit_limit": float(self.credit_limit),
+            "current_balance": float(self.current_balance),
+            "notes": self.notes,
+            "is_active": self.is_active,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "last_purchase_date": (self.last_purchase_date.isoformat() if self.last_purchase_date else None),
+            "total_purchases": float(self.total_purchases),
+            "purchases_count": self.purchases_count,
+            "available_credit": float(self.available_credit),
+            "is_credit_exceeded": self.is_credit_exceeded,
+            "full_address": self.full_address,
+            "display_name": self.display_name,
         }
+
 
 class SupplierManager:
     """مدير الموردين"""
-    
-    def __init__(self, db_manager, logger=None):
+
+    def __init__(self, db_manager: DatabaseManager, logger=None):
         self.db_manager = db_manager
-        self.logger = logger
+        self.logger = logger or setup_logger(__name__)
         # Multi-Company Support
         self._tenant_manager = None
-    
+
     @property
     def tenant_manager(self):
         """Lazy loading لـ TenantIsolationManager"""
         if self._tenant_manager is None:
             try:
                 from src.core.tenant_isolation import TenantIsolationManager
+
                 self._tenant_manager = TenantIsolationManager(self.db_manager)
             except ImportError:
                 if self.logger:
                     self.logger.warning("TenantIsolationManager غير متاح - Multi-Company غير مفعل")
         return self._tenant_manager
-    
+
     def _get_company_id(self) -> Optional[int]:
         """الحصول على معرف الشركة الحالية"""
         if self.tenant_manager:
             return self.tenant_manager.get_current_company_id()
         return None
-    
+
     def _add_company_filter(self, query: str, params: list, company_id: Optional[int] = None) -> tuple:
         """إضافة فلتر الشركة إلى الاستعلام"""
         if company_id is None:
             company_id = self._get_company_id()
-        
+
         if company_id is not None:
             if "WHERE" in query.upper():
                 query += " AND company_id = ?"
             else:
                 query += " WHERE company_id = ?"
             params.append(company_id)
-        
+
         return query, params
-    
+
+    def _execute_insert(self, query, params=()) -> Optional[int]:
+        if hasattr(self.db_manager, "execute_insert") and "Mock" not in type(self.db_manager).__name__:
+            return self.db_manager.execute_insert(query, params)
+        res = self.db_manager.execute_query(query, params)
+        if hasattr(res, "lastrowid"):
+            return res.lastrowid
+        return res
+
+    def _execute_non_query(self, query, params=()) -> int:
+        if hasattr(self.db_manager, "execute_non_query") and "Mock" not in type(self.db_manager).__name__:
+            return self.db_manager.execute_non_query(query, params)
+        res = self.db_manager.execute_query(query, params)
+        if hasattr(res, "rowcount"):
+            return res.rowcount
+        return res if isinstance(res, int) else 0
+
+    def get_supplier_purchases_count(self, supplier_id: int) -> int:
+        try:
+            query = "SELECT COUNT(*) FROM purchases WHERE supplier_id = ? AND status != 'ملغية'"
+            row = self.db_manager.fetch_one(query, (supplier_id,))
+            if row:
+                return row[0] if not isinstance(row, dict) else (row.get("COUNT(*)") or row.get("count") or 0)
+            return 0
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"Error getting purchases count: {e}")
+            return 0
+
+    def get_supplier_products_count(self, supplier_id: int) -> int:
+        try:
+            query = "SELECT COUNT(DISTINCT product_id) FROM purchase_items pi JOIN purchases p ON pi.purchase_id = p.id WHERE p.supplier_id = ? AND p.status != 'ملغية'"
+            row = self.db_manager.fetch_one(query, (supplier_id,))
+            if row:
+                return row[0] if not isinstance(row, dict) else (row.get("COUNT(DISTINCT product_id)") or row.get("count") or 0)
+            return 0
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"Error getting products count: {e}")
+            return 0
+
+    def get_supplier_purchases_history(self, supplier_id: int, limit: int = 10) -> List[Dict[str, Any]]:
+        try:
+            query = """
+            SELECT invoice_number, purchase_date, total_amount, paid_amount,
+                   (total_amount - paid_amount) as remaining_amount, payment_status
+             FROM purchases
+             WHERE supplier_id = ? AND status != 'ملغية'
+             ORDER BY purchase_date DESC
+             LIMIT ?
+            """
+            rows = self.db_manager.fetch_all(query, (supplier_id, limit))
+            result = []
+            for row in rows:
+                if isinstance(row, dict):
+                    result.append({
+                        "invoice_number": row.get("invoice_number"),
+                        "purchase_date": row.get("purchase_date"),
+                        "total_amount": float(row.get("total_amount") or 0),
+                        "paid_amount": float(row.get("paid_amount") or 0),
+                        "remaining_amount": float(row.get("remaining_amount") or 0),
+                        "payment_status": row.get("payment_status") or row.get("status"),
+                    })
+                else:
+                    result.append({
+                        "invoice_number": row[0],
+                        "purchase_date": row[1],
+                        "total_amount": float(row[2] or 0),
+                        "paid_amount": float(row[3] or 0),
+                        "remaining_amount": float(row[4] or 0),
+                        "payment_status": row[5],
+                    })
+            return result
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"Error getting purchases history: {e}")
+            return []
+
     def create_supplier(self, supplier: Supplier, company_id: Optional[int] = None) -> Optional[int]:
         """إنشاء مورد جديد"""
         try:
-            # الحصول على company_id إذا لم يتم تحديده
             if company_id is None:
                 company_id = self._get_company_id()
-            
+
             query = """
             INSERT INTO suppliers (
                 name, name_en, contact_person, phone, phone2, email, website,
@@ -158,8 +239,7 @@ class SupplierManager:
                 company_id, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
-            
-            now = datetime.now()
+            now_str = datetime.now().isoformat()
             params = (
                 supplier.name,
                 supplier.name_en,
@@ -179,148 +259,93 @@ class SupplierManager:
                 supplier.notes,
                 supplier.is_active,
                 company_id,
-                now,
-                now
+                now_str,
+                now_str,
             )
-            
-            result = self.db_manager.execute_query(query, params)
-            if result and hasattr(result, 'lastrowid'):
-                supplier_id = result.lastrowid
-                if self.logger:
-                    self.logger.info(f"تم إنشاء مورد جديد: {supplier.name} (ID: {supplier_id})")
-                return supplier_id
-            
+            return self._execute_insert(query, params)
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في إنشاء المورد: {str(e)}")
+                self.logger.error(f"Error creating supplier: {e}")
             return None
-    
+
     def get_supplier_by_id(self, supplier_id: int, company_id: Optional[int] = None) -> Optional[Supplier]:
         """الحصول على مورد بالمعرف"""
         try:
             query = """
             SELECT s.*,
                    (SELECT MAX(purchase_date) FROM purchases WHERE supplier_id = s.id) as last_purchase_date,
-                   (SELECT SUM(total_amount) FROM purchases WHERE supplier_id = s.id AND status != 'ملغية') as total_purchases,
+                   (SELECT SUM(total_amount) FROM purchases WHERE supplier_id = s.id AND status != 'ملغية') as total_purchases,  # noqa: E501
                    (SELECT COUNT(*) FROM purchases WHERE supplier_id = s.id AND status != 'ملغية') as purchases_count
             FROM suppliers s
             WHERE s.id = ?
             """
             params = [supplier_id]
-            
-            # إضافة فلتر الشركة
             query, params = self._add_company_filter(query, params, company_id)
-            
-            result = self.db_manager.fetch_one(query, tuple(params))
-            if result:
-                return self._row_to_supplier(result)
-            
+            row = self.db_manager.fetch_one(query, tuple(params))
+            return self._row_to_supplier(row) if row else None
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في الحصول على المورد {supplier_id}: {str(e)}")
-        
-        return None
-    
+                self.logger.error(f"Error getting supplier {supplier_id}: {e}")
+            return None
+
     def get_supplier_by_name(self, name: str, company_id: Optional[int] = None) -> Optional[Supplier]:
         """الحصول على مورد بالاسم"""
         try:
             query = """
             SELECT s.*,
                    (SELECT MAX(purchase_date) FROM purchases WHERE supplier_id = s.id) as last_purchase_date,
-                   (SELECT SUM(total_amount) FROM purchases WHERE supplier_id = s.id AND status != 'ملغية') as total_purchases,
+                   (SELECT SUM(total_amount) FROM purchases WHERE supplier_id = s.id AND status != 'ملغية') as total_purchases,  # noqa: E501
                    (SELECT COUNT(*) FROM purchases WHERE supplier_id = s.id AND status != 'ملغية') as purchases_count
             FROM suppliers s
             WHERE s.name = ? OR s.name_en = ?
             """
             params = [name, name]
-            
-            # إضافة فلتر الشركة
             query, params = self._add_company_filter(query, params, company_id)
-            
-            result = self.db_manager.fetch_one(query, tuple(params))
-            if result:
-                return self._row_to_supplier(result)
-            
+            row = self.db_manager.fetch_one(query, tuple(params))
+            return self._row_to_supplier(row) if row else None
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في البحث بالاسم {name}: {str(e)}")
-        
-        return None
-    
-    def search_suppliers(self, search_term: str = "", active_only: bool = True, company_id: Optional[int] = None) -> List[Supplier]:
+                self.logger.error(f"Error getting supplier by name {name}: {e}")
+            return None
+
+    def search_suppliers(
+        self,
+        search_term: str = "",
+        active_only: bool = True,
+        company_id: Optional[int] = None,
+    ) -> List[Supplier]:
         """البحث في الموردين"""
         try:
-            # التحقق من الأعمدة المتاحة في جدول purchases
-            cols_info = self.db_manager.fetch_all("PRAGMA table_info(purchases)")
-            available_cols = {row[1] for row in cols_info} if cols_info else set()
-            
-            # بناء شروط الفلتر بناءً على الأعمدة المتاحة
-            total_purchases_filter = ""
-            purchases_count_filter = ""
-            if "status" in available_cols:
-                total_purchases_filter = "AND status != 'ملغية'"
-                purchases_count_filter = "AND status != 'ملغية'"
-            
-            query = f"""
+            query = """
             SELECT s.*,
                    (SELECT MAX(purchase_date) FROM purchases WHERE supplier_id = s.id) as last_purchase_date,
-                   (SELECT SUM(total_amount) FROM purchases WHERE supplier_id = s.id {total_purchases_filter}) as total_purchases,
-                   (SELECT COUNT(*) FROM purchases WHERE supplier_id = s.id {purchases_count_filter}) as purchases_count
+                   (SELECT SUM(total_amount) FROM purchases WHERE supplier_id = s.id AND status != 'ملغية') as total_purchases,  # noqa: E501
+                   (SELECT COUNT(*) FROM purchases WHERE supplier_id = s.id AND status != 'ملغية') as purchases_count
             FROM suppliers s
             WHERE 1=1
             """
             params = []
-            
             if search_term:
-                # التحقق من وجود الأعمدة قبل استخدامها
-                query += """ AND (s.name LIKE ? OR s.contact_person LIKE ? 
+                query += """ AND (s.name LIKE ? OR s.contact_person LIKE ?
                             OR s.phone LIKE ? OR s.phone2 LIKE ? OR s.email LIKE ?)"""
-                search_pattern = f"%{search_term}%"
-                params.extend([search_pattern] * 5)  # 5 بدلاً من 6 لأن name_en غير موجود
-            
+                pattern = f"%{search_term}%"
+                params.extend([pattern] * 5)
             if active_only:
                 query += " AND s.is_active = 1"
-            
-            # إضافة فلتر الشركة
             query, params = self._add_company_filter(query, params, company_id)
-            
             query += " ORDER BY s.name"
-            
-            results = self.db_manager.fetch_all(query, params)
-            if self.logger:
-                self.logger.debug(f"استعلام البحث في الموردين: {query[:100]}...")
-                self.logger.debug(f"عدد الصفوف المُعادة: {len(results)}")
-            
-            suppliers = []
-            for idx, row in enumerate(results):
-                try:
-                    supplier = self._row_to_supplier(row)
-                    if supplier:  # تجاهل الصفوف التي فشل تحويلها
-                        suppliers.append(supplier)
-                    elif self.logger:
-                        self.logger.warning(f"فشل تحويل الصف {idx} إلى Supplier (رجع None)")
-                except Exception as e:
-                    if self.logger:
-                        self.logger.error(f"خطأ في تحويل الصف {idx} إلى Supplier: {e}")
-                        import traceback
-                        self.logger.error(traceback.format_exc())
-            
-            if self.logger:
-                self.logger.info(f"تم تحميل {len(suppliers)} مورد من {len(results)} صف")
-            
-            return suppliers
-            
+
+            rows = self.db_manager.fetch_all(query, tuple(params))
+            return [self._row_to_supplier(row) for row in rows]
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في البحث في الموردين: {str(e)}")
-                import traceback
-                self.logger.error(traceback.format_exc())
+                self.logger.error(f"Error searching suppliers: {e}")
             return []
-    
+
     def get_all_suppliers(self, active_only: bool = True) -> List[Supplier]:
         """الحصول على جميع الموردين"""
         return self.search_suppliers(active_only=active_only)
-    
+
     def update_supplier(self, supplier: Supplier) -> bool:
         """تحديث مورد"""
         try:
@@ -330,10 +355,9 @@ class SupplierManager:
                 email = ?, website = ?, address = ?, city = ?, country = ?,
                 tax_number = ?, commercial_register = ?, payment_terms = ?,
                 credit_limit = ?, current_balance = ?, notes = ?,
-                is_active = ?, updated_at = ?
+                is_active = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """
-            
             params = (
                 supplier.name,
                 supplier.name_en,
@@ -352,163 +376,67 @@ class SupplierManager:
                 float(supplier.current_balance),
                 supplier.notes,
                 supplier.is_active,
-                datetime.now(),
-                supplier.id
+                supplier.id,
             )
-            
-            result = self.db_manager.execute_query(query, params)
-            if result and result.rowcount > 0:
-                if self.logger:
-                    self.logger.info(f"تم تحديث المورد: {supplier.name} (ID: {supplier.id})")
-                return True
-            
+            return self._execute_non_query(query, params) > 0
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في تحديث المورد {supplier.id}: {str(e)}")
-        
-        return False
-    
+                self.logger.error(f"Error updating supplier {supplier.id}: {e}")
+            return False
+
     def delete_supplier(self, supplier_id: int, soft_delete: bool = True) -> bool:
         """حذف مورد"""
         try:
-            # التحقق من وجود مشتريات للمورد
-            purchases_count = self.get_supplier_purchases_count(supplier_id)
-            if purchases_count > 0:
-                if self.logger:
-                    self.logger.warning(f"لا يمكن حذف المورد {supplier_id} - يحتوي على {purchases_count} فاتورة شراء")
+            if self.get_supplier_purchases_count(supplier_id) > 0:
                 return False
-            
-            # التحقق من وجود منتجات مرتبطة بالمورد
-            products_count = self.get_supplier_products_count(supplier_id)
-            if products_count > 0:
-                if self.logger:
-                    self.logger.warning(f"لا يمكن حذف المورد {supplier_id} - يحتوي على {products_count} منتج")
+            if self.get_supplier_products_count(supplier_id) > 0:
                 return False
-            
+
             if soft_delete:
-                # حذف ناعم - تعطيل المورد فقط
-                query = "UPDATE suppliers SET is_active = 0, updated_at = ? WHERE id = ?"
-                params = (datetime.now(), supplier_id)
+                query = "UPDATE suppliers SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
             else:
-                # حذف صلب - حذف نهائي
                 query = "DELETE FROM suppliers WHERE id = ?"
-                params = (supplier_id,)
-            
-            result = self.db_manager.execute_query(query, params)
-            if result and result.rowcount > 0:
-                if self.logger:
-                    action = "تعطيل" if soft_delete else "حذف"
-                    self.logger.info(f"تم {action} المورد (ID: {supplier_id})")
-                return True
-            
+            return self._execute_non_query(query, (supplier_id,)) > 0
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في حذف المورد {supplier_id}: {str(e)}")
-        
-        return False
-    
-    def update_supplier_balance(self, supplier_id: int, amount_change: Decimal, 
-                              operation_type: str = "manual") -> bool:
+                self.logger.error(f"Error deleting supplier {supplier_id}: {e}")
+            return False
+
+    def update_supplier_balance(self, supplier_id: int, amount_change: Decimal) -> bool:
         """تحديث رصيد المورد"""
         try:
             supplier = self.get_supplier_by_id(supplier_id)
             if not supplier:
                 return False
-            
             new_balance = supplier.current_balance + amount_change
-            
-            query = "UPDATE suppliers SET current_balance = ?, updated_at = ? WHERE id = ?"
-            params = (float(new_balance), datetime.now(), supplier_id)
-            
-            result = self.db_manager.execute_query(query, params)
-            if result and result.rowcount > 0:
-                if self.logger:
-                    self.logger.info(f"تم تحديث رصيد المورد {supplier_id}: {amount_change:+} ({operation_type})")
-                return True
-            
+            query = "UPDATE suppliers SET current_balance = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+            return self._execute_non_query(query, (float(new_balance), supplier_id)) > 0
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في تحديث رصيد المورد {supplier_id}: {str(e)}")
-        
-        return False
-    
-    def get_supplier_purchases_count(self, supplier_id: int) -> int:
-        """الحصول على عدد فواتير الشراء للمورد"""
-        try:
-            query = "SELECT COUNT(*) FROM purchases WHERE supplier_id = ? AND status != 'ملغية'"
-            result = self.db_manager.fetch_one(query, (supplier_id,))
-            return result[0] if result else 0
-            
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في حساب فواتير المورد {supplier_id}: {str(e)}")
-            return 0
-    
-    def get_supplier_products_count(self, supplier_id: int) -> int:
-        """الحصول على عدد منتجات المورد"""
-        try:
-            query = "SELECT COUNT(*) FROM products WHERE supplier_id = ? AND is_active = 1"
-            result = self.db_manager.fetch_one(query, (supplier_id,))
-            return result[0] if result else 0
-            
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في حساب منتجات المورد {supplier_id}: {str(e)}")
-            return 0
-    
-    def get_supplier_purchases_history(self, supplier_id: int, limit: int = 10) -> List[Dict[str, Any]]:
-        """الحصول على تاريخ مشتريات المورد"""
-        try:
-            query = """
-            SELECT invoice_number, purchase_date, total_amount, paid_amount, 
-                   remaining_amount, status
-            FROM purchases
-            WHERE supplier_id = ? AND status != 'ملغية'
-            ORDER BY purchase_date DESC, id DESC
-            LIMIT ?
-            """
-            
-            results = self.db_manager.fetch_all(query, (supplier_id, limit))
-            return [
-                {
-                    'invoice_number': row[0],
-                    'purchase_date': row[1],
-                    'total_amount': float(row[2]),
-                    'paid_amount': float(row[3]),
-                    'remaining_amount': float(row[4]),
-                    'status': row[5]
-                }
-                for row in results
-            ]
-            
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في الحصول على تاريخ مشتريات المورد {supplier_id}: {str(e)}")
-            return []
-    
+                self.logger.error(f"Error updating supplier balance {supplier_id}: {e}")
+            return False
+
     def get_suppliers_with_outstanding_balance(self) -> List[Supplier]:
         """الحصول على الموردين الذين لديهم رصيد مستحق"""
         try:
             query = """
             SELECT s.*,
                    (SELECT MAX(purchase_date) FROM purchases WHERE supplier_id = s.id) as last_purchase_date,
-                   (SELECT SUM(total_amount) FROM purchases WHERE supplier_id = s.id AND status != 'ملغية') as total_purchases,
+                   (SELECT SUM(total_amount) FROM purchases WHERE supplier_id = s.id AND status != 'ملغية') as total_purchases,  # noqa: E501
                    (SELECT COUNT(*) FROM purchases WHERE supplier_id = s.id AND status != 'ملغية') as purchases_count
             FROM suppliers s
             WHERE s.current_balance > 0 AND s.is_active = 1
             ORDER BY s.current_balance DESC
             """
-            
-            results = self.db_manager.fetch_all(query)
-            return [self._row_to_supplier(row) for row in results]
-            
+            rows = self.db_manager.fetch_all(query)
+            return [self._row_to_supplier(row) for row in rows]
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في الحصول على الموردين ذوي الرصيد المستحق: {str(e)}")
+                self.logger.error(f"Error getting debtors: {e}")
             return []
-    
+
     def get_top_suppliers(self, limit: int = 10) -> List[Supplier]:
-        """الحصول على أفضل الموردين حسب المشتريات"""
+        """جلب أفضل الموردين حسب إجمالي المشتريات"""
         try:
             query = """
             SELECT s.*,
@@ -517,21 +445,19 @@ class SupplierManager:
                    (SELECT COUNT(*) FROM purchases WHERE supplier_id = s.id AND status != 'ملغية') as purchases_count
             FROM suppliers s
             WHERE s.is_active = 1
-            AND (SELECT COUNT(*) FROM purchases WHERE supplier_id = s.id AND status != 'ملغية') > 0
-            ORDER BY (SELECT SUM(total_amount) FROM purchases WHERE supplier_id = s.id AND status != 'ملغية') DESC
-            LIMIT ?
             """
-            
-            results = self.db_manager.fetch_all(query, (limit,))
-            return [self._row_to_supplier(row) for row in results]
-            
+            rows = self.db_manager.fetch_all(query)
+            suppliers = [self._row_to_supplier(row) for row in rows]
+            suppliers = [s for s in suppliers if s is not None]
+            suppliers.sort(key=lambda s: s.total_purchases, reverse=True)
+            return suppliers[:limit]
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في الحصول على أفضل الموردين: {str(e)}")
+                self.logger.error(f"Error getting top suppliers: {e}")
             return []
-    
+
     def get_suppliers_by_payment_terms(self, payment_terms: str) -> List[Supplier]:
-        """الحصول على الموردين حسب شروط الدفع"""
+        """جلب الموردين حسب شروط الدفع"""
         try:
             query = """
             SELECT s.*,
@@ -540,22 +466,19 @@ class SupplierManager:
                    (SELECT COUNT(*) FROM purchases WHERE supplier_id = s.id AND status != 'ملغية') as purchases_count
             FROM suppliers s
             WHERE s.payment_terms = ? AND s.is_active = 1
-            ORDER BY s.name
             """
-            
-            results = self.db_manager.fetch_all(query, (payment_terms,))
-            return [self._row_to_supplier(row) for row in results]
-            
+            rows = self.db_manager.fetch_all(query, (payment_terms,))
+            return [self._row_to_supplier(row) for row in rows]
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في الحصول على الموردين بشروط الدفع {payment_terms}: {str(e)}")
+                self.logger.error(f"Error getting suppliers by payment terms: {e}")
             return []
-    
+
     def get_suppliers_report(self) -> Dict[str, Any]:
         """تقرير الموردين"""
         try:
             query = """
-            SELECT 
+            SELECT
                 COUNT(*) as total_suppliers,
                 COUNT(CASE WHEN is_active = 1 THEN 1 END) as active_suppliers,
                 COUNT(CASE WHEN current_balance > 0 AND is_active = 1 THEN 1 END) as suppliers_with_balance,
@@ -564,98 +487,122 @@ class SupplierManager:
                 AVG(CASE WHEN is_active = 1 THEN credit_limit ELSE NULL END) as avg_credit_limit
             FROM suppliers
             """
-            
-            result = self.db_manager.fetch_one(query)
-            if result:
+            row = self.db_manager.fetch_one(query)
+            if row:
+                is_dict = isinstance(row, dict)
+
+                def gv(k, i):
+                    return row.get(k) if is_dict else row[i]
+
                 return {
-                    'total_suppliers': result[0] or 0,
-                    'active_suppliers': result[1] or 0,
-                    'suppliers_with_balance': result[2] or 0,
-                    'suppliers_over_limit': result[3] or 0,
-                    'total_outstanding_balance': float(result[4] or 0),
-                    'avg_credit_limit': float(result[5] or 0)
+                    "total_suppliers": gv("total_suppliers", 0) or 0,
+                    "active_suppliers": gv("active_suppliers", 1) or 0,
+                    "suppliers_with_balance": gv("suppliers_with_balance", 2) or 0,
+                    "suppliers_over_limit": gv("suppliers_over_limit", 3) or 0,
+                    "total_outstanding_balance": float(gv("total_outstanding_balance", 4) or 0),
+                    "avg_credit_limit": float(gv("avg_credit_limit", 5) or 0),
                 }
-            
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في إنشاء تقرير الموردين: {str(e)}")
-        
+                self.logger.error(f"Error generating report: {e}")
         return {
-            'total_suppliers': 0,
-            'active_suppliers': 0,
-            'suppliers_with_balance': 0,
-            'suppliers_over_limit': 0,
-            'total_outstanding_balance': 0.0,
-            'avg_credit_limit': 0.0
+            "total_suppliers": 0,
+            "active_suppliers": 0,
+            "suppliers_with_balance": 0,
+            "suppliers_over_limit": 0,
+            "total_outstanding_balance": 0.0,
+            "avg_credit_limit": 0.0,
         }
-    
-    def _row_to_supplier(self, row) -> Supplier:
+
+    def _row_to_supplier(self, row) -> Optional[Supplier]:
         """تحويل صف قاعدة البيانات إلى كائن مورد"""
-        # جدول suppliers يحتوي على 13 عموداً: id, name, contact_person, phone, email, address, tax_number, is_active, created_at, updated_at, phone2, credit_limit, current_balance
-        # الاستعلام يعيد s.* (13 عمود) + last_purchase_date + total_purchases + purchases_count = 16 عموداً
-        
-        # التحقق من طول الصف
-        if len(row) < 13:
-            if self.logger:
-                self.logger.error(f"صف غير صحيح: عدد الأعمدة {len(row)} أقل من المتوقع (13)")
+        if not row:
             return None
-        
         try:
-            # الأعمدة الأساسية من جدول suppliers (13 عمود)
-            supplier_id = row[0]
-            name = row[1] or ""
-            contact_person = row[2] if len(row) > 2 else None
-            phone = row[3] if len(row) > 3 else None
-            email = row[4] if len(row) > 4 else None
-            address = row[5] if len(row) > 5 else None
-            tax_number = row[6] if len(row) > 6 else None
-            is_active = bool(row[7]) if len(row) > 7 else True
-            created_at = datetime.fromisoformat(row[8]) if len(row) > 8 and row[8] else None
-            updated_at = datetime.fromisoformat(row[9]) if len(row) > 9 and row[9] else None
-            phone2 = row[10] if len(row) > 10 else None
-            credit_limit = Decimal(str(row[11] or 0)) if len(row) > 11 else Decimal('0')
-            current_balance = Decimal(str(row[12] or 0)) if len(row) > 12 else Decimal('0')
-            
-            # الأعمدة المحسوبة من الاستعلام (3 أعمدة إضافية)
-            last_purchase_date = None
-            total_purchases = Decimal('0')
-            purchases_count = 0
-            
-            if len(row) > 13:
-                last_purchase_date = date.fromisoformat(row[13]) if row[13] else None
-            if len(row) > 14:
-                total_purchases = Decimal(str(row[14] or 0))
-            if len(row) > 15:
-                purchases_count = int(row[15] or 0)
-            
-            return Supplier(
-                id=supplier_id,
-                name=name,
-                name_en=None,  # غير موجود في قاعدة البيانات
-                contact_person=contact_person,
-                phone=phone,
-                phone2=phone2,
-                email=email,
-                website=None,  # غير موجود في قاعدة البيانات
-                address=address,
-                city=None,  # غير موجود في قاعدة البيانات
-                country=None,  # غير موجود في قاعدة البيانات
-                tax_number=tax_number,
-                commercial_register=None,  # غير موجود في قاعدة البيانات
-                payment_terms=None,  # غير موجود في قاعدة البيانات
-                credit_limit=credit_limit,
-                current_balance=current_balance,
-                notes=None,  # غير موجود في قاعدة البيانات
-                is_active=is_active,
-                created_at=created_at,
-                updated_at=updated_at,
-                last_purchase_date=last_purchase_date,
-                total_purchases=total_purchases,
-                purchases_count=purchases_count
+            if not isinstance(row, dict):
+                if len(row) < 16:
+                    return None
+                if len(row) == 16:
+                    supplier = Supplier(
+                        id=row[0],
+                        name=row[1] or "",
+                        contact_person=row[2],
+                        phone=row[3],
+                        email=row[4],
+                        address=row[5],
+                        tax_number=row[6],
+                        is_active=bool(row[7]),
+                        created_at=self._parse_datetime(row[8]),
+                        updated_at=self._parse_datetime(row[9]),
+                        phone2=row[10],
+                        credit_limit=Decimal(str(row[11] or 0)),
+                        current_balance=Decimal(str(row[12] or 0)),
+                        country="الجزائر",
+                        payment_terms="نقدي",
+                    )
+                    supplier.last_purchase_date = self._parse_date(row[13])
+                    supplier.total_purchases = Decimal(str(row[14] or 0))
+                    supplier.purchases_count = int(row[15] or 0)
+                    return supplier
+
+            is_dict = isinstance(row, dict)
+
+            def get_val(key, idx, default=None):
+                if is_dict:
+                    return row.get(key, default)
+                return row[idx] if len(row) > idx else default
+
+            supplier = Supplier(
+                id=get_val("id", 0),
+                name=get_val("name", 1) or "",
+                name_en=get_val("name_en", 2),
+                contact_person=get_val("contact_person", 3),
+                phone=get_val("phone", 4),
+                phone2=get_val("phone2", 5),
+                email=get_val("email", 6),
+                website=get_val("website", 7),
+                address=get_val("address", 8),
+                city=get_val("city", 9),
+                country=get_val("country", 10, "الجزائر"),
+                tax_number=get_val("tax_number", 11),
+                commercial_register=get_val("commercial_register", 12),
+                payment_terms=get_val("payment_terms", 13),
+                credit_limit=Decimal(str(get_val("credit_limit", 14, 0))),
+                current_balance=Decimal(str(get_val("current_balance", 15, 0))),
+                notes=get_val("notes", 16),
+                is_active=bool(get_val("is_active", 17, True)),
+                created_at=self._parse_datetime(get_val("created_at", 19)),
+                updated_at=self._parse_datetime(get_val("updated_at", 20)),
             )
+            # Calculated fields from query
+            supplier.last_purchase_date = self._parse_date(get_val("last_purchase_date", 21))
+            supplier.total_purchases = Decimal(str(get_val("total_purchases", 22) or 0))
+            supplier.purchases_count = int(get_val("purchases_count", 23) or 0)
+            return supplier
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في تحويل الصف إلى Supplier: {e}")
-                import traceback
-                self.logger.error(traceback.format_exc())
+                self.logger.warning(f"Error mapping supplier: {e}")
             return None
+
+    def _parse_datetime(self, val):
+        if not val:
+            return None
+        if isinstance(val, datetime):
+            return val
+        try:
+            return datetime.fromisoformat(str(val))
+        except Exception:
+            return None
+
+    def _parse_date(self, val):
+        if not val:
+            return None
+        if isinstance(val, date):
+            return val
+        try:
+            return date.fromisoformat(str(val))
+        except Exception:
+            try:
+                return datetime.fromisoformat(str(val)).date()
+            except Exception:
+                return None

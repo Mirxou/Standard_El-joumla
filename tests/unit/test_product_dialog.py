@@ -1,89 +1,60 @@
 #!/usr/bin/env python3
 """
-اختبارات Product Dialog
+اختبارات Product Dialog المحدثة
 """
 
+from unittest.mock import Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from decimal import Decimal
-from PySide6.QtWidgets import QApplication, QDialog, QLineEdit, QPushButton, QTextEdit
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication
+
 from src.ui.dialogs.product_dialog import ProductDialog
 
+# إنشاء تطبيق Qt للاختبارات
 app = QApplication.instance() or QApplication([])
 
 
 class TestProductDialog:
     """اختبارات نافذة المنتج"""
-    
+
     @pytest.fixture
     def dialog(self):
         """إنشاء نافذة للاختبارات"""
-        product_service = Mock()
-        return ProductDialog(product_service)
-    
+        db_manager = Mock()
+        # محاكاة الاستجابات لقاعدة البيانات
+        db_manager.execute_query.return_value = []
+
+        with patch("src.ui.dialogs.product_dialog.CategoryManager"):
+            with patch("src.ui.dialogs.product_dialog.SupplierManager"):
+                with patch("src.ui.dialogs.product_dialog.ProductManager"):
+                    with patch("src.utils.i18n_api.I18n") as mock_i18n:
+                        mock_i18n.return_value.get_message.side_effect = (
+                            lambda key, **kwargs: f"msg_{key}_{kwargs.get('percent', '')}"
+                        )
+                        return ProductDialog(db_manager)
+
     def test_initialization(self, dialog):
         """اختبار تهيئة النافذة"""
         assert dialog is not None
-        assert hasattr(dialog, 'name_input')
-        assert hasattr(dialog, 'price_input')
-        assert hasattr(dialog, 'quantity_input')
-    
-    def test_name_input(self, dialog):
-        """اختبار حقل الاسم"""
-        dialog.name_input.setText("منتج تجريبي")
-        assert dialog.name_input.text() == "منتج تجريبي"
-    
-    def test_price_input(self, dialog):
-        """اختبار حقل السعر"""
-        dialog.price_input.setText("99.99")
-        assert dialog.price_input.text() == "99.99"
-    
-    def test_quantity_input(self, dialog):
-        """اختبار حقل الكمية"""
-        dialog.quantity_input.setText("50")
-        assert dialog.quantity_input.text() == "50"
-    
-    def test_get_product_data(self, dialog):
-        """اختبار الحصول على بيانات المنتج"""
-        dialog.name_input.setText("منتج 1")
-        dialog.price_input.setText("150.00")
-        dialog.quantity_input.setText("100")
-        
-        data = dialog.get_product_data()
-        
-        assert isinstance(data, dict)
-        assert data.get("name") == "منتج 1"
-        assert data.get("price") == "150.00"
-    
-    def test_validate_product_valid(self, dialog):
-        """اختبار التحقق من منتج صحيح"""
-        dialog.name_input.setText("Valid Product")
-        dialog.price_input.setText("10.00")
-        assert dialog.validate_product() is True
-    
-    def test_validate_product_invalid_name(self, dialog):
-        """اختبار التحقق من منتج بدون اسم"""
-        dialog.name_input.setText("")
-        assert dialog.validate_product() is False
-    
-    def test_on_save(self, dialog):
-        """اختبار حفظ المنتج"""
-        dialog.name_input.setText("Test Product")
-        dialog.price_input.setText("25.00")
-        result = dialog.on_save()
-        assert result is not None
-    
-    def test_set_product(self, dialog):
-        """اختبار تعيين بيانات المنتج"""
-        product = {"name": "Existing Product", "price": "75.00", "quantity": "30"}
-        result = dialog.set_product(product)
-        assert result is not None
-        assert dialog.name_input.text() == "Existing Product"
+        assert hasattr(dialog, "name_edit")
+        assert hasattr(dialog, "selling_price_spin")
+        assert hasattr(dialog, "stock_quantity_spin")
+
+    def test_input_fields(self, dialog):
+        """اختبار حقول الإدخال"""
+        dialog.name_edit.setText("منتج اختبار")
+        assert dialog.name_edit.text() == "منتج اختبار"
+
+        dialog.selling_price_spin.setValue(150.75)
+        assert dialog.selling_price_spin.value() == 150.75
+
+    def test_calculate_profit_margin(self, dialog):
+        """اختبار حساب هامش الربح"""
+        dialog.cost_price_spin.setValue(100)
+        dialog.selling_price_spin.setValue(150)
+        # الربح = (150-100)/150 = 33.33%
+        assert "33.33" in dialog.profit_margin_label.text()
 
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-
-
-

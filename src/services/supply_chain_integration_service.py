@@ -1,3 +1,4 @@
+import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -5,24 +6,24 @@
 إدارة الموردين والمشتريات والتكامل مع سلاسل التوريد
 """
 
-from typing import Dict, List, Any, Optional, Tuple
-from decimal import Decimal
-from datetime import datetime, timedelta
-from dataclasses import dataclass
-import sys
-from pathlib import Path
 import json
-import requests
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from decimal import Decimal
+from typing import Any, Dict, List, Optional
 
-
-from src.core.database_manager import DatabaseManager
 from src.core.config_manager import ConfigManager
-from src.services.advanced_inventory_management_service import AdvancedInventoryManagementService
+from src.core.database_manager import DatabaseManager
+from src.services.advanced_inventory_management_service import (
+    AdvancedInventoryManagementService,
+)
 from src.utils.logger import setup_logger
+
 
 @dataclass
 class Supplier:
     """مورد"""
+
     supplier_id: int
     name: str
     contact_info: Dict[str, Any]
@@ -33,9 +34,11 @@ class Supplier:
     categories: List[str]
     created_at: datetime
 
+
 @dataclass
 class PurchaseOrder:
     """أمر شراء"""
+
     po_id: str
     supplier_id: int
     items: List[Dict[str, Any]]
@@ -47,9 +50,11 @@ class PurchaseOrder:
     approved_by: Optional[int]
     created_at: datetime
 
+
 @dataclass
 class SupplierPerformance:
     """أداء المورد"""
+
     supplier_id: int
     on_time_delivery_rate: float
     quality_score: float
@@ -59,9 +64,11 @@ class SupplierPerformance:
     last_order_date: Optional[datetime]
     performance_rating: str  # 'excellent', 'good', 'average', 'poor'
 
+
 @dataclass
 class SupplyChainAlert:
     """تنبيه سلسلة التوريد"""
+
     alert_id: str
     alert_type: str  # 'supplier_issue', 'delivery_delay', 'quality_problem', 'stockout_risk'
     severity: str  # 'low', 'medium', 'high', 'critical'
@@ -70,27 +77,36 @@ class SupplyChainAlert:
     suggested_actions: List[str]
     created_at: datetime
 
+
 class SupplyChainIntegrationService:
     """خدمة تكامل سلاسل التوريد"""
 
-    def __init__(self, db_manager: DatabaseManager, inventory_service: AdvancedInventoryManagementService):
+    def __init__(
+        self,
+        db_manager: DatabaseManager,
+        inventory_service: AdvancedInventoryManagementService,
+    ):
         self.db = db_manager
         self.inventory_service = inventory_service
         self.config = ConfigManager()
         self.logger = setup_logger(__name__)
 
         # معلمات التكوين
-        self.api_base_url = self.config.get('supply_chain.api_base_url', '')
-        self.api_key = self.config.get('supply_chain.api_key', '')
-        self.auto_po_approval_limit = self.config.get('supply_chain.auto_po_approval_limit', 5000)
-        self.supplier_evaluation_period_days = self.config.get('supply_chain.evaluation_period_days', 365)
+        self.api_base_url = self.config.get("supply_chain.api_base_url", "")
+        self.api_key = self.config.get("supply_chain.api_key", "")
+        self.auto_po_approval_limit = self.config.get("supply_chain.auto_po_approval_limit", 5000)
+        self.supplier_evaluation_period_days = self.config.get("supply_chain.evaluation_period_days", 365)
 
         # تحميل بيانات الموردين
         self._load_suppliers()
 
-    def create_purchase_order(self, supplier_id: int, items: List[Dict[str, Any]],
-                             expected_delivery: Optional[datetime] = None,
-                             created_by: int = 1) -> str:
+    def create_purchase_order(
+        self,
+        supplier_id: int,
+        items: List[Dict[str, Any]],
+        expected_delivery: Optional[datetime] = None,
+        created_by: int = 1,
+    ) -> str:
         """
         إنشاء أمر شراء
 
@@ -107,30 +123,30 @@ class SupplyChainIntegrationService:
             po_id = f"PO_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
             # حساب الإجمالي
-            total_amount = Decimal('0')
+            total_amount = Decimal("0")
             for item in items:
-                total_amount += Decimal(str(item['quantity'])) * Decimal(str(item['unit_price']))
+                total_amount += Decimal(str(item["quantity"])) * Decimal(str(item["unit_price"]))
 
             # تحويل Decimal إلى string للتسلسل
             serializable_items = []
             for item in items:
                 serializable_item = {
-                    'product_id': item['product_id'],
-                    'quantity': str(item['quantity']),
-                    'unit_price': str(item['unit_price'])
+                    "product_id": item["product_id"],
+                    "quantity": str(item["quantity"]),
+                    "unit_price": str(item["unit_price"]),
                 }
                 serializable_items.append(serializable_item)
 
             # إنشاء أمر الشراء
             po_data = {
-                'po_id': po_id,
-                'supplier_id': supplier_id,
-                'items': json.dumps(serializable_items),
-                'total_amount': str(total_amount),
-                'status': 'draft',
-                'expected_delivery': expected_delivery.isoformat() if expected_delivery else None,
-                'created_by': created_by,
-                'created_at': datetime.now().isoformat()
+                "po_id": po_id,
+                "supplier_id": supplier_id,
+                "items": json.dumps(serializable_items),
+                "total_amount": str(total_amount),
+                "status": "draft",
+                "expected_delivery": (expected_delivery.isoformat() if expected_delivery else None),
+                "created_by": created_by,
+                "created_at": datetime.now().isoformat(),
             }
 
             # إدراج في قاعدة البيانات
@@ -159,15 +175,15 @@ class SupplyChainIntegrationService:
         try:
             # التحقق من الحد التلقائي
             po_data = self._get_purchase_order(po_id)
-            total_amount = Decimal(po_data['total_amount'])
+            total_amount = Decimal(po_data["total_amount"])
 
             if total_amount <= self.auto_po_approval_limit:
                 # موافقة تلقائية
-                self._update_purchase_order_status(po_id, 'approved', approved_by)
+                self._update_purchase_order_status(po_id, "approved", approved_by)
                 return True
 
             # موافقة يدوية مطلوبة
-            self._update_purchase_order_status(po_id, 'pending_approval', approved_by)
+            self._update_purchase_order_status(po_id, "pending_approval", approved_by)
 
             # إرسال إشعار للموافقة
             self._send_approval_notification(po_id, total_amount)
@@ -178,8 +194,7 @@ class SupplyChainIntegrationService:
             self.logger.error(f"Error approving purchase order: {e}", exc_info=True)
             return False
 
-    def receive_purchase_order(self, po_id: str, received_items: List[Dict[str, Any]],
-                              received_by: int = 1) -> bool:
+    def receive_purchase_order(self, po_id: str, received_items: List[Dict[str, Any]], received_by: int = 1) -> bool:
         """
         استلام أمر شراء
 
@@ -193,35 +208,35 @@ class SupplyChainIntegrationService:
         """
         try:
             # تحديث حالة أمر الشراء
-            self._update_purchase_order_status(po_id, 'received', received_by)
+            self._update_purchase_order_status(po_id, "received", received_by)
             self._update_purchase_order_delivery(po_id, datetime.now())
 
             # إضافة العناصر للمخزون
             for item in received_items:
-                product_id = item['product_id']
-                batch_id = item['batch_id']
-                quantity = item['quantity']
+                product_id = item["product_id"]
+                batch_id = item["batch_id"]
+                quantity = item["quantity"]
                 unit_cost = self._get_po_item_cost(po_id, product_id)
-                expiry_date = item.get('expiry_date')
-                warehouse_id = item.get('warehouse_id', 1)  # المستودع الافتراضي
+                expiry_date = item.get("expiry_date")
+                warehouse_id = item.get("warehouse_id", 1)  # المستودع الافتراضي
 
                 # إضافة للمخزون
-                transaction_id = self.inventory_service.add_inventory_item(
+                transaction_id = self.inventory_service.add_inventory_item(  # noqa: F841
                     product_id=product_id,
                     warehouse_id=warehouse_id,
                     batch_id=batch_id,
                     quantity=quantity,
                     unit_cost=unit_cost,
                     expiry_date=expiry_date,
-                    performed_by=received_by
+                    performed_by=received_by,
                 )
 
                 # تحديث حالة عنصر أمر الشراء
-                self._update_po_item_status(po_id, product_id, 'received', quantity)
+                self._update_po_item_status(po_id, product_id, "received", quantity)
 
             # تحديث أداء المورد
             po_data = self._get_purchase_order(po_id)
-            self._update_supplier_performance(po_data['supplier_id'], po_id)
+            self._update_supplier_performance(po_data["supplier_id"], po_id)
 
             return True
 
@@ -258,10 +273,10 @@ class SupplyChainIntegrationService:
                 on_time_delivery_rate=on_time_delivery_rate,
                 quality_score=quality_score,
                 average_lead_time=average_lead_time,
-                total_orders=performance_data['total_orders'],
-                total_value=Decimal(str(performance_data['total_value'])),
-                last_order_date=performance_data['last_order_date'],
-                performance_rating=performance_rating
+                total_orders=performance_data["total_orders"],
+                total_value=Decimal(str(performance_data["total_value"])),
+                last_order_date=performance_data["last_order_date"],
+                performance_rating=performance_rating,
             )
 
         except Exception as e:
@@ -272,9 +287,9 @@ class SupplyChainIntegrationService:
                 quality_score=0,
                 average_lead_time=0,
                 total_orders=0,
-                total_value=Decimal('0'),
+                total_value=Decimal("0"),
                 last_order_date=None,
-                performance_rating='unknown'
+                performance_rating="unknown",
             )
 
     def get_supply_chain_alerts(self) -> List[SupplyChainAlert]:
@@ -322,31 +337,33 @@ class SupplyChainIntegrationService:
 
             recommendations = []
             for supplier in suppliers:
-                if supplier['status'] != 'active':
+                if supplier["status"] != "active":
                     continue
 
                 # تقييم المورد
-                performance = self.evaluate_supplier_performance(supplier['supplier_id'])
+                performance = self.evaluate_supplier_performance(supplier["supplier_id"])
 
                 # حساب التكلفة الإجمالية
-                unit_price = Decimal(str(supplier['unit_price']))
+                unit_price = Decimal(str(supplier["unit_price"]))
                 total_cost = unit_price * Decimal(str(quantity))
 
                 # حساب الدرجة الإجمالية
-                score = self._calculate_supplier_score(performance, unit_price, supplier['lead_time_days'])
+                score = self._calculate_supplier_score(performance, unit_price, supplier["lead_time_days"])
 
-                recommendations.append({
-                    'supplier_id': supplier['supplier_id'],
-                    'supplier_name': supplier['name'],
-                    'unit_price': float(unit_price),
-                    'total_cost': float(total_cost),
-                    'lead_time_days': supplier['lead_time_days'],
-                    'performance_rating': performance.performance_rating,
-                    'score': score
-                })
+                recommendations.append(
+                    {
+                        "supplier_id": supplier["supplier_id"],
+                        "supplier_name": supplier["name"],
+                        "unit_price": float(unit_price),
+                        "total_cost": float(total_cost),
+                        "lead_time_days": supplier["lead_time_days"],
+                        "performance_rating": performance.performance_rating,
+                        "score": score,
+                    }
+                )
 
             # ترتيب حسب الدرجة
-            recommendations.sort(key=lambda x: x['score'], reverse=True)
+            recommendations.sort(key=lambda x: x["score"], reverse=True)
 
             return recommendations
 
@@ -366,10 +383,10 @@ class SupplyChainIntegrationService:
         """
         try:
             plan = {
-                'recommended_orders': [],
-                'total_estimated_cost': 0,
-                'priority_items': [],
-                'generated_at': datetime.now().isoformat()
+                "recommended_orders": [],
+                "total_estimated_cost": 0,
+                "priority_items": [],
+                "generated_at": datetime.now().isoformat(),
             }
 
             # الحصول على المنتجات التي تحتاج إعادة طلب
@@ -377,23 +394,25 @@ class SupplyChainIntegrationService:
 
             for item in reorder_items:
                 # تحسين اختيار المورد
-                suppliers = self.optimize_supplier_selection(item['product_id'], item['recommended_quantity'])
+                suppliers = self.optimize_supplier_selection(item["product_id"], item["recommended_quantity"])
 
                 if suppliers:
                     best_supplier = suppliers[0]
-                    plan['recommended_orders'].append({
-                        'product_id': item['product_id'],
-                        'product_name': item['product_name'],
-                        'recommended_quantity': item['recommended_quantity'],
-                        'best_supplier': best_supplier,
-                        'estimated_cost': best_supplier['total_cost'],
-                        'priority': item['priority']
-                    })
+                    plan["recommended_orders"].append(
+                        {
+                            "product_id": item["product_id"],
+                            "product_name": item["product_name"],
+                            "recommended_quantity": item["recommended_quantity"],
+                            "best_supplier": best_supplier,
+                            "estimated_cost": best_supplier["total_cost"],
+                            "priority": item["priority"],
+                        }
+                    )
 
-                    plan['total_estimated_cost'] += best_supplier['total_cost']
+                    plan["total_estimated_cost"] += best_supplier["total_cost"]
 
-                    if item['priority'] == 'high':
-                        plan['priority_items'].append(item['product_id'])
+                    if item["priority"] == "high":
+                        plan["priority_items"].append(item["product_id"])
 
             return plan
 
@@ -410,14 +429,14 @@ class SupplyChainIntegrationService:
         """
         try:
             sync_results = {
-                'synced_suppliers': 0,
-                'synced_products': 0,
-                'errors': [],
-                'timestamp': datetime.now().isoformat()
+                "synced_suppliers": 0,
+                "synced_products": 0,
+                "errors": [],
+                "timestamp": datetime.now().isoformat(),
             }
 
             if not self.api_base_url or not self.api_key:
-                sync_results['errors'].append("API configuration missing")
+                sync_results["errors"].append("API configuration missing")
                 return sync_results
 
             # مزامنة بيانات الموردين
@@ -425,24 +444,24 @@ class SupplyChainIntegrationService:
             for supplier_data in suppliers_data:
                 try:
                     self._sync_supplier_data(supplier_data)
-                    sync_results['synced_suppliers'] += 1
+                    sync_results["synced_suppliers"] += 1
                 except Exception as e:
-                    sync_results['errors'].append(f"Supplier sync error: {e}")
+                    sync_results["errors"].append(f"Supplier sync error: {e}")
 
             # مزامنة بيانات المنتجات
             products_data = self._fetch_external_products()
             for product_data in products_data:
                 try:
                     self._sync_product_data(product_data)
-                    sync_results['synced_products'] += 1
+                    sync_results["synced_products"] += 1
                 except Exception as e:
-                    sync_results['errors'].append(f"Product sync error: {e}")
+                    sync_results["errors"].append(f"Product sync error: {e}")
 
             return sync_results
 
         except Exception as e:
             self.logger.error(f"Error syncing with external suppliers: {e}", exc_info=True)
-            return {'error': str(e)}
+            return {"error": str(e)}
 
     def _load_suppliers(self):
         """تحميل بيانات الموردين"""
@@ -458,13 +477,13 @@ class SupplyChainIntegrationService:
 
             for row in data:
                 self.suppliers[row[0]] = {
-                    'name': row[1],
-                    'contact_info': json.loads(row[2]) if row[2] else {},
-                    'payment_terms': row[3],
-                    'lead_time_days': row[4] or 7,
-                    'reliability_score': float(row[5] or 0),
-                    'status': row[6],
-                    'categories': json.loads(row[7]) if row[7] else []
+                    "name": row[1],
+                    "contact_info": json.loads(row[2]) if row[2] else {},
+                    "payment_terms": row[3],
+                    "lead_time_days": row[4] or 7,
+                    "reliability_score": float(row[5] or 0),
+                    "status": row[6],
+                    "categories": json.loads(row[7]) if row[7] else [],
                 }
 
         except Exception as e:
@@ -480,16 +499,19 @@ class SupplyChainIntegrationService:
                  created_by, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """
-            self.db.execute_query(query, (
-                po_data['po_id'],
-                po_data['supplier_id'],
-                po_data['items'],
-                po_data['total_amount'],
-                po_data['status'],
-                po_data['expected_delivery'],
-                po_data['created_by'],
-                po_data['created_at']
-            ))
+            self.db.execute_query(
+                query,
+                (
+                    po_data["po_id"],
+                    po_data["supplier_id"],
+                    po_data["items"],
+                    po_data["total_amount"],
+                    po_data["status"],
+                    po_data["expected_delivery"],
+                    po_data["created_by"],
+                    po_data["created_at"],
+                ),
+            )
 
         except Exception as e:
             self.logger.error(f"Error inserting purchase order: {e}", exc_info=True)
@@ -504,12 +526,15 @@ class SupplyChainIntegrationService:
                     (po_id, product_id, quantity, unit_price, status)
                     VALUES (?, ?, ?, ?, 'pending')
                 """
-                self.db.execute_query(query, (
-                    po_id,
-                    item['product_id'],
-                    item['quantity'],
-                    str(item['unit_price'])
-                ))
+                self.db.execute_query(
+                    query,
+                    (
+                        po_id,
+                        item["product_id"],
+                        item["quantity"],
+                        str(item["unit_price"]),
+                    ),
+                )
 
         except Exception as e:
             self.logger.error(f"Error inserting purchase order items: {e}", exc_info=True)
@@ -523,16 +548,16 @@ class SupplyChainIntegrationService:
 
             if data:
                 return {
-                    'po_id': data[0],
-                    'supplier_id': data[1],
-                    'items': json.loads(data[2]) if data[2] else [],
-                    'total_amount': data[3],
-                    'status': data[4],
-                    'expected_delivery': data[5],
-                    'actual_delivery': data[6],
-                    'created_by': data[7],
-                    'approved_by': data[8],
-                    'created_at': data[9]
+                    "po_id": data[0],
+                    "supplier_id": data[1],
+                    "items": json.loads(data[2]) if data[2] else [],
+                    "total_amount": data[3],
+                    "status": data[4],
+                    "expected_delivery": data[5],
+                    "actual_delivery": data[6],
+                    "created_by": data[7],
+                    "approved_by": data[8],
+                    "created_at": data[9],
                 }
 
             return {}
@@ -564,11 +589,11 @@ class SupplyChainIntegrationService:
         try:
             query = "SELECT unit_price FROM purchase_order_items WHERE po_id = ? AND product_id = ?"
             data = self.db.execute_query(query, (po_id, product_id), fetch_one=True)
-            return Decimal(str(data[0])) if data else Decimal('0')
+            return Decimal(str(data[0])) if data else Decimal("0")
 
         except Exception as e:
             self.logger.error(f"Error getting PO item cost: {e}", exc_info=True)
-            return Decimal('0')
+            return Decimal("0")
 
     def _update_po_item_status(self, po_id: str, product_id: int, status: str, received_quantity: int):
         """تحديث حالة عنصر أمر الشراء"""
@@ -588,13 +613,13 @@ class SupplyChainIntegrationService:
         try:
             # حساب التأخير في التسليم
             po_data = self._get_purchase_order(po_id)
-            if po_data.get('expected_delivery') and po_data.get('actual_delivery'):
-                expected = datetime.fromisoformat(po_data['expected_delivery'])
-                actual = datetime.fromisoformat(po_data['actual_delivery'])
+            if po_data.get("expected_delivery") and po_data.get("actual_delivery"):
+                expected = datetime.fromisoformat(po_data["expected_delivery"])
+                actual = datetime.fromisoformat(po_data["actual_delivery"])
                 delay_days = (actual - expected).days
 
                 # تحديث درجة الموثوقية
-                current_score = self.suppliers.get(supplier_id, {}).get('reliability_score', 0.5)
+                current_score = self.suppliers.get(supplier_id, {}).get("reliability_score", 0.5)
                 if delay_days <= 0:
                     new_score = min(1.0, current_score + 0.1)  # مكافأة للتسليم في الوقت
                 else:
@@ -606,7 +631,7 @@ class SupplyChainIntegrationService:
 
                 # تحديث في الذاكرة
                 if supplier_id in self.suppliers:
-                    self.suppliers[supplier_id]['reliability_score'] = new_score
+                    self.suppliers[supplier_id]["reliability_score"] = new_score
 
         except Exception as e:
             self.logger.error(f"Error updating supplier performance: {e}", exc_info=True)
@@ -642,20 +667,25 @@ class SupplyChainIntegrationService:
             delivery_data = self.db.execute_query(delivery_query, (supplier_id,), fetch_all=True)
 
             return {
-                'total_orders': orders_data[0] or 0 if orders_data else 0,
-                'total_value': float(orders_data[1] or 0) if orders_data else 0,
-                'last_order_date': orders_data[2] if orders_data else None,
-                'delivery_data': delivery_data
+                "total_orders": orders_data[0] or 0 if orders_data else 0,
+                "total_value": float(orders_data[1] or 0) if orders_data else 0,
+                "last_order_date": orders_data[2] if orders_data else None,
+                "delivery_data": delivery_data,
             }
 
         except Exception as e:
             self.logger.error(f"Error getting supplier performance data: {e}", exc_info=True)
-            return {'total_orders': 0, 'total_value': 0, 'last_order_date': None, 'delivery_data': []}
+            return {
+                "total_orders": 0,
+                "total_value": 0,
+                "last_order_date": None,
+                "delivery_data": [],
+            }
 
     def _calculate_on_time_delivery_rate(self, performance_data: Dict[str, Any]) -> float:
         """حساب معدل التسليم في الوقت"""
         try:
-            delivery_data = performance_data.get('delivery_data', [])
+            delivery_data = performance_data.get("delivery_data", [])
             if not delivery_data:
                 return 0
 
@@ -681,7 +711,7 @@ class SupplyChainIntegrationService:
     def _calculate_average_lead_time(self, performance_data: Dict[str, Any]) -> int:
         """حساب متوسط وقت الانتظار"""
         try:
-            delivery_data = performance_data.get('delivery_data', [])
+            delivery_data = performance_data.get("delivery_data", [])
             if not delivery_data:
                 return 7  # افتراضي
 
@@ -704,17 +734,17 @@ class SupplyChainIntegrationService:
             composite_score = (on_time_rate * 0.4) + (quality_score * 0.4) + ((30 - min(lead_time, 30)) / 30 * 0.2)
 
             if composite_score >= 0.8:
-                return 'excellent'
+                return "excellent"
             elif composite_score >= 0.6:
-                return 'good'
+                return "good"
             elif composite_score >= 0.4:
-                return 'average'
+                return "average"
             else:
-                return 'poor'
+                return "poor"
 
         except Exception as e:
             self.logger.error(f"Error determining performance rating: {e}", exc_info=True)
-            return 'unknown'
+            return "unknown"
 
     def _check_supplier_alerts(self) -> List[SupplyChainAlert]:
         """فحص تنبيهات الموردين"""
@@ -723,16 +753,21 @@ class SupplyChainIntegrationService:
         try:
             for supplier_id, supplier_data in self.suppliers.items():
                 # فحص الموثوقية المنخفضة
-                if supplier_data['reliability_score'] < 0.5:
-                    alerts.append(SupplyChainAlert(
-                        alert_id=f"SUPPLIER_LOW_RELIABILITY_{supplier_id}",
-                        alert_type='supplier_issue',
-                        severity='high',
-                        description=f"موثوقية منخفضة للمورد {supplier_data['name']}",
-                        affected_items=[],
-                        suggested_actions=['مراجعة بدائل المورد', 'تفاوض على شروط أفضل'],
-                        created_at=datetime.now()
-                    ))
+                if supplier_data["reliability_score"] < 0.5:
+                    alerts.append(
+                        SupplyChainAlert(
+                            alert_id=f"SUPPLIER_LOW_RELIABILITY_{supplier_id}",
+                            alert_type="supplier_issue",
+                            severity="high",
+                            description=f"موثوقية منخفضة للمورد {supplier_data['name']}",
+                            affected_items=[],
+                            suggested_actions=[
+                                "مراجعة بدائل المورد",
+                                "تفاوض على شروط أفضل",
+                            ],
+                            created_at=datetime.now(),
+                        )
+                    )
 
                 # فحص عدم النشاط
                 # (سيتم إضافة منطق إضافي هنا)
@@ -758,17 +793,19 @@ class SupplyChainIntegrationService:
 
             for row in data:
                 po_id, supplier_id, expected_delivery = row
-                supplier_name = self.suppliers.get(supplier_id, {}).get('name', 'Unknown')
+                supplier_name = self.suppliers.get(supplier_id, {}).get("name", "Unknown")
 
-                alerts.append(SupplyChainAlert(
-                    alert_id=f"DELAY_{po_id}",
-                    alert_type='delivery_delay',
-                    severity='medium',
-                    description=f"تأخير متوقع في تسليم أمر الشراء {po_id} من {supplier_name}",
-                    affected_items=self._get_po_items(po_id),
-                    suggested_actions=['الاتصال بالمورد', 'البحث عن بدائل'],
-                    created_at=datetime.now()
-                ))
+                alerts.append(
+                    SupplyChainAlert(
+                        alert_id=f"DELAY_{po_id}",
+                        alert_type="delivery_delay",
+                        severity="medium",
+                        description=f"تأخير متوقع في تسليم أمر الشراء {po_id} من {supplier_name}",
+                        affected_items=self._get_po_items(po_id),
+                        suggested_actions=["الاتصال بالمورد", "البحث عن بدائل"],
+                        created_at=datetime.now(),
+                    )
+                )
 
         except Exception as e:
             self.logger.error(f"Error checking delivery alerts: {e}", exc_info=True)
@@ -784,15 +821,20 @@ class SupplyChainIntegrationService:
             single_supplier_products = self._get_single_supplier_products()
 
             for product in single_supplier_products:
-                alerts.append(SupplyChainAlert(
-                    alert_id=f"RISK_SINGLE_SUPPLIER_{product['product_id']}",
-                    alert_type='stockout_risk',
-                    severity='medium',
-                    description=f"مخاطر توريد للمنتج {product['name']} (مورد وحيد)",
-                    affected_items=[product['product_id']],
-                    suggested_actions=['البحث عن موردين بديلين', 'زيادة المخزون الآمن'],
-                    created_at=datetime.now()
-                ))
+                alerts.append(
+                    SupplyChainAlert(
+                        alert_id=f"RISK_SINGLE_SUPPLIER_{product['product_id']}",
+                        alert_type="stockout_risk",
+                        severity="medium",
+                        description=f"مخاطر توريد للمنتج {product['name']} (مورد وحيد)",
+                        affected_items=[product["product_id"]],
+                        suggested_actions=[
+                            "البحث عن موردين بديلين",
+                            "زيادة المخزون الآمن",
+                        ],
+                        created_at=datetime.now(),
+                    )
+                )
 
         except Exception as e:
             self.logger.error(f"Error checking supply risk alerts: {e}", exc_info=True)
@@ -812,13 +854,15 @@ class SupplyChainIntegrationService:
 
             suppliers = []
             for row in data:
-                suppliers.append({
-                    'supplier_id': row[0],
-                    'name': row[1],
-                    'unit_price': float(row[2] or 0),
-                    'lead_time_days': row[3] or 7,
-                    'status': row[4]
-                })
+                suppliers.append(
+                    {
+                        "supplier_id": row[0],
+                        "name": row[1],
+                        "unit_price": float(row[2] or 0),
+                        "lead_time_days": row[3] or 7,
+                        "status": row[4],
+                    }
+                )
 
             return suppliers
 
@@ -836,11 +880,11 @@ class SupplyChainIntegrationService:
 
             # تحويل التصنيف إلى رقم
             rating_scores = {
-                'excellent': 1.0,
-                'good': 0.8,
-                'average': 0.6,
-                'poor': 0.4,
-                'unknown': 0.5
+                "excellent": 1.0,
+                "good": 0.8,
+                "average": 0.6,
+                "poor": 0.4,
+                "unknown": 0.5,
             }
 
             performance_score = rating_scores.get(performance.performance_rating, 0.5)
@@ -853,9 +897,7 @@ class SupplyChainIntegrationService:
             lead_time_score = max(0, 1 - (lead_time / 30))  # تطبيع لمدة 30 يوم
 
             total_score = (
-                performance_score * performance_weight +
-                price_score * price_weight +
-                lead_time_score * lead_time_weight
+                performance_score * performance_weight + price_score * price_weight + lead_time_score * lead_time_weight
             )
 
             return total_score
@@ -887,14 +929,16 @@ class SupplyChainIntegrationService:
                 # حساب الكمية الموصى بها
                 recommended_quantity = max(min_stock * 2 - current_stock, min_stock - current_stock)
 
-                items.append({
-                    'product_id': product_id,
-                    'product_name': name,
-                    'current_stock': current_stock,
-                    'min_stock': min_stock,
-                    'recommended_quantity': int(recommended_quantity),
-                    'priority': priority
-                })
+                items.append(
+                    {
+                        "product_id": product_id,
+                        "product_name": name,
+                        "current_stock": current_stock,
+                        "min_stock": min_stock,
+                        "recommended_quantity": int(recommended_quantity),
+                        "priority": priority,
+                    }
+                )
 
             return items
 
@@ -926,10 +970,7 @@ class SupplyChainIntegrationService:
 
             data = self.db.execute_query(query, fetch_all=True)
 
-            return [
-                {'product_id': row[0], 'name': row[1], 'supplier_count': row[2]}
-                for row in data
-            ]
+            return [{"product_id": row[0], "name": row[1], "supplier_count": row[2]} for row in data]
 
         except Exception as e:
             self.logger.error(f"Error getting single supplier products: {e}", exc_info=True)

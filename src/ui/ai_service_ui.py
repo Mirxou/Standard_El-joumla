@@ -2,29 +2,42 @@
 AI Service UI - Phase 9
 واجهة المستخدم لخدمات الذكاء الاصطناعي المتقدم
 """
+import logging
 
-import sys
-import os
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional
 import json
+import os
+from datetime import datetime
+from typing import Any, Dict
 
+from PySide6.QtCore import Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QTextEdit, QLineEdit, QComboBox, QTableWidget, QTableWidgetItem,
-    QTabWidget, QGroupBox, QProgressBar, QSplitter, QScrollArea,
-    QMessageBox, QFileDialog, QCheckBox, QSpinBox, QDoubleSpinBox,
-    QTextBrowser, QFrame
+    QComboBox,
+    QFileDialog,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QSpinBox,
+    QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
+    QTextBrowser,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt, QThread, Signal, QTimer, QSize
-from PySide6.QtGui import QFont, QIcon, QPixmap, QPainter, QColor
+
+from src.core.config_manager import ConfigManager
+from src.core.database_manager import DatabaseManager
+from src.core.logger import logger
 
 # Local imports
 from src.services.advanced_ai_service import AdvancedAIService
-from src.core.database_manager import DatabaseManager
-from src.core.config_manager import ConfigManager
-from src.ui.styles import apply_style_to_app
-from src.core.logger import logger
 
 
 class AutoMLWorker(QThread):
@@ -45,21 +58,22 @@ class AutoMLWorker(QThread):
 
             result = self.ai_service.run_automl_experiment(**self.config)
 
-            if 'error' in result:
-                self.error_occurred.emit(result['error'])
+            if "error" in result:
+                self.error_occurred.emit(result["error"])
             else:
                 self.progress_updated.emit("تم بدء التجربة بنجاح، جاري الانتظار...")
-                experiment_id = result['experiment_id']
+                experiment_id = result["experiment_id"]
 
                 # انتظار انتهاء التجربة
                 import time
+
                 max_wait = 300  # 5 دقائق كحد أقصى
                 waited = 0
 
                 while waited < max_wait:
                     status = self.ai_service.get_automl_status(experiment_id)
 
-                    if status.get('status') in ['completed', 'failed']:
+                    if status.get("status") in ["completed", "failed"]:
                         self.experiment_completed.emit(status)
                         break
 
@@ -123,9 +137,6 @@ class AIServiceUI(QWidget):
         self.setWindowTitle("الذكاء الاصطناعي المتقدم - Phase 9")
         self.setGeometry(100, 100, 1400, 900)
 
-        # تطبيق النمط
-        apply_style_to_app(self)
-
         # تخطيط رئيسي
         main_layout = QHBoxLayout()
 
@@ -180,8 +191,8 @@ class AIServiceUI(QWidget):
         self.chat_display.setMinimumHeight(400)
         self.chat_display.setStyleSheet("""
             QTextBrowser {
-                background-color: #f8f9fa;
-                border: 1px solid #dee2e6;
+                background-color: #1e293b;
+                border: 1px solid #334155;
                 border-radius: 5px;
                 padding: 10px;
             }
@@ -238,14 +249,7 @@ class AIServiceUI(QWidget):
         data_layout.addWidget(QLabel("نوع البيانات:"))
 
         self.data_type_combo = QComboBox()
-        self.data_type_combo.addItems([
-            "اختر نوع البيانات",
-            "مبيعات",
-            "عملاء",
-            "مخزون",
-            "مالية",
-            "عمليات"
-        ])
+        self.data_type_combo.addItems(["اختر نوع البيانات", "مبيعات", "عملاء", "مخزون", "مالية", "عمليات"])
         data_layout.addWidget(self.data_type_combo)
 
         self.load_data_button = QPushButton("تحميل البيانات")
@@ -354,12 +358,7 @@ class AIServiceUI(QWidget):
         analysis_type_layout.addWidget(QLabel("نوع التحليل:"))
 
         self.analysis_type_combo = QComboBox()
-        self.analysis_type_combo.addItems([
-            "عام",
-            "منتج",
-            "مستند",
-            "وجه"
-        ])
+        self.analysis_type_combo.addItems(["عام", "منتج", "مستند", "وجه"])
         analysis_type_layout.addWidget(self.analysis_type_combo)
 
         self.analyze_image_button = QPushButton("🔍 تحليل الصورة")
@@ -380,9 +379,9 @@ class AIServiceUI(QWidget):
         self.image_label.setAlignment(Qt.AlignCenter)
         self.image_label.setStyleSheet("""
             QLabel {
-                border: 2px dashed #dee2e6;
+                border: 2px dashed #334155;
                 border-radius: 5px;
-                background-color: #f8f9fa;
+                background-color: #1e293b;
             }
         """)
         image_layout.addWidget(self.image_label)
@@ -424,13 +423,7 @@ class AIServiceUI(QWidget):
         generate_layout.addWidget(QLabel("نوع البيانات:"))
 
         self.insights_data_type_combo = QComboBox()
-        self.insights_data_type_combo.addItems([
-            "مبيعات",
-            "مخزون",
-            "عملاء",
-            "مالية",
-            "عمليات"
-        ])
+        self.insights_data_type_combo.addItems(["مبيعات", "مخزون", "عملاء", "مالية", "عمليات"])
         generate_layout.addWidget(self.insights_data_type_combo)
 
         self.generate_insights_button = QPushButton("🎯 توليد رؤى ذكية")
@@ -442,9 +435,7 @@ class AIServiceUI(QWidget):
         # جدول الرؤى
         self.insights_table = QTableWidget()
         self.insights_table.setColumnCount(5)
-        self.insights_table.setHorizontalHeaderLabels([
-            "النوع", "العنوان", "المحتوى", "الثقة", "التأثير"
-        ])
+        self.insights_table.setHorizontalHeaderLabels(["النوع", "العنوان", "المحتوى", "الثقة", "التأثير"])
         self.insights_table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.insights_table)
 
@@ -469,9 +460,9 @@ class AIServiceUI(QWidget):
         # جدول النماذج
         self.models_table = QTableWidget()
         self.models_table.setColumnCount(6)
-        self.models_table.setHorizontalHeaderLabels([
-            "معرف النموذج", "الاسم", "النوع", "الحالة", "تاريخ التدريب", "الأداء"
-        ])
+        self.models_table.setHorizontalHeaderLabels(
+            ["معرف النموذج", "الاسم", "النوع", "الحالة", "تاريخ التدريب", "الأداء"]
+        )
         self.models_table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.models_table)
 
@@ -554,24 +545,28 @@ class AIServiceUI(QWidget):
             try:
                 self.load_insights()
             except Exception as e:
-                logger.error(f"Safe guard: load_insights failed: {e}")
+                logger.log(logging.ERROR, f"Safe guard: load_insights failed: {e}")
             try:
                 self.load_models()
             except Exception as e:
-                logger.error(f"Safe guard: load_models failed: {e}")
+                logger.log(logging.ERROR, f"Safe guard: load_models failed: {e}")
             self.update_system_status()
         except Exception as e:
-            logger.error(f"Error loading initial data: {e}")
+            logger.log(logging.ERROR, f"Error loading initial data: {e}")
 
     def _init_input_text_compat(self):
         """Create a lightweight compatibility input_text object for tests"""
+
         class _CompatInput:
             def __init__(self):
                 self._text = ""
+
             def setPlainText(self, text):
                 self._text = text
+
             def toPlainText(self):
                 return self._text
+
             def clear(self):
                 self._text = ""
 
@@ -621,7 +616,7 @@ class AIServiceUI(QWidget):
             if hasattr(self.input_text, "clear"):
                 self.input_text.clear()
         except Exception:
-            pass
+            logging.getLogger(__name__).warning("Ignored exception in ai_service_ui.py")
         return {"cleared": True}
 
     def show_loading(self, flag: bool):
@@ -664,8 +659,8 @@ class AIServiceUI(QWidget):
     def on_chat_response(self, response: Dict[str, Any]):
         """معالجة رد المحادثة"""
         try:
-            ai_response = response.get('response', 'عذراً، لم أتمكن من فهم رسالتك.')
-            confidence = response.get('confidence', 0.5)
+            ai_response = response.get("response", "عذراً، لم أتمكن من فهم رسالتك.")
+            confidence = response.get("confidence", 0.5)
 
             # إضافة رد الذكاء الاصطناعي
             confidence_text = f" (ثقة: {confidence:.1%})" if confidence < 0.9 else ""
@@ -673,8 +668,8 @@ class AIServiceUI(QWidget):
             self.chat_display.append("")  # سطر فارغ
 
             # تحديث معرف المحادثة
-            if 'conversation_id' in response:
-                self.current_conversation_id = response['conversation_id']
+            if "conversation_id" in response:
+                self.current_conversation_id = response["conversation_id"]
 
             # تمكين زر الإرسال
             self.send_button.setEnabled(True)
@@ -682,7 +677,7 @@ class AIServiceUI(QWidget):
             self.message_input.setFocus()
 
         except Exception as e:
-            logger.error(f"Error handling chat response: {e}")
+            logger.log(logging.ERROR, f"Error handling chat response: {e}")
             self.on_chat_error(str(e))
 
     def on_chat_error(self, error: str):
@@ -724,16 +719,16 @@ class AIServiceUI(QWidget):
 
             # تحضير التكوين
             config = {
-                'experiment_id': f"automl_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-                'target_column': self.target_column_combo.currentText(),
-                'features': [f.strip() for f in features_text.split('\n') if f.strip()],
-                'algorithms': [a.strip() for a in self.algorithms_input.toPlainText().split('\n') if a.strip()],
-                'max_time': self.max_time_spin.value()
+                "experiment_id": f"automl_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                "target_column": self.target_column_combo.currentText(),
+                "features": [f.strip() for f in features_text.split("\n") if f.strip()],
+                "algorithms": [a.strip() for a in self.algorithms_input.toPlainText().split("\n") if a.strip()],
+                "max_time": self.max_time_spin.value(),
             }
 
             # إضافة البيانات (افتراضياً من قاعدة البيانات)
             # في التطبيق الحقيقي، سيتم تحميل البيانات الفعلية
-            config['data'] = self.get_sample_data_for_experiment()
+            config["data"] = self.get_sample_data_for_experiment()
 
             # تشغيل التجربة
             self.automl_progress.setVisible(True)
@@ -748,35 +743,35 @@ class AIServiceUI(QWidget):
             self.run_automl_button.setEnabled(False)
 
         except Exception as e:
-            logger.error(f"Error starting AutoML experiment: {e}")
+            logger.log(logging.ERROR, f"Error starting AutoML experiment: {e}")
             QMessageBox.critical(self, "خطأ", f"فشل في بدء التجربة: {str(e)}")
 
     def get_sample_data_for_experiment(self):
         """الحصول على بيانات تجريبية للتجربة"""
         # بيانات تجريبية - في التطبيق الحقيقي ستكون من قاعدة البيانات
-        import pandas as pd
         import numpy as np
+        import pandas as pd
 
         np.random.seed(42)
         n_samples = 1000
 
         if self.data_type_combo.currentText() == "مبيعات":
             data = {
-                'product_id': np.random.randint(1, 100, n_samples),
-                'customer_id': np.random.randint(1, 500, n_samples),
-                'quantity': np.random.randint(1, 20, n_samples),
-                'price': np.random.uniform(10, 1000, n_samples),
-                'discount': np.random.uniform(0, 0.3, n_samples),
-                'season': np.random.choice(['winter', 'spring', 'summer', 'fall'], n_samples),
-                'sales_amount': np.random.uniform(50, 20000, n_samples)  # الهدف
+                "product_id": np.random.randint(1, 100, n_samples),
+                "customer_id": np.random.randint(1, 500, n_samples),
+                "quantity": np.random.randint(1, 20, n_samples),
+                "price": np.random.uniform(10, 1000, n_samples),
+                "discount": np.random.uniform(0, 0.3, n_samples),
+                "season": np.random.choice(["winter", "spring", "summer", "fall"], n_samples),
+                "sales_amount": np.random.uniform(50, 20000, n_samples),  # الهدف
             }
         else:
             # بيانات عامة
             data = {
-                'feature1': np.random.randn(n_samples),
-                'feature2': np.random.randn(n_samples),
-                'feature3': np.random.randint(0, 10, n_samples),
-                'target': np.random.randint(0, 2, n_samples)  # تصنيف ثنائي
+                "feature1": np.random.randn(n_samples),
+                "feature2": np.random.randn(n_samples),
+                "feature3": np.random.randint(0, 10, n_samples),
+                "target": np.random.randint(0, 2, n_samples),  # تصنيف ثنائي
             }
 
         return pd.DataFrame(data)
@@ -790,7 +785,7 @@ class AIServiceUI(QWidget):
         self.automl_progress.setVisible(False)
         self.run_automl_button.setEnabled(True)
 
-        if 'error' in result:
+        if "error" in result:
             self.experiment_results.append(f"❌ خطأ: {result['error']}")
         else:
             self.experiment_results.append("✅ انتهت التجربة بنجاح!")
@@ -820,11 +815,7 @@ class AIServiceUI(QWidget):
         try:
             pixmap = QPixmap(image_path)
             if not pixmap.isNull():
-                scaled_pixmap = pixmap.scaled(
-                    self.image_label.size(),
-                    Qt.KeepAspectRatio,
-                    Qt.SmoothTransformation
-                )
+                scaled_pixmap = pixmap.scaled(self.image_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
                 self.image_label.setPixmap(scaled_pixmap)
             else:
                 self.image_label.setText("فشل في تحميل الصورة")
@@ -854,7 +845,7 @@ class AIServiceUI(QWidget):
 
             result = self.ai_service.analyze_image(image_path, analysis_type)
 
-            if 'error' in result:
+            if "error" in result:
                 self.vision_results.append(f"❌ خطأ: {result['error']}")
             else:
                 self.vision_results.append("✅ تم التحليل بنجاح!")
@@ -862,11 +853,11 @@ class AIServiceUI(QWidget):
 
                 # عرض النتائج
                 for key, value in result.items():
-                    if key != 'error':
+                    if key != "error":
                         self.vision_results.append(f"<b>{key}:</b> {value}")
 
         except Exception as e:
-            logger.error(f"Error analyzing image: {e}")
+            logger.log(logging.ERROR, f"Error analyzing image: {e}")
             self.vision_results.append(f"❌ خطأ: {str(e)}")
 
     def generate_insights(self):
@@ -881,49 +872,54 @@ class AIServiceUI(QWidget):
 
             if insights:
                 self.load_insights()  # إعادة تحميل الجدول
-                QMessageBox.information(
-                    self, "نجح",
-                    f"تم توليد {len(insights)} رؤية ذكية جديدة"
-                )
+                QMessageBox.information(self, "نجح", f"تم توليد {len(insights)} رؤية ذكية جديدة")
             else:
                 QMessageBox.warning(self, "تحذير", "لم يتم توليد أي رؤى")
 
         except Exception as e:
-            logger.error(f"Error generating insights: {e}")
+            logger.log(logging.ERROR, f"Error generating insights: {e}")
             QMessageBox.critical(self, "خطأ", f"فشل في توليد الرؤى: {str(e)}")
 
     def get_sample_data_for_insights(self, data_type: str):
         """الحصول على بيانات تجريبية للرؤى"""
-        import pandas as pd
         import numpy as np
+        import pandas as pd
 
         np.random.seed(42)
         n_samples = 100
 
         if data_type == "مبيعات":
-            return pd.DataFrame({
-                'amount': np.random.uniform(100, 10000, n_samples),
-                'quantity': np.random.randint(1, 50, n_samples),
-                'customer_id': np.random.randint(1, 1000, n_samples),
-                'product_id': np.random.randint(1, 500, n_samples)
-            })
+            return pd.DataFrame(
+                {
+                    "amount": np.random.uniform(100, 10000, n_samples),
+                    "quantity": np.random.randint(1, 50, n_samples),
+                    "customer_id": np.random.randint(1, 1000, n_samples),
+                    "product_id": np.random.randint(1, 500, n_samples),
+                }
+            )
         elif data_type == "مخزون":
-            return pd.DataFrame({
-                'quantity': np.random.randint(0, 1000, n_samples),
-                'product_id': np.random.randint(1, 500, n_samples),
-                'location': np.random.choice(['warehouse_a', 'warehouse_b', 'store'], n_samples)
-            })
+            return pd.DataFrame(
+                {
+                    "quantity": np.random.randint(0, 1000, n_samples),
+                    "product_id": np.random.randint(1, 500, n_samples),
+                    "location": np.random.choice(["warehouse_a", "warehouse_b", "store"], n_samples),
+                }
+            )
         elif data_type == "عملاء":
-            return pd.DataFrame({
-                'customer_id': range(1, n_samples + 1),
-                'total_purchases': np.random.uniform(0, 50000, n_samples),
-                'status': np.random.choice(['active', 'inactive'], n_samples)
-            })
+            return pd.DataFrame(
+                {
+                    "customer_id": range(1, n_samples + 1),
+                    "total_purchases": np.random.uniform(0, 50000, n_samples),
+                    "status": np.random.choice(["active", "inactive"], n_samples),
+                }
+            )
         else:
-            return pd.DataFrame({
-                'value1': np.random.randn(n_samples),
-                'value2': np.random.randn(n_samples)
-            })
+            return pd.DataFrame(
+                {
+                    "value1": np.random.randn(n_samples),
+                    "value2": np.random.randn(n_samples),
+                }
+            )
 
     def load_insights(self):
         """تحميل و عرض الرؤى الذكية"""
@@ -933,16 +929,16 @@ class AIServiceUI(QWidget):
             self.insights_table.setRowCount(len(insights))
 
             for row, insight in enumerate(insights):
-                self.insights_table.setItem(row, 0, QTableWidgetItem(insight.get('type', '')))
-                self.insights_table.setItem(row, 1, QTableWidgetItem(insight.get('title', '')))
-                self.insights_table.setItem(row, 2, QTableWidgetItem(insight.get('content', '')))
+                self.insights_table.setItem(row, 0, QTableWidgetItem(insight.get("type", "")))
+                self.insights_table.setItem(row, 1, QTableWidgetItem(insight.get("title", "")))
+                self.insights_table.setItem(row, 2, QTableWidgetItem(insight.get("content", "")))
                 self.insights_table.setItem(row, 3, QTableWidgetItem(f"{insight.get('confidence', 0):.1%}"))
-                self.insights_table.setItem(row, 4, QTableWidgetItem(insight.get('impact', '')))
+                self.insights_table.setItem(row, 4, QTableWidgetItem(insight.get("impact", "")))
 
             self.insights_table.resizeColumnsToContents()
 
         except Exception as e:
-            logger.error(f"Error loading insights: {e}")
+            logger.log(logging.ERROR, f"Error loading insights: {e}")
 
     def load_models(self):
         """تحميل وعرض النماذج المدربة"""
@@ -953,11 +949,11 @@ class AIServiceUI(QWidget):
                 return
             with self.db_manager.get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute('''
+                cursor.execute("""
                     SELECT model_id, model_name, model_type, status, training_date, performance_metrics
                     FROM trained_ai_models
                     ORDER BY training_date DESC
-                ''')
+                """)
 
                 models = cursor.fetchall()
                 self.models_table.setRowCount(len(models))
@@ -967,25 +963,27 @@ class AIServiceUI(QWidget):
                     self.models_table.setItem(row, 1, QTableWidgetItem(model[1] or "غير محدد"))  # model_name
                     self.models_table.setItem(row, 2, QTableWidgetItem(model[2] or "غير محدد"))  # model_type
                     self.models_table.setItem(row, 3, QTableWidgetItem(model[3] or "غير محدد"))  # status
-                    self.models_table.setItem(row, 4, QTableWidgetItem(
-                        model[4].strftime('%Y-%m-%d %H:%M') if model[4] else "غير محدد"
-                    ))  # training_date
+                    self.models_table.setItem(
+                        row,
+                        4,
+                        QTableWidgetItem(model[4].strftime("%Y-%m-%d %H:%M") if model[4] else "غير محدد"),
+                    )  # training_date
 
                     # الأداء
                     perf_text = "غير محدد"
                     if model[5]:
                         try:
                             perf_data = json.loads(model[5])
-                            if 'accuracy' in perf_data:
+                            if "accuracy" in perf_data:
                                 perf_text = f"دقة: {perf_data['accuracy']:.1%}"
-                        except:
-                            pass
+                        except Exception:
+                            logging.getLogger(__name__).warning("Ignored exception in ai_service_ui.py")
                     self.models_table.setItem(row, 5, QTableWidgetItem(perf_text))
 
                 self.models_table.resizeColumnsToContents()
 
         except Exception as e:
-            logger.error(f"Error loading models: {e}")
+            logger.log(logging.ERROR, f"Error loading models: {e}")
 
     def delete_model(self):
         """حذف النموذج المحدد"""
@@ -997,9 +995,10 @@ class AIServiceUI(QWidget):
         model_id = self.models_table.item(current_row, 0).text()
 
         reply = QMessageBox.question(
-            self, "تأكيد الحذف",
+            self,
+            "تأكيد الحذف",
             f"هل أنت متأكد من حذف النموذج '{model_id}'؟",
-            QMessageBox.Yes | QMessageBox.No
+            QMessageBox.Yes | QMessageBox.No,
         )
 
         if reply == QMessageBox.Yes:
@@ -1021,13 +1020,13 @@ class AIServiceUI(QWidget):
                 QMessageBox.information(self, "نجح", "تم حذف النموذج بنجاح")
 
             except Exception as e:
-                logger.error(f"Error deleting model: {e}")
+                logger.log(logging.ERROR, f"Error deleting model: {e}")
                 QMessageBox.critical(self, "خطأ", f"فشل في حذف النموذج: {str(e)}")
 
     def update_system_status(self):
         """تحديث حالة النظام في اللوحة الجانبية"""
         try:
-            status_text = f"""
+            status_text = """
 <b>حالة النظام - Phase 9</b><br>
 ⏰ الوقت: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}<br>
 🤖 خدمات الذكاء الاصطناعي: نشطة<br>
@@ -1043,16 +1042,17 @@ class AIServiceUI(QWidget):
             self.stats_text.setText(stats_text)
 
         except Exception as e:
-            logger.error(f"Error updating system status: {e}")
+            logger.log(logging.ERROR, f"Error updating system status: {e}")
 
     def get_memory_usage(self) -> str:
         """الحصول على استخدام الذاكرة"""
         try:
             import psutil
+
             process = psutil.Process()
-            memory_mb = process.memory_info().rss / 1024 / 1024
+            memory_mb = process.memory_info().rss / 1024 / 1024  # noqa: F841
             return ".1f"
-        except:
+        except Exception:
             return "غير متوفر"
 
     def get_quick_stats(self) -> str:
@@ -1065,17 +1065,17 @@ class AIServiceUI(QWidget):
 
                 # عدد النماذج
                 cursor.execute("SELECT COUNT(*) FROM trained_ai_models")
-                models_count = cursor.fetchone()[0]
+                cursor.fetchone()[0]
 
                 # عدد الرؤى
                 cursor.execute("SELECT COUNT(*) FROM ai_insights")
-                insights_count = cursor.fetchone()[0]
+                cursor.fetchone()[0]
 
                 # عدد المحادثات
                 cursor.execute("SELECT COUNT(*) FROM ai_conversations")
-                conversations_count = cursor.fetchone()[0]
+                cursor.fetchone()[0]
 
-                return f"""
+                return """
 عدد النماذج: {models_count}
 عدد الرؤى: {insights_count}
 عدد المحادثات: {conversations_count}
@@ -1092,19 +1092,19 @@ class AIServiceUI(QWidget):
         """تحميل بيانات التجربة"""
         # في التطبيق الحقيقي، سيتم تحميل البيانات الفعلية من قاعدة البيانات
         # هنا سنضع بيانات تجريبية
-        sample_columns = ['feature1', 'feature2', 'feature3', 'target']
+        sample_columns = ["feature1", "feature2", "feature3", "target"]
 
         self.target_column_combo.clear()
         self.target_column_combo.addItems(sample_columns)
 
         # تعبئة الميزات افتراضياً
-        features_text = '\n'.join([col for col in sample_columns if col != 'target'])
+        features_text = "\n".join([col for col in sample_columns if col != "target"])
         self.features_list.setPlainText(features_text)
 
     def closeEvent(self, event):
         """معالجة إغلاق النافذة"""
         # إيقاف التايمر
-        if hasattr(self, 'update_timer'):
+        if hasattr(self, "update_timer"):
             self.update_timer.stop()
 
         # إيقاف الـ threads

@@ -10,23 +10,51 @@ Date: February 2026
 Version: 1.0.0
 """
 
-import cv2
-import numpy as np
+from __future__ import annotations
 import logging
-from typing import Dict, List, Any, Optional, Tuple, Union
+
+import re
+import warnings
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-import warnings
-warnings.filterwarnings('ignore')
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+try:
+    import cv2
+
+    CV2_AVAILABLE = True
+except ImportError:
+    CV2_AVAILABLE = False
+
+try:
+    import numpy as np
+
+    NUMPY_AVAILABLE = True
+except ImportError:
+    NUMPY_AVAILABLE = False
+
+try:
+    import torch
+    from torchvision import transforms
+
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+
+from PIL import Image
+
+warnings.filterwarnings("ignore")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class ProductRecognition:
     """Product recognition result"""
+
     product_id: str
     product_name: str
     confidence: float
@@ -35,9 +63,11 @@ class ProductRecognition:
     detected_at: datetime
     image_quality: str
 
+
 @dataclass
 class QualityInspection:
     """Quality inspection result"""
+
     item_id: str
     quality_score: float
     defects_detected: List[str]
@@ -46,9 +76,11 @@ class QualityInspection:
     recommendations: List[str]
     inspected_at: datetime
 
+
 @dataclass
 class DocumentAnalysis:
     """Document analysis result"""
+
     document_type: str
     extracted_text: str
     key_fields: Dict[str, Any]
@@ -57,15 +89,29 @@ class DocumentAnalysis:
     language: str
     analyzed_at: datetime
 
+
 @dataclass
 class VisualAnalytics:
     """Visual analytics result"""
+
     metric_name: str
     value: float
     trend: str
     confidence: float
     visual_elements: List[str]
     analyzed_at: datetime
+
+
+@dataclass
+class ProductMatch:
+    """Product match result"""
+
+    product_id: str
+    product_name: str
+    confidence: float
+    similarity_score: float
+    category: Optional[str] = None
+
 
 class ComputerVisionEngine:
     """
@@ -110,39 +156,50 @@ class ComputerVisionEngine:
                 "object_detection": {
                     "model_path": "models/cv/yolo_model",
                     "confidence_threshold": 0.5,
-                    "nms_threshold": 0.4
+                    "nms_threshold": 0.4,
                 },
                 "image_classification": {
                     "model_path": "models/cv/classifier_model",
                     "input_size": [224, 224, 3],
-                    "classes": ["product", "document", "defect", "normal"]
+                    "classes": ["product", "document", "defect", "normal"],
                 },
                 "ocr": {
                     "engine": "tesseract",
                     "languages": ["en", "ar"],
-                    "confidence_threshold": 0.6
+                    "confidence_threshold": 0.6,
                 },
                 "quality_inspection": {
-                    "defect_types": ["scratch", "stain", "tear", "discoloration", "missing_part"],
-                    "quality_threshold": 0.8
-                }
+                    "defect_types": [
+                        "scratch",
+                        "stain",
+                        "tear",
+                        "discoloration",
+                        "missing_part",
+                    ],
+                    "quality_threshold": 0.8,
+                },
             },
             "processing": {
                 "max_image_size": [1024, 1024],
                 "supported_formats": [".jpg", ".jpeg", ".png", ".bmp", ".tiff"],
                 "batch_size": 8,
-                "gpu_acceleration": True
+                "gpu_acceleration": True,
             },
             "analytics": {
-                "metrics": ["color_distribution", "texture_analysis", "shape_recognition"],
+                "metrics": [
+                    "color_distribution",
+                    "texture_analysis",
+                    "shape_recognition",
+                ],
                 "trend_detection": True,
-                "anomaly_detection": True
-            }
+                "anomaly_detection": True,
+            },
         }
 
         if Path(self.config_path).exists():
-            with open(self.config_path, 'r') as f:
+            with open(self.config_path, "r") as f:
                 import json
+
                 user_config = json.load(f)
                 default_config.update(user_config)
 
@@ -166,7 +223,7 @@ class ComputerVisionEngine:
             logger.info("CV components initialized successfully")
 
         except Exception as e:
-            logger.error(f"Failed to initialize CV components: {e}")
+            logger.log(logging.ERROR, f"Failed to initialize CV components: {e}")
 
     def _initialize_object_detection(self):
         """Initialize object detection model"""
@@ -174,7 +231,7 @@ class ComputerVisionEngine:
         self.object_detector = {
             "model": "yolo_v5",
             "loaded": True,
-            "classes": ["product", "barcode", "label", "defect"]
+            "classes": ["product", "barcode", "label", "defect"],
         }
 
     def _initialize_image_classification(self):
@@ -182,7 +239,14 @@ class ComputerVisionEngine:
         self.image_classifier = {
             "model": "resnet50",
             "loaded": True,
-            "classes": ["electronics", "clothing", "food", "documents", "defective", "normal"]
+            "classes": [
+                "electronics",
+                "clothing",
+                "food",
+                "documents",
+                "defective",
+                "normal",
+            ],
         }
 
     def _initialize_ocr_engine(self):
@@ -190,7 +254,7 @@ class ComputerVisionEngine:
         self.ocr_engine = {
             "engine": "tesseract",
             "loaded": True,
-            "languages": ["eng", "ara"]
+            "languages": ["eng", "ara"],
         }
 
     def _initialize_quality_inspection(self):
@@ -198,7 +262,7 @@ class ComputerVisionEngine:
         self.quality_inspector = {
             "defect_detector": True,
             "quality_scorer": True,
-            "loaded": True
+            "loaded": True,
         }
 
     def _setup_directories(self):
@@ -208,7 +272,7 @@ class ComputerVisionEngine:
             "data/cv_training",
             "logs/cv_processing",
             "cache/cv_results",
-            "temp/cv_images"
+            "temp/cv_images",
         ]
 
         try:
@@ -217,7 +281,7 @@ class ComputerVisionEngine:
 
             logger.info("CV directories initialized successfully")
         except Exception as e:
-            logger.error(f"Failed to initialize directories: {e}")
+            logger.log(logging.ERROR, f"Failed to initialize directories: {e}")
 
     def preprocess_image(self, image: Union[str, np.ndarray, Image.Image]) -> Tuple[np.ndarray, Dict[str, Any]]:
         """
@@ -241,33 +305,29 @@ class ComputerVisionEngine:
             raise ValueError("Unsupported image format")
 
         original_shape = img.shape
-        metadata = {
-            'original_shape': original_shape,
-            'processing_steps': []
-        }
+        metadata = {"original_shape": original_shape, "processing_steps": []}
 
         # Apply preprocessing steps
-        for step in self.config['processing']['preprocessing']:
-            if step == 'normalize':
+        for step in self.config["processing"]["preprocessing"]:
+            if step == "normalize":
                 img = img.astype(np.float32) / 255.0
-                metadata['processing_steps'].append('normalized')
-            elif step == 'resize':
-                max_size = self.config['processing']['max_image_size']
+                metadata["processing_steps"].append("normalized")
+            elif step == "resize":
+                max_size = self.config["processing"]["max_image_size"]
                 h, w = img.shape[:2]
                 if max(h, w) > max_size:
                     scale = max_size / max(h, w)
                     new_w, new_h = int(w * scale), int(h * scale)
                     img = cv2.resize(img, (new_w, new_h))
-                metadata['processing_steps'].append('resized')
-            elif step == 'enhance':
+                metadata["processing_steps"].append("resized")
+            elif step == "enhance":
                 # Simple enhancement
                 img = cv2.convertScaleAbs(img, alpha=1.2, beta=10)
-                metadata['processing_steps'].append('enhanced')
+                metadata["processing_steps"].append("enhanced")
 
         return img, metadata
 
-    def _old_recognize_products(self, image: Union[str, np.ndarray, Image.Image],
-                          top_k: int = 5) -> List[ProductMatch]:
+    def _old_recognize_products(self, image: Union[str, np.ndarray, Image.Image], top_k: int = 5) -> List[ProductMatch]:
         """
         Recognize products in an image
 
@@ -287,8 +347,8 @@ class ComputerVisionEngine:
         img_tensor = self._prepare_image_for_model(processed_img)
 
         # Generate embedding
-        if self.torch_available:
-            embedding = self._get_pytorch_embedding(img_tensor)
+        if self.torch_available:  # noqa: F821
+            embedding = self._get_pytorch_embedding(img_tensor)  # noqa: F821
         elif self.tf_available:
             embedding = self._get_tensorflow_embedding(img_tensor)
         else:
@@ -302,26 +362,28 @@ class ComputerVisionEngine:
 
         return matches
 
-    def _prepare_image_for_model(self, image: np.ndarray) -> torch.Tensor:
+    def _prepare_image_for_model(self, image: np.ndarray) -> torch.Tensor:  # noqa: F821
         """Prepare image for model input"""
         # Resize to 224x224 for ResNet
         img = cv2.resize(image, (224, 224))
 
         # Convert to tensor
-        transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        ])
+        transform = transforms.Compose(  # noqa: F821
+            [
+                transforms.ToTensor(),  # noqa: F821
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # noqa: F821
+            ]
+        )
 
         if isinstance(img, np.ndarray):
-            img = Image.fromarray(img.astype('uint8'), 'RGB')
+            img = Image.fromarray(img.astype("uint8"), "RGB")
 
         return transform(img).unsqueeze(0)
 
-    def _get_pytorch_embedding(self, img_tensor: torch.Tensor) -> np.ndarray:
+    def _get_pytorch_embedding(self, img_tensor: torch.Tensor) -> np.ndarray:  # noqa: F821
         """Get embedding using PyTorch model"""
         self.product_model.eval()
-        with torch.no_grad():
+        with torch.no_grad():  # noqa: F821
             embedding = self.product_model(img_tensor)
             return embedding.squeeze().numpy()
 
@@ -339,7 +401,7 @@ class ComputerVisionEngine:
         query_embedding = embedding.reshape(1, -1)
 
         for product_id, product_data in self.product_database.items():
-            product_embedding = product_data['embedding']
+            product_embedding = product_data["embedding"]
 
             # Calculate cosine similarity
             similarity = np.dot(query_embedding, product_embedding.T) / (
@@ -348,14 +410,16 @@ class ComputerVisionEngine:
 
             confidence = float(similarity[0][0])
 
-            if confidence >= self.config['models']['product_recognition']['threshold']:
-                matches.append(ProductMatch(
-                    product_id=product_id,
-                    product_name=product_data['name'],
-                    confidence=confidence,
-                    similarity_score=confidence,
-                    category=product_data.get('category')
-                ))
+            if confidence >= self.config["models"]["product_recognition"]["threshold"]:
+                matches.append(
+                    ProductMatch(
+                        product_id=product_id,
+                        product_name=product_data["name"],
+                        confidence=confidence,
+                        similarity_score=confidence,
+                        category=product_data.get("category"),
+                    )
+                )
 
         # Sort by confidence and return top_k
         matches.sort(key=lambda x: x.confidence, reverse=True)
@@ -368,24 +432,25 @@ class ComputerVisionEngine:
             "PROD001": {
                 "name": "Wireless Headphones",
                 "category": "Electronics",
-                "embedding": np.random.randn(512)
+                "embedding": np.random.randn(512),
             },
             "PROD002": {
                 "name": "Coffee Maker",
                 "category": "Appliances",
-                "embedding": np.random.randn(512)
+                "embedding": np.random.randn(512),
             },
             "PROD003": {
                 "name": "Running Shoes",
                 "category": "Sports",
-                "embedding": np.random.randn(512)
-            }
+                "embedding": np.random.randn(512),
+            },
         }
 
         self.product_database = sample_products
 
-    def quality_inspection(self, image: Union[str, np.ndarray, Image.Image],
-                          product_type: str) -> QualityReport:
+    def quality_inspection(
+        self, image: Union[str, np.ndarray, Image.Image], product_type: str
+    ) -> "QualityReport":  # noqa: F821
         """
         Perform quality inspection on a product image
 
@@ -412,13 +477,13 @@ class ComputerVisionEngine:
 
         processing_time = (datetime.now() - start_time).total_seconds()
 
-        report = QualityReport(
+        report = QualityReport(  # noqa: F821
             product_id=f"inspection_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
             overall_quality=quality_score,
             defects_found=defects,
             quality_score=quality_score,
             recommendations=recommendations,
-            inspection_time=processing_time
+            inspection_time=processing_time,
         )
 
         logger.info(f"Quality inspection completed in {processing_time:.2f} seconds")
@@ -445,14 +510,16 @@ class ComputerVisionEngine:
                 # Classify defect type (simplified)
                 defect_type = "scratch" if w > h else "stain"
 
-                defects.append({
-                    'id': f'defect_{i}',
-                    'type': defect_type,
-                    'severity': 'medium' if area > 500 else 'low',
-                    'bounding_box': (x, y, w, h),
-                    'confidence': 0.8,
-                    'area': area
-                })
+                defects.append(
+                    {
+                        "id": f"defect_{i}",
+                        "type": defect_type,
+                        "severity": "medium" if area > 500 else "low",
+                        "bounding_box": (x, y, w, h),
+                        "confidence": 0.8,
+                        "area": area,
+                    }
+                )
 
         return defects
 
@@ -462,11 +529,7 @@ class ComputerVisionEngine:
 
         # Reduce score based on defects
         for defect in defects:
-            severity_penalty = {
-                'low': 0.05,
-                'medium': 0.15,
-                'high': 0.3
-            }.get(defect['severity'], 0.1)
+            severity_penalty = {"low": 0.05, "medium": 0.15, "high": 0.3}.get(defect["severity"], 0.1)
 
             base_score -= severity_penalty
 
@@ -486,7 +549,7 @@ class ComputerVisionEngine:
             recommendations.append("High defect rate detected - review production process")
 
         for defect in defects:
-            if defect['severity'] == 'high':
+            if defect["severity"] == "high":
                 recommendations.append(f"Critical {defect['type']} defect found - immediate action required")
 
         if not recommendations:
@@ -529,7 +592,7 @@ class ComputerVisionEngine:
             extracted_text=extracted_text,
             confidence=confidence,
             fields=fields,
-            processing_time=processing_time
+            processing_time=processing_time,
         )
 
         logger.info(f"Document scanning completed in {processing_time:.2f} seconds")
@@ -553,34 +616,34 @@ class ComputerVisionEngine:
         # Simple keyword-based analysis
         text_lower = text.lower()
 
-        if 'invoice' in text_lower:
-            doc_type = 'invoice'
+        if "invoice" in text_lower:
+            doc_type = "invoice"
             fields = self._extract_invoice_fields(text)
-        elif 'receipt' in text_lower:
-            doc_type = 'receipt'
+        elif "receipt" in text_lower:
+            doc_type = "receipt"
             fields = self._extract_receipt_fields(text)
         else:
-            doc_type = 'document'
-            fields = {'raw_text': text}
+            doc_type = "document"
+            fields = {"raw_text": text}
 
         return doc_type, fields
 
     def _extract_invoice_fields(self, text: str) -> Dict[str, Any]:
         """Extract fields from invoice text"""
         # Simplified extraction - would use NLP in production
-        lines = text.strip().split('\n')
+        lines = text.strip().split("\n")
         fields = {}
 
         for line in lines:
-            if 'invoice number' in line.lower():
-                fields['invoice_number'] = line.split(':')[-1].strip()
-            elif 'date' in line.lower():
-                fields['date'] = line.split(':')[-1].strip()
-            elif 'customer' in line.lower():
-                fields['customer'] = line.split(':')[-1].strip()
-            elif 'total' in line.lower() and 'amount' in line.lower():
-                amount_str = line.split(':')[-1].strip()
-                fields['total_amount'] = amount_str
+            if "invoice number" in line.lower():
+                fields["invoice_number"] = line.split(":")[-1].strip()
+            elif "date" in line.lower():
+                fields["date"] = line.split(":")[-1].strip()
+            elif "customer" in line.lower():
+                fields["customer"] = line.split(":")[-1].strip()
+            elif "total" in line.lower() and "amount" in line.lower():
+                amount_str = line.split(":")[-1].strip()
+                fields["total_amount"] = amount_str
 
         return fields
 
@@ -609,10 +672,10 @@ class ComputerVisionEngine:
 
         if not faces:
             return {
-                'authenticated': False,
-                'reason': 'No face detected',
-                'confidence': 0.0,
-                'processing_time': (datetime.now() - start_time).total_seconds()
+                "authenticated": False,
+                "reason": "No face detected",
+                "confidence": 0.0,
+                "processing_time": (datetime.now() - start_time).total_seconds(),
             }
 
         # Face recognition (simplified)
@@ -621,10 +684,10 @@ class ComputerVisionEngine:
         processing_time = (datetime.now() - start_time).total_seconds()
 
         result = {
-            'authenticated': recognition_result['confidence'] > 0.8,
-            'user_id': recognition_result.get('user_id'),
-            'confidence': recognition_result['confidence'],
-            'processing_time': processing_time
+            "authenticated": recognition_result["confidence"] > 0.8,
+            "user_id": recognition_result.get("user_id"),
+            "confidence": recognition_result["confidence"],
+            "processing_time": processing_time,
         }
 
         logger.info(f"Facial recognition completed in {processing_time:.2f} seconds")
@@ -637,39 +700,28 @@ class ComputerVisionEngine:
             return []
 
         try:
-            face_cascade = cv2.CascadeClassifier(
-                cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-            )
+            face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
             gray = cv2.cvtColor(image.astype(np.uint8), cv2.COLOR_RGB2GRAY)
             faces = face_cascade.detectMultiScale(gray, 1.1, 4)
 
             detected_faces = []
-            for (x, y, w, h) in faces:
-                detected_faces.append({
-                    'x': int(x),
-                    'y': int(y),
-                    'width': int(w),
-                    'height': int(h)
-                })
+            for x, y, w, h in faces:
+                detected_faces.append({"x": int(x), "y": int(y), "width": int(w), "height": int(h)})
 
             return detected_faces
 
         except Exception as e:
-            logger.error(f"Face detection failed: {e}")
+            logger.log(logging.ERROR, f"Face detection failed: {e}")
             return []
 
     def _recognize_face(self, image: np.ndarray, face_region: Dict) -> Dict[str, Any]:
         """Recognize face (simplified)"""
         # This would use a trained face recognition model in production
         # For demo, return random confidence
-        return {
-            'user_id': 'USER001',
-            'confidence': np.random.uniform(0.7, 0.95)
-        }
+        return {"user_id": "USER001", "confidence": np.random.uniform(0.7, 0.95)}
 
-    def visualize_product(self, image: Union[str, np.ndarray, Image.Image],
-                         product_info: Dict[str, Any]) -> np.ndarray:
+    def visualize_product(self, image: Union[str, np.ndarray, Image.Image], product_info: Dict[str, Any]) -> np.ndarray:
         """
         Add visual overlays to product image
 
@@ -693,15 +745,32 @@ class ComputerVisionEngine:
         price_text = f"Price: ${product_info.get('price', 'N/A')}"
 
         # Add text overlay
-        cv2.putText(img, overlay_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
-                   1, (255, 255, 255), 2, cv2.LINE_AA)
-        cv2.putText(img, price_text, (10, 70), cv2.FONT_HERSHEY_SIMPLEX,
-                   0.7, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.putText(
+            img,
+            overlay_text,
+            (10, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (255, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
+        cv2.putText(
+            img,
+            price_text,
+            (10, 70),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
 
         return img
 
-    def batch_process_images(self, image_paths: List[str],
-                           processing_type: str = "recognition") -> List[Dict[str, Any]]:
+    def batch_process_images(
+        self, image_paths: List[str], processing_type: str = "recognition"
+    ) -> List[Dict[str, Any]]:
         """
         Process multiple images in batch
 
@@ -718,32 +787,34 @@ class ComputerVisionEngine:
             try:
                 if processing_type == "recognition":
                     matches = self.recognize_products(image_path)
-                    results.append({
-                        'image_path': image_path,
-                        'success': True,
-                        'matches': [match.__dict__ for match in matches]
-                    })
+                    results.append(
+                        {
+                            "image_path": image_path,
+                            "success": True,
+                            "matches": [match.__dict__ for match in matches],
+                        }
+                    )
                 elif processing_type == "quality":
                     report = self.quality_inspection(image_path, "general")
-                    results.append({
-                        'image_path': image_path,
-                        'success': True,
-                        'report': report.__dict__
-                    })
+                    results.append(
+                        {
+                            "image_path": image_path,
+                            "success": True,
+                            "report": report.__dict__,
+                        }
+                    )
                 elif processing_type == "document":
                     analysis = self.scan_documents(image_path)
-                    results.append({
-                        'image_path': image_path,
-                        'success': True,
-                        'analysis': analysis.__dict__
-                    })
+                    results.append(
+                        {
+                            "image_path": image_path,
+                            "success": True,
+                            "analysis": analysis.__dict__,
+                        }
+                    )
 
             except Exception as e:
-                results.append({
-                    'image_path': image_path,
-                    'success': False,
-                    'error': str(e)
-                })
+                results.append({"image_path": image_path, "success": False, "error": str(e)})
 
         return results
 
@@ -769,7 +840,7 @@ class ComputerVisionEngine:
         # Classify detected objects
         recognitions = []
         for detection in detections:
-            if detection['confidence'] >= confidence_threshold:
+            if detection["confidence"] >= confidence_threshold:
                 recognition = self._classify_product(detection, image)
                 if recognition:
                     recognitions.append(recognition)
@@ -810,14 +881,14 @@ class ComputerVisionEngine:
                 "class": "product",
                 "confidence": 0.85,
                 "bbox": [50, 50, 200, 200],  # x1, y1, x2, y2
-                "class_id": 0
+                "class_id": 0,
             },
             {
                 "class": "barcode",
                 "confidence": 0.92,
                 "bbox": [60, 210, 180, 230],
-                "class_id": 1
-            }
+                "class_id": 1,
+            },
         ]
 
         return detections
@@ -825,14 +896,14 @@ class ComputerVisionEngine:
     def _classify_product(self, detection: Dict[str, Any], image: np.ndarray) -> Optional[ProductRecognition]:
         """Classify detected product"""
         # Extract region of interest
-        x1, y1, x2, y2 = detection['bbox']
-        roi = image[y1:y2, x1:x2]
+        x1, y1, x2, y2 = detection["bbox"]
+        roi = image[y1:y2, x1:x2]  # noqa: F841
 
         # Mock classification - in reality, use trained classifier
         product_classes = {
             "electronics": ["laptop", "phone", "tablet"],
             "clothing": ["shirt", "pants", "shoes"],
-            "food": ["apple", "bread", "milk"]
+            "food": ["apple", "bread", "milk"],
         }
 
         # Simulate classification
@@ -843,11 +914,11 @@ class ComputerVisionEngine:
         recognition = ProductRecognition(
             product_id=product_id,
             product_name=product_name,
-            confidence=detection['confidence'],
-            bounding_box=tuple(detection['bbox']),
+            confidence=detection["confidence"],
+            bounding_box=tuple(detection["bbox"]),
             category=category,
             detected_at=datetime.now(),
-            image_quality="good"
+            image_quality="good",
         )
 
         return recognition
@@ -888,7 +959,7 @@ class ComputerVisionEngine:
             inspection_passed=inspection_passed,
             confidence=0.85,  # Mock confidence
             recommendations=recommendations,
-            inspected_at=datetime.now()
+            inspected_at=datetime.now(),
         )
 
         processing_time = (datetime.now() - start_time).total_seconds()
@@ -942,7 +1013,7 @@ class ComputerVisionEngine:
             "potential_scratch": 0.2,
             "color_variation": 0.15,
             "low_texture": 0.1,
-            "irregular_shape": 0.25
+            "irregular_shape": 0.25,
         }
 
         for defect in defects:
@@ -976,7 +1047,7 @@ class ComputerVisionEngine:
             "potential_scratch": "Inspect for surface damage and consider repackaging",
             "color_variation": "Check for fading or discoloration issues",
             "low_texture": "Verify image quality and retake photo if necessary",
-            "irregular_shape": "Check item integrity and packaging"
+            "irregular_shape": "Check item integrity and packaging",
         }
 
         for defect in defects:
@@ -1019,13 +1090,13 @@ class ComputerVisionEngine:
         processing_time = (datetime.now() - start_time).total_seconds()
 
         analysis = DocumentAnalysis(
-            document_type=document_type if document_type != "auto" else self._classify_document_type(extracted_text),
+            document_type=(document_type if document_type != "auto" else self._classify_document_type(extracted_text)),
             extracted_text=extracted_text,
             key_fields=key_fields,
             confidence=0.88,  # Mock confidence
             processing_time=processing_time,
             language=language,
-            analyzed_at=datetime.now()
+            analyzed_at=datetime.now(),
         )
 
         logger.info(f"Document scanned and analyzed in {processing_time:.2f} seconds")
@@ -1040,9 +1111,7 @@ class ComputerVisionEngine:
         blurred = cv2.GaussianBlur(gray, (5, 5), 0)
 
         # Apply adaptive thresholding
-        thresh = cv2.adaptiveThreshold(
-            blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
-        )
+        thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
 
         # Morphological operations to clean up
         kernel = np.ones((2, 2), np.uint8)
@@ -1089,43 +1158,37 @@ Customer Satisfaction: 4.8/5.0
         import re
 
         # Date patterns
-        date_patterns = [
-            r'\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b',
-            r'\b\d{4}-\d{2}-\d{2}\b'
-        ]
+        date_patterns = [r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b", r"\b\d{4}-\d{2}-\d{2}\b"]
         for pattern in date_patterns:
             dates = re.findall(pattern, text)
             if dates:
-                fields['date'] = dates[0]
+                fields["date"] = dates[0]
                 break
 
         # Amount patterns
-        amount_patterns = [
-            r'\$\d+(?:\.\d{2})?',
-            r'\d+(?:\.\d{2})?\s*(?:USD|SAR|EGP)'
-        ]
+        amount_patterns = [r"\$\d+(?:\.\d{2})?", r"\d+(?:\.\d{2})?\s*(?:USD|SAR|EGP)"]
         for pattern in amount_patterns:
             amounts = re.findall(pattern, text)
             if amounts:
-                fields['amounts'] = amounts
+                fields["amounts"] = amounts
                 break
 
         # Invoice number
-        invoice_match = re.search(r'(?:invoice|receipt)\s*#?\s*(\w+)', text, re.IGNORECASE)
+        invoice_match = re.search(r"(?:invoice|receipt)\s*#?\s*(\w+)", text, re.IGNORECASE)
         if invoice_match:
-            fields['invoice_number'] = invoice_match.group(1)
+            fields["invoice_number"] = invoice_match.group(1)
 
         # Customer name
-        customer_match = re.search(r'(?:customer|client):\s*([^\n]+)', text, re.IGNORECASE)
+        customer_match = re.search(r"(?:customer|client):\s*([^\n]+)", text, re.IGNORECASE)
         if customer_match:
-            fields['customer'] = customer_match.group(1).strip()
+            fields["customer"] = customer_match.group(1).strip()
 
         return fields
 
     def _detect_text_language(self, text: str) -> str:
         """Detect language of extracted text"""
         # Simple language detection
-        arabic_chars = re.findall(r'[\u0600-\u06FF]', text)
+        arabic_chars = re.findall(r"[\u0600-\u06FF]", text)
         if len(arabic_chars) > len(text) * 0.1:
             return "ar"
         return "en"
@@ -1206,7 +1269,7 @@ Customer Satisfaction: 4.8/5.0
             trend=trend,
             confidence=0.85,
             visual_elements=["image_analysis"],
-            analyzed_at=datetime.now()
+            analyzed_at=datetime.now(),
         )
 
     def process_video_stream(self, video_path: str, analysis_type: str = "product_tracking") -> Dict[str, Any]:
@@ -1230,7 +1293,7 @@ Customer Satisfaction: 4.8/5.0
             "frames_processed": 0,
             "detections": [],
             "analysis_type": analysis_type,
-            "processing_time": 0
+            "processing_time": 0,
         }
 
         start_time = datetime.now()
@@ -1271,14 +1334,15 @@ Customer Satisfaction: 4.8/5.0
         brightness = np.mean(gray) / 255.0
         contrast = gray.std() / 255.0
 
-        quality_score = (brightness * 0.4 + contrast * 0.6)
+        quality_score = brightness * 0.4 + contrast * 0.6
 
         return {
             "quality_score": quality_score,
             "brightness": brightness,
             "contrast": contrast,
-            "passed": quality_score > 0.6
+            "passed": quality_score > 0.6,
         }
+
 
 # Global instance for easy access
 computer_vision_engine = ComputerVisionEngine()
@@ -1309,7 +1373,7 @@ if __name__ == "__main__":
         bounding_box=(50, 50, 200, 200),
         category="electronics",
         detected_at=datetime.now(),
-        image_quality="good"
+        image_quality="good",
     )
     logger.info(f"Product: {mock_recognition.product_name} (ID: {mock_recognition.product_id})")
     logger.info(f"Confidence: {mock_recognition.confidence:.2f}")
@@ -1322,7 +1386,7 @@ if __name__ == "__main__":
         inspection_passed=True,
         confidence=0.92,
         recommendations=["Item passed quality inspection"],
-        inspected_at=datetime.now()
+        inspected_at=datetime.now(),
     )
     logger.info(f"Quality Score: {mock_inspection.quality_score:.2f}")
     logger.info(f"Passed: {mock_inspection.inspection_passed}")
@@ -1336,7 +1400,7 @@ if __name__ == "__main__":
         confidence=0.88,
         processing_time=1.2,
         language="en",
-        analyzed_at=datetime.now()
+        analyzed_at=datetime.now(),
     )
     logger.info(f"Document Type: {mock_analysis.document_type}")
     logger.info(f"Language: {mock_analysis.language}")
@@ -1349,7 +1413,7 @@ if __name__ == "__main__":
         trend="normal",
         confidence=0.85,
         visual_elements=["image_analysis"],
-        analyzed_at=datetime.now()
+        analyzed_at=datetime.now(),
     )
     logger.info(f"Metric: {mock_visual.metric_name}")
     logger.info(f"Value: {mock_visual.value:.2f}")

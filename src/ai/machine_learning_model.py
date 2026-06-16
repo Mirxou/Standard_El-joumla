@@ -4,18 +4,17 @@
 نموذج تنبؤي بسيط للتنبؤ بالمبيعات والطلب
 """
 
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional, Tuple
-from collections import defaultdict
+import random  # nosec B311
 import statistics
-import math
-import random
+from collections import defaultdict
+from datetime import datetime, timedelta
+from typing import Any, Dict, List
 
 
 class SalesPredictionModel:
     """نموذج تنبؤ المبيعات"""
 
-    def __init__(self, model_type: str = 'linear'):
+    def __init__(self, model_type: str = "linear"):
         self.model_type = model_type
         self.is_trained = False
         self.weights = None
@@ -28,49 +27,55 @@ class SalesPredictionModel:
     def train_model(self, sales_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         """تدريب النموذج - واجهة متوافقة مع الاختبارات"""
         if not sales_data:
-            return {'success': False, 'error': 'لا توجد بيانات للتدريب'}
+            return {"success": False, "error": "لا توجد بيانات للتدريب"}
         if len(sales_data) < 2:
-            return {'success': False, 'error': 'بيانات غير كافية للتدريب'}
+            return {"success": False, "error": "بيانات غير كافية للتدريب"}
         self.training_data = sales_data
         self.is_trained = True
         self.weights = [1.0]
         self.bias = 0.0
-        return {'success': True, 'metrics': {'accuracy': 0.85}}
+        return {"success": True, "metrics": {"accuracy": 0.85}}
 
     def predict_sales(self, days: int = 7) -> Dict[str, Any]:
         """التنبؤ بالمبيعات"""
         if not self.is_trained:
-            return {'error': 'النموذج غير مدرب'}
+            return {"error": "النموذج غير مدرب"}
         predictions = [random.uniform(100, 200) for _ in range(days)]
-        return {'predictions': predictions, 'confidence': 0.8}
+        return {"predictions": predictions, "confidence": 0.8}
 
     def evaluate_model(self, test_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         """تقييم النموذج"""
         if not self.is_trained:
-            return {'error': 'النموذج غير مدرب'}
-        return {'mse': 0.05, 'mae': 0.15, 'r2': 0.85}
+            return {"error": "النموذج غير مدرب"}
+        return {"mse": 0.05, "mae": 0.15, "r2": 0.85}
 
     def get_model_info(self) -> Dict[str, Any]:
         """معلومات النموذج"""
-        return {'model_type': self.model_type, 'is_trained': self.is_trained}
+        return {"model_type": self.model_type, "is_trained": self.is_trained}
 
     def save_model(self, path: str) -> Dict[str, Any]:
         """حفظ النموذج"""
         import json
-        data = {'weights': self.weights, 'bias': self.bias, 'is_trained': self.is_trained}
-        with open(path, 'w') as f:
+
+        data = {
+            "weights": self.weights,
+            "bias": self.bias,
+            "is_trained": self.is_trained,
+        }
+        with open(path, "w") as f:
             json.dump(data, f)
-        return {'success': True}
+        return {"success": True}
 
     def load_model(self, path: str) -> Dict[str, Any]:
         """تحميل النموذج"""
         import json
-        with open(path, 'r') as f:
+
+        with open(path, "r") as f:
             data = json.load(f)
-        self.weights = data.get('weights')
-        self.bias = data.get('bias')
-        self.is_trained = data.get('is_trained', False)
-        return {'success': True}
+        self.weights = data.get("weights")
+        self.bias = data.get("bias")
+        self.is_trained = data.get("is_trained", False)
+        return {"success": True}
 
     def train(self, sales_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         """تدريب النموذج"""
@@ -84,14 +89,14 @@ class SalesPredictionModel:
 
         # حفظ المعلمات
         self.model_parameters = {
-            "daily_average": statistics.mean(daily_sales.values()) if daily_sales else 0,
-            "daily_std": statistics.stdev(daily_sales.values()) if len(daily_sales) > 1 else 0,
+            "daily_average": (statistics.mean(daily_sales.values()) if daily_sales else 0),
+            "daily_std": (statistics.stdev(daily_sales.values()) if len(daily_sales) > 1 else 0),
             "weekly_patterns": weekly_patterns,
             "seasonal_patterns": seasonal_patterns,
             "trend_slope": trend_analysis["slope"],
             "trend_intercept": trend_analysis["intercept"],
             "training_samples": len(daily_sales),
-            "last_trained": datetime.now()
+            "last_trained": datetime.now(),
         }
 
         # تقييم النموذج
@@ -103,8 +108,8 @@ class SalesPredictionModel:
             "accuracy": self.accuracy_metrics,
             "training_summary": {
                 "samples": len(daily_sales),
-                "date_range": f"{min(daily_sales.keys())} to {max(daily_sales.keys())}" if daily_sales else "N/A"
-            }
+                "date_range": (f"{min(daily_sales.keys())} to {max(daily_sales.keys())}" if daily_sales else "N/A"),
+            },
         }
 
     def predict(self, prediction_date: datetime, context: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -143,7 +148,7 @@ class SalesPredictionModel:
         std_dev = self.model_parameters["daily_std"]
         prediction_range = {
             "lower": max(0, prediction - 1.96 * std_dev),  # 95% confidence interval
-            "upper": prediction + 1.96 * std_dev
+            "upper": prediction + 1.96 * std_dev,
         }
 
         return {
@@ -152,16 +157,16 @@ class SalesPredictionModel:
             "confidence": round(confidence, 3),
             "prediction_range": {
                 "lower": round(prediction_range["lower"], 2),
-                "upper": round(prediction_range["upper"], 2)
+                "upper": round(prediction_range["upper"], 2),
             },
             "factors": {
                 "base_average": round(base_prediction, 2),
                 "weekly_adjustment": round(weekly_multiplier, 3),
                 "seasonal_adjustment": round(seasonal_multiplier, 3),
                 "trend_adjustment": round(trend_adjustment, 2),
-                "context_adjustment": round(context_multiplier, 3)
+                "context_adjustment": round(context_multiplier, 3),
             },
-            "assumptions": self._list_assumptions(context)
+            "assumptions": self._list_assumptions(context),
         }
 
     def predict_range(self, start_date: datetime, end_date: datetime, context: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -174,11 +179,13 @@ class SalesPredictionModel:
         while current_date <= end_date:
             daily_prediction = self.predict(current_date, context)
             if "predicted_sales" in daily_prediction:
-                predictions.append({
-                    "date": current_date.isoformat(),
-                    "sales": daily_prediction["predicted_sales"],
-                    "confidence": daily_prediction["confidence"]
-                })
+                predictions.append(
+                    {
+                        "date": current_date.isoformat(),
+                        "sales": daily_prediction["predicted_sales"],
+                        "confidence": daily_prediction["confidence"],
+                    }
+                )
                 total_prediction += daily_prediction["predicted_sales"]
                 total_confidence += daily_prediction["confidence"]
 
@@ -190,14 +197,14 @@ class SalesPredictionModel:
             "period": {
                 "start": start_date.isoformat(),
                 "end": end_date.isoformat(),
-                "days": len(predictions)
+                "days": len(predictions),
             },
             "total_prediction": round(total_prediction, 2),
-            "average_daily": round(total_prediction / len(predictions), 2) if predictions else 0,
+            "average_daily": (round(total_prediction / len(predictions), 2) if predictions else 0),
             "average_confidence": round(avg_confidence, 3),
             "daily_predictions": predictions,
-            "peak_day": max(predictions, key=lambda x: x["sales"]) if predictions else None,
-            "lowest_day": min(predictions, key=lambda x: x["sales"]) if predictions else None
+            "peak_day": (max(predictions, key=lambda x: x["sales"]) if predictions else None),
+            "lowest_day": (min(predictions, key=lambda x: x["sales"]) if predictions else None),
         }
 
     def get_model_performance(self) -> Dict[str, Any]:
@@ -207,13 +214,13 @@ class SalesPredictionModel:
             "model_parameters": self.model_parameters,
             "training_info": {
                 "last_trained": self.model_parameters.get("last_trained"),
-                "samples_used": self.model_parameters.get("training_samples", 0)
+                "samples_used": self.model_parameters.get("training_samples", 0),
             },
             "performance_indicators": {
                 "mean_absolute_error": self.accuracy_metrics.get("mae", 0),
                 "mean_squared_error": self.accuracy_metrics.get("mse", 0),
-                "r_squared": self.accuracy_metrics.get("r_squared", 0)
-            }
+                "r_squared": self.accuracy_metrics.get("r_squared", 0),
+            },
         }
 
     def _aggregate_daily_sales(self, sales_data: List[Dict[str, Any]]) -> Dict[str, float]:
@@ -273,7 +280,10 @@ class SalesPredictionModel:
     def _calculate_trend(self, daily_sales: Dict[str, float]) -> Dict[str, float]:
         """حساب الاتجاه"""
         if len(daily_sales) < 2:
-            return {"slope": 0.0, "intercept": statistics.mean(daily_sales.values()) if daily_sales else 0.0}
+            return {
+                "slope": 0.0,
+                "intercept": (statistics.mean(daily_sales.values()) if daily_sales else 0.0),
+            }
 
         # تحويل التواريخ إلى أرقام
         dates = []
@@ -370,7 +380,7 @@ class SalesPredictionModel:
         assumptions = [
             "استمرار الأنماط التاريخية",
             "عدم وجود تغييرات كبيرة في السوق",
-            "استقرار الأسعار والمنتجات"
+            "استقرار الأسعار والمنتجات",
         ]
 
         if not context:
@@ -384,10 +394,15 @@ class SalesPredictionModel:
     def _evaluate_model(self, daily_sales: Dict[str, float]) -> Dict[str, float]:
         """تقييم النموذج"""
         if len(daily_sales) < 10:
-            return {"mae": 0.0, "mse": 0.0, "r_squared": 0.0, "note": "بيانات غير كافية للتقييم"}
+            return {
+                "mae": 0.0,
+                "mse": 0.0,
+                "r_squared": 0.0,
+                "note": "بيانات غير كافية للتقييم",
+            }
 
         # استخدام cross-validation بسيط
-        dates = list(daily_sales.keys())
+        list(daily_sales.keys())
         values = list(daily_sales.values())
 
         # تقسيم البيانات
@@ -412,7 +427,7 @@ class SalesPredictionModel:
             "mae": mae,
             "mse": mse,
             "r_squared": r_squared,
-            "test_samples": len(test_values)
+            "test_samples": len(test_values),
         }
 
     def update_model(self, new_sales_data: List[Dict[str, Any]]):
@@ -447,13 +462,13 @@ class InventoryPredictionModel:
             "sales_velocity": sales_velocity,
             "reorder_patterns": reorder_patterns,
             "seasonal_demand": seasonal_demand,
-            "last_updated": datetime.now()
+            "last_updated": datetime.now(),
         }
 
         return {
             "product_id": product_id,
             "model_trained": True,
-            "parameters": self.product_models[product_id]
+            "parameters": self.product_models[product_id],
         }
 
     def predict_inventory_needs(self, product_id: str, days_ahead: int = 30) -> Dict[str, Any]:
@@ -489,8 +504,8 @@ class InventoryPredictionModel:
             "factors": {
                 "average_daily_demand": round(daily_demand, 2),
                 "seasonal_adjustment": round(seasonal_multiplier, 3),
-                "lead_time_days": model["reorder_patterns"]["lead_time_days"]
-            }
+                "lead_time_days": model["reorder_patterns"]["lead_time_days"],
+            },
         }
 
     def _calculate_sales_velocity(self, inventory_data: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -502,9 +517,9 @@ class InventoryPredictionModel:
 
         return {
             "average_daily": statistics.mean(sales_amounts),
-            "volatility": statistics.stdev(sales_amounts) if len(sales_amounts) > 1 else 0.0,
+            "volatility": (statistics.stdev(sales_amounts) if len(sales_amounts) > 1 else 0.0),
             "peak_sales": max(sales_amounts),
-            "min_sales": min(sales_amounts)
+            "min_sales": min(sales_amounts),
         }
 
     def _analyze_reorder_patterns(self, inventory_data: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -512,9 +527,9 @@ class InventoryPredictionModel:
         reorder_points = [item.get("reorder_point", 20) for item in inventory_data if "reorder_point" in item]
 
         return {
-            "average_reorder_point": statistics.mean(reorder_points) if reorder_points else 20,
+            "average_reorder_point": (statistics.mean(reorder_points) if reorder_points else 20),
             "lead_time_days": 7,  # افتراض أسبوع
-            "reorder_frequency": len(reorder_points) / len(inventory_data) if inventory_data else 0
+            "reorder_frequency": (len(reorder_points) / len(inventory_data) if inventory_data else 0),
         }
 
     def _analyze_seasonal_demand(self, inventory_data: List[Dict[str, Any]]) -> Dict[int, float]:

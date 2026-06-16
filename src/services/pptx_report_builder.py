@@ -5,17 +5,14 @@ Professional PPTX Report Generator
 Based on pptx-generator guidelines with business professional styling
 """
 
-from typing import Dict, List, Optional, Any
 from datetime import datetime
-from enum import Enum
-import os
+from typing import Dict, List
 
 try:
     from pptx import Presentation
-    from pptx.util import Inches, Pt
-    from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
     from pptx.dml.color import RGBColor
-    from pptx.enum.shapes import MSO_SHAPE
+    from pptx.enum.text import PP_ALIGN
+    from pptx.util import Inches, Pt
 
     PPTX_AVAILABLE = True
 except ImportError:
@@ -93,9 +90,7 @@ class PptxReportBuilder:
         self.theme = theme or PptxReportTheme.CORPORATE
         self.slides = []
 
-    def add_title_slide(
-        self, title: str, subtitle: str = "", company: str = "", date: str = None
-    ):
+    def add_title_slide(self, title: str, subtitle: str = "", company: str = "", date: str = None):
         """Add cover/title slide"""
         slide = {
             "type": "cover",
@@ -190,9 +185,9 @@ class PptxReportBuilder:
         slide = prs.slides.add_slide(slide_layout)
 
         title = data.get("title", "")
-        subtitle = data.get("subtitle", "")
-        company = data.get("company", "")
-        date = data.get("date", "")
+        data.get("subtitle", "")
+        data.get("company", "")
+        data.get("date", "")
 
         primary = self._hex_to_rgb(self.theme["primary"])
 
@@ -388,9 +383,7 @@ class ReportTemplates:
         """Create inventory report builder"""
         builder = PptxReportBuilder(PptxReportTheme.FOREST)
 
-        builder.add_title_slide(
-            "تقرير المخزون", "حالة المخزون الحالية", "Logical Version ERP"
-        )
+        builder.add_title_slide("تقرير المخزون", "حالة المخزون الحالية", "Logical Version ERP")
 
         builder.add_section_divider("01", "حالة المخزون")
 
@@ -418,9 +411,7 @@ class ReportTemplates:
         """Create financial report builder"""
         builder = PptxReportBuilder(PptxReportTheme.GOLD)
 
-        builder.add_title_slide(
-            "التقرير المالي", f"الفترة: {period}", "Logical Version ERP"
-        )
+        builder.add_title_slide("التقرير المالي", f"الفترة: {period}", "Logical Version ERP")
 
         builder.add_content_slide(
             "الملخص المالي",

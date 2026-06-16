@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>فاتورة مبيعات - {{ invoice.id }}</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap');
+
+        @page {
+            size: A4;
+            margin: 20mm;
+            @bottom-center {
+                content: "صفحة " counter(page) " من " counter(pages);
+                font-family: 'Tajawal', sans-serif;
+                font-size: 10pt;
+                color: #7f8c8d;
+            }
+        }
+
+        body {
+            font-family: 'Tajawal', sans-serif;
+            color: #2c3e50;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            direction: rtl;
+            text-align: right;
+        }
+
+        /* Header Section */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 2px solid #2c3e50;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+
+        .brand {
+            float: right;
+        }
+
+        .brand-logo {
+            font-size: 28px;
+            font-weight: 700;
+            color: #1a1a1a;
+            margin: 0;
+            letter-spacing: -0.5px;
+        }
+        
+        .brand-slogan {
+            font-size: 12px;
+            color: #7f8c8d;
+            letter-spacing: 1px;
+            margin-top: 5px;
+        }
+
+        .invoice-details {
+            float: left;
+            text-align: left;
+        }
+
+        .invoice-details h2 {
+            margin: 0 0 5px 0;
+            font-size: 24px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #2c3e50;
+        }
+
+        /* Info Section */
+        .info-section {
+            margin-bottom: 40px;
+            margin-top: 20px;
+            clear: both;
+        }
+
+        .info-block {
+            width: 45%;
+            display: inline-block;
+            vertical-align: top;
+        }
+
+        .info-block strong {
+            display: block;
+            font-size: 12px;
+            color: #7f8c8d;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        /* Table Section */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+            margin-top: 20px;
+            clear: both;
+        }
+
+        th {
+            background-color: #f8f9fa;
+            color: #2c3e50;
+            font-weight: 700;
+            text-align: right;
+            padding: 12px;
+            border-bottom: 2px solid #bdc3c7;
+            font-size: 14px;
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #ecf0f1;
+            font-size: 14px;
+        }
+
+        /* Totals Section */
+        .totals-section {
+            width: 45%;
+            float: left;
+            margin-top: 20px;
+        }
+
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #ecf0f1;
+        }
+
+        .total-row.final {
+            font-size: 18px;
+            font-weight: 700;
+            border-bottom: none;
+            border-top: 2px solid #2c3e50;
+            padding-top: 12px;
+            margin-top: 5px;
+        }
+        
+        .clearfix::after {
+            content: "";
+            clear: both;
+            display: table;
+        }
+
+        .notes-section {
+            width: 45%;
+            float: right;
+            margin-top: 20px;
+            font-size: 12px;
+            color: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header clearfix">
+        <div class="brand">
+            <h1 class="brand-logo">Standard</h1>
+            <div class="brand-slogan">شعارنا للأبد</div>
+        </div>
+        <div class="invoice-details">
+            <h2>فاتورة مبيعات</h2>
+            <div>رقم الفاتورة: #{{ invoice.reference or invoice.id }}</div>
+            <div>التاريخ: {{ invoice.created_at }}</div>
+        </div>
+    </div>
+
+    <div class="info-section clearfix">
+        <div class="info-block">
+            <strong>إلى السيد/ة:</strong>
+            <div>{{ customer.name | default('عميل نقدي', true) }}</div>
+            {% if customer.phone %}<div>الهاتف: {{ customer.phone }}</div>{% endif %}
+        </div>
+        <div class="info-block" style="text-align: left; float: left;">
+            <strong>طريقة الدفع:</strong>
+            <div>{{ invoice.payment_method | default('نقداً', true) }}</div>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>المنتج</th>
+                <th>الكمية</th>
+                <th>سعر الوحدة</th>
+                <th>الخصم</th>
+                <th>الإجمالي</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in invoice.items %}
+            <tr>
+                <td>{{ item.product_name }}</td>
+                <td>{{ item.quantity }}</td>
+                <td>{{ item.unit_price }} د.ج</td>
+                <td>{{ item.discount }} د.ج</td>
+                <td>{{ item.total_amount }} د.ج</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="clearfix">
+        {% if invoice.notes %}
+        <div class="notes-section">
+            <strong>ملاحظات:</strong>
+            <p>{{ invoice.notes }}</p>
+        </div>
+        {% endif %}
+        <div class="totals-section">
+            <div class="total-row">
+                <span>المجموع الفرعي:</span>
+                <span>{{ invoice.subtotal }} د.ج</span>
+            </div>
+            <div class="total-row">
+                <span>إجمالي الخصم:</span>
+                <span>{{ invoice.discount_amount }} د.ج</span>
+            </div>
+            <div class="total-row final">
+                <span>المبلغ الإجمالي:</span>
+                <span>{{ invoice.final_amount }} د.ج</span>
+            </div>
+            {% if invoice.paid_amount and invoice.remaining_amount != "0.00" %}
+            <div class="total-row" style="color: #7f8c8d; font-size: 12px; margin-top: 10px;">
+                <span>المدفوع: {{ invoice.paid_amount }} د.ج</span> | 
+                <span>المتبقي: {{ invoice.remaining_amount }} د.ج</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+</body>
+</html>

@@ -42,7 +42,7 @@ Thumbs.db
 *.log
 logs/
 
-# Database
+# Database journal files
 *.db-journal
 *.sqlite3-journal
 *.db-wal
@@ -54,6 +54,8 @@ data/*.db-shm
 *.tmp
 *.temp
 *.bak
+*.old
+*.save
 
 # Build artifacts
 *.spec
@@ -63,6 +65,7 @@ dist/
 # Test coverage
 .coverage
 htmlcov/
+coverage.xml
 
 # Pytest
 .pytest_cache/
@@ -71,6 +74,9 @@ htmlcov/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# Ruff cache
+.ruff_cache/
 
 # Database files (keep structure, ignore data)
 database/*.db
@@ -95,4 +101,123 @@ assets/images/products/
 assets/images/thumbnails/
 assets/images/previews/
 !assets/images/.gitkeep
-node_modules
+
+# Node modules
+node_modules/
+
+# ============================================================
+# SECURITY: Environment & Secrets - NEVER commit these!
+# ============================================================
+.env
+.env.local
+.env.production
+.env.staging
+.env.development
+.env.*.local
+.docker.env
+.docker.env.*
+*.pem
+*.key
+*.crt
+config/secrets.json
+
+# ============================================================
+# SQLite Database files (contain real/sensitive data)
+# ============================================================
+*.db
+erp_system.db
+data/*.db
+data/database.db
+data/erp_system.db
+data/logical_release.db
+data/unified_erp.db
+
+# AI model pickle files (large binary)
+data/models/*.pkl
+*.pkl
+
+# ============================================================
+# Large auto-generated analysis/report files (not source code)
+# ============================================================
+artifacts_flake8.txt
+bandit_final.txt
+bandit_final2.txt
+bandit_final_audit.txt
+bandit_report.json
+bandit_report.txt
+bandit_result.txt
+dead_code_report.txt
+duplicates_report.txt
+file_structure.md
+final_flake8.txt
+final_test_report.txt
+flake8_after_format.txt
+flake8_final.txt
+flake8_final2.txt
+flake8_report.txt
+flake8_result.txt
+global_flake8_report.txt
+radon_report.txt
+root_flake8_report.txt
+tests_flake8_report.txt
+unit_test_results.txt
+unit_test_results_v2.txt
+unit_test_summary.txt
+vulture_final.txt
+vulture_report.txt
+vulture_report_final.txt
+vulture_result.txt
+coverage_report.txt
+test_quick_result.txt
+skiLL
+AUDIT_REPORT_LINE_BY_LINE.md
+
+# ============================================================
+# Temporary directories & caches
+# ============================================================
+temp/
+temp_qrcodes/
+scratch/
+cache/
+output/
+backups/
+brain/
+metrics/
+.kombai/
+
+# ============================================================
+# One-off fix/verify/debug scripts (not part of codebase)
+# ============================================================
+_fix_unused_e.py
+_fix_unused_vars.py
+fix_ai_duplicates.py
+fix_duplicates.py
+fix_syntax.py
+fixer.py
+build_deep_verify.py
+cycle_verify.py
+deep_verify.py
+smart_dead_code_scanner.py
+safe_dead_code_remover.py
+verify_production.py
+verify_production_final.py
+verify_production_full.py
+check_schema.py
+vulture_whitelist.py
+.vulture_whitelist.py
+test_ui_startup.py
+desktop_launcher.py
+
+# ============================================================
+# Test output files
+# ============================================================
+test_export.json
+test_report.json
+test_results.txt
+test_after_fix.txt
+test_run.log
+tests_output.txt
+pytest_collect.log
+pytest_version.txt
+failure_classification.json
+db_check.txt

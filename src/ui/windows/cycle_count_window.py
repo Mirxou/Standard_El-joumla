@@ -1,18 +1,18 @@
 from __future__ import annotations
+import logging
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QMainWindow,
-    QWidget,
-    QVBoxLayout,
+    QFileDialog,
     QHBoxLayout,
-    QPushButton,
+    QInputDialog,
     QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
     QTableWidget,
     QTableWidgetItem,
-    QMessageBox,
-    QInputDialog,
-    QFileDialog,
+    QVBoxLayout,
+    QWidget,
 )
 
 
@@ -21,7 +21,7 @@ class CycleCountWindow(QMainWindow):
 
     This is a scaffold window. It can be wired to services later.
     """
-    
+
     # Window Manager attributes (للتسجيل التلقائي)
     window_key = "cycle_count"
     window_singleton = True
@@ -32,6 +32,10 @@ class CycleCountWindow(QMainWindow):
         self.db = db_manager
         self.setWindowTitle("الجرد الدوري")
         self.resize(900, 600)
+
+        # تطبيق ستايل الهوية الموحدة
+        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+
         self._service = service
 
         root = QWidget(self)
@@ -55,14 +59,16 @@ class CycleCountWindow(QMainWindow):
         layout.addLayout(header)
 
         self.table = QTableWidget(0, 6)
-        self.table.setHorizontalHeaderLabels([
-            "المعرف",
-            "الخطة",
-            "الموقع",
-            "البداية",
-            "النهاية",
-            "الحالة",
-        ])
+        self.table.setHorizontalHeaderLabels(
+            [
+                "المعرف",
+                "الخطة",
+                "الموقع",
+                "البداية",
+                "النهاية",
+                "الحالة",
+            ]
+        )
         self.table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.table)
 
@@ -85,9 +91,10 @@ class CycleCountWindow(QMainWindow):
         # Try to resolve from parent db_manager
         try:
             from ...services.cycle_count_service import CycleCountService
+
             parent = self.parent()
-            db_manager = getattr(parent, 'db_manager', None) if parent else None
-            db_path = getattr(db_manager, 'db_path', None) if db_manager else None
+            db_manager = getattr(parent, "db_manager", None) if parent else None
+            db_path = getattr(db_manager, "db_path", None) if db_manager else None
             if not db_path:
                 raise RuntimeError("تعذر تهيئة خدمة الجرد الدوري: db_path غير متوفر")
             self._service = CycleCountService(db_path)
@@ -116,7 +123,7 @@ class CycleCountWindow(QMainWindow):
             self.status_label.setText("تم التحديث")
         except Exception:
             # Error already shown
-            pass
+            logging.getLogger(__name__).warning("Ignored exception in cycle_count_window.py")
 
     def _on_new_session(self) -> None:
         try:
@@ -166,8 +173,18 @@ class CycleCountWindow(QMainWindow):
             if not path:
                 return
             import csv
+
             fields = [
-                "id","plan_id","plan_name","location_id","started_at","closed_at","status","accuracy","variance_qty","variance_value"
+                "id",
+                "plan_id",
+                "plan_name",
+                "location_id",
+                "started_at",
+                "closed_at",
+                "status",
+                "accuracy",
+                "variance_qty",
+                "variance_value",
             ]
             with open(path, "w", newline="", encoding="utf-8-sig") as f:
                 writer = csv.DictWriter(f, fieldnames=fields)
@@ -177,7 +194,7 @@ class CycleCountWindow(QMainWindow):
             QMessageBox.information(self, "تم", f"تم حفظ الملف:\n{path}")
         except Exception as e:
             QMessageBox.critical(self, "خطأ", f"فشل تصدير CSV: {e}")
-            
+
     # --- Stubs for Testing ---
     def start_cycle_count(self, *args, **kwargs):
         """بدء الجرد الدوري (Stub for testing)"""

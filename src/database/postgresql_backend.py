@@ -1,3 +1,4 @@
+import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -5,23 +6,26 @@ PostgreSQL Backend Implementation
 تنفيذ DatabaseBackend لـ PostgreSQL
 """
 
+from contextlib import contextmanager
+from typing import Any, Dict, List, Optional, Tuple
+
 import psycopg2
 import psycopg2.extras
-from typing import Optional, List, Dict, Any, Tuple
-from contextlib import contextmanager
-from .backend import DatabaseBackend
+
 from src.utils.logger import setup_logger
+
+from .backend import DatabaseBackend
 
 
 class PostgreSQLBackend(DatabaseBackend):
     """
     PostgreSQL implementation لـ DatabaseBackend
     """
-    
+
     def __init__(self, db_url: str):
         """
         تهيئة PostgreSQL Backend
-        
+
         Args:
             db_url: PostgreSQL connection URL (postgresql://user:pass@host:5432/dbname)
         """
@@ -29,7 +33,7 @@ class PostgreSQLBackend(DatabaseBackend):
         self.connection = None
         self.logger = setup_logger(__name__)
         self._in_transaction = False
-    
+
     def connect(self) -> bool:
         """إنشاء الاتصال بقاعدة البيانات"""
         try:
@@ -39,25 +43,25 @@ class PostgreSQLBackend(DatabaseBackend):
         except Exception as e:
             self.logger.error(f"فشل الاتصال بقاعدة البيانات PostgreSQL: {e}")
             return False
-    
+
     def disconnect(self) -> None:
         """إغلاق الاتصال"""
         if self.connection:
             try:
                 self.connection.close()
             except Exception:
-                pass
+                logging.getLogger(__name__).warning("Ignored exception in postgresql_backend.py")
             finally:
                 self.connection = None
-    
+
     def execute_query(self, query: str, params: Tuple = ()) -> List[Dict[str, Any]]:
         """تنفيذ SELECT query"""
         if not self.connection:
             raise RuntimeError("Database connection not initialized")
-        
+
         # تحويل صيغة placeholers من ؟ إلى %s الخاصة بـ psycopg2
-        pg_query = query.replace('?', '%s')
-        
+        pg_query = query.replace("?", "%s")
+
         try:
             with self.connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(pg_query, params)
@@ -70,14 +74,14 @@ class PostgreSQLBackend(DatabaseBackend):
         """تنفيذ INSERT query وإرجاع last_insert_id"""
         if not self.connection:
             raise RuntimeError("Database connection not initialized")
-        
+
         # تحويل صيغة placeholers
-        pg_query = query.replace('?', '%s')
-        
+        pg_query = query.replace("?", "%s")
+
         # PostgreSQL يحتاج RETURNING id للحصول على last_insert_id
         if "RETURNING" not in pg_query.upper():
             pg_query += " RETURNING id"
-            
+
         try:
             with self.connection.cursor() as cursor:
                 cursor.execute(pg_query, params)
@@ -91,9 +95,9 @@ class PostgreSQLBackend(DatabaseBackend):
         """تنفيذ UPDATE/DELETE query"""
         if not self.connection:
             raise RuntimeError("Database connection not initialized")
-        
-        pg_query = query.replace('?', '%s')
-        
+
+        pg_query = query.replace("?", "%s")
+
         try:
             with self.connection.cursor() as cursor:
                 cursor.execute(pg_query, params)
@@ -106,9 +110,9 @@ class PostgreSQLBackend(DatabaseBackend):
         """تنفيذ query وإرجاع قيمة واحدة"""
         if not self.connection:
             raise RuntimeError("Database connection not initialized")
-        
-        pg_query = query.replace('?', '%s')
-        
+
+        pg_query = query.replace("?", "%s")
+
         try:
             with self.connection.cursor() as cursor:
                 cursor.execute(pg_query, params)
@@ -122,7 +126,7 @@ class PostgreSQLBackend(DatabaseBackend):
         """بدء transaction"""
         if not self.connection:
             raise RuntimeError("Database connection not initialized")
-        
+
         self.connection.autocommit = False
         self._in_transaction = True
 
@@ -130,7 +134,7 @@ class PostgreSQLBackend(DatabaseBackend):
         """Commit transaction"""
         if not self.connection:
             raise RuntimeError("Database connection not initialized")
-        
+
         try:
             self.connection.commit()
         finally:
@@ -141,7 +145,7 @@ class PostgreSQLBackend(DatabaseBackend):
         """Rollback transaction"""
         if not self.connection:
             raise RuntimeError("Database connection not initialized")
-        
+
         try:
             self.connection.rollback()
         finally:
@@ -152,9 +156,9 @@ class PostgreSQLBackend(DatabaseBackend):
     def transaction(self):
         """Context manager للـ transaction"""
         if self._in_transaction:
-             # Nested transaction support (savepoint) could be added here, 
-             # but for now we just yield
-             yield self
+            # Nested transaction support (savepoint) could be added here,
+            # but for now we just yield
+            yield self
         else:
             self.begin_transaction()
             try:
@@ -171,11 +175,11 @@ class PostgreSQLBackend(DatabaseBackend):
 
     def get_last_insert_id(self) -> int:
         """
-        الحصول على آخر ID تم إدراجه. 
+        الحصول على آخر ID تم إدراجه.
         ملاحظة: في PG يفضل استخدام RETURNING id في جملة INSERT نفسها (تم معالجتها في execute_insert)
         """
         # هذه الدالة قد لا تعمل بدقة في PG بدون تسلسل محدد، لذا نعتمد على execute_insert
-        return 0 
+        return 0
 
     @property
     def is_connected(self) -> bool:

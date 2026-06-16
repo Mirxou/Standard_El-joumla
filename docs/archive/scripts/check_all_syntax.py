@@ -1,5 +1,4 @@
 """Check ALL test files for syntax errors"""
-import sys
 import os
 import ast
 import glob

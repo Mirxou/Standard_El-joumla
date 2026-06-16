@@ -1,3 +1,4 @@
+import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -5,15 +6,20 @@
 تطبق Fitts Law وWCAG 2.2 لتحسين تجربة المستخدم
 """
 
-import sys
-from typing import Optional, List, Dict, Any, Callable
 from decimal import Decimal
+
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor, QFont, QPainter, QPixmap
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFrame, QScrollArea, QGridLayout, QSizePolicy, QApplication
+    QFrame,
+    QGridLayout,
+    QLabel,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt, QSize, Signal, QPoint
-from PySide6.QtGui import QIcon, QFont, QColor, QPainter, QPixmap, QImage
 
 from ...core.database_manager import DatabaseManager
 from ...models.product import ProductManager
@@ -39,8 +45,13 @@ class SmartProductGrid(QWidget):
     THUMB_ZONE_Y = 0.7  # 70% من الأسفل = منطقة الإبهام المثلى
     THUMB_ZONE_X = (0.3, 0.9)  # المنطقة الأفقية المثلى
 
-    def __init__(self, db_manager: DatabaseManager, pricing_service: PricingService,
-                 customer=None, parent=None):
+    def __init__(
+        self,
+        db_manager: DatabaseManager,
+        pricing_service: PricingService,
+        customer=None,
+        parent=None,
+    ):
         super().__init__(parent)
         self.db_manager = db_manager
         self.pricing_service = pricing_service
@@ -204,7 +215,7 @@ class ProductGridItem(QFrame):
             QLabel {
                 border: 2px solid #e1e5e9;
                 border-radius: 8px;
-                background-color: #f8f9fa;
+                background-color: #1e293b;
             }
         """)
 
@@ -234,21 +245,21 @@ class ProductGridItem(QFrame):
         # زر الإضافة
         self.add_button = QPushButton("إضافة")
         self.add_button.setFixedSize(self.parent().PRIMARY_BUTTON_SIZE, self.parent().PRIMARY_BUTTON_SIZE // 2)
-        self.add_button.setStyleSheet(f"""
-            QPushButton {{
+        self.add_button.setStyleSheet("""
+            QPushButton {
                 background-color: #3b82f6;
                 color: white;
                 border: none;
                 border-radius: 6px;
                 font-weight: bold;
                 font-size: 12px;
-            }}
-            QPushButton:hover {{
+            }
+            QPushButton:hover {
                 background-color: #2563eb;
-            }}
-            QPushButton:pressed {{
+            }
+            QPushButton:pressed {
                 background-color: #1d4ed8;
-            }}
+            }
         """)
 
         # وضع الأزرار حسب Fitts Law
@@ -266,10 +277,7 @@ class ProductGridItem(QFrame):
         """وضع الأزرار بناءً على Fitts Law"""
         # الزر الرئيسي في منطقة الإبهام
         button_y = int(self.height() * self.parent().THUMB_ZONE_Y) - self.add_button.height()
-        self.add_button.move(
-            (self.width() - self.add_button.width()) // 2,  # منتصف أفقياً
-            button_y
-        )
+        self.add_button.move((self.width() - self.add_button.width()) // 2, button_y)  # منتصف أفقياً
 
     def update_display(self):
         """تحديث عرض البيانات"""
@@ -278,11 +286,9 @@ class ProductGridItem(QFrame):
 
         # السعر
         if self.customer and self.pricing_service:
-            price = self.pricing_service.get_price_for_customer(
-                self.product.id, self.customer, 1
-            )
+            price = self.pricing_service.get_price_for_customer(self.product.id, self.customer, 1)
         else:
-            price = self.product.retail_price or Decimal('0.00')
+            price = self.product.retail_price or Decimal("0.00")
 
         self.price_label.setText(f"{price:.2f} دج")
 
@@ -309,18 +315,17 @@ class ProductGridItem(QFrame):
         # فتح حوار لتحديد الكمية
         from PySide6.QtWidgets import QInputDialog
 
-        quantity, ok = QInputDialog.getInt(
-            self, "تحديد الكمية", "أدخل الكمية:",
-            1, 1, 9999, 1
-        )
+        quantity, ok = QInputDialog.getInt(self, "تحديد الكمية", "أدخل الكمية:", 1, 1, 9999, 1)
 
         if ok and quantity > 0:
             product_data = {
-                'product_id': self.product.id,
-                'name': self.product.name,
-                'quantity': quantity,
-                'unit_price': float(self.pricing_service.get_price_for_customer(
-                    self.product.id, self.customer, quantity
-                )) if self.customer and self.pricing_service else float(self.product.retail_price or 0)
+                "product_id": self.product.id,
+                "name": self.product.name,
+                "quantity": quantity,
+                "unit_price": (
+                    float(self.pricing_service.get_price_for_customer(self.product.id, self.customer, quantity))
+                    if self.customer and self.pricing_service
+                    else float(self.product.retail_price or 0)
+                ),
             }
             self.product_clicked.emit(product_data)

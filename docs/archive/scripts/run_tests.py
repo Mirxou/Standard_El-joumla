@@ -3,7 +3,6 @@
 سكريبت لتشغيل الاختبارات والتحقق من الأخطاء
 """
 import sys
-import os
 
 # إضافة المسار الرئيسي
 sys.path.insert(0, 'c:/Users/aboun/Desktop/Logical Version trae')

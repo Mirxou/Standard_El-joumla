@@ -6,7 +6,6 @@ Initial Model Training Script for Phase 7
 """
 
 import sys
-import os
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -21,8 +20,7 @@ sys.path.insert(0, str(project_root / 'src'))
 from src.services.advanced_ai_service import AdvancedAIService, TrainingData
 from src.services.intelligent_forecasting_service import IntelligentForecastingService
 from src.services.advanced_business_analytics_service import AdvancedBusinessAnalyticsService
-from src.core.database_manager import DatabaseManager
-from src.core.config_manager import ConfigManager
+from src.core.local_database_manager import LocalDatabaseManager
 
 def generate_sample_sales_data():
     """توليد بيانات مبيعات تجريبية"""
@@ -98,7 +96,7 @@ def train_initial_models():
     print("🤖 بدء تدريب النماذج الأولية...")
 
     # إعداد الخدمات
-    db_manager = DatabaseManager()
+    db_manager = LocalDatabaseManager()
     db_manager.initialize()  # تهيئة الاتصال بقاعدة البيانات
     ai_service = AdvancedAIService(db_manager)
     forecasting_service = IntelligentForecastingService(db_manager)
@@ -152,14 +150,14 @@ def train_initial_models():
             if isinstance(data_content, str):
                 try:
                     data_content = json.loads(data_content)
-                except:
+                except Exception:
                     data_content = [float(data_content)] if data_content.replace('.', '').isdigit() else [0.0]
 
             labels = data['labels']
             if isinstance(labels, str):
                 try:
                     labels = int(labels)
-                except:
+                except Exception:
                     labels = 0
 
             training_data_objects.append(TrainingData(
@@ -182,7 +180,7 @@ def train_initial_models():
 
         # 2. تدريب نموذج تنبؤ المبيعات
         print("\n2️⃣ تدريب نموذج تنبؤ المبيعات...")
-        sales_data = generate_sample_sales_data()
+        sales_data = generate_sample_sales_data()  # noqa: F841
 
         forecast_result = forecasting_service.generate_sales_forecast(forecast_days=30)
         if forecast_result:

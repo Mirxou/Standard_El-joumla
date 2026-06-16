@@ -5,4 +5,4 @@ Server Migrations Module
 
 from .migration_manager import ServerMigrationManager
 
-__all__ = ['ServerMigrationManager']
+__all__ = ["ServerMigrationManager"]

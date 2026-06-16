@@ -20,12 +20,12 @@ function getApiBaseUrl(): string {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return 'http://localhost:8001';
+      return 'http://localhost:8000';
     }
   }
 
   // 3. افتراضي للتطوير
-  return 'http://localhost:8001';
+  return 'http://localhost:8000';
 }
 
 const API_BASE_URL = getApiBaseUrl();

@@ -7,15 +7,14 @@
 
 import sys
 from pathlib import Path
-from datetime import datetime
 
 # Add src to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.core.database_manager import DatabaseManager
+from src.core.local_database_manager import LocalDatabaseManager
 
-def cleanup_database(db_path: str = "data/logical_release.db"):
+def cleanup_database(db_path: str = "data/standard_eljoumla.db"):
     """تنظيف قاعدة البيانات"""
     db_file = Path(db_path)
     
@@ -30,7 +29,7 @@ def cleanup_database(db_path: str = "data/logical_release.db"):
         print(f"📊 حجم قاعدة البيانات قبل التنظيف: {size_before:.2f} MB")
         
         # الاتصال بقاعدة البيانات
-        db_manager = DatabaseManager(db_path)
+        db_manager = LocalDatabaseManager(db_path)
         db_manager.initialize()
         cursor = db_manager.connection.cursor()
         

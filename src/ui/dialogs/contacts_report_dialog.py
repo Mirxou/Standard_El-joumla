@@ -1,140 +1,102 @@
+import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 نافذة تقارير العملاء والموردين
 """
 
-from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QTabWidget, QWidget, QTextEdit, QComboBox,
-    QFrame, QGraphicsDropShadowEffect
-)
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QTextDocument, QTextCursor, QColor
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from src.ui.widgets.custom_title_bar import CustomTitleBar
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QComboBox,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
+
+from src.ui.widgets.base_dialog import BaseDialog
 from src.ui.widgets.quantum_notification import NotificationManager
 
 
-class ContactsReportDialog(QDialog):
+class ContactsReportDialog(BaseDialog):
     """نافذة تقارير العملاء والموردين"""
-    
+
     def __init__(self, db_manager, logger=None, parent=None):
-        super().__init__(parent)
+        super().__init__(title="", parent=parent)
         self.db_manager = db_manager
         self.logger = logger
-        
+
         # self.setWindowTitle("تقارير العملاء والموردين")
         # self.setGeometry(100, 100, 900, 600)
-        
+
         # --- Quantum Window Setup ---
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
-        self.setAttribute(Qt.WA_TranslucentBackground)
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
-        
+
         # Notifications
         self.notify = NotificationManager(self)
-        
+
         self.resize(900, 650)
         self.title_text = "تقارير العملاء والموردين"
-        
+
         self.setup_ui()
-    
+
     def setup_ui(self):
         """تهيئة واجهة المستخدم"""
-        # تخطيط جذري شفاف
-        root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(10, 10, 10, 10)
-        root_layout.setSpacing(0)
-        
-        # الإطار الرئيسي
-        self.main_frame = QFrame()
-        self.main_frame.setStyleSheet("""
-            QFrame#MainFrame {
-                background-color: #f5f5f5;
-                border: 1px solid #3498db;
-                border-radius: 10px;
-            }
-        """)
-        self.main_frame.setObjectName("MainFrame")
-        
-        # Shadow
-        shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(20)
-        shadow.setColor(QColor("#3498db"))
-        shadow.setOffset(0, 0)
-        self.main_frame.setGraphicsEffect(shadow)
-        
-        root_layout.addWidget(self.main_frame)
-        
-        # تخطيط النافذة الداخلية
-        main_layout = QVBoxLayout(self.main_frame)
-        main_layout.setContentsMargins(0, 0, 0, 10)
-        main_layout.setSpacing(10)
-        
-        # 1. Custom Title Bar
-        self.title_bar = CustomTitleBar(self, title=self.title_text, is_dialog=True)
-        main_layout.addWidget(self.title_bar)
-        
-        # Container for content
-        content_widget = QWidget()
-        content_layout = QVBoxLayout(content_widget)
-        content_layout.setSpacing(10)
-        content_layout.setContentsMargins(15, 5, 15, 15)
-        main_layout.addWidget(content_widget)
-        
-        # Re-assign layout to content_layout for the existing widget helpers
-        layout = content_layout
-        
+        layout = self.content_layout
+
         title = QLabel("تقارير العملاء والموردين")
-        title.setStyleSheet("font-size: 16px; font-weight: bold; color: #2c3e50;")
+        title.setStyleSheet("font-size: 16px; font-weight: bold; color: #f8fafc;")
         layout.addWidget(title)
-        
+
         # تبويبات التقارير
         self.tab_widget = QTabWidget()
-        
+
         # تقرير العملاء
         customers_tab = self.create_customers_report_tab()
         self.tab_widget.addTab(customers_tab, "👥 تقرير العملاء")
-        
+
         # تقرير الموردين
         suppliers_tab = self.create_suppliers_report_tab()
         self.tab_widget.addTab(suppliers_tab, "🏭 تقرير الموردين")
-        
+
         # تقرير المقارنة
         comparison_tab = self.create_comparison_report_tab()
         self.tab_widget.addTab(comparison_tab, "📊 تقرير المقارنة")
-        
+
         layout.addWidget(self.tab_widget)
-        
+
         # أزرار
         buttons_layout = QHBoxLayout()
-        
+
         export_btn = QPushButton("📥 تصدير التقرير")
         export_btn.clicked.connect(self.export_report)
         buttons_layout.addWidget(export_btn)
-        
+
         print_btn = QPushButton("🖨️ طباعة")
         print_btn.clicked.connect(self.print_report)
         buttons_layout.addWidget(print_btn)
-        
+
         buttons_layout.addStretch()
-        
+
         close_btn = QPushButton("إغلاق")
         close_btn.clicked.connect(self.close)
         buttons_layout.addWidget(close_btn)
-        
+
         layout.addLayout(buttons_layout)
-    
+
     def create_customers_report_tab(self):
         """إنشاء تبويب تقرير العملاء"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        
+
         # خيارات التقرير
         options_layout = QHBoxLayout()
-        
+
         period_label = QLabel("الفترة:")
         self.customers_period_combo = QComboBox()
         self.customers_period_combo.addItems(["الكل", "هذا الشهر", "آخر 3 أشهر", "آخر سنة"])
@@ -142,31 +104,31 @@ class ContactsReportDialog(QDialog):
         options_layout.addWidget(period_label)
         options_layout.addWidget(self.customers_period_combo)
         options_layout.addStretch()
-        
+
         refresh_btn = QPushButton("تحديث")
         refresh_btn.clicked.connect(self.generate_customers_report)
         options_layout.addWidget(refresh_btn)
-        
+
         layout.addLayout(options_layout)
-        
+
         # منطقة التقرير
         self.customers_report_text = QTextEdit()
         self.customers_report_text.setReadOnly(True)
         layout.addWidget(self.customers_report_text)
-        
+
         # توليد التقرير الأولي
         self.generate_customers_report()
-        
+
         return tab
-    
+
     def create_suppliers_report_tab(self):
         """إنشاء تبويب تقرير الموردين"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        
+
         # خيارات التقرير
         options_layout = QHBoxLayout()
-        
+
         period_label = QLabel("الفترة:")
         self.suppliers_period_combo = QComboBox()
         self.suppliers_period_combo.addItems(["الكل", "هذا الشهر", "آخر 3 أشهر", "آخر سنة"])
@@ -174,80 +136,78 @@ class ContactsReportDialog(QDialog):
         options_layout.addWidget(period_label)
         options_layout.addWidget(self.suppliers_period_combo)
         options_layout.addStretch()
-        
+
         refresh_btn = QPushButton("تحديث")
         refresh_btn.clicked.connect(self.generate_suppliers_report)
         options_layout.addWidget(refresh_btn)
-        
+
         layout.addLayout(options_layout)
-        
+
         # منطقة التقرير
         self.suppliers_report_text = QTextEdit()
         self.suppliers_report_text.setReadOnly(True)
         layout.addWidget(self.suppliers_report_text)
-        
+
         # توليد التقرير الأولي
         self.generate_suppliers_report()
-        
+
         return tab
-    
+
     def create_comparison_report_tab(self):
         """إنشاء تبويب تقرير المقارنة"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        
+
         # خيارات التقرير
         options_layout = QHBoxLayout()
         options_layout.addStretch()
-        
+
         refresh_btn = QPushButton("تحديث")
         refresh_btn.clicked.connect(self.generate_comparison_report)
         options_layout.addWidget(refresh_btn)
-        
+
         layout.addLayout(options_layout)
-        
+
         # منطقة التقرير
         self.comparison_report_text = QTextEdit()
         self.comparison_report_text.setReadOnly(True)
         layout.addWidget(self.comparison_report_text)
-        
+
         # توليد التقرير الأولي
         self.generate_comparison_report()
-        
+
         return tab
-    
+
     def generate_customers_report(self):
         """توليد تقرير العملاء"""
         try:
             # احسب الإحصائيات
-            total = self.db_manager.fetch_one("SELECT COUNT(*) FROM customers")[0] or 0
-            active = self.db_manager.fetch_one("SELECT COUNT(*) FROM customers WHERE is_active = 1")[0] or 0
-            
+            self.db_manager.fetch_one("SELECT COUNT(*) FROM customers")[0] or 0
+            active = self.db_manager.fetch_one("SELECT COUNT(*) FROM customers WHERE is_active = 1")[0] or 0  # noqa: F841,E501
+
             # الأعلى رصيد مستحق - تحقق من وجود العمود أولاً
             try:
                 top_balance = self.db_manager.fetch_all(
-                    "SELECT name, COALESCE(current_balance, 0) as balance FROM customers WHERE COALESCE(current_balance, 0) > 0 ORDER BY balance DESC LIMIT 5"
+                    "SELECT name, COALESCE(current_balance, 0) as balance FROM customers WHERE COALESCE(current_balance, 0) > 0 ORDER BY balance DESC LIMIT 5"  # noqa: E501
                 )
-            except:
+            except Exception:
                 top_balance = []
-            
+
             # الأكثر شراءً
             try:
-                top_buyers = self.db_manager.fetch_all(
-                    """
+                top_buyers = self.db_manager.fetch_all("""
                     SELECT c.name, COUNT(*) as purchase_count, COALESCE(SUM(s.total_amount), 0) as total_amount
                     FROM customers c
                     LEFT JOIN sales s ON c.id = s.customer_id
                     GROUP BY c.id
                     ORDER BY purchase_count DESC
                     LIMIT 5
-                    """
-                )
-            except:
+                    """)
+            except Exception:
                 top_buyers = []
-            
+
             # بناء التقرير
-            report = f"""
+            report = """
 {'='*80}
 تقرير العملاء
 تاريخ التقرير: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
@@ -260,7 +220,7 @@ class ContactsReportDialog(QDialog):
   العملاء المعطلون:        {total - active}
 
 """
-            
+
             if top_balance:
                 report += """💰 العملاء الأعلى رصيداً مستحقاً:
 ─────────────────────────────────────────────────────────────────────────────
@@ -272,25 +232,25 @@ class ContactsReportDialog(QDialog):
 ─────────────────────────────────────────────────────────────────────────────
   لا توجد أرصدة مستحقة
 """
-            
+
             if top_buyers:
-                report += f"\n🛍️  العملاء الأكثر شراءً:\n"
+                report += "\n🛍️  العملاء الأكثر شراءً:\n"
                 report += "─────────────────────────────────────────────────────────────────────────────\n"
                 for i, (name, count, amount) in enumerate(top_buyers, 1):
                     amount_val = float(amount) if amount else 0
                     report += f"  {i}. {name:<30} {count:>5} فاتورة  {amount_val:>15,.2f} دج\n"
             else:
-                report += f"\n🛍️  العملاء الأكثر شراءً:\n"
+                report += "\n🛍️  العملاء الأكثر شراءً:\n"
                 report += "─────────────────────────────────────────────────────────────────────────────\n"
                 report += "  لا توجد عمليات شراء مسجلة\n"
-            
+
             report += f"\n{'='*80}\n"
-            
+
             self.customers_report_text.setText(report)
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في توليد تقرير العملاء: {str(e)}")
-            error_report = f"""
+            error_report = """
 {'='*80}
 تقرير العملاء
 تاريخ التقرير: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
@@ -307,31 +267,29 @@ class ContactsReportDialog(QDialog):
 {'='*80}
 """
             self.customers_report_text.setText(error_report)
-    
+
     def generate_suppliers_report(self):
         """توليد تقرير الموردين"""
         try:
             # احسب الإحصائيات
-            total = self.db_manager.fetch_one("SELECT COUNT(*) FROM suppliers")[0] or 0
-            active = self.db_manager.fetch_one("SELECT COUNT(*) FROM suppliers WHERE is_active = 1")[0] or 0
-            
+            self.db_manager.fetch_one("SELECT COUNT(*) FROM suppliers")[0] or 0
+            active = self.db_manager.fetch_one("SELECT COUNT(*) FROM suppliers WHERE is_active = 1")[0] or 0  # noqa: F841,E501
+
             # الموردين الأكثر عمليات (لا يوجد عمود current_balance في جدول suppliers)
             try:
-                top_suppliers = self.db_manager.fetch_all(
-                    """
+                top_suppliers = self.db_manager.fetch_all("""
                     SELECT s.name, COUNT(*) as purchase_count, COALESCE(SUM(p.total_amount), 0) as total_amount
                     FROM suppliers s
                     LEFT JOIN purchases p ON s.id = p.supplier_id
                     GROUP BY s.id
                     ORDER BY purchase_count DESC
                     LIMIT 5
-                    """
-                )
-            except:
+                    """)
+            except Exception:
                 top_suppliers = []
-            
+
             # بناء التقرير
-            report = f"""
+            report = """
 {'='*80}
 تقرير الموردين
 تاريخ التقرير: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
@@ -344,25 +302,25 @@ class ContactsReportDialog(QDialog):
   الموردين المعطلين:      {total - active}
 
 """
-            
+
             if top_suppliers:
-                report += f"📦 الموردين الأكثر عمليات:\n"
+                report += "📦 الموردين الأكثر عمليات:\n"
                 report += "─────────────────────────────────────────────────────────────────────────────\n"
                 for i, (name, count, amount) in enumerate(top_suppliers, 1):
                     amount_val = float(amount) if amount else 0
                     report += f"  {i}. {name:<30} {count:>5} عملية   {amount_val:>15,.2f} دج\n"
             else:
-                report += f"📦 الموردين الأكثر عمليات:\n"
+                report += "📦 الموردين الأكثر عمليات:\n"
                 report += "─────────────────────────────────────────────────────────────────────────────\n"
                 report += "  لا توجد عمليات شراء مسجلة\n"
-            
+
             report += f"\n{'='*80}\n"
-            
+
             self.suppliers_report_text.setText(report)
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في توليد تقرير الموردين: {str(e)}")
-            error_report = f"""
+            error_report = """
 {'='*80}
 تقرير الموردين
 تاريخ التقرير: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
@@ -379,39 +337,42 @@ class ContactsReportDialog(QDialog):
 {'='*80}
 """
             self.suppliers_report_text.setText(error_report)
-    
+
     def generate_comparison_report(self):
         """توليد تقرير المقارنة بين العملاء والموردين"""
         try:
             # إحصائيات العملاء
             customers_total = self.db_manager.fetch_one("SELECT COUNT(*) FROM customers")[0] or 0
-            customers_active = self.db_manager.fetch_one("SELECT COUNT(*) FROM customers WHERE is_active = 1")[0] or 0
-            customers_balance = self.db_manager.fetch_one("SELECT COALESCE(SUM(COALESCE(current_balance, 0)), 0) FROM customers")[0] or 0
-            
+            customers_active = self.db_manager.fetch_one("SELECT COUNT(*) FROM customers WHERE is_active = 1")[0] or 0  # noqa: F841,E501
+            customers_balance = (  # noqa: F841
+                self.db_manager.fetch_one("SELECT COALESCE(SUM(COALESCE(current_balance, 0)), 0) FROM customers")[0]
+                or 0
+            )
+
             # إحصائيات الموردين
             suppliers_total = self.db_manager.fetch_one("SELECT COUNT(*) FROM suppliers")[0] or 0
-            suppliers_active = self.db_manager.fetch_one("SELECT COUNT(*) FROM suppliers WHERE is_active = 1")[0] or 0
+            suppliers_active = self.db_manager.fetch_one("SELECT COUNT(*) FROM suppliers WHERE is_active = 1")[0] or 0  # noqa: F841,E501
             # لا يوجد current_balance في جدول suppliers
-            suppliers_balance = 0
-            
+            suppliers_balance = 0  # noqa: F841
+
             # إحصائيات المبيعات
             try:
                 sales_total = self.db_manager.fetch_one("SELECT COALESCE(SUM(total_amount), 0) FROM sales")[0] or 0
-                sales_count = self.db_manager.fetch_one("SELECT COUNT(*) FROM sales")[0] or 0
-            except:
+                sales_count = self.db_manager.fetch_one("SELECT COUNT(*) FROM sales")[0] or 0  # noqa: F841
+            except Exception:
                 sales_total = 0
-                sales_count = 0
-            
+
             # إحصائيات الشراء
             try:
-                purchases_total = self.db_manager.fetch_one("SELECT COALESCE(SUM(total_amount), 0) FROM purchases")[0] or 0
-                purchases_count = self.db_manager.fetch_one("SELECT COUNT(*) FROM purchases")[0] or 0
-            except:
+                purchases_total = (
+                    self.db_manager.fetch_one("SELECT COALESCE(SUM(total_amount), 0) FROM purchases")[0] or 0
+                )
+                purchases_count = self.db_manager.fetch_one("SELECT COUNT(*) FROM purchases")[0] or 0  # noqa: F841
+            except Exception:
                 purchases_total = 0
-                purchases_count = 0
-            
+
             # بناء التقرير
-            report = f"""
+            report = """
 {'='*80}
 تقرير المقارنة: العملاء مقابل الموردين
 تاريخ التقرير: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
@@ -436,36 +397,40 @@ class ContactsReportDialog(QDialog):
 {'-'*70}
 {'عدد العمليات':<30} {sales_count:>20} {purchases_count:>20}
 {'إجمالي المبلغ':<30} {float(sales_total):>20,.2f} {float(purchases_total):>20,.2f}
-{'متوسط العملية':<30} {float(sales_total)/max(sales_count, 1):>20,.2f} {float(purchases_total)/max(purchases_count, 1):>20,.2f}
+{'متوسط العملية':<30} {float(sales_total)/max(sales_count, 1):>20,.2f} {float(purchases_total)/max(purchases_count, 1):>20,.2f}  # noqa: E501
 
 📋 التحليل:
 ─────────────────────────────────────────────────────────────────────────────
 """
-            
+
             # تحليل الحالات
             if customers_total > suppliers_total:
                 report += f"  ✓ عدد العملاء ({customers_total}) أكثر من الموردين ({suppliers_total})\n"
             elif suppliers_total > customers_total:
                 report += f"  ✓ عدد الموردين ({suppliers_total}) أكثر من العملاء ({customers_total})\n"
             else:
-                report += f"  ✓ العدد متوازن\n"
-            
+                report += "  ✓ العدد متوازن\n"
+
             if float(sales_total) > float(purchases_total):
-                report += f"  ✓ المبيعات ({float(sales_total):,.2f}) أكثر من المشتريات ({float(purchases_total):,.2f})\n"
+                report += (
+                    f"  ✓ المبيعات ({float(sales_total):,.2f}) أكثر من المشتريات ({float(purchases_total):,.2f})\n"
+                )
                 profit = float(sales_total) - float(purchases_total)
                 report += f"  ✓ صافي الأرباح المتوقع: {profit:,.2f} دج\n"
             elif float(purchases_total) > float(sales_total):
-                report += f"  ✓ المشتريات ({float(purchases_total):,.2f}) أكثر من المبيعات ({float(sales_total):,.2f})\n"
+                report += (
+                    f"  ✓ المشتريات ({float(purchases_total):,.2f}) أكثر من المبيعات ({float(sales_total):,.2f})\n"
+                )
             else:
-                report += f"  ✓ المبيعات والمشتريات متوازنة\n"
-            
+                report += "  ✓ المبيعات والمشتريات متوازنة\n"
+
             report += f"\n{'='*80}\n"
-            
+
             self.comparison_report_text.setText(report)
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في توليد تقرير المقارنة: {str(e)}")
-            error_report = f"""
+            error_report = """
 {'='*80}
 تقرير المقارنة: العملاء مقابل الموردين
 تاريخ التقرير: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
@@ -482,12 +447,12 @@ class ContactsReportDialog(QDialog):
 {'='*80}
 """
             self.comparison_report_text.setText(error_report)
-    
+
     def export_report(self):
         """تصدير التقرير"""
         try:
             current_tab = self.tab_widget.currentIndex()
-            
+
             if current_tab == 0:
                 content = self.customers_report_text.toPlainText()
                 filename = f"تقرير_العملاء_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
@@ -497,28 +462,28 @@ class ContactsReportDialog(QDialog):
             else:
                 content = self.comparison_report_text.toPlainText()
                 filename = f"تقرير_المقارنة_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-            
-            with open(filename, 'w', encoding='utf-8') as f:
+
+            with open(filename, "w", encoding="utf-8") as f:
                 f.write(content)
-            
+
             self.notify.show_info("نجاح", f"تم تصدير التقرير إلى {filename}")
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في تصدير التقرير: {str(e)}")
             self.notify.show_error("خطأ", f"فشل في تصدير التقرير: {str(e)}")
-    
+
     def print_report(self):
         """طباعة التقرير"""
         try:
             current_tab = self.tab_widget.currentIndex()
-            
+
             if current_tab == 0:
                 content = self.customers_report_text.toPlainText()
             elif current_tab == 1:
                 content = self.suppliers_report_text.toPlainText()
             else:
-                content = self.comparison_report_text.toPlainText()
-            
+                content = self.comparison_report_text.toPlainText()  # noqa: F841
+
             self.notify.show_info("طباعة", "سيتم إرسال التقرير للطابعة الافتراضية")
         except Exception as e:
             if self.logger:

@@ -1,10 +1,17 @@
+from pathlib import Path
+from typing import Dict
+
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, Signal
+from PySide6.QtGui import QCursor, QPixmap
 from PySide6.QtWidgets import (
-    QFrame, QVBoxLayout, QPushButton, QLabel, 
-    QSpacerItem, QSizePolicy, QWidget
+    QFrame,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QSpacerItem,
+    QVBoxLayout,
 )
-from PySide6.QtCore import Qt, Signal, QSize, QPropertyAnimation, QEasingCurve
-from PySide6.QtGui import QIcon, QCursor
-from typing import Dict, Optional
+
 
 class ModernSidebar(QFrame):
     """
@@ -14,127 +21,152 @@ class ModernSidebar(QFrame):
     - Animated transitions
     - Glassmorphism styling support
     """
-    
+
     # Signal: page_id, button_text
     page_changed = Signal(str, str)
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("modernSidebar")
-        
+
         # Current state
         self.is_collapsed = False
         self.expanded_width = 250
         self.collapsed_width = 70
-        
+
         # Mapping: button_id -> QPushButton
         self.buttons: Dict[str, QPushButton] = {}
-        
+
         self.setup_ui()
         self._apply_styles()
-        
+
     def setup_ui(self):
         """Initialize the UI layout"""
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(15, 25, 15, 25)
         self.layout.setSpacing(12)
-        self.menu_layout = self.layout # Alias for tests
-        
+        self.menu_layout = self.layout  # Alias for tests
+
         # 1. Header (Logo/Title)
         self._setup_header()
-        
+
         # 2. Toggle Button (Burger Menu)
         self._setup_toggle_btn()
-        
+
         # Spacer
         self.layout.addSpacing(20)
-        
+
         # 3. Navigation Buttons
         self._setup_nav_buttons()
-        
+
         # Checkable logic
         self._current_active_btn = None
-        
+
         # Bottom Spacer
-        self.layout.addItem(QSpacerItem(
-            20, 20, QSizePolicy.Minimum, QSizePolicy.Expanding
-        ))
-        
+        self.layout.addItem(QSpacerItem(20, 20, QSizePolicy.Minimum, QSizePolicy.Expanding))
+
         # 4. Settings/Logout at bottom
         self._setup_bottom_buttons()
 
         # Fixed width initially
         self.setFixedWidth(self.expanded_width)
-        
+
     def _apply_styles(self):
-        """Apply Glassmorphism and UI/UX Pro Max styles to the sidebar"""
+        """Apply Dark Pro styles matching the app's dark theme"""
         self.setStyleSheet("""
             QFrame#modernSidebar {
-                background-color: rgba(255, 255, 255, 0.85); /* Glass effect */
-                border-left: 1px solid rgba(226, 232, 240, 0.9); /* slate-200 */
+                background-color: #0f172a;
+                border-right: 1px solid #1e293b;
                 border-radius: 0px;
             }
             QLabel#sidebarTitle {
-                font-size: 18px;
+                font-size: 15px;
                 font-weight: 800;
-                color: #1E293B; /* slate-800 */
+                color: #00f3ff;
                 letter-spacing: 1px;
+            }
+            QLabel#sidebarSubtitle {
+                font-size: 11px;
+                color: #64748b;
             }
             QPushButton#sidebarToggleBtn {
                 background: transparent;
                 border: none;
                 border-radius: 8px;
-                font-size: 20px;
-                color: #475569;
-                padding: 5px;
+                font-size: 18px;
+                color: #64748b;
+                padding: 4px;
             }
             QPushButton#sidebarToggleBtn:hover {
-                background-color: #F1F5F9;
-                color: #2563EB;
+                background-color: rgba(0, 243, 255, 0.08);
+                color: #00f3ff;
             }
             QPushButton#modernSidebarBtn {
                 background: transparent;
                 border: none;
-                border-radius: 12px;
-                text-align: left;
-                padding: 12px 16px;
-                color: #475569; /* slate-600 */
+                border-radius: 10px;
+                text-align: right;
+                padding: 10px 14px;
+                color: #94a3b8;
                 font-weight: 600;
-                font-size: 15px;
+                font-size: 14px;
             }
             QPushButton#modernSidebarBtn:hover {
-                background-color: rgba(37, 99, 235, 0.08); /* blue-600 with 8% opacity */
-                color: #2563EB; /* blue-600 */
+                background-color: rgba(0, 243, 255, 0.07);
+                color: #e2e8f0;
             }
             QPushButton#modernSidebarBtn:checked {
-                background-color: #2563EB;
-                color: white;
+                background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
+                    stop:0 rgba(0,243,255,0.18), stop:1 rgba(37,99,235,0.18));
+                color: #00f3ff;
+                border-left: 3px solid #00f3ff;
             }
             QPushButton#sidebarLogoutBtn {
-                color: #EF4444; /* red-500 */
+                color: #f87171;
             }
             QPushButton#sidebarLogoutBtn:hover {
-                background-color: rgba(239, 68, 68, 0.1);
+                background-color: rgba(239, 68, 68, 0.12);
+                color: #ef4444;
             }
         """)
 
     def _setup_header(self):
-        """Header with App Title"""
+        """Header with App Title - Standard El Joumla Branding"""
         self.header_container = QFrame()
+        self.header_container.setStyleSheet(
+            "background: transparent; border-bottom: 1px solid #1e293b; padding-bottom: 8px;"
+        )
         self.header_layout = QVBoxLayout(self.header_container)
-        self.header_layout.setContentsMargins(0, 0, 0, 0)
-        
-        self.app_logo = QLabel("🚀") # Placeholder or Icon
+        self.header_layout.setContentsMargins(0, 0, 0, 8)
+        self.header_layout.setSpacing(2)
+
+        self.app_logo = QLabel()
         self.app_logo.setAlignment(Qt.AlignCenter)
-        self.app_logo.setStyleSheet("font-size: 24px;")
-        
-        self.app_title = QLabel("EL-joumLa")
+        self.app_logo.setContentsMargins(0, 10, 0, 5)  # Add vertical padding
+        logo_path = Path(__file__).parent.parent.parent.parent / "assets" / "images" / "standard_eljoumla_logo.png"
+        if logo_path.exists():
+            pixmap = QPixmap(str(logo_path))
+            self.app_logo.setPixmap(pixmap.scaled(70, 70, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        else:
+            self.app_logo.setText("🛒")
+            self.app_logo.setStyleSheet("font-size: 28px; background: transparent;")
+
+        from ...utils.i18n_api import I18n
+
+        self.i18n = I18n(locales_dir=str(Path(__file__).parent.parent.parent.parent / "locales"))
+
+        self.app_title = QLabel(self.i18n.get_message("app_name_short"))
         self.app_title.setObjectName("sidebarTitle")
         self.app_title.setAlignment(Qt.AlignCenter)
-        
+
+        self.app_subtitle = QLabel(self.i18n.get_message("app_description"))
+        self.app_subtitle.setObjectName("sidebarSubtitle")
+        self.app_subtitle.setAlignment(Qt.AlignCenter)
+
         self.header_layout.addWidget(self.app_logo)
         self.header_layout.addWidget(self.app_title)
-        
+        self.header_layout.addWidget(self.app_subtitle)
+
         self.layout.addWidget(self.header_container)
 
     def _setup_toggle_btn(self):
@@ -144,7 +176,7 @@ class ModernSidebar(QFrame):
         self.toggle_btn.setCursor(QCursor(Qt.PointingHandCursor))
         self.toggle_btn.setToolTip("تبديل القائمة")
         self.toggle_btn.clicked.connect(self.toggle_sidebar)
-        
+
         # Add to layout properly (usually at top or separate)
         # For this design, maybe beside title or just below
         # Let's put it at the very top right, effectively acting as menu
@@ -157,22 +189,29 @@ class ModernSidebar(QFrame):
         # Define menu items: (ID, Label, Icon)
         # Note: Icons will need to be set properly. Using text fallback for now if no icon system ready.
         menu_items = [
-            ("home", "الرئيسية", "🏠"),
-            ("inventory", "المخزون", "📦"),
-            ("sales", "المبيعات", "💰"),
-            ("purchases", "المشتريات", "🛒"),
-            ("payments", "الحسابات", "💳"), # Changed to Al-Hisabat (Accounts)
-            ("reports", "التقارير", "📊"),
-            ("contacts", "الجهات", "👥"), # Changed to Al-Jahat (Contacts)
-            ("performance", "الأداء", "🚀"), # Added Performance
-            
+            ("home", self.i18n.get_message("dashboard"), "🏠"),
+            ("inventory", self.i18n.get_message("inventory"), "📦"),
+            ("sales", self.i18n.get_message("sales"), "💰"),
+            ("purchases", self.i18n.get_message("purchases"), "🛒"),
+            ("payments", self.i18n.get_message("payments"), "💳"),
+            ("reports", self.i18n.get_message("reports"), "📊"),
+            ("contacts", self.i18n.get_message("customers"), "👥"),
+            (
+                "performance",
+                self.i18n.get_message("performance", default="الأداء"),
+                "🚀",
+            ),
             # Application Features
-            ("users", "المستخدمين", "👤"),
-            ("system", "النظام", "💻"),
-            ("audit", "السجلات", "📝"),
-            ("notifications", "الإشعارات", "🔔"),
+            ("users", self.i18n.get_message("users", default="المستخدمين"), "👤"),
+            ("system", self.i18n.get_message("settings"), "💻"),
+            ("audit", self.i18n.get_message("audit", default="السجلات"), "📝"),
+            (
+                "notifications",
+                self.i18n.get_message("notifications", default="الإشعارات"),
+                "🔔",
+            ),
         ]
-        
+
         for btn_id, label, icon_char in menu_items:
             btn = self._create_btn(btn_id, label, icon_char)
             self.layout.addWidget(btn)
@@ -181,33 +220,29 @@ class ModernSidebar(QFrame):
     def _setup_bottom_buttons(self):
         """Bottom actions like Settings"""
         bottom_items = [
-            ("settings", "الإعدادات", "⚙️"),
-            ("logout", "خروج", "🚪"),
+            ("settings", self.i18n.get_message("settings"), "⚙️"),
+            ("logout", self.i18n.get_message("logout"), "🚪"),
         ]
-        
+
         for btn_id, label, icon_char in bottom_items:
             btn = self._create_btn(btn_id, label, icon_char)
             if btn_id == "logout":
-                btn.setObjectName("sidebarLogoutBtn") # Specific styling
+                btn.setObjectName("sidebarLogoutBtn")  # Specific styling
             self.layout.addWidget(btn)
             self.buttons[btn_id] = btn
 
     def _create_btn(self, btn_id: str, label: str, icon_char: str) -> QPushButton:
-        """Helper to create a unified sidebar button"""
-        btn = QPushButton(f"  {label}")
-        btn.setProperty("icon_char", icon_char) # Store for collapsed mode
+        """Helper to create a unified sidebar button with Icon + Text"""
+        # نستخدم أيقونة + نص معاً ليكون التصميم واضحاً
+        btn = QPushButton(f"{icon_char}   {label}")
+        btn.setProperty("icon_char", icon_char)
         btn.setProperty("full_text", label)
         btn.setObjectName("modernSidebarBtn")
         btn.setCheckable(True)
         btn.setCursor(QCursor(Qt.PointingHandCursor))
-        
-        # Set icon (using text as placeholder or QIcon if available)
-        # Assuming we might swap to QIcon later, but for now text-based icons are reliable
-        # We'll use a specific style for text icons
-        
-        # Connect
+
         btn.clicked.connect(lambda checked=False, b_id=btn_id, b_text=label: self._on_btn_clicked(b_id, b_text))
-        
+
         return btn
 
     def _on_btn_clicked(self, btn_id: str, btn_text: str):
@@ -216,7 +251,7 @@ class ModernSidebar(QFrame):
         for bid, btn in self.buttons.items():
             if bid != btn_id:
                 btn.setChecked(False)
-        
+
         self.buttons[btn_id].setChecked(True)
         self.page_changed.emit(btn_id, btn_text)
 
@@ -224,36 +259,38 @@ class ModernSidebar(QFrame):
         """Animate expand/collapse"""
         width_start = self.width()
         width_end = self.collapsed_width if not self.is_collapsed else self.expanded_width
-        
+
         # Animation
         self.animation = QPropertyAnimation(self, b"minimumWidth")
         self.animation.setDuration(300)
         self.animation.setStartValue(width_start)
         self.animation.setEndValue(width_end)
         self.animation.setEasingCurve(QEasingCurve.InOutQuart)
-        
+
         # Fix maximum width to ensure animation works
-        self.setMaximumWidth(width_end) 
-        
+        self.setMaximumWidth(width_end)
+
         self.animation.start()
-        
+
         # Update UI elements
         self.is_collapsed = not self.is_collapsed
         self._update_ui_state()
-        
+
     def _update_ui_state(self):
         """Update labels and icons based on collapsed state"""
         for btn in self.buttons.values():
             icon = btn.property("icon_char")
             label = btn.property("full_text")
-            
+
             if self.is_collapsed:
-                btn.setText(icon) # Icon only
+                btn.setText(icon)  # Icon only
                 btn.setToolTip(label)
+                btn.setStyleSheet("text-align: center; padding: 10px 0;")
             else:
-                btn.setText(f"  {label}") # Restore text
+                btn.setText(f"{icon}   {label}")  # Icon + Text
                 btn.setToolTip("")
-                
+                btn.setStyleSheet("text-align: right; padding: 10px 20px;")
+
         # Header visibility
         if self.is_collapsed:
             self.app_title.hide()
@@ -273,7 +310,7 @@ class ModernSidebar(QFrame):
         btn_id = label.lower().replace(" ", "_")
         btn = self._create_btn(btn_id, label, icon)
         btn.clicked.connect(callback)
-        self.layout.insertWidget(self.layout.count() - 1, btn) # قبل الـ spacer
+        self.layout.insertWidget(self.layout.count() - 1, btn)  # قبل الـ spacer
         self.buttons[btn_id] = btn
         return btn
 

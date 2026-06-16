@@ -6,17 +6,16 @@ Populate default categories and reset admin password
 """
 
 import sys
-import os
 from pathlib import Path
 
 # إضافة مسار src للمشروع
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.core.database_manager import DatabaseManager
+from src.core.local_database_manager import LocalDatabaseManager
 from src.core.config_manager import ConfigManager
-from src.models.user import UserManager, User
-from src.models.category import CategoryManager, Category
+from src.models.user import UserManager
+from src.models.category import CategoryManager
 from src.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -30,7 +29,7 @@ def main():
         db_path = config.get_database_path()
         logger.info(f"📍 استخدام قاعدة البيانات في: {db_path}")
         
-        db_manager = DatabaseManager(db_path=db_path)
+        db_manager = LocalDatabaseManager(db_path=db_path)
         if not db_manager.initialize():
             logger.error("❌ فشل تهيئة قاعدة البيانات")
             return

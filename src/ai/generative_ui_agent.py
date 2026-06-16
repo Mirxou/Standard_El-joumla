@@ -4,15 +4,15 @@
 يولد واجهات مستخدم ديناميكية بناءً على السياق والاحتياجات
 """
 
-from datetime import datetime
-from typing import Dict, List, Any, Optional
-import json
 from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
 class UIComponent:
     """مكون واجهة المستخدم"""
+
     component_id: str
     component_type: str
     properties: Dict[str, Any]
@@ -24,6 +24,7 @@ class UIComponent:
 @dataclass
 class GeneratedUI:
     """واجهة مستخدم مولدة"""
+
     ui_id: str
     ui_type: str
     title: str
@@ -36,7 +37,7 @@ class GeneratedUI:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
-from .multi_agent_coordinator import BaseAgent, AgentType, AgentTask, AgentResult
+from .multi_agent_coordinator import AgentResult, AgentTask, AgentType, BaseAgent
 
 
 class GenerativeUIAgent(BaseAgent):
@@ -63,7 +64,7 @@ class GenerativeUIAgent(BaseAgent):
             "تخصيص الواجهة حسب الدور",
             "إنشاء نماذج تفاعلية",
             "تحسين تجربة المستخدم",
-            "إنشاء واجهات مخصصة"
+            "إنشاء واجهات مخصصة",
         ]
 
     def _load_ui_templates(self) -> Dict[str, Dict[str, Any]]:
@@ -73,26 +74,26 @@ class GenerativeUIAgent(BaseAgent):
                 "type": "dashboard",
                 "components": ["charts", "metrics", "quick_actions"],
                 "layout": "grid",
-                "responsive": True
+                "responsive": True,
             },
             "form": {
                 "type": "form",
                 "components": ["input_fields", "buttons", "validation"],
                 "layout": "vertical",
-                "responsive": True
+                "responsive": True,
             },
             "list": {
                 "type": "list",
                 "components": ["search", "filters", "pagination"],
                 "layout": "table",
-                "responsive": True
+                "responsive": True,
             },
             "modal": {
                 "type": "modal",
                 "components": ["header", "content", "actions"],
                 "layout": "overlay",
-                "responsive": False
-            }
+                "responsive": False,
+            },
         }
 
     def execute_task(self, task: AgentTask) -> AgentResult:
@@ -118,7 +119,7 @@ class GenerativeUIAgent(BaseAgent):
                 agent_id=self.agent_id,
                 result=result,
                 confidence=0.9,
-                execution_time=execution_time
+                execution_time=execution_time,
             )
 
         except Exception as e:
@@ -128,7 +129,7 @@ class GenerativeUIAgent(BaseAgent):
                 agent_id=self.agent_id,
                 result={"error": str(e)},
                 confidence=0.0,
-                execution_time=execution_time
+                execution_time=execution_time,
             )
 
     def _generate_dashboard(self, task: AgentTask) -> Dict[str, Any]:
@@ -136,41 +137,37 @@ class GenerativeUIAgent(BaseAgent):
         dashboard_config = {
             "id": f"dashboard_{task.task_id}",
             "title": "لوحة التحكم الذكية",
-            "layout": {
-                "type": "grid",
-                "columns": 3,
-                "rows": 2
-            },
+            "layout": {"type": "grid", "columns": 3, "rows": 2},
             "widgets": [
                 {
                     "type": "metric",
                     "title": "إجمالي المبيعات",
                     "value": "₺125,000",
                     "change": "+12%",
-                    "position": {"x": 0, "y": 0}
+                    "position": {"x": 0, "y": 0},
                 },
                 {
                     "type": "chart",
                     "title": "المبيعات الشهرية",
                     "chart_type": "line",
                     "data": [12000, 15000, 18000, 22000, 25000, 28000],
-                    "position": {"x": 1, "y": 0, "width": 2}
+                    "position": {"x": 1, "y": 0, "width": 2},
                 },
                 {
                     "type": "list",
                     "title": "أفضل المنتجات",
                     "items": ["منتج A", "منتج B", "منتج C"],
-                    "position": {"x": 0, "y": 1}
+                    "position": {"x": 0, "y": 1},
                 },
                 {
                     "type": "actions",
                     "title": "إجراءات سريعة",
                     "buttons": ["إضافة فاتورة", "عرض التقارير", "إدارة العملاء"],
-                    "position": {"x": 1, "y": 1}
-                }
+                    "position": {"x": 1, "y": 1},
+                },
             ],
             "responsive": True,
-            "theme": "modern"
+            "theme": "modern",
         }
 
         self.generated_interfaces[task.task_id] = dashboard_config
@@ -179,7 +176,7 @@ class GenerativeUIAgent(BaseAgent):
             "action": "dashboard_generated",
             "interface_id": dashboard_config["id"],
             "config": dashboard_config,
-            "message": "تم توليد لوحة تحكم ذكية مع مؤشرات الأداء والإجراءات السريعة"
+            "message": "تم توليد لوحة تحكم ذكية مع مؤشرات الأداء والإجراءات السريعة",
         }
 
     def _generate_form(self, task: AgentTask) -> Dict[str, Any]:
@@ -194,21 +191,21 @@ class GenerativeUIAgent(BaseAgent):
                     "label": "اسم العميل",
                     "name": "customer_name",
                     "required": True,
-                    "validation": "min_length:2"
+                    "validation": "min_length:2",
                 },
                 {
                     "type": "email",
                     "label": "البريد الإلكتروني",
                     "name": "email",
                     "required": True,
-                    "validation": "email_format"
+                    "validation": "email_format",
                 },
                 {
                     "type": "select",
                     "label": "نوع المنتج",
                     "name": "product_type",
                     "options": ["إلكترونيات", "ملابس", "أغذية", "أخرى"],
-                    "required": True
+                    "required": True,
                 },
                 {
                     "type": "number",
@@ -216,24 +213,19 @@ class GenerativeUIAgent(BaseAgent):
                     "name": "quantity",
                     "min": 1,
                     "max": 100,
-                    "required": True
+                    "required": True,
                 },
-                {
-                    "type": "textarea",
-                    "label": "ملاحظات",
-                    "name": "notes",
-                    "rows": 3
-                }
+                {"type": "textarea", "label": "ملاحظات", "name": "notes", "rows": 3},
             ],
             "actions": [
                 {"type": "submit", "label": "حفظ", "style": "primary"},
-                {"type": "cancel", "label": "إلغاء", "style": "secondary"}
+                {"type": "cancel", "label": "إلغاء", "style": "secondary"},
             ],
             "validation_rules": {
                 "customer_name": {"required": True, "min_length": 2},
                 "email": {"required": True, "format": "email"},
-                "quantity": {"required": True, "min": 1, "max": 100}
-            }
+                "quantity": {"required": True, "min": 1, "max": 100},
+            },
         }
 
         self.generated_interfaces[task.task_id] = form_config
@@ -242,7 +234,7 @@ class GenerativeUIAgent(BaseAgent):
             "action": "form_generated",
             "interface_id": form_config["id"],
             "config": form_config,
-            "message": "تم توليد نموذج تفاعلي مع التحقق من صحة البيانات"
+            "message": "تم توليد نموذج تفاعلي مع التحقق من صحة البيانات",
         }
 
     def _generate_list(self, task: AgentTask) -> Dict[str, Any]:
@@ -256,21 +248,21 @@ class GenerativeUIAgent(BaseAgent):
                 {"key": "name", "label": "الاسم", "sortable": True},
                 {"key": "category", "label": "الفئة", "filterable": True},
                 {"key": "price", "label": "السعر", "sortable": True},
-                {"key": "status", "label": "الحالة", "filterable": True}
+                {"key": "status", "label": "الحالة", "filterable": True},
             ],
             "features": {
                 "search": True,
                 "filter": True,
                 "sort": True,
                 "pagination": True,
-                "export": True
+                "export": True,
             },
             "actions": [
                 {"type": "view", "label": "عرض", "icon": "eye"},
                 {"type": "edit", "label": "تعديل", "icon": "edit"},
-                {"type": "delete", "label": "حذف", "icon": "trash"}
+                {"type": "delete", "label": "حذف", "icon": "trash"},
             ],
-            "responsive": True
+            "responsive": True,
         }
 
         self.generated_interfaces[task.task_id] = list_config
@@ -279,7 +271,7 @@ class GenerativeUIAgent(BaseAgent):
             "action": "list_generated",
             "interface_id": list_config["id"],
             "config": list_config,
-            "message": "تم توليد قائمة ذكية مع البحث والتصفية والترتيب"
+            "message": "تم توليد قائمة ذكية مع البحث والتصفية والترتيب",
         }
 
     def _customize_interface(self, task: AgentTask) -> Dict[str, Any]:
@@ -290,29 +282,29 @@ class GenerativeUIAgent(BaseAgent):
                 "theme": "dark",
                 "language": "ar",
                 "font_size": "medium",
-                "color_scheme": "blue"
+                "color_scheme": "blue",
             },
             "layout_modifications": {
                 "sidebar_width": "250px",
                 "header_height": "60px",
-                "main_padding": "20px"
+                "main_padding": "20px",
             },
             "component_overrides": {
                 "buttons": {"border_radius": "8px", "shadow": True},
                 "cards": {"background": "gradient", "hover_effect": True},
-                "tables": {"striped": True, "compact": False}
+                "tables": {"striped": True, "compact": False},
             },
             "accessibility": {
                 "high_contrast": False,
                 "large_text": False,
-                "screen_reader": True
-            }
+                "screen_reader": True,
+            },
         }
 
         return {
             "action": "interface_customized",
             "customization": customization,
-            "message": "تم تخصيص الواجهة حسب تفضيلات المستخدم ودوره"
+            "message": "تم تخصيص الواجهة حسب تفضيلات المستخدم ودوره",
         }
 
     def get_generated_interface(self, interface_id: str) -> Optional[Dict[str, Any]]:
@@ -339,52 +331,56 @@ class GenerativeUIAgent(BaseAgent):
 
     def generate_form(self, requirements: Dict[str, Any]) -> GeneratedUI:
         """توليد نموذج"""
-        fields = requirements.get('fields', [])
+        fields = requirements.get("fields", [])
         components = [
             UIComponent(
                 component_id=f"field_{i}",
-                component_type=f.get('type', 'text'),
-                properties={"name": f.get('name', ''), "required": f.get('required', False)},
+                component_type=f.get("type", "text"),
+                properties={
+                    "name": f.get("name", ""),
+                    "required": f.get("required", False),
+                },
                 styles={},
-                events={}
-            ) for i, f in enumerate(fields)
+                events={},
+            )
+            for i, f in enumerate(fields)
         ]
         return GeneratedUI(
             ui_id=f"form_{id(requirements)}",
             ui_type="form",
-            title=requirements.get('title', 'Form'),
+            title=requirements.get("title", "Form"),
             components=components,
             layout="vertical",
             responsive=True,
-            created_at=datetime.now()
+            created_at=datetime.now(),
         )
 
     def generate_dashboard(self, requirements: Dict[str, Any]) -> GeneratedUI:
         """توليد لوحة تحكم"""
-        widgets = requirements.get('widgets', [])
+        widgets = requirements.get("widgets", [])
         components = [UIComponent(f"widget_{i}", w, {}, {}, {}) for i, w in enumerate(widgets)]
         return GeneratedUI(
             ui_id=f"dashboard_{id(requirements)}",
             ui_type="dashboard",
-            title=requirements.get('title', 'Dashboard'),
+            title=requirements.get("title", "Dashboard"),
             components=components,
             layout="grid",
             responsive=True,
-            created_at=datetime.now()
+            created_at=datetime.now(),
         )
 
     def generate_report_view(self, requirements: Dict[str, Any]) -> GeneratedUI:
         """توليد عرض تقرير"""
-        sections = requirements.get('sections', [])
+        sections = requirements.get("sections", [])
         components = [UIComponent(f"section_{i}", s, {}, {}, {}) for i, s in enumerate(sections)]
         return GeneratedUI(
             ui_id=f"report_{id(requirements)}",
             ui_type="report",
-            title=requirements.get('title', 'Report'),
+            title=requirements.get("title", "Report"),
             components=components,
             layout="vertical",
             responsive=True,
-            created_at=datetime.now()
+            created_at=datetime.now(),
         )
 
     def customize_component(self, component: UIComponent, customization: Dict[str, Any]) -> UIComponent:
@@ -396,7 +392,7 @@ class GenerativeUIAgent(BaseAgent):
             component_type=component.component_type,
             properties=new_props,
             styles=component.styles,
-            events=component.events
+            events=component.events,
         )
 
     def optimize_layout(self, components: List[UIComponent], target: str = "desktop") -> List[UIComponent]:

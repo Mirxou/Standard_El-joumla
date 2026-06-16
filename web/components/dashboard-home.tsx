@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -48,8 +48,7 @@ interface DashboardHomeProps {
   setActiveView?: (view: string) => void
 }
 
-export default function DashboardHome(props: DashboardHomeProps = {} as DashboardHomeProps) {
-  const { setActiveView } = props
+export default function DashboardHome({ setActiveView }: DashboardHomeProps) {
   const [loading, setLoading] = useState(true)
   const [realTimeData, setRealTimeData] = useState({
     totalRevenue: 0,
@@ -66,18 +65,16 @@ export default function DashboardHome(props: DashboardHomeProps = {} as Dashboar
   useEffect(() => {
     fetchDashboardData()
     
-    // Connect to WebSocket for real-time updates (optional - won't break if fails)
+    // Connect to WebSocket for real-time updates
     let wsClient: any = null
     try {
       wsClient = getWebSocketClient('data_updates')
       
       wsClient.on('data_update', (message: any) => {
         if (message.data) {
-          // تحديث البيانات عند استقبال تحديثات من Desktop
           if (message.data.type === 'sale' || message.data.type === 'product' || message.data.type === 'inventory') {
             fetchDashboardData()
             
-            // إضافة نشاط مباشر جديد
             if (message.data.type === 'sale') {
               setLiveActivities(prev => [{
                 title: `فاتورة جديدة #${message.data.id || ''}`,
@@ -97,14 +94,11 @@ export default function DashboardHome(props: DashboardHomeProps = {} as Dashboar
         }
       })
       
-      // محاولة الاتصال بدون إيقاف التطبيق عند الفشل
-      wsClient.connect().catch((err: any) => {
-        // WebSocket غير متاح - هذا طبيعي إذا كان Backend غير متاح
+      wsClient.connect().catch(() => {
         console.info("ℹ️ WebSocket غير متاح - سيتم العمل بدون تحديثات مباشرة")
       })
       
     } catch (err) {
-      // WebSocket غير متاح - هذا طبيعي
       console.info("ℹ️ WebSocket غير متاح - سيتم العمل بدون تحديثات مباشرة")
     }
     
@@ -112,9 +106,7 @@ export default function DashboardHome(props: DashboardHomeProps = {} as Dashboar
       if (wsClient) {
         try {
           wsClient.disconnect()
-        } catch (e) {
-          // تجاهل الأخطاء عند الإغلاق
-        }
+        } catch (e) {}
       }
     }
   }, [])
@@ -127,7 +119,6 @@ export default function DashboardHome(props: DashboardHomeProps = {} as Dashboar
         dashboardService.getSalesChartData(7)
       ])
 
-      // تحويل بيانات الرسم البياني من API
       if (Array.isArray(chartData) && chartData.length > 0) {
         setSalesChartData(chartData.map((item: any) => ({
           name: item.date || item.name || '',
@@ -147,33 +138,9 @@ export default function DashboardHome(props: DashboardHomeProps = {} as Dashboar
       })
     } catch (e) {
       console.error("Error fetching dashboard data:", e)
-      setSalesChartData([])
-      setRealTimeData({
-        totalRevenue: 0,
-        totalProducts: 0,
-        lowStockAlerts: 0,
-        profitMargin: 0,
-        todaySales: 0,
-        pendingOrders: 0,
-      })
     } finally {
       setLoading(false)
     }
-  }
-
-  const containerAnimations = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
-    }
-  }
-
-  const itemAnimations = {
-    hidden: { y: 20, opacity: 0 },
-    show: { y: 0, opacity: 1 }
   }
 
   if (loading) {
@@ -182,12 +149,10 @@ export default function DashboardHome(props: DashboardHomeProps = {} as Dashboar
 
   return (
     <motion.div
-      variants={containerAnimations}
-      initial="hidden"
-      animate="show"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
       className="space-y-8"
     >
-
       {/* Title & Actions */}
       <div className="flex items-center justify-between">
         <div>
@@ -195,12 +160,12 @@ export default function DashboardHome(props: DashboardHomeProps = {} as Dashboar
           <p className="text-gray-400">نظرة عامة على أداء مشروعك اليوم.</p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" className="glass-panel border-white/10 hover:bg-white/5 text-gray-300">
-            <RefreshCw className="w-4 h-4 mr-2" />
+          <Button variant="outline" className="glass-panel border-white/10 hover:bg-white/5 text-gray-300" onClick={fetchDashboardData}>
+            <RefreshCw className="w-4 h-4 ml-2" />
             تحديث
           </Button>
           <Button className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white border-0 shadow-lg shadow-cyan-500/20">
-            <Zap className="w-4 h-4 mr-2" />
+            <Zap className="w-4 h-4 ml-2" />
             تقرير ذكي
           </Button>
         </div>
@@ -245,21 +210,15 @@ export default function DashboardHome(props: DashboardHomeProps = {} as Dashboar
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
-
-        {/* Sales Chart (2 Cols) */}
-        <motion.div variants={itemAnimations} className="lg:col-span-2 glass-panel p-3 sm:p-4 lg:p-6 rounded-xl sm:rounded-2xl lg:rounded-3xl relative overflow-hidden transition-all">
-          <div className="absolute top-0 right-0 p-6 opacity-10 pointer-events-none">
-            <BarChart3 className="w-32 h-32 text-cyan-500" />
-          </div>
-
+        {/* Sales Chart */}
+        <div className="lg:col-span-2 glass-panel p-3 sm:p-4 lg:p-6 rounded-xl sm:rounded-2xl lg:rounded-3xl relative overflow-hidden">
           <div className="flex items-center justify-between mb-8 relative z-10">
             <h3 className="text-xl font-bold text-white">تحليل المبيعات</h3>
             <div className="flex gap-2">
-              <Badge variant="outline" className="border-cyan-500/30 text-cyan-400 bg-cyan-500/10 cursor-pointer">اسبوعي</Badge>
-              <Badge variant="outline" className="border-white/10 text-gray-400 hover:bg-white/5 cursor-pointer">شهري</Badge>
+              <Badge variant="outline" className="border-cyan-500/30 text-cyan-400 bg-cyan-500/10">اسبوعي</Badge>
+              <Badge variant="outline" className="border-white/10 text-gray-400 hover:bg-white/5">شهري</Badge>
             </div>
           </div>
-
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={salesChartData}>
@@ -280,15 +239,13 @@ export default function DashboardHome(props: DashboardHomeProps = {} as Dashboar
               </AreaChart>
             </ResponsiveContainer>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Quick Actions & Recent Activity (1 Col) */}
-        <motion.div variants={itemAnimations} className="space-y-6">
-
-          {/* Quick Actions */}
-          <div className="glass-panel p-3 sm:p-4 lg:p-6 rounded-xl sm:rounded-2xl lg:rounded-3xl transition-all">
-            <h3 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">وصول سريع</h3>
-            <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:gap-4">
+        {/* Quick Actions & Live Activity */}
+        <div className="space-y-6">
+          <div className="glass-panel p-4 sm:p-6 rounded-xl sm:rounded-3xl">
+            <h3 className="text-lg font-bold text-white mb-4">وصول سريع</h3>
+            <div className="grid grid-cols-2 gap-4">
               <ActionButton icon={ShoppingCart} label="بيع جديد" color="bg-green-500" onClick={() => setActiveView?.("sales")} />
               <ActionButton icon={Package} label="إضافة منتج" color="bg-blue-500" onClick={() => setActiveView?.("products")} />
               <ActionButton icon={Users} label="موردين" color="bg-purple-500" onClick={() => setActiveView?.("suppliers")} />
@@ -296,13 +253,12 @@ export default function DashboardHome(props: DashboardHomeProps = {} as Dashboar
             </div>
           </div>
 
-          {/* Live Activity */}
-          <div className="glass-panel p-3 sm:p-4 lg:p-6 rounded-xl sm:rounded-2xl lg:rounded-3xl transition-all">
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <h3 className="text-base sm:text-lg font-bold text-white">النشاط المباشر</h3>
+          <div className="glass-panel p-4 sm:p-6 rounded-xl sm:rounded-3xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-white">النشاط المباشر</h3>
               <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
             </div>
-            <div className="space-y-2 sm:space-y-3 lg:space-y-4">
+            <div className="space-y-4">
               {liveActivities.length === 0 ? (
                 <div className="text-center text-gray-400 py-8 text-sm">لا يوجد نشاط مباشر</div>
               ) : (
@@ -318,10 +274,8 @@ export default function DashboardHome(props: DashboardHomeProps = {} as Dashboar
               )}
             </div>
           </div>
-
-        </motion.div>
+        </div>
       </div>
-
     </motion.div>
   )
 }
@@ -339,18 +293,18 @@ function StatsCard({ title, value, trend, icon: Icon, color, delay, isAlert }: a
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay }}
-      className={`glass-panel p-4 sm:p-5 lg:p-6 rounded-xl sm:rounded-2xl lg:rounded-3xl relative overflow-hidden group hover:-translate-y-1 transition-all duration-300`}
+      className="glass-panel p-6 rounded-3xl relative overflow-hidden group hover:-translate-y-1 transition-all duration-300"
     >
-      <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center mb-3 sm:mb-4 ${colors[color]} group-hover:scale-110 transition-transform`}>
-        <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
+      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-4 ${colors[color]} group-hover:scale-110 transition-transform`}>
+        <Icon className="w-6 h-6" />
       </div>
       <div>
-        <p className="text-gray-400 text-xs sm:text-sm font-medium mb-1">{title}</p>
-        <h3 className="text-xl sm:text-2xl font-bold text-white">{value}</h3>
+        <p className="text-gray-400 text-sm font-medium mb-1">{title}</p>
+        <h3 className="text-2xl font-bold text-white">{value}</h3>
       </div>
-      <div className={`absolute top-3 left-3 sm:top-4 sm:left-4 lg:top-6 lg:left-6 text-xs sm:text-sm font-bold flex items-center gap-1 ${isAlert ? 'text-red-400' : 'text-green-400'}`}>
+      <div className={`absolute top-6 left-6 text-sm font-bold flex items-center gap-1 ${isAlert ? 'text-red-400' : 'text-green-400'}`}>
         <span>{trend}</span>
-        {!isAlert && <ArrowUpRight className="w-3 h-3 sm:w-4 sm:h-4" />}
+        {!isAlert && <ArrowUpRight className="w-4 h-4" />}
       </div>
     </motion.div>
   )
@@ -360,19 +314,19 @@ function ActionButton({ icon: Icon, label, color, onClick }: any) {
   return (
     <button
       onClick={onClick}
-      className="flex flex-col items-center justify-center p-2 sm:p-3 lg:p-4 rounded-xl sm:rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all group"
+      className="flex flex-col items-center justify-center p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all group"
     >
-      <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white mb-1 sm:mb-2 ${color} shadow-lg group-hover:scale-110 transition-transform`}>
-        <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
+      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white mb-2 ${color} shadow-lg group-hover:scale-110 transition-transform`}>
+        <Icon className="w-5 h-5" />
       </div>
-      <span className="text-[10px] sm:text-xs font-medium text-gray-300 group-hover:text-white text-center">{label}</span>
+      <span className="text-xs font-medium text-gray-300 group-hover:text-white text-center">{label}</span>
     </button>
   )
 }
 
 function ActivityItem({ title, time, desc, isAlert }: any) {
   return (
-    <div className="flex items-start gap-2 sm:gap-3 p-2 sm:p-3 rounded-lg sm:rounded-xl hover:bg-white/5 transition-colors">
+    <div className="flex items-start gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors">
       <div className={`w-2 h-2 mt-2 rounded-full ${isAlert ? 'bg-red-500' : 'bg-cyan-500'}`} />
       <div className="flex-1">
         <div className="flex justify-between items-start">

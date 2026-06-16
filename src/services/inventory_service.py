@@ -3,20 +3,27 @@
 """
 خدمة إدارة المخزون - Inventory Service
 تحتوي على جميع العمليات المتعلقة بإدارة المخزون والمنتجات
+محسنة لاستخدام DatabaseManager المطور مع معالجة مرنة للبيانات
 """
 
-from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime, date, timedelta
 from dataclasses import dataclass
+from datetime import date, datetime
+from typing import Any, Dict, List, Optional
 
+from src.models.category import CategoryManager
 from src.models.product import Product, ProductManager
-from src.models.category import Category, CategoryManager
-from src.models.supplier import Supplier, SupplierManager
+from src.models.supplier import SupplierManager
+from src.utils.logger import setup_logger
+
+
+def gv(k, i, d=None):
+    return k[i] if isinstance(k, (list, tuple)) and len(k) > i else (k.get(i, d) if isinstance(k, dict) else d)
 
 
 @dataclass
 class StockMovement:
     """حركة المخزون"""
+
     id: Optional[int] = None
     product_id: int = 0
     movement_type: str = ""  # in, out, adjustment, transfer
@@ -28,9 +35,11 @@ class StockMovement:
     created_at: Optional[datetime] = None
     product_name: Optional[str] = None  # اسم المنتج (من JOIN)
 
+
 @dataclass
 class StockAlert:
     """تنبيه المخزون"""
+
     product_id: int
     product_name: str
     current_stock: float
@@ -39,9 +48,11 @@ class StockAlert:
     severity: str  # low, medium, high, critical
     message: str
 
+
 @dataclass
 class InventoryReport:
     """تقرير المخزون"""
+
     total_products: int
     total_categories: int
     total_stock_value: float
@@ -52,609 +63,457 @@ class InventoryReport:
     stock_movements: List[Dict[str, Any]]
     alerts: List[StockAlert]
 
+
 class InventoryService:
     """خدمة إدارة المخزون"""
-    
+
     def __init__(self, db_manager, logger=None):
         self.db_manager = db_manager
-        self.logger = logger
-        self.product_manager = ProductManager(db_manager, logger)
-        self.category_manager = CategoryManager(db_manager, logger)
-        self.supplier_manager = SupplierManager(db_manager, logger)
-        
+        self.logger = logger or setup_logger(__name__)
+        self.product_manager = ProductManager(db_manager, self.logger)
+        self.category_manager = CategoryManager(db_manager, self.logger)
+        self.supplier_manager = SupplierManager(db_manager, self.logger)
+
         # Multi-Warehouse Support (Optional - يتم تحميله عند الحاجة)
         self._warehouse_service = None
-    
+
     @property
     def warehouse_service(self):
         """Lazy loading لـ WarehouseService"""
         if self._warehouse_service is None:
             try:
                 from src.services.warehouse_service import WarehouseService
+
                 self._warehouse_service = WarehouseService(self.db_manager, self.logger)
             except ImportError:
                 if self.logger:
                     self.logger.warning("WarehouseService غير متاح - Multi-Warehouse غير مفعل")
         return self._warehouse_service
-    
+
     def is_multi_warehouse_enabled(self) -> bool:
         """التحقق من تفعيل Multi-Warehouse"""
         return self.warehouse_service is not None
-    
-    # ===== إدارة المنتجات =====
-    
-    def add_product(self, product: Product) -> Optional[int]:
-        """إضافة منتج جديد"""
-        try:
-            # التحقق من عدم تكرار الباركود
-            if product.barcode and self.product_manager.get_product_by_barcode(product.barcode):
-                if self.logger:
-                    self.logger.warning(f"الباركود {product.barcode} موجود بالفعل")
-                return None
-            
-            product_id = self.product_manager.create_product(product)
-            if product_id:
-                # تسجيل حركة المخزون الأولية
-                if product.current_stock > 0:
-                    self._record_stock_movement(
-                        product_id=product_id,
-                        movement_type="in",
-                        quantity=product.current_stock,
-                        reference_type="initial",
-                        notes="رصيد أولي"
-                    )
-                
-                if self.logger:
-                    self.logger.info(f"تم إضافة منتج جديد: {product.name} (ID: {product_id})")
-            
-            return product_id
-            
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في إضافة المنتج: {str(e)}")
+
+    def _parse_datetime(self, val):
+        """معالجة التواريخ بشكل موحد"""
+        if not val:
             return None
-    
-    def update_product(self, product: Product) -> bool:
-        """تحديث منتج"""
+        if isinstance(val, datetime):
+            return val
+        if isinstance(val, str):
+            try:
+                return datetime.fromisoformat(val.replace("Z", "+00:00"))
+            except Exception:
+                try:
+                    return datetime.strptime(val, "%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    return None
+        return None
+
+    def search_products(
+        self,
+        query: str = "",
+        category_id: Optional[int] = None,
+        supplier_id: Optional[int] = None,
+        active_only: bool = True,
+        limit: Optional[int] = None,
+    ) -> List[Product]:
+        """البحث عن المنتجات مع فلاتر"""
         try:
-            # الحصول على المنتج الحالي لمقارنة الكمية
-            current_product = self.product_manager.get_product_by_id(product.id)
-            if not current_product:
-                return False
-            
-            # تحديث المنتج
-            success = self.product_manager.update_product(product)
-            if success:
-                # تسجيل تغيير الكمية إذا حدث
-                if current_product.current_stock != product.current_stock:
-                    quantity_diff = product.current_stock - current_product.current_stock
-                    movement_type = "in" if quantity_diff > 0 else "out"
-                    
-                    self._record_stock_movement(
-                        product_id=product.id,
-                        movement_type=movement_type,
-                        quantity=abs(quantity_diff),
-                        reference_type="adjustment",
-                        notes="تعديل يدوي للكمية"
-                    )
-                
-                if self.logger:
-                    self.logger.info(f"تم تحديث المنتج: {product.name}")
-            
-            return success
-            
+            return self.product_manager.search_products(query, category_id, active_only, limit)
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في تحديث المنتج {product.id}: {str(e)}")
-            return False
-    
-    def delete_product(self, product_id: int, hard_delete: bool = False) -> bool:
-        """حذف منتج"""
-        try:
-            success = self.product_manager.delete_product(product_id, hard_delete)
-            if success and self.logger:
-                delete_type = "نهائي" if hard_delete else "مؤقت"
-                self.logger.info(f"تم حذف المنتج {product_id} ({delete_type})")
-            
-            return success
-            
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في حذف المنتج {product_id}: {str(e)}")
-            return False
-    
-    def search_products(self, query: str, category_id: Optional[int] = None, 
-                       supplier_id: Optional[int] = None, active_only: bool = True) -> List[Product]:
-        """البحث عن المنتجات"""
-        try:
-            return self.product_manager.search_products(query, category_id, supplier_id, active_only)
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في البحث عن المنتجات: {str(e)}")
+            self.logger.warning(f"خطأ في البحث عن المنتجات: {str(e)}")
             return []
-    
+
     def get_product_by_barcode(self, barcode: str) -> Optional[Product]:
         """الحصول على منتج بالباركود"""
         try:
             return self.product_manager.get_product_by_barcode(barcode)
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في البحث بالباركود {barcode}: {str(e)}")
+            self.logger.warning(f"خطأ في الحصول على المنتج بالباركود: {str(e)}")
             return None
-    
-    # ===== إدارة الفئات =====
-    
-    def add_category(self, category: Category) -> Optional[int]:
+
+    def update_product(self, product: Product) -> bool:
+        """تحديث منتج مع تتبع تغيير المخزون"""
+        try:
+            old_product = self.product_manager.get_product_by_id(product.id)
+            if old_product is None:
+                self.logger.warning(f"المنتج {product.id} غير موجود")
+                return False
+            if self.product_manager.update_product(product):
+                if old_product and product.current_stock != old_product.current_stock:
+                    diff = product.current_stock - old_product.current_stock
+                    self._record_stock_movement(
+                        product_id=product.id,
+                        movement_type="in" if diff > 0 else "out",
+                        quantity=abs(diff),
+                        reference_type="adjustment",
+                        notes="تحديث المخزون عبر تحديث المنتج",
+                    )
+                return True
+            return False
+        except Exception as e:
+            self.logger.warning(f"خطأ في تحديث المنتج: {str(e)}")
+            return False
+
+    def delete_product(self, product_id: int, hard_delete: bool = False) -> bool:
+        """حذف منتج"""
+        try:
+            return self.product_manager.delete_product(product_id, hard_delete)
+        except Exception as e:
+            self.logger.warning(f"خطأ في حذف المنتج: {str(e)}")
+            return False
+
+    def transfer_stock(self, from_product_id: int, to_product_id: int, quantity: float) -> bool:
+        """نقل مخزون بين منتجين"""
+        try:
+            if from_product_id == to_product_id:
+                self.logger.warning("لا يمكن نقل المخزون لنفس المنتج")
+                return False
+            from_product = self.product_manager.get_product_by_id(from_product_id)
+            to_product = self.product_manager.get_product_by_id(to_product_id)
+            if not from_product or not to_product:
+                return False
+            if from_product.current_stock < quantity:
+                return False
+            if not self.product_manager.update_stock(from_product_id, int(from_product.current_stock - quantity)):
+                return False
+            if not self.product_manager.update_stock(to_product_id, int(to_product.current_stock + quantity)):
+                self.product_manager.update_stock(from_product_id, int(from_product.current_stock))
+                return False
+            self._record_stock_movement(
+                from_product_id,
+                "out",
+                quantity,
+                reference_type="transfer",
+                notes=f"تحويل إلى المنتج {to_product_id}",
+            )
+            self._record_stock_movement(
+                to_product_id,
+                "in",
+                quantity,
+                reference_type="transfer",
+                notes=f"تحويل من المنتج {from_product_id}",
+            )
+            return True
+        except Exception as e:
+            self.logger.warning(f"خطأ في نقل المخزون: {str(e)}")
+            return False
+
+    def add_category(self, category) -> Optional[int]:
         """إضافة فئة جديدة"""
         try:
-            category_id = self.category_manager.create_category(category)
-            if category_id and self.logger:
-                self.logger.info(f"تم إضافة فئة جديدة: {category.name} (ID: {category_id})")
-            return category_id
+            return self.category_manager.create_category(category)
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في إضافة الفئة: {str(e)}")
+            self.logger.warning(f"خطأ في إضافة الفئة: {str(e)}")
             return None
-    
+
     def get_category_tree(self) -> List[Dict[str, Any]]:
         """الحصول على شجرة الفئات"""
         try:
             return self.category_manager.get_category_tree()
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في الحصول على شجرة الفئات: {str(e)}")
+            self.logger.warning(f"خطأ في الحصول على شجرة الفئات: {str(e)}")
             return []
-    
-    # ===== إدارة المخزون =====
-    
-    def adjust_stock(self, product_id: int, new_quantity: float, 
-                    reason: str = "", user_id: Optional[int] = None,
-                    warehouse_id: Optional[int] = None) -> bool:
-        """تعديل كمية المخزون
-        
-        Args:
-            product_id: معرف المنتج
-            new_quantity: الكمية الجديدة
-            reason: سبب التعديل
-            user_id: معرف المستخدم
-            warehouse_id: معرف المستودع (اختياري - إذا كان None يستخدم المستودع الافتراضي)
-        """
+
+    # ===== إدارة المنتجات =====
+
+    def add_product(self, product: Product) -> Optional[int]:
+        """إضافة منتج جديد"""
         try:
-            # إذا كان Multi-Warehouse مفعل، استخدم WarehouseService
+            if product.barcode and self.product_manager.get_product_by_barcode(product.barcode):
+                self.logger.warning(f"الباركود {product.barcode} موجود بالفعل")
+                return None
+
+            product_id = self.product_manager.create_product(product)
+            if product_id and product.current_stock > 0:
+                self._record_stock_movement(
+                    product_id=product_id,
+                    movement_type="in",
+                    quantity=product.current_stock,
+                    reference_type="initial",
+                    notes="رصيد أولي",
+                )
+            return product_id
+        except Exception as e:
+            self.logger.warning(f"خطأ في إضافة المنتج: {str(e)}")
+            return None
+
+    def adjust_stock(
+        self,
+        product_id: int,
+        new_quantity: float,
+        reason: str = "",
+        user_id: Optional[int] = None,
+        warehouse_id: Optional[int] = None,
+    ) -> bool:
+        """تعديل كمية المخزون مع دعم المستودعات المتعددة"""
+        try:
             if self.is_multi_warehouse_enabled():
-                # إذا لم يتم تحديد مستودع، استخدم المستودع الافتراضي (Backward Compatibility)
                 if warehouse_id is None:
-                    default_warehouse = self.warehouse_service.get_default_warehouse()
-                    if default_warehouse:
-                        warehouse_id = default_warehouse.id
-                        if self.logger:
-                            self.logger.debug(f"استخدام المستودع الافتراضي: {default_warehouse.name} (ID: {warehouse_id})")
-                    else:
-                        # لا يوجد مستودع افتراضي، استخدم الطريقة القديمة
-                        if self.logger:
-                            self.logger.warning("لا يوجد مستودع افتراضي، استخدام الطريقة القديمة")
-                        warehouse_id = None
-                
+                    default_wh = self.warehouse_service.get_default_warehouse()
+                    warehouse_id = default_wh.id if default_wh else None
+
                 if warehouse_id is not None:
-                    # استخدام Multi-Warehouse
-                    product = self.product_manager.get_product_by_id(product_id)
-                    if not product:
-                        return False
-                    
-                    # الحصول على المخزون الحالي في المستودع
-                    inventory = self.warehouse_service.inventory_manager.get_inventory(
-                        warehouse_id, product_id
-                    )
-                    
-                    old_quantity = inventory.quantity if inventory else 0.0
-                    quantity_diff = new_quantity - old_quantity
-                    
-                    if self.logger:
-                        self.logger.debug(f"DEBUG ADJUST: new={new_quantity}, old={old_quantity}, diff={quantity_diff}, prod={product_id}")
-                    
-                    # تحديث المخزون في المستودع
-                    success = self.warehouse_service.adjust_stock(
-                        warehouse_id, product_id, quantity_diff
-                    )
-                    
-                    if success:
-                        # تسجيل حركة المخزون
-                        movement_type = "in" if quantity_diff > 0 else "out"
-                        warehouse_name = self.warehouse_service.get_warehouse(warehouse_id).name if warehouse_id else "غير محدد"
+                    inventory = self.warehouse_service.inventory_manager.get_inventory(warehouse_id, product_id)
+                    old_qty = inventory.quantity if inventory else 0.0
+                    diff = new_quantity - old_qty
+
+                    if self.warehouse_service.adjust_stock(warehouse_id, product_id, diff):
                         self._record_stock_movement(
                             product_id=product_id,
-                            movement_type=movement_type,
-                            quantity=abs(quantity_diff),
+                            movement_type="in" if diff > 0 else "out",
+                            quantity=abs(diff),
                             reference_type="adjustment",
-                            notes=f"تعديل المخزون (مستودع {warehouse_name}): {reason}",
-                            created_by=user_id
+                            notes=f"تعديل المخزون (مستودع {warehouse_id}): {reason}",
+                            created_by=user_id,
                         )
-                        
-                        # تحديث المخزون الإجمالي في products (للتوافق)
+                        # تحديث المخزون الإجمالي للتوافق
                         total_stock = self.warehouse_service.get_total_stock(product_id)
                         self.product_manager.update_stock(product_id, int(total_stock))
-                        
-                        if self.logger:
-                            self.logger.info(f"تم تعديل مخزون المنتج {product_id} في المستودع {warehouse_id}: {old_quantity} -> {new_quantity}")
-                    
-                    return success
-            else:
-                # الطريقة القديمة (Single Warehouse) - للتوافق مع الكود الحالي
-                product = self.product_manager.get_product_by_id(product_id)
-                if not product:
-                    return False
-                
-                old_quantity = product.current_stock
-                quantity_diff = new_quantity - old_quantity
-                
-                # تحديث الكمية النهائية المطلوبة
-                success = self.product_manager.update_stock(product_id, int(new_quantity))
-                if success:
-                    # تسجيل حركة المخزون
-                    movement_type = "in" if quantity_diff > 0 else "out"
-                    self._record_stock_movement(
-                        product_id=product_id,
-                        movement_type=movement_type,
-                        quantity=abs(quantity_diff),
-                        reference_type="adjustment",
-                        notes=f"تعديل المخزون: {reason}",
-                        created_by=user_id
-                    )
-                    
-                    if self.logger:
-                        self.logger.info(f"تم تعديل مخزون المنتج {product_id}: {old_quantity} -> {new_quantity}")
-                
-                return success
-            
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في تعديل مخزون المنتج {product_id}: {str(e)}")
-            return False
-    
-    def transfer_stock(self, from_product_id: int, to_product_id: int, 
-                      quantity: float, reason: str = "", user_id: Optional[int] = None) -> bool:
-        """نقل المخزون بين المنتجات"""
-        try:
-            # التحقق من وجود المنتجات
-            from_product = self.product_manager.get_product_by_id(from_product_id)
-            to_product = self.product_manager.get_product_by_id(to_product_id)
-            
-            if not from_product or not to_product:
+                        return True
+
+            # الحالة الافتراضية (Single Warehouse)
+            product = self.product_manager.get_product_by_id(product_id)
+            if not product:
                 return False
-            
-            if from_product_id == to_product_id:
-                if self.logger:
-                    self.logger.warning(f"محاولة نقل المخزون لنفس المنتج {from_product_id}")
-                return False
-            
-            # التحقق من توفر الكمية
-            if from_product.current_stock < quantity:
-                if self.logger:
-                    self.logger.warning(f"كمية غير كافية للنقل من المنتج {from_product_id}")
-                return False
-            
-            # تحديث المخزون
-            success1 = self.product_manager.update_stock(
-                from_product_id, int(from_product.current_stock - quantity)
-            )
-            success2 = self.product_manager.update_stock(
-                to_product_id, int(to_product.current_stock + quantity)
-            )
-            
-            if success1 and success2:
-                # تسجيل حركات المخزون
-                transfer_ref = int(datetime.now().timestamp())
-                
+
+            diff = new_quantity - product.current_stock
+            if self.product_manager.update_stock(product_id, int(new_quantity)):
                 self._record_stock_movement(
-                    product_id=from_product_id,
-                    movement_type="out",
-                    quantity=quantity,
-                    reference_id=transfer_ref,
-                    reference_type="transfer",
-                    notes=f"نقل إلى المنتج {to_product_id}: {reason}",
-                    created_by=user_id
+                    product_id=product_id,
+                    movement_type="in" if diff > 0 else "out",
+                    quantity=abs(diff),
+                    reference_type="adjustment",
+                    notes=f"تعديل المخزون: {reason}",
+                    created_by=user_id,
                 )
-                
-                self._record_stock_movement(
-                    product_id=to_product_id,
-                    movement_type="in",
-                    quantity=quantity,
-                    reference_id=transfer_ref,
-                    reference_type="transfer",
-                    notes=f"نقل من المنتج {from_product_id}: {reason}",
-                    created_by=user_id
-                )
-                
-                if self.logger:
-                    self.logger.info(f"تم نقل {quantity} من المنتج {from_product_id} إلى {to_product_id}")
-                
                 return True
-            
             return False
-            
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في نقل المخزون: {str(e)}")
+            self.logger.warning(f"خطأ في تعديل مخزون المنتج {product_id}: {str(e)}")
             return False
-    
-    def get_stock_movements(self, product_id: Optional[int] = None, 
-                           start_date: Optional[date] = None, 
-                           end_date: Optional[date] = None,
-                           limit: int = 100) -> List[StockMovement]:
-        """الحصول على حركات المخزون"""
+
+    def adjust_stock_relative(
+        self,
+        product_id: int,
+        diff: float,
+        reason: str = "",
+        user_id: Optional[int] = None,
+        warehouse_id: Optional[int] = None,
+    ) -> bool:
+        """تعديل المخزون بشكل نسبي (ذري)"""
         try:
-            # تحديد الأعمدة بشكل صريح لتجنب مشاكل الترتيب
+            if self.is_multi_warehouse_enabled():
+                if warehouse_id is None:
+                    default_wh = self.warehouse_service.get_default_warehouse()
+                    warehouse_id = default_wh.id if default_wh else None
+
+                if warehouse_id is not None:
+                    if self.warehouse_service.adjust_stock(warehouse_id, product_id, diff):
+                        self._record_stock_movement(
+                            product_id=product_id,
+                            movement_type="in" if diff > 0 else "out",
+                            quantity=abs(diff),
+                            reference_type="adjustment",
+                            notes=f"تعديل المخزون النسبي (مستودع {warehouse_id}): {reason}",
+                            created_by=user_id,
+                        )
+                        # تحديث المخزون الإجمالي للتوافق بشكل نسبي
+                        self.product_manager.adjust_stock_relative(product_id, diff)
+                        return True
+
+            # الحالة الافتراضية (Single Warehouse)
+            if self.product_manager.adjust_stock_relative(product_id, diff):
+                self._record_stock_movement(
+                    product_id=product_id,
+                    movement_type="in" if diff > 0 else "out",
+                    quantity=abs(diff),
+                    reference_type="adjustment",
+                    notes=f"تعديل المخزون النسبي: {reason}",
+                    created_by=user_id,
+                )
+                return True
+            return False
+        except Exception as e:
+            self.logger.warning(f"خطأ في التعديل النسبي للمخزون {product_id}: {str(e)}")
+            return False
+
+    def get_stock_movements(
+        self,
+        product_id: Optional[int] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+        limit: int = 100,
+    ) -> List[StockMovement]:
+        """الحصول على حركات المخزون بنمط Mapping مرن"""
+        try:
             query = """
-            SELECT 
-                sm.id,
-                sm.product_id,
-                sm.movement_type,
-                sm.quantity,
-                sm.reference_id,
-                sm.reference_type,
-                sm.notes,
-                sm.user_id as created_by,
-                sm.created_at,
-                p.name as product_name
+            SELECT sm.*, p.name as product_name
             FROM stock_movements sm
             LEFT JOIN products p ON sm.product_id = p.id
             WHERE 1=1
             """
             params = []
-            
             if product_id:
                 query += " AND sm.product_id = ?"
                 params.append(product_id)
-            
             if start_date:
                 query += " AND DATE(sm.created_at) >= ?"
                 params.append(start_date.isoformat())
-            
             if end_date:
                 query += " AND DATE(sm.created_at) <= ?"
                 params.append(end_date.isoformat())
-            
+
             query += " ORDER BY sm.created_at DESC LIMIT ?"
             params.append(limit)
-            
-            results = self.db_manager.fetch_all(query, params)
+
+            rows = self.db_manager.fetch_all(query, params)
             movements = []
-            
-            for row in results:
-                # الأعمدة: id, product_id, movement_type, quantity, reference_id, 
-                # reference_type, notes, created_by, created_at, product_name
-                # معالجة created_at بشكل صحيح
-                created_at_value = None
-                if row[8]:
-                    if isinstance(row[8], str):
-                        try:
-                            created_at_value = datetime.fromisoformat(row[8].replace('Z', '+00:00'))
-                        except (ValueError, AttributeError):
-                            try:
-                                created_at_value = datetime.strptime(row[8], "%Y-%m-%d %H:%M:%S")
-                            except (ValueError, AttributeError):
-                                created_at_value = None
-                    elif isinstance(row[8], datetime):
-                        created_at_value = row[8]
-                
-                movement = StockMovement(
-                    id=row[0] if row[0] else None,
-                    product_id=row[1] if row[1] else 0,
-                    movement_type=row[2] if row[2] else "",
-                    quantity=float(row[3]) if row[3] else 0.0,
-                    reference_id=row[4] if row[4] else None,
-                    reference_type=row[5] if row[5] else None,
-                    notes=row[6] if row[6] else None,
-                    created_by=row[7] if row[7] else None,
-                    created_at=created_at_value
+            for row in rows:
+                isinstance(row, dict)
+                movements.append(
+                    StockMovement(
+                        id=gv("id", 0),
+                        product_id=gv("product_id", 1, 0),
+                        movement_type=gv("movement_type", 2, ""),
+                        quantity=float(gv("quantity", 3, 0)),
+                        reference_id=gv("reference_id", 4),
+                        reference_type=gv("reference_type", 5),
+                        notes=gv("notes", 6),
+                        created_by=gv("user_id", 7),  # التوافق مع اسم العمود في DB
+                        created_at=self._parse_datetime(gv("created_at", 8)),
+                        product_name=gv("product_name", 9),
+                    )
                 )
-                # إضافة اسم المنتج كخاصية إضافية
-                if len(row) > 9 and row[9]:
-                    movement.product_name = row[9]
-                movements.append(movement)
-            
             return movements
-            
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في الحصول على حركات المخزون: {str(e)}")
+            self.logger.warning(f"خطأ في الحصول على حركات المخزون: {str(e)}")
             return []
-    
-    # ===== التنبيهات والتقارير =====
-    
+
     def get_stock_alerts(self) -> List[StockAlert]:
-        """الحصول على تنبيهات المخزون (محسّن للأداء)"""
+        """تنبيهات المخزون بنمط Mapping مرن"""
         try:
-            alerts = []
-            
-            # استخدام استعلام مباشر بدلاً من تحميل كل المنتجات
             query = """
             SELECT id, name, current_stock, min_stock
             FROM products
             WHERE is_active = 1 AND current_stock <= min_stock
-            ORDER BY current_stock ASC, name
-            LIMIT 100
+            ORDER BY current_stock ASC, name LIMIT 100
             """
-            
-            results = self.db_manager.fetch_all(query)
-            for row in results:
-                product_id, name, current_stock, min_stock = row
-                severity = "critical" if current_stock == 0 else "high"
-                alert_type = "out_of_stock" if current_stock == 0 else "low_stock"
-                
-                message = f"المنتج {name} "
-                if current_stock == 0:
-                    message += "نفد من المخزون"
-                else:
-                    message += f"مخزون منخفض ({current_stock} متبقي)"
-                
-                alert = StockAlert(
-                    product_id=product_id,
-                    product_name=name,
-                    current_stock=current_stock,
-                    minimum_stock=min_stock,
-                    alert_type=alert_type,
-                    severity=severity,
-                    message=message
+            rows = self.db_manager.fetch_all(query)
+            alerts = []
+            for row in rows:
+                pid = (
+                    gv(row, 0) if isinstance(row, (list, tuple)) else (row.get("id") if isinstance(row, dict) else None)
                 )
-                alerts.append(alert)
-            
-            # منتجات منتهية الصلاحية (إذا كانت متوفرة)
-            expired_products = self._get_expired_products()
-            for product in expired_products:
-                alert = StockAlert(
-                    product_id=product['id'],
-                    product_name=product['name'],
-                    current_stock=product['current_stock'],
-                    minimum_stock=product.get('minimum_stock', 0),
-                    alert_type="expired",
-                    severity="high",
-                    message=f"المنتج {product['name']} منتهي الصلاحية"
+                name_val = (
+                    gv(row, 1)
+                    if isinstance(row, (list, tuple))
+                    else (row.get("name") if isinstance(row, dict) else None)
                 )
-                alerts.append(alert)
-            
+                curr = float(gv(row, 2, 0) if isinstance(row, (list, tuple)) else row.get("current_stock", 0))
+                mins = float(gv(row, 3, 0) if isinstance(row, (list, tuple)) else row.get("min_stock", 0))
+
+                alerts.append(
+                    StockAlert(
+                        product_id=pid,
+                        product_name=name_val,
+                        current_stock=curr,
+                        minimum_stock=mins,
+                        alert_type="out_of_stock" if curr <= 0 else "low_stock",
+                        severity="critical" if curr <= 0 else "high",
+                        message=f"المنتج {name_val} {'نفد من المخزون' if curr <= 0 else f'مخزون منخفض ({curr})'}",
+                    )
+                )
             return alerts
-            
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في الحصول على تنبيهات المخزون: {str(e)}")
+            self.logger.warning(f"خطأ في تنبيهات المخزون: {str(e)}")
             return []
-    
+
     def generate_inventory_report(self, include_movements: bool = True) -> InventoryReport:
-        """إنشاء تقرير شامل للمخزون (محسّن للأداء)"""
+        """إنشاء تقرير شامل للمخزون"""
         try:
-            # استخدام استعلام واحد للحصول على معظم البيانات
             stock_report = self.product_manager.get_stock_report()
-            total_products = stock_report.get('total_products', 0)
-            total_stock_value = stock_report.get('total_stock_value', 0)
-            low_stock_count = stock_report.get('low_stock_products', 0)
-            
-            # عدد الفئات (استعلام بسيط)
-            total_categories_query = "SELECT COUNT(*) FROM categories"
-            total_categories_result = self.db_manager.fetch_one(total_categories_query)
-            total_categories = total_categories_result[0] if total_categories_result else 0
-            
-            # حساب المنتجات النافدة (استعلام محسّن)
-            out_of_stock_query = """
-            SELECT COUNT(*) 
-            FROM products 
-            WHERE is_active = 1 AND current_stock = 0
-            """
-            out_of_stock_result = self.db_manager.fetch_one(out_of_stock_query)
-            out_of_stock_count = out_of_stock_result[0] if out_of_stock_result else 0
-            
-            # المنتجات منتهية الصلاحية
-            expired_products = self._get_expired_products()
-            expired_count = len(expired_products)
-            
-            # أفضل المنتجات (حسب القيمة) - محمّل مسبقاً
-            top_products = self._get_top_products_by_value(limit=10)
-            
-            # حركات المخزون الأخيرة (فقط إذا طُلب)
-            stock_movements = []
-            if include_movements:
-                movements = self.get_stock_movements(limit=50)
-                stock_movements = [
-                    {
-                        'product_id': m.product_id,
-                        'movement_type': m.movement_type,
-                        'quantity': m.quantity,
-                        'reference_type': m.reference_type,
-                        'notes': m.notes,
-                        'created_at': m.created_at.isoformat() if m.created_at else None
-                    }
-                    for m in movements
-                ]
-            
-            # التنبيهات (محسّنة - لا تحتاج تحميل كل المنتجات)
-            alerts = self.get_stock_alerts()
-            
+
+            # إحصائيات إضافية
+            cat_count = self.db_manager.fetch_one("SELECT COUNT(*) FROM categories")[0]
+            out_count = self.db_manager.fetch_one(
+                "SELECT COUNT(*) FROM products WHERE is_active=1 AND current_stock<=0"
+            )[0]
+
             report = InventoryReport(
-                total_products=total_products,
-                total_categories=total_categories,
-                total_stock_value=total_stock_value,
-                low_stock_items=low_stock_count,
-                out_of_stock_items=out_of_stock_count,
-                expired_items=expired_count,
-                top_products=top_products,
-                stock_movements=stock_movements,
-                alerts=alerts
+                total_products=stock_report.get("total_products", 0),
+                total_categories=cat_count,
+                total_stock_value=stock_report.get("total_stock_value", 0.0),
+                low_stock_items=stock_report.get("low_stock_products", 0),
+                out_of_stock_items=out_count,
+                expired_items=0,  # قيد التطوير
+                top_products=self._get_top_products_by_value(limit=10),
+                stock_movements=([m.__dict__ for m in self.get_stock_movements(limit=50)] if include_movements else []),
+                alerts=self.get_stock_alerts(),
             )
-            
             return report
-            
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في إنشاء تقرير المخزون: {str(e)}")
-            return InventoryReport(
-                total_products=0, total_categories=0, total_stock_value=0,
-                low_stock_items=0, out_of_stock_items=0, expired_items=0,
-                top_products=[], stock_movements=[], alerts=[]
-            )
-    
-    # ===== الدوال المساعدة =====
-    
-    def _record_stock_movement(self, product_id: int, movement_type: str, quantity: float,
-                              reference_id: Optional[int] = None, reference_type: Optional[str] = None,
-                              notes: Optional[str] = None, created_by: Optional[int] = None):
-        """تسجيل حركة مخزون"""
+            self.logger.warning(f"خطأ في تقرير المخزون: {str(e)}")
+            return InventoryReport(0, 0, 0, 0, 0, 0, [], [], [])
+
+    def _get_expired_products(self) -> List[Product]:
+        """الحصول على المنتجات المنتهية الصلاحية"""
+        return []
+
+    def _record_stock_movement(
+        self,
+        product_id: int,
+        movement_type: str,
+        quantity: float,
+        reference_id: Optional[int] = None,
+        reference_type: Optional[str] = None,
+        notes: Optional[str] = None,
+        created_by: Optional[int] = None,
+    ):
+        """تسجيل حركة مخزون باستخدام execute_insert لضمان التوافق"""
         try:
             query = """
             INSERT INTO stock_movements (
-                product_id, movement_type, quantity, reference_id, 
-                reference_type, notes, user_id, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """
-            
-            params = (
                 product_id, movement_type, quantity, reference_id,
-                reference_type, notes, created_by, datetime.now()
+                reference_type, notes, user_id, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """
+            params = (
+                product_id,
+                movement_type,
+                quantity,
+                reference_id,
+                reference_type,
+                notes,
+                created_by,
             )
-            
-            self.db_manager.execute_query(query, params)
-            
+            self.db_manager.execute_insert(query, params)
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في تسجيل حركة المخزون: {str(e)}")
-    
-    def _get_expired_products(self) -> List[Dict[str, Any]]:
-        """الحصول على المنتجات منتهية الصلاحية"""
-        try:
-            # هذا يتطلب جدول batches أو حقل expiry_date في products
-            # سنعيد قائمة فارغة حالياً
-            return []
-            
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في الحصول على المنتجات منتهية الصلاحية: {str(e)}")
-            return []
-    
+            self.logger.warning(f"خطأ في تسجيل حركة المخزون: {str(e)}")
+
     def _get_top_products_by_value(self, limit: int = 10) -> List[Dict[str, Any]]:
-        """الحصول على أفضل المنتجات حسب القيمة"""
+        """أفضل المنتجات حسب القيمة مع Mapping مرن"""
         try:
             query = """
-            SELECT id, name, current_stock, selling_price,
-                   (current_stock * selling_price) as stock_value
-            FROM products
-            WHERE is_active = 1 AND current_stock > 0
-            ORDER BY stock_value DESC
-            LIMIT ?
+            SELECT id, name, current_stock, selling_price, (current_stock * selling_price) as stock_value
+            FROM products WHERE is_active = 1 AND current_stock > 0
+            ORDER BY stock_value DESC LIMIT ?
             """
-            
-            results = self.db_manager.fetch_all(query, (limit,))
-            
-            return [
-                {
-                    'id': row[0],
-                    'name': row[1],
-                    'current_stock': row[2],
-                    'selling_price': row[3],
-                    'stock_value': row[4]
-                }
-                for row in results
-            ]
-            
+            rows = self.db_manager.fetch_all(query, (limit,))
+            results = []
+            for row in rows:
+                isinstance(row, dict)
+                results.append(
+                    {
+                        "id": gv("id", 0),
+                        "name": gv("name", 1),
+                        "current_stock": gv("current_stock", 2),
+                        "selling_price": gv("selling_price", 3),
+                        "stock_value": gv("stock_value", 4),
+                    }
+                )
+            return results
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في الحصول على أفضل المنتجات: {str(e)}")
+            self.logger.warning(f"خطأ في جلب أفضل المنتجات: {str(e)}")
             return []

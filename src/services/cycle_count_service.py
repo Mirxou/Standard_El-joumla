@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -34,25 +34,25 @@ class CycleCountService:
 
     Tables expected (from migration 012):
       - cycle_count_plans(id, name, frequency, strategy, locations, start_date, enabled, created_at, updated_at)
-      - cycle_count_sessions(id, plan_id, location_id, started_at, closed_at, counted_by, status, accuracy, variance_qty, variance_value)
-      - cycle_count_items(id, session_id, product_id, location_id, expected_qty, counted_qty, variance_qty, unit_cost, variance_value, reason_id, notes)
+      - cycle_count_sessions(id, plan_id, location_id, started_at, closed_at, counted_by, status, accuracy, variance_qty, variance_value)  # noqa: E501
+      - cycle_count_items(id, session_id, product_id, location_id, expected_qty, counted_qty, variance_qty, unit_cost, variance_value, reason_id, notes)  # noqa: E501
       - variance_reasons(id, code, name, description, is_active)
     """
 
     def __init__(self, db_path: str = None, db_manager: Any = None) -> None:
         self.db_manager = db_manager
         if db_manager is not None:
-            self.db_path = getattr(db_manager, 'db_path', db_path)
+            self.db_path = getattr(db_manager, "db_path", db_path)
         else:
             self.db_path = db_path
 
     def _conn(self) -> sqlite3.Connection:
         if self.db_manager is not None:
-            if hasattr(self.db_manager, 'connection') and self.db_manager.connection:
+            if hasattr(self.db_manager, "connection") and self.db_manager.connection:
                 return self.db_manager.connection
-            if hasattr(self.db_manager, 'create_thread_connection'):
+            if hasattr(self.db_manager, "create_thread_connection"):
                 return self.db_manager.create_thread_connection()
-            if hasattr(self.db_manager, 'initialize'):
+            if hasattr(self.db_manager, "initialize"):
                 self.db_manager.initialize()
                 return self.db_manager.connection
 
@@ -77,7 +77,7 @@ class CycleCountService:
         with self._conn() as cx:
             cur = cx.execute(
                 """
-                INSERT INTO cycle_count_plans(name, frequency, strategy, locations, start_date, enabled, created_at, updated_at)
+                INSERT INTO cycle_count_plans(name, frequency, strategy, locations, start_date, enabled, created_at, updated_at)  # noqa: E501
                 VALUES(?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
                 """,
                 (name, frequency, strategy, locations, start_date, 1 if enabled else 0),
@@ -118,7 +118,12 @@ class CycleCountService:
                 INSERT INTO cycle_count_sessions(plan_id, location_id, started_at, counted_by, status)
                 VALUES(?,?,?,?, 'open')
                 """,
-                (plan_id, location_id, datetime.now(timezone.utc).isoformat(timespec="seconds"), counted_by),
+                (
+                    plan_id,
+                    location_id,
+                    datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    counted_by,
+                ),
             )
             return int(cur.lastrowid)
 
@@ -193,9 +198,13 @@ class CycleCountService:
 
             return {
                 "session": dict(sess) if sess else None,
-                "items": int(totals["items"]) if totals and totals["items"] is not None else 0,
-                "variance_qty": float(totals["variance_qty"]) if totals and totals["variance_qty"] is not None else 0.0,
-                "variance_value": float(totals["variance_value"]) if totals and totals["variance_value"] is not None else 0.0,
+                "items": (int(totals["items"]) if totals and totals["items"] is not None else 0),
+                "variance_qty": (
+                    float(totals["variance_qty"]) if totals and totals["variance_qty"] is not None else 0.0
+                ),
+                "variance_value": (
+                    float(totals["variance_value"]) if totals and totals["variance_value"] is not None else 0.0
+                ),
             }
 
     def get_dashboard_summary(self) -> Dict[str, Any]:
@@ -203,16 +212,13 @@ class CycleCountService:
             open_sessions = cx.execute(
                 "SELECT COUNT(*) AS c FROM cycle_count_sessions WHERE status = 'open'"
             ).fetchone()["c"]
-            recent_closed = cx.execute(
-                """
+            recent_closed = cx.execute("""
                 SELECT COUNT(*) AS c
                 FROM cycle_count_sessions
                 WHERE status = 'closed' AND closed_at >= datetime('now', '-7 days')
-                """
-            ).fetchone()["c"]
+                """).fetchone()["c"]
 
-            totals = cx.execute(
-                """
+            totals = cx.execute("""
                 SELECT
                     SUM(COALESCE(variance_qty, 0)) AS variance_qty,
                     SUM(COALESCE(variance_value, 0)) AS variance_value
@@ -222,20 +228,22 @@ class CycleCountService:
                         (COALESCE(counted_qty,0) - COALESCE(expected_qty,0)) * COALESCE(unit_cost,0) AS variance_value
                     FROM cycle_count_items
                 )
-                """
-            ).fetchone()
+                """).fetchone()
 
             return {
                 "open_sessions": int(open_sessions),
                 "recent_closed": int(recent_closed),
-                "variance_qty": float(totals["variance_qty"]) if totals and totals["variance_qty"] is not None else 0.0,
-                "variance_value": float(totals["variance_value"]) if totals and totals["variance_value"] is not None else 0.0,
+                "variance_qty": (
+                    float(totals["variance_qty"]) if totals and totals["variance_qty"] is not None else 0.0
+                ),
+                "variance_value": (
+                    float(totals["variance_value"]) if totals and totals["variance_value"] is not None else 0.0
+                ),
             }
 
     # Listings
     def list_sessions(self, limit: int = 200) -> List[Dict[str, Any]]:
-        sql = (
-            """
+        sql = """
             SELECT s.id,
                    s.plan_id,
                    p.name AS plan_name,
@@ -251,7 +259,6 @@ class CycleCountService:
             ORDER BY s.id DESC
             LIMIT ?
             """
-        )
         with self._conn() as cx:
             rows = cx.execute(sql, (limit,)).fetchall()
             return [dict(r) for r in rows]

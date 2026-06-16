@@ -4,12 +4,12 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.core.database_manager import DatabaseManager
+from src.core.local_database_manager import LocalDatabaseManager
 
 def main():
     print("Starting Database Migration...")
     try:
-        db = DatabaseManager()
+        db = LocalDatabaseManager()
         print(f"Database path: {db.db_path}")
         
         # Initialize triggers check_and_migrate_db because we added the hook

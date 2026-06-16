@@ -6,99 +6,90 @@ Database Backend Interface
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, List, Dict, Any, Tuple
 from contextlib import contextmanager
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class DatabaseBackend(ABC):
     """Interface لـ database backends"""
-    
+
     @abstractmethod
     def connect(self) -> bool:
         """
         إنشاء الاتصال بقاعدة البيانات
-        
+
         Returns:
             bool: True إذا نجح الاتصال، False خلاف ذلك
         """
-        pass
-    
+
     @abstractmethod
     def disconnect(self) -> None:
         """إغلاق الاتصال بقاعدة البيانات"""
-        pass
-    
+
     @abstractmethod
     def execute_query(self, query: str, params: Tuple = ()) -> List[Dict[str, Any]]:
         """
         تنفيذ SELECT query وإرجاع النتائج كقائمة من dictionaries
-        
+
         Args:
             query: SQL query string
             params: Query parameters tuple
-            
+
         Returns:
             List[Dict[str, Any]]: قائمة النتائج
         """
-        pass
-    
+
     @abstractmethod
     def execute_insert(self, query: str, params: Tuple = ()) -> Optional[int]:
         """
         تنفيذ INSERT query وإرجاع last_insert_id
-        
+
         Args:
             query: SQL query string
             params: Query parameters tuple
-            
+
         Returns:
             Optional[int]: last_insert_id أو None إذا فشل
         """
-        pass
-    
+
     @abstractmethod
     def execute_update(self, query: str, params: Tuple = ()) -> int:
         """
         تنفيذ UPDATE/DELETE query وإرجاع عدد الصفوف المتأثرة
-        
+
         Args:
             query: SQL query string
             params: Query parameters tuple
-            
+
         Returns:
             int: عدد الصفوف المتأثرة
         """
-        pass
-    
+
     @abstractmethod
     def execute_scalar(self, query: str, params: Tuple = ()) -> Any:
         """
         تنفيذ query وإرجاع قيمة واحدة
-        
+
         Args:
             query: SQL query string
             params: Query parameters tuple
-            
+
         Returns:
             Any: القيمة الأولى من النتيجة
         """
-        pass
-    
+
     @abstractmethod
     def begin_transaction(self) -> None:
         """بدء transaction"""
-        pass
-    
+
     @abstractmethod
     def commit(self) -> None:
         """Commit transaction"""
-        pass
-    
+
     @abstractmethod
     def rollback(self) -> None:
         """Rollback transaction"""
-        pass
-    
+
     @contextmanager
     @abstractmethod
     def transaction(self):
@@ -109,34 +100,29 @@ class DatabaseBackend(ABC):
                 backend.execute_insert(...)
                 backend.execute_update(...)
         """
-        pass
-    
+
     @abstractmethod
     def table_exists(self, table_name: str) -> bool:
         """
         التحقق من وجود جدول
-        
+
         Args:
             table_name: اسم الجدول
-            
+
         Returns:
             bool: True إذا كان الجدول موجوداً
         """
-        pass
-    
+
     @abstractmethod
     def get_last_insert_id(self) -> int:
         """
         الحصول على آخر ID تم إدراجه
-        
+
         Returns:
             int: last_insert_id
         """
-        pass
-    
+
     @property
     @abstractmethod
     def is_connected(self) -> bool:
         """التحقق من حالة الاتصال"""
-        pass
-

@@ -9,7 +9,6 @@ from .action_delegate import ActionDelegate
 from .modern_action_delegate import ModernActionDelegate
 
 __all__ = [
-    'ActionDelegate',
-    'ModernActionDelegate',
+    "ActionDelegate",
+    "ModernActionDelegate",
 ]
-

@@ -5,7 +5,6 @@
 import subprocess
 import sys
 import os
-import re
 import ast
 from pathlib import Path
 
@@ -30,7 +29,7 @@ def fix_pyqt5_imports(filepath):
         # إضافة معالجة الأخطاء
         lines = content.split('\n')
         new_lines = []
-        in_import_section = False
+        in_import_section = False  # noqa: F841
         import_end_idx = 0
         
         for i, line in enumerate(lines):

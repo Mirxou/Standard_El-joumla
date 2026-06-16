@@ -12,19 +12,18 @@
     python db_manager.py restore [path]
 
 أو استخدم متغير البيئة:
-    DB_PATH=data/logical_release.db python db_manager.py checkIntegrity
+    DB_PATH=data/standard_eljoumla.db python db_manager.py checkIntegrity
 """
 
 import sys
 import os
-import sqlite3
 import shutil
 from pathlib import Path
 from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.core.database_manager import DatabaseManager
+from src.core.local_database_manager import LocalDatabaseManager
 
 
 def get_db_path():
@@ -45,7 +44,7 @@ def get_db_path():
     
     # Default paths
     default_paths = [
-        Path(__file__).parent.parent / "data" / "logical_release.db",
+        Path(__file__).parent.parent / "data" / "standard_eljoumla.db",
         Path(__file__).parent.parent / "data" / "database.db",
         Path(__file__).parent.parent / "erp_system.db",
     ]
@@ -66,7 +65,7 @@ def check_integrity(db_path):
     print(f"🔍 فحص سلامة قاعدة البيانات: {db_path}")
     
     try:
-        db_manager = DatabaseManager(db_path)
+        db_manager = LocalDatabaseManager(db_path)
         db_manager.initialize()
         cursor = db_manager.connection.cursor()
         
@@ -96,7 +95,7 @@ def fix_integrity(db_path):
     print(f"🔧 إصلاح قاعدة البيانات: {db_path}")
     
     try:
-        db_manager = DatabaseManager(db_path)
+        db_manager = LocalDatabaseManager(db_path)
         db_manager.initialize()
         cursor = db_manager.connection.cursor()
         
@@ -128,7 +127,7 @@ def vacuum_db(db_path):
     original_size = os.path.getsize(db_path)
     
     try:
-        db_manager = DatabaseManager(db_path)
+        db_manager = LocalDatabaseManager(db_path)
         db_manager.initialize()
         cursor = db_manager.connection.cursor()
         cursor.execute("VACUUM")

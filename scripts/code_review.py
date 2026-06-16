@@ -8,7 +8,7 @@ Code Review Script
 import re
 import sys
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict
 
 
 def review_code(file_path: str) -> List[str]:

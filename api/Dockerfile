@@ -3,7 +3,17 @@ FROM python:3.12-slim-bullseye
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends gcc build-essential \
+    && apt-get install -y --no-install-recommends \
+       gcc \
+       build-essential \
+       python3-dev \
+       libpangocairo-1.0-0 \
+       libpango-1.0-0 \
+       libharfbuzz0b \
+       libpangoft2-1.0-0 \
+       libffi-dev \
+       libjpeg-dev \
+       libopenjp2-7-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements-prod.txt .

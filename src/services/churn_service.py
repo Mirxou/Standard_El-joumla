@@ -1,3 +1,4 @@
+import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -6,15 +7,16 @@ Churn Prediction Service
 Uses machine learning to predict customer churn.
 """
 
-import pandas as pd
-import numpy as np
 from datetime import datetime, timedelta
-import joblib
 from pathlib import Path
 
-from sklearn.model_selection import train_test_split
+import joblib
+import numpy as np
+import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
+from sklearn.model_selection import train_test_split
+
 
 class ChurnPredictionService:
     def __init__(self, db_manager, logger=None):
@@ -45,28 +47,35 @@ class ChurnPredictionService:
         if not sales_data:
             return pd.DataFrame()
 
-        df = pd.DataFrame(sales_data, columns=['customer_id', 'sale_date', 'amount'])
-        df['sale_date'] = pd.to_datetime(df['sale_date'])
-        
-        snapshot_date = df['sale_date'].max() + timedelta(days=1)
-        
+        df = pd.DataFrame(sales_data, columns=["customer_id", "sale_date", "amount"])
+        df["sale_date"] = pd.to_datetime(df["sale_date"])
+
+        snapshot_date = df["sale_date"].max() + timedelta(days=1)
+
         # Calculate RFM features
-        rfm = df.groupby('customer_id').agg({
-            'sale_date': lambda date: (snapshot_date - date.max()).days,
-            'customer_id': 'count',
-            'amount': 'sum'
-        })
-        rfm.rename(columns={'sale_date': 'Recency', 
-                               'customer_id': 'Frequency', 
-                               'amount': 'MonetaryValue'}, inplace=True)
-        
+        rfm = df.groupby("customer_id").agg(
+            {
+                "sale_date": lambda date: (snapshot_date - date.max()).days,
+                "customer_id": "count",
+                "amount": "sum",
+            }
+        )
+        rfm.rename(
+            columns={
+                "sale_date": "Recency",
+                "customer_id": "Frequency",
+                "amount": "MonetaryValue",
+            },
+            inplace=True,
+        )
+
         return rfm
 
     def train_model(self):
         """Trains the churn prediction model and saves it."""
         if self.logger:
             self.logger.info("Starting churn model training...")
-        
+
         rfm_df = self._get_feature_data()
         if rfm_df.empty:
             if self.logger:
@@ -74,10 +83,10 @@ class ChurnPredictionService:
             return False, "No data"
 
         # Define churn: inactive for more than 90 days (high recency score)
-        rfm_df['Churn'] = (rfm_df['Recency'] > 90).astype(int)
-        
-        X = rfm_df[['Recency', 'Frequency', 'MonetaryValue']]
-        y = rfm_df['Churn']
+        rfm_df["Churn"] = (rfm_df["Recency"] > 90).astype(int)
+
+        X = rfm_df[["Recency", "Frequency", "MonetaryValue"]]
+        y = rfm_df["Churn"]
 
         if len(y.unique()) < 2:
             if self.logger:
@@ -112,31 +121,30 @@ class ChurnPredictionService:
         """Predicts churn probability for a single customer."""
         if not self.model:
             return None, "Model not trained"
-            
+
         try:
             # Get features for the specific customer
             query = "SELECT sale_date, final_amount FROM sales WHERE customer_id = ? AND status = 'confirmed'"
             sales = self.db_manager.fetch_all(query, (customer_id,))
             if not sales:
-                return 0.0, "No sales history" # No history, low risk
+                return 0.0, "No sales history"  # No history, low risk
 
-            df = pd.DataFrame(sales, columns=['sale_date', 'amount'])
-            df['sale_date'] = pd.to_datetime(df['sale_date'])
-            
+            df = pd.DataFrame(sales, columns=["sale_date", "amount"])
+            df["sale_date"] = pd.to_datetime(df["sale_date"])
+
             snapshot_date = datetime.now()
-            
-            recency = (snapshot_date - df['sale_date'].max()).days
+
+            recency = (snapshot_date - df["sale_date"].max()).days
             frequency = len(df)
-            monetary = df['amount'].sum()
+            monetary = df["amount"].sum()
 
             features = np.array([recency, frequency, monetary]).reshape(1, -1)
-            
+
             # Predict probability [prob_not_churn, prob_churn]
             churn_probability = self.model.predict_proba(features)[0][1]
-            
+
             return churn_probability, "Success"
         except Exception as e:
             if self.logger:
                 self.logger.error(f"Failed to predict churn for customer {customer_id}: {e}")
             return None, str(e)
-

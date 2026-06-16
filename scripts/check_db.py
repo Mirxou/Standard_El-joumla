@@ -4,7 +4,7 @@
 فحص قاعدة البيانات - Check Database Tables
 
 الاستخدام: python check_db.py [database_path]
-           أو يستخدم المسار الافتراضي: data/logical_release.db
+           أو يستخدم المسار الافتراضي: data/standard_eljoumla.db
 """
 
 import sys
@@ -15,7 +15,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.core.database_manager import DatabaseManager
+from src.core.local_database_manager import LocalDatabaseManager
 
 # تحديد مسار قاعدة البيانات
 def get_db_path():
@@ -30,7 +30,7 @@ def get_db_path():
     
     # المسارات الافتراضية
     default_paths = [
-        Path(__file__).parent.parent / "data" / "logical_release.db",
+        Path(__file__).parent.parent / "data" / "standard_eljoumla.db",
         Path(__file__).parent.parent / "data" / "database.db",
         Path(__file__).parent.parent / "erp_system.db",
     ]
@@ -55,7 +55,7 @@ if not os.path.exists(db_path):
 
 print(f"📂 الاتصال بقاعدة البيانات: {db_path}\n")
 
-db_manager = DatabaseManager(db_path)
+db_manager = LocalDatabaseManager(db_path)
 db_manager.initialize()
 cursor = db_manager.connection.cursor()
 

@@ -4,11 +4,10 @@
 نظام توصيات متقدم يقترح المنتجات والإجراءات المناسبة
 """
 
+import random  # nosec B311
+from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional, Tuple
-from collections import defaultdict, Counter
-import random
-import math
+from typing import Any, Dict, List
 
 
 class RecommendationEngine:
@@ -20,18 +19,29 @@ class RecommendationEngine:
         self.product_similarity = {}
         self.purchase_history = defaultdict(list)
 
-    def generate_comprehensive_recommendations(self, performance: Dict, anomalies: Dict, context: Dict) -> Dict[str, Any]:
+    def generate_comprehensive_recommendations(
+        self, performance: Dict, anomalies: Dict, context: Dict
+    ) -> Dict[str, Any]:
         """توليد توصيات شاملة"""
         return {
             "recommendations": [
-                {"type": "business", "priority": "high", "title": "تحسين الأداء", "description": "بناءً على التحليل"},
-                {"type": "inventory", "priority": "medium", "title": "تعديل المخزون", "description": "بناءً على الشذوذ"}
+                {
+                    "type": "business",
+                    "priority": "high",
+                    "title": "تحسين الأداء",
+                    "description": "بناءً على التحليل",
+                },
+                {
+                    "type": "inventory",
+                    "priority": "medium",
+                    "title": "تعديل المخزون",
+                    "description": "بناءً على الشذوذ",
+                },
             ],
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
     def get_product_recommendations(self, user_id: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
-
         """الحصول على توصيات المنتجات"""
         context = context or {}
 
@@ -46,7 +56,7 @@ class RecommendationEngine:
             "trending": trending_products[:5],
             "complementary": self._get_complementary_products(user_history),
             "seasonal": self._get_seasonal_recommendations(),
-            "contextual": self._contextual_recommendations(context)
+            "contextual": self._contextual_recommendations(context),
         }
 
         # ترتيب التوصيات
@@ -57,7 +67,7 @@ class RecommendationEngine:
             "recommendations": ranked_recommendations,
             "explanations": self._generate_explanations(ranked_recommendations),
             "diversity_score": self._calculate_diversity_score(ranked_recommendations),
-            "confidence": self._calculate_recommendation_confidence(ranked_recommendations)
+            "confidence": self._calculate_recommendation_confidence(ranked_recommendations),
         }
 
     def get_action_recommendations(self, user_role: str, current_context: Dict[str, Any]) -> Dict[str, Any]:
@@ -71,7 +81,7 @@ class RecommendationEngine:
             "context": current_context,
             "recommended_actions": priority_actions[:10],
             "urgency_levels": self._categorize_action_urgency(priority_actions),
-            "expected_impact": self._estimate_action_impact(priority_actions)
+            "expected_impact": self._estimate_action_impact(priority_actions),
         }
 
     def get_business_insights(self) -> Dict[str, Any]:
@@ -80,14 +90,14 @@ class RecommendationEngine:
             "sales_opportunities": self._identify_sales_opportunities(),
             "efficiency_improvements": self._suggest_efficiency_improvements(),
             "risk_mitigation": self._recommend_risk_mitigation(),
-            "growth_strategies": self._propose_growth_strategies()
+            "growth_strategies": self._propose_growth_strategies(),
         }
 
         return {
             "insights": insights,
             "priority_order": self._prioritize_insights(insights),
             "implementation_roadmap": self._create_implementation_roadmap(insights),
-            "expected_roi": self._estimate_insights_roi(insights)
+            "expected_roi": self._estimate_insights_roi(insights),
         }
 
     def _get_user_purchase_history(self, user_id: str) -> List[Dict[str, Any]]:
@@ -95,7 +105,15 @@ class RecommendationEngine:
         # محاكاة بيانات المستخدم
         if user_id not in self.purchase_history:
             # إنشاء تاريخ شراء وهمي
-            products = ["laptop", "phone", "tablet", "headphones", "charger", "case", "screen_protector"]
+            products = [
+                "laptop",
+                "phone",
+                "tablet",
+                "headphones",
+                "charger",
+                "case",
+                "screen_protector",
+            ]
             history = []
 
             for i in range(random.randint(3, 15)):
@@ -104,7 +122,7 @@ class RecommendationEngine:
                     "category": "electronics",
                     "price": random.uniform(50, 1000),
                     "date": (datetime.now() - timedelta(days=random.randint(1, 365))).isoformat(),
-                    "rating": random.randint(3, 5)
+                    "rating": random.randint(3, 5),
                 }
                 history.append(purchase)
 
@@ -122,11 +140,15 @@ class RecommendationEngine:
     def _get_trending_products(self) -> List[Dict[str, Any]]:
         """الحصول على المنتجات الرائجة"""
         trending = [
-            {"product": "wireless_headphones", "trend_score": 0.9, "category": "electronics"},
+            {
+                "product": "wireless_headphones",
+                "trend_score": 0.9,
+                "category": "electronics",
+            },
             {"product": "smart_watch", "trend_score": 0.8, "category": "electronics"},
             {"product": "gaming_mouse", "trend_score": 0.7, "category": "gaming"},
             {"product": "bluetooth_speaker", "trend_score": 0.6, "category": "audio"},
-            {"product": "phone_case", "trend_score": 0.5, "category": "accessories"}
+            {"product": "phone_case", "trend_score": 0.5, "category": "accessories"},
         ]
         return trending
 
@@ -146,12 +168,14 @@ class RecommendationEngine:
         new_products = similar_products - user_products
 
         for product in list(new_products)[:5]:
-            recommendations.append({
-                "product": product,
-                "method": "collaborative_filtering",
-                "confidence": random.uniform(0.6, 0.9),
-                "reason": "مستخدمون مشابهون اشتروا هذا المنتج"
-            })
+            recommendations.append(
+                {
+                    "product": product,
+                    "method": "collaborative_filtering",
+                    "confidence": random.uniform(0.6, 0.9),
+                    "reason": "مستخدمون مشابهون اشتروا هذا المنتج",
+                }
+            )
 
         return recommendations
 
@@ -161,7 +185,7 @@ class RecommendationEngine:
             "laptop": ["charger", "case", "mouse"],
             "phone": ["case", "screen_protector", "charger"],
             "tablet": ["case", "stylus", "keyboard"],
-            "headphones": ["charger", "case"]
+            "headphones": ["charger", "case"],
         }
 
         user_products = {p["product"] for p in user_history}
@@ -171,12 +195,14 @@ class RecommendationEngine:
             if product in complementary_map:
                 for complement in complementary_map[product]:
                     if complement not in user_products:
-                        complements.append({
-                            "product": complement,
-                            "method": "complementary",
-                            "confidence": 0.8,
-                            "reason": f"منتج تكميلي لـ {product}"
-                        })
+                        complements.append(
+                            {
+                                "product": complement,
+                                "method": "complementary",
+                                "confidence": 0.8,
+                                "reason": f"منتج تكميلي لـ {product}",
+                            }
+                        )
 
         return complements[:3]
 
@@ -186,51 +212,60 @@ class RecommendationEngine:
 
         seasonal_products = {
             1: ["winter_clothing", "heating_devices"],  # يناير
-            2: ["valentine_gifts", "romantic_items"],   # فبراير
-            3: ["spring_cleaning", "gardening"],        # مارس
-            4: ["easter_decorations", "outdoor"],       # أبريل
-            9: ["back_to_school", "stationery"],        # سبتمبر
-            10: ["halloween_costumes", "pumpkins"],     # أكتوبر
-            11: ["thanksgiving_decor", "cooking"],      # نوفمبر
-            12: ["christmas_decor", "holiday_gifts"]    # ديسمبر
+            2: ["valentine_gifts", "romantic_items"],  # فبراير
+            3: ["spring_cleaning", "gardening"],  # مارس
+            4: ["easter_decorations", "outdoor"],  # أبريل
+            9: ["back_to_school", "stationery"],  # سبتمبر
+            10: ["halloween_costumes", "pumpkins"],  # أكتوبر
+            11: ["thanksgiving_decor", "cooking"],  # نوفمبر
+            12: ["christmas_decor", "holiday_gifts"],  # ديسمبر
         }
 
         products = seasonal_products.get(current_month, ["general_items"])
 
-        return [{
-            "product": product,
-            "method": "seasonal",
-            "confidence": 0.7,
-            "reason": "منتج موسمي شائع"
-        } for product in products[:3]]
+        return [
+            {
+                "product": product,
+                "method": "seasonal",
+                "confidence": 0.7,
+                "reason": "منتج موسمي شائع",
+            }
+            for product in products[:3]
+        ]
 
     def _contextual_recommendations(self, context: Dict[str, Any]) -> List[Dict[str, Any]]:
         """توصيات سياقية"""
         recommendations = []
 
         if context.get("time_of_day") == "morning":
-            recommendations.append({
-                "product": "coffee_maker",
-                "method": "contextual",
-                "confidence": 0.6,
-                "reason": "منتج مناسب للصباح"
-            })
+            recommendations.append(
+                {
+                    "product": "coffee_maker",
+                    "method": "contextual",
+                    "confidence": 0.6,
+                    "reason": "منتج مناسب للصباح",
+                }
+            )
 
         if context.get("weather") == "rainy":
-            recommendations.append({
-                "product": "umbrella",
-                "method": "contextual",
-                "confidence": 0.8,
-                "reason": "مناسب للطقس الممطر"
-            })
+            recommendations.append(
+                {
+                    "product": "umbrella",
+                    "method": "contextual",
+                    "confidence": 0.8,
+                    "reason": "مناسب للطقس الممطر",
+                }
+            )
 
         if context.get("location") == "office":
-            recommendations.append({
-                "product": "office_supplies",
-                "method": "contextual",
-                "confidence": 0.7,
-                "reason": "مناسب للبيئة المكتبية"
-            })
+            recommendations.append(
+                {
+                    "product": "office_supplies",
+                    "method": "contextual",
+                    "confidence": 0.7,
+                    "reason": "مناسب للبيئة المكتبية",
+                }
+            )
 
         return recommendations
 
@@ -245,9 +280,11 @@ class RecommendationEngine:
                 all_recommendations.append(rec)
 
         # ترتيب حسب الثقة والتنوع
-        ranked = sorted(all_recommendations,
-                       key=lambda x: (x.get("confidence", 0), random.random()),
-                       reverse=True)
+        ranked = sorted(
+            all_recommendations,
+            key=lambda x: (x.get("confidence", 0), random.random()),
+            reverse=True,
+        )
 
         # إزالة التكرارات
         seen_products = set()
@@ -312,29 +349,93 @@ class RecommendationEngine:
         """إجراءات حسب الدور"""
         role_actions = {
             "sales": [
-                {"action": "create_invoice", "priority": 8, "description": "إنشاء فاتورة جديدة"},
-                {"action": "contact_customers", "priority": 7, "description": "التواصل مع العملاء"},
-                {"action": "update_prices", "priority": 6, "description": "تحديث الأسعار"},
-                {"action": "generate_quotes", "priority": 5, "description": "إنشاء عروض أسعار"}
+                {
+                    "action": "create_invoice",
+                    "priority": 8,
+                    "description": "إنشاء فاتورة جديدة",
+                },
+                {
+                    "action": "contact_customers",
+                    "priority": 7,
+                    "description": "التواصل مع العملاء",
+                },
+                {
+                    "action": "update_prices",
+                    "priority": 6,
+                    "description": "تحديث الأسعار",
+                },
+                {
+                    "action": "generate_quotes",
+                    "priority": 5,
+                    "description": "إنشاء عروض أسعار",
+                },
             ],
             "warehouse": [
-                {"action": "check_inventory", "priority": 9, "description": "فحص المخزون"},
-                {"action": "process_orders", "priority": 8, "description": "معالجة الطلبات"},
-                {"action": "organize_stock", "priority": 7, "description": "تنظيم المخزون"},
-                {"action": "receive_shipments", "priority": 6, "description": "استلام الشحنات"}
+                {
+                    "action": "check_inventory",
+                    "priority": 9,
+                    "description": "فحص المخزون",
+                },
+                {
+                    "action": "process_orders",
+                    "priority": 8,
+                    "description": "معالجة الطلبات",
+                },
+                {
+                    "action": "organize_stock",
+                    "priority": 7,
+                    "description": "تنظيم المخزون",
+                },
+                {
+                    "action": "receive_shipments",
+                    "priority": 6,
+                    "description": "استلام الشحنات",
+                },
             ],
             "cfo": [
-                {"action": "review_financials", "priority": 10, "description": "مراجعة البيانات المالية"},
-                {"action": "analyze_budget", "priority": 9, "description": "تحليل الميزانية"},
-                {"action": "forecast_revenue", "priority": 8, "description": "توقع الإيرادات"},
-                {"action": "optimize_costs", "priority": 7, "description": "تحسين التكاليف"}
+                {
+                    "action": "review_financials",
+                    "priority": 10,
+                    "description": "مراجعة البيانات المالية",
+                },
+                {
+                    "action": "analyze_budget",
+                    "priority": 9,
+                    "description": "تحليل الميزانية",
+                },
+                {
+                    "action": "forecast_revenue",
+                    "priority": 8,
+                    "description": "توقع الإيرادات",
+                },
+                {
+                    "action": "optimize_costs",
+                    "priority": 7,
+                    "description": "تحسين التكاليف",
+                },
             ],
             "admin": [
-                {"action": "manage_users", "priority": 9, "description": "إدارة المستخدمين"},
-                {"action": "system_backup", "priority": 8, "description": "نسخ احتياطي للنظام"},
-                {"action": "security_audit", "priority": 7, "description": "مراجعة الأمان"},
-                {"action": "generate_reports", "priority": 6, "description": "إنشاء التقارير"}
-            ]
+                {
+                    "action": "manage_users",
+                    "priority": 9,
+                    "description": "إدارة المستخدمين",
+                },
+                {
+                    "action": "system_backup",
+                    "priority": 8,
+                    "description": "نسخ احتياطي للنظام",
+                },
+                {
+                    "action": "security_audit",
+                    "priority": 7,
+                    "description": "مراجعة الأمان",
+                },
+                {
+                    "action": "generate_reports",
+                    "priority": 6,
+                    "description": "إنشاء التقارير",
+                },
+            ],
         }
 
         return role_actions.get(user_role, [])
@@ -344,25 +445,31 @@ class RecommendationEngine:
         actions = []
 
         if context.get("time_of_day") == "morning":
-            actions.append({
-                "action": "daily_briefing",
-                "priority": 8,
-                "description": "مراجعة النشاط اليومي"
-            })
+            actions.append(
+                {
+                    "action": "daily_briefing",
+                    "priority": 8,
+                    "description": "مراجعة النشاط اليومي",
+                }
+            )
 
         if context.get("pending_tasks", 0) > 10:
-            actions.append({
-                "action": "prioritize_tasks",
-                "priority": 9,
-                "description": "ترتيب المهام ذات الأولوية"
-            })
+            actions.append(
+                {
+                    "action": "prioritize_tasks",
+                    "priority": 9,
+                    "description": "ترتيب المهام ذات الأولوية",
+                }
+            )
 
         if context.get("low_inventory_alerts", 0) > 0:
-            actions.append({
-                "action": "reorder_inventory",
-                "priority": 8,
-                "description": "إعادة طلب المخزون"
-            })
+            actions.append(
+                {
+                    "action": "reorder_inventory",
+                    "priority": 8,
+                    "description": "إعادة طلب المخزون",
+                }
+            )
 
         return actions
 
@@ -421,20 +528,20 @@ class RecommendationEngine:
                 "opportunity": "cross_sell_electronics",
                 "description": "بيع ملحقات إلكترونية مع المنتجات الرئيسية",
                 "potential_value": 15000,
-                "difficulty": "medium"
+                "difficulty": "medium",
             },
             {
                 "opportunity": "loyalty_program",
                 "description": "برنامج ولاء للعملاء المنتظمين",
                 "potential_value": 25000,
-                "difficulty": "low"
+                "difficulty": "low",
             },
             {
                 "opportunity": "seasonal_promotions",
                 "description": "عروض موسمية للمنتجات ذات الطلب الموسمي",
                 "potential_value": 18000,
-                "difficulty": "medium"
-            }
+                "difficulty": "medium",
+            },
         ]
 
     def _suggest_efficiency_improvements(self) -> List[Dict[str, Any]]:
@@ -444,20 +551,20 @@ class RecommendationEngine:
                 "improvement": "automate_inventory",
                 "description": "أتمتة عمليات المخزون",
                 "time_saving": 20,  # ساعات أسبوعياً
-                "cost_saving": 5000
+                "cost_saving": 5000,
             },
             {
                 "improvement": "digital_invoicing",
                 "description": "نظام فوترة إلكتروني",
                 "time_saving": 15,
-                "cost_saving": 3000
+                "cost_saving": 3000,
             },
             {
                 "improvement": "predictive_analytics",
                 "description": "تحليلات تنبؤية للطلب",
                 "time_saving": 10,
-                "cost_saving": 8000
-            }
+                "cost_saving": 8000,
+            },
         ]
 
     def _recommend_risk_mitigation(self) -> List[Dict[str, Any]]:
@@ -467,20 +574,20 @@ class RecommendationEngine:
                 "risk": "inventory_shortage",
                 "mitigation": "تنويع الموردين وإنشاء مخزون احتياطي",
                 "impact": "high",
-                "cost": 10000
+                "cost": 10000,
             },
             {
                 "risk": "customer_churn",
                 "mitigation": "برامج ولاء وخدمة عملاء محسنة",
                 "impact": "high",
-                "cost": 15000
+                "cost": 15000,
             },
             {
                 "risk": "economic_downturn",
                 "mitigation": "تنويع المنتجات وتقليل التكاليف",
                 "impact": "medium",
-                "cost": 20000
-            }
+                "cost": 20000,
+            },
         ]
 
     def _propose_growth_strategies(self) -> List[Dict[str, Any]]:
@@ -491,22 +598,22 @@ class RecommendationEngine:
                 "description": "دخول أسواق جديدة",
                 "timeline": "12_months",
                 "investment": 50000,
-                "expected_roi": 2.5
+                "expected_roi": 2.5,
             },
             {
                 "strategy": "product_diversification",
                 "description": "إضافة فئات منتجات جديدة",
                 "timeline": "8_months",
                 "investment": 30000,
-                "expected_roi": 1.8
+                "expected_roi": 1.8,
             },
             {
                 "strategy": "digital_transformation",
                 "description": "تحويل رقمي كامل للعمليات",
                 "timeline": "18_months",
                 "investment": 80000,
-                "expected_roi": 3.2
-            }
+                "expected_roi": 3.2,
+            },
         ]
 
     def _prioritize_insights(self, insights: Dict[str, List]) -> List[str]:
@@ -515,22 +622,31 @@ class RecommendationEngine:
             "sales_opportunities": 9,
             "efficiency_improvements": 8,
             "risk_mitigation": 7,
-            "growth_strategies": 6
+            "growth_strategies": 6,
         }
 
         prioritized = []
         for category, items in insights.items():
-            priority = priority_map.get(category, 5)
-            prioritized.extend([f"{category}:{item.get('opportunity', item.get('improvement', item.get('risk', item.get('strategy', ''))))}" for item in items])
+            priority_map.get(category, 5)
+            prioritized.extend(
+                [
+                    f"{category}:{item.get('opportunity', item.get('improvement', item.get('risk', item.get('strategy', ''))))}"  # noqa: E501
+                    for item in items
+                ]
+            )
 
-        return sorted(prioritized, key=lambda x: priority_map.get(x.split(':')[0], 5), reverse=True)
+        return sorted(
+            prioritized,
+            key=lambda x: priority_map.get(x.split(":")[0], 5),
+            reverse=True,
+        )
 
     def _create_implementation_roadmap(self, insights: Dict[str, List]) -> Dict[str, List]:
         """إنشاء خطة تنفيذ"""
         roadmap = {
             "phase_1_quick_wins": [],  # 1-3 أشهر
             "phase_2_core_improvements": [],  # 3-6 أشهر
-            "phase_3_strategic_initiatives": []  # 6-12 شهر
+            "phase_3_strategic_initiatives": [],  # 6-12 شهر
         }
 
         for category, items in insights.items():
@@ -572,10 +688,18 @@ class RecommendationEngine:
 
 # ==================== كلاسات متوافقة مع الاختبارات ====================
 
+
 class RecommendationResult:
     """نتيجة التوصية"""
-    def __init__(self, product_id: int, product_name: str, recommendation_score: float,
-                 reason: str = "", confidence: float = 0.8):
+
+    def __init__(
+        self,
+        product_id: int,
+        product_name: str,
+        recommendation_score: float,
+        reason: str = "",
+        confidence: float = 0.8,
+    ):
         self.product_id = product_id
         self.product_name = product_name
         self.recommendation_score = recommendation_score
@@ -631,7 +755,12 @@ class IntelligentRecommendationSystem:
         """تاريخ مشتريات العميل"""
         return self._customer_history_cache.get(customer_id, [])
 
-    def _calculate_recommendation_score(self, product_id: int, customer_id: int,
-                                        purchase_history: list, product_features: dict) -> float:
+    def _calculate_recommendation_score(
+        self,
+        product_id: int,
+        customer_id: int,
+        purchase_history: list,
+        product_features: dict,
+    ) -> float:
         """حساب درجة التوصية"""
-        return 0.75
+        return 0.75

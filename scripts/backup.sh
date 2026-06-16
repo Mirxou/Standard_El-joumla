@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Unified Commerce ERP Backup Script
+# Standard El-Joumla Backup Script
 # Version: 1.0.0
 # Description: Automated backup for production environment
 
@@ -134,7 +134,7 @@ generate_report() {
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
     REPORT_FILE="$BACKUP_DIR/backup_report_$TIMESTAMP.txt"
 
-    echo "Unified Commerce ERP Backup Report" > "$REPORT_FILE"
+    echo "Standard El-Joumla Backup Report" > "$REPORT_FILE"
     echo "Generated: $(date)" >> "$REPORT_FILE"
     echo "=================================" >> "$REPORT_FILE"
     echo "" >> "$REPORT_FILE"

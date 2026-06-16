@@ -7,20 +7,26 @@ Uses a QGraphicsProxyWidget to embed a QTableWidget in the scene.
 """
 
 from PySide6.QtWidgets import (
-    QGraphicsProxyWidget, QGraphicsItem, QTableWidget, QTableWidgetItem,
-    QHeaderView
+    QGraphicsItem,
+    QGraphicsProxyWidget,
+    QHeaderView,
+    QTableWidget,
+    QTableWidgetItem,
 )
-from PySide6.QtCore import Qt
+
 
 class DraggableTableItem(QGraphicsProxyWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        
+
         # Create the widget to be embedded
-        self.table = QTableWidget(4, 4) # 4x4 table as default
+        self.table = QTableWidget(4, 4)  # 4x4 table as default
         self.table.setHorizontalHeaderLabels(["المنتج", "الكمية", "السعر", "الإجمالي"])
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        self.table.horizontalHeader().setMinimumSectionSize(120)
+        self.table.horizontalHeader().setDefaultSectionSize(150)
+        self.table.horizontalHeader().setStretchLastSection(True)
+
         # Example items
         self.table.setItem(0, 0, QTableWidgetItem("منتج تجريبي 1"))
         self.table.setItem(0, 1, QTableWidgetItem("1"))
@@ -29,7 +35,7 @@ class DraggableTableItem(QGraphicsProxyWidget):
 
         # Set the widget for the proxy
         self.setWidget(self.table)
-        
+
         self.setFlag(QGraphicsItem.ItemIsMovable)
         self.setFlag(QGraphicsItem.ItemIsSelectable)
         self.setFlag(QGraphicsItem.ItemSendsGeometryChanges)
@@ -40,7 +46,7 @@ class DraggableTableItem(QGraphicsProxyWidget):
             new_pos = value
             scene_rect = self.scene().sceneRect()
             item_rect = self.boundingRect()
-            
+
             if new_pos.x() < scene_rect.left():
                 new_pos.setX(scene_rect.left())
             elif new_pos.x() + item_rect.width() > scene_rect.right():
@@ -50,13 +56,13 @@ class DraggableTableItem(QGraphicsProxyWidget):
                 new_pos.setY(scene_rect.top())
             elif new_pos.y() + item_rect.height() > scene_rect.bottom():
                 new_pos.setY(scene_rect.bottom() - item_rect.height())
-                
+
             return new_pos
         return super().itemChange(change, value)
 
     def get_structure(self):
         """Returns a serializable dictionary of the table's structure."""
         return {
-            'column_count': self.table.columnCount(),
-            'headers': [self.table.horizontalHeaderItem(i).text() for i in range(self.table.columnCount())]
+            "column_count": self.table.columnCount(),
+            "headers": [self.table.horizontalHeaderItem(i).text() for i in range(self.table.columnCount())],
         }

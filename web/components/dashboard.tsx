@@ -135,12 +135,12 @@ export default function Dashboard() {
             </div>
 
             {/* Search Bar */}
-            <div className="hidden md:flex items-center relative flex-1 max-w-md mx-2 lg:mx-4">
-              <Search className="absolute right-3 h-4 w-4 text-gray-400" />
+            <div className="hidden md:flex items-center relative flex-1 max-w-md mx-2 lg:mx-4 group">
+              <Search className="absolute right-3.5 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
               <input
                 type="text"
                 placeholder="بحث سريع (Ctrl + K)..."
-                className="w-full bg-white/5 border border-white/10 rounded-lg lg:rounded-xl py-1.5 lg:py-2 pr-10 pl-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all duration-200 placeholder:text-gray-500"
+                className="w-full bg-background/50 border border-border/50 rounded-xl py-2 pr-11 pl-4 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200 placeholder:text-muted-foreground"
               />
             </div>
 

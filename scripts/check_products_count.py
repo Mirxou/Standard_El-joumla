@@ -4,7 +4,6 @@
 التحقق من عدد المنتجات في قاعدة البيانات
 """
 
-import sqlite3
 import sys
 from pathlib import Path
 import io
@@ -17,13 +16,13 @@ if sys.platform == 'win32':
 # إضافة مسار src
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.core.database_manager import DatabaseManager
+from src.core.local_database_manager import LocalDatabaseManager
 
 def check_products_count():
     """التحقق من عدد المنتجات"""
     print("🔍 التحقق من عدد المنتجات في قاعدة البيانات...\n")
     
-    db_path = Path(__file__).parent.parent / "data" / "logical_release.db"
+    db_path = Path(__file__).parent.parent / "data" / "standard_eljoumla.db"
     
     if not db_path.exists():
         print(f"❌ قاعدة البيانات غير موجودة: {db_path}")
@@ -33,7 +32,7 @@ def check_products_count():
     print(f"📊 حجم الملف: {db_path.stat().st_size / 1024 / 1024:.2f} MB\n")
     
     try:
-        db_manager = DatabaseManager()
+        db_manager = LocalDatabaseManager()
         if not db_manager.initialize():
             print("❌ فشل تهيئة قاعدة البيانات")
             return False
@@ -88,7 +87,7 @@ def check_products_count():
                 count = cursor.fetchone()[0]
                 if count > 0:
                     table_counts.append((table_name, count))
-            except:
+            except Exception:
                 pass
         
         # ترتيب حسب العدد

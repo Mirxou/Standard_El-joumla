@@ -1,6 +1,6 @@
 # 📚 دليل التوثيق الشامل - Documentation Guide
 
-مرحباً بك في دليل التوثيق الشامل لنظام الإصدار المنطقي (Logical Version ERP System).
+مرحباً بك في دليل التوثيق الشامل لنظام Standard El-Joumla (ستاندرد الجملة).
 
 ## 📋 الفهرس
 
@@ -178,5 +178,5 @@ success, message = service.print_invoice(invoice_data)
 
 ---
 
-**تم إنشاء هذا الدليل بواسطة:** Logical Version Team
+**تم إنشاء هذا الدليل بواسطة:** Standard El-Joumla Team
 

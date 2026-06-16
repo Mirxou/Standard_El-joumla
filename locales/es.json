@@ -1,5 +1,5 @@
-{
-  "app_title": "Sistema ERP Versión Lógica",
+﻿{
+  "app_title": "Sistema ERP Standard El Joumla",
   "welcome": "Bienvenido",
   "login": "Iniciar sesión",
   "logout": "Cerrar sesión",
@@ -116,7 +116,7 @@
   "refresh_data": "Actualizar datos",
   "smart_assistant": "Asistente inteligente",
   "ask_question": "Pregunte sobre ventas, inventario, ...",
-  "system_title": "Versión Lógica - Sistema de gestión comercial general",
+  "system_title": "Standard El Joumla - Sistema de gestión comercial general",
   "search_customer": "Buscar cliente...",
   "customer": "Cliente",
   "current_balance": "Saldo actual",
@@ -263,10 +263,10 @@
   "error_network": "Error de Red",
   "error_file_system": "Error del Sistema de Archivos",
   "error_system": "Error del Sistema",
-  "login_title": "Iniciar Sesión - Versión Lógica",
-  "app_name_short": "Versión Lógica",
+  "login_title": "Iniciar Sesión - Standard El Joumla",
+  "app_name_short": "Standard El Joumla",
   "app_description": "Sistema Integrado de Gestión de Ventas e Inventario",
-  "app_version_copyright": "Versión 1.0.0 | © 2024 Versión Lógica - Todos los Derechos Reservados",
+  "app_version_copyright": "Versión 1.0.0 | © 2024 Standard El Joumla - Todos los Derechos Reservados",
   "username_label": "👤 Nombre de Usuario",
   "password_label": "🔒 Contraseña",
   "enter_username": "Ingrese nombre de usuario",
@@ -412,7 +412,7 @@
   "data_updated_ask_question": "Datos actualizados. Ahora puede hacer una pregunta.",
   "refresh_data_failed": "Error al actualizar datos: {error}",
   "processing_query": "Procesando consulta...",
-  "welcome_title": "🚀 Versión Lógica",
+  "welcome_title": "🚀 Standard El Joumla",
   "main_dashboard": "🏠 Panel Principal",
   "period": "Período",
   "chart_load_error": "⚠️ No se pudo cargar el gráfico. Por favor instale la biblioteca requerida: pip install pyqtgraph",
@@ -432,4 +432,5 @@
   "question": "Pregunta",
   "answer": "Respuesta"
 }
+
 

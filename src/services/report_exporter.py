@@ -1,42 +1,48 @@
+import logging
 #!/usr/bin/env python3
 """
 خدمة التقارير - Reports Service
 تدير إنشاء وتصدير التقارير المختلفة للنظام
 """
 
-import os
 import json
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Tuple
-from dataclasses import dataclass, asdict
+import os
+from dataclasses import asdict, dataclass
+from datetime import datetime
 from enum import Enum
-import logging
+from typing import Any, Dict, List, Optional
 
 # استيراد المكتبات المطلوبة للتصدير
 try:
     import pandas as pd
     from openpyxl import Workbook  # pyright: ignore[reportMissingModuleSource]
-    from openpyxl.styles import Font, PatternFill, Alignment  # pyright: ignore[reportMissingModuleSource]
-    from openpyxl.utils.dataframe import dataframe_to_rows  # pyright: ignore[reportMissingModuleSource]
+    from openpyxl.styles import (  # pyright: ignore[reportMissingModuleSource]
+        Alignment,
+        Font,
+        PatternFill,
+    )
+    from openpyxl.utils.dataframe import (
+        dataframe_to_rows,
+    )  # pyright: ignore[reportMissingModuleSource]
 
     EXCEL_AVAILABLE = True
 except ImportError:
     EXCEL_AVAILABLE = False
 
-from jinja2 import Template
+import os  # noqa: F811
 import warnings
-import sys
-import os
+
+from jinja2 import Template
 
 # قمع تحذيرات WeasyPrint قبل الاستيراد
 warnings.filterwarnings("ignore", category=UserWarning, module="weasyprint")
 warnings.filterwarnings("ignore", message=".*WeasyPrint.*", category=UserWarning)
 
 try:
-    from weasyprint import HTML, CSS  # type: ignore
+    from weasyprint import CSS, HTML  # type: ignore
 
     PDF_AVAILABLE = True
-except (ImportError, OSError, RuntimeError) as e:
+except (ImportError, OSError, RuntimeError):
     # يشمل ImportError و OSError الناتج عن عدم توفر مكتبات نظام مثل gobject/pango
     # RuntimeError قد يحدث عند عدم توفر مكتبات النظام المطلوبة
     PDF_AVAILABLE = False
@@ -53,24 +59,24 @@ except ImportError:
 try:
     # محاولة الاستيراد النسبي أولاً (عند الاستيراد من داخل الحزمة)
     from ..core.database_manager import DatabaseManager
-    from ..utils.logger import setup_logger, DatabaseLogger
-    from ..models.product import ProductManager
-    from ..models.sale import SaleManager
-    from ..models.purchase import PurchaseManager
     from ..models.customer import CustomerManager
+    from ..models.product import ProductManager
+    from ..models.purchase import PurchaseManager
+    from ..models.report import ExportFormat, ReportData, ReportFilter, ReportType
+    from ..models.sale import SaleManager
     from ..models.supplier import SupplierManager
-    from ..models.report import ReportType, ReportFilter, ReportData, ExportFormat
+    from ..utils.logger import DatabaseLogger, setup_logger
 except ImportError:
     # Fallback للاستيراد المطلق (عند الاستيراد المباشر)
     try:
         from src.core.database_manager import DatabaseManager
-        from src.utils.logger import setup_logger, DatabaseLogger
-        from src.models.product import ProductManager
-        from src.models.sale import SaleManager
-        from src.models.purchase import PurchaseManager
         from src.models.customer import CustomerManager
+        from src.models.product import ProductManager
+        from src.models.purchase import PurchaseManager
+        from src.models.report import ExportFormat, ReportData, ReportFilter, ReportType
+        from src.models.sale import SaleManager
         from src.models.supplier import SupplierManager
-        from src.models.report import ReportType, ReportFilter, ReportData, ExportFormat
+        from src.utils.logger import DatabaseLogger, setup_logger
     except ImportError:
         # Fallback: تعريف محلي إذا لم يكن models.report متوفراً
         class ReportType(Enum):
@@ -98,7 +104,7 @@ except ImportError:
             WAREHOUSE_SUMMARY = "warehouse_summary"
 
     @dataclass
-    class ReportFilter:
+    class ReportFilter:  # noqa: F811
         """فلاتر التقارير"""
 
         start_date: Optional[datetime] = None
@@ -121,7 +127,7 @@ except ImportError:
         warehouse_id: Optional[int] = None  # Multi-Warehouse Support
 
     @dataclass
-    class ReportData:
+    class ReportData:  # noqa: F811
         """بيانات التقرير"""
 
         title: str
@@ -132,7 +138,7 @@ except ImportError:
         summary: Dict[str, Any]
         charts_data: Optional[Dict[str, Any]] = None
 
-    class ExportFormat(Enum):
+    class ExportFormat(Enum):  # noqa: F811
         """صيغ التصدير"""
 
         PDF = "pdf"
@@ -177,9 +183,7 @@ class ReportExporter:
         )
         os.makedirs(self.reports_dir, exist_ok=True)
 
-    def generate_report(
-        self, report_type: ReportType, filters: ReportFilter
-    ) -> ReportData:
+    def generate_report(self, report_type: ReportType, filters: ReportFilter) -> ReportData:
         """توليد تقرير بناءً على نوع التقرير المحدد"""
         try:
             if report_type == ReportType.SALES_SUMMARY:
@@ -234,7 +238,7 @@ class ReportExporter:
         try:
             # بناء استعلام المبيعات (مع دعم Multi-Currency)
             query = """
-                SELECT 
+                SELECT
                     s.id,
                     s.invoice_number,
                     s.sale_date,
@@ -347,11 +351,7 @@ class ReportExporter:
                 exchange_rate = row.get("exchange_rate") or 1.0
 
                 # استخدام base_amount إذا كان متوفراً، وإلا استخدام final_amount
-                display_amount = (
-                    float(base_amount)
-                    if base_amount
-                    else float(row.get("final_amount") or 0)
-                )
+                display_amount = float(base_amount) if base_amount else float(row.get("final_amount") or 0)
 
                 # row هو dictionary من execute_query
                 sales_data.append(
@@ -368,17 +368,11 @@ class ReportExporter:
                         "currency_code": currency_code,
                         "currency_name": currency_name,
                         "currency_symbol": currency_symbol,
-                        "base_amount": float(base_amount)
-                        if base_amount
-                        else display_amount,
-                        "converted_amount": float(converted_amount)
-                        if converted_amount
-                        else display_amount,
+                        "base_amount": (float(base_amount) if base_amount else display_amount),
+                        "converted_amount": (float(converted_amount) if converted_amount else display_amount),
                         "exchange_rate": float(exchange_rate),
                         "display_amount": display_amount,  # المبلغ للعرض (بالعملة الأساسية)
-                        "payment_method": translate_payment_method(
-                            row.get("payment_method")
-                        ),
+                        "payment_method": translate_payment_method(row.get("payment_method")),
                         "status": translate_status(row.get("status")),
                         "customer_name": row.get("customer_name") or "",
                         "user_name": row.get("user_name") or "",
@@ -387,9 +381,7 @@ class ReportExporter:
 
             # حساب الملخص (باستخدام المبالغ بالعملة الأساسية)
             total_sales = len(sales_data)
-            total_amount = sum(
-                row.get("base_amount", row["final_amount"]) for row in sales_data
-            )
+            total_amount = sum(row.get("base_amount", row["final_amount"]) for row in sales_data)
             total_discount = sum(row["discount_amount"] or 0 for row in sales_data)
             total_tax = sum(row["tax_amount"] or 0 for row in sales_data)
 
@@ -404,12 +396,8 @@ class ReportExporter:
                         "base_amount": 0,
                     }
                 currencies_summary[currency_code]["count"] += 1
-                currencies_summary[currency_code]["amount"] += row.get(
-                    "converted_amount", row["final_amount"]
-                )
-                currencies_summary[currency_code]["base_amount"] += row.get(
-                    "base_amount", row["final_amount"]
-                )
+                currencies_summary[currency_code]["amount"] += row.get("converted_amount", row["final_amount"])
+                currencies_summary[currency_code]["base_amount"] += row.get("base_amount", row["final_amount"])
 
             # تجميع البيانات حسب طريقة الدفع
             payment_methods = {}
@@ -440,7 +428,7 @@ class ReportExporter:
 
             return ReportData(
                 title="تقرير ملخص المبيعات",
-                subtitle=f"من {filters.start_date.strftime('%Y-%m-%d') if filters.start_date else 'البداية'} إلى {filters.end_date.strftime('%Y-%m-%d') if filters.end_date else 'النهاية'}",
+                subtitle=f"من {filters.start_date.strftime('%Y-%m-%d') if filters.start_date else 'البداية'} إلى {filters.end_date.strftime('%Y-%m-%d') if filters.end_date else 'النهاية'}",  # noqa: E501
                 generated_at=datetime.now(),
                 filters=filters,
                 data=sales_data,
@@ -459,9 +447,7 @@ class ReportExporter:
             try:
                 columns_info = self.db.fetch_all("PRAGMA table_info(products)")
                 # PRAGMA table_info returns tuples: (cid, name, type, notnull, default_value, pk)
-                available_columns = (
-                    {row[1] for row in columns_info} if columns_info else set()
-                )
+                available_columns = {row[1] for row in columns_info} if columns_info else set()
             except Exception:
                 # في حالة الخطأ، افترض أن الأعمدة الأساسية موجودة فقط
                 available_columns = {
@@ -481,20 +467,12 @@ class ReportExporter:
             has_max_stock = "max_stock" in available_columns
 
             # بناء الاستعلام بناءً على الأعمدة المتاحة
-            supplier_join = (
-                "LEFT JOIN suppliers s ON p.supplier_id = s.id"
-                if has_supplier_id
-                else ""
-            )
-            supplier_select = (
-                "s.name as supplier_name,"
-                if has_supplier_id
-                else "NULL as supplier_name,"
-            )
-            max_stock_col = "COALESCE(p.max_stock, 0)" if has_max_stock else "0"
+            supplier_join = "LEFT JOIN suppliers s ON p.supplier_id = s.id" if has_supplier_id else ""  # noqa: F841
+            supplier_select = "s.name as supplier_name," if has_supplier_id else "NULL as supplier_name,"  # noqa: F841
+            "COALESCE(p.max_stock, 0)" if has_max_stock else "0"
 
-            query = f"""
-                SELECT 
+            query = """
+                SELECT
                     p.id,
                     p.name,
                     p.barcode,
@@ -506,9 +484,9 @@ class ReportExporter:
                     p.current_stock * COALESCE(p.cost_price, 0) as stock_value,
                     c.name as category_name,
                     {supplier_select}
-                    CASE 
+                    CASE
                         WHEN p.current_stock <= 0 THEN 'نفد المخزون'
-                        WHEN COALESCE(p.min_stock, 0) > 0 AND p.current_stock <= COALESCE(p.min_stock, 0) THEN 'مخزون منخفض'
+                        WHEN COALESCE(p.min_stock, 0) > 0 AND p.current_stock <= COALESCE(p.min_stock, 0) THEN 'مخزون منخفض'  # noqa: E501
                         WHEN {max_stock_col} > 0 AND p.current_stock >= {max_stock_col} THEN 'مخزون مرتفع'
                         ELSE 'طبيعي'
                     END as stock_status
@@ -534,12 +512,8 @@ class ReportExporter:
 
             # حساب الملخص
             total_products = len(products_data)
-            total_stock_value = sum(
-                float(row.get("stock_value", 0) or 0) for row in products_data
-            )
-            out_of_stock = len(
-                [p for p in products_data if (p.get("current_stock") or 0) <= 0]
-            )
+            total_stock_value = sum(float(row.get("stock_value", 0) or 0) for row in products_data)
+            out_of_stock = len([p for p in products_data if (p.get("current_stock") or 0) <= 0])
             low_stock = len(
                 [
                     p
@@ -606,31 +580,30 @@ class ReportExporter:
         try:
             # المبيعات (باستخدام base_amount للعملة الأساسية)
             sales_query = """
-                SELECT 
-                    SUM(COALESCE(base_amount, final_amount)) as total_sales, 
-                    COUNT(*) as sales_count 
-                FROM sales 
+                SELECT
+                    SUM(COALESCE(base_amount, final_amount)) as total_sales,
+                    COUNT(*) as sales_count
+                FROM sales
                 WHERE status != 'cancelled'
             """
 
             # المشتريات (باستخدام base_amount للعملة الأساسية)
             purchases_query = """
-                SELECT 
-                    SUM(COALESCE(base_amount, total_amount)) as total_purchases, 
-                    COUNT(*) as purchases_count 
-                FROM purchases 
+                SELECT
+                    SUM(COALESCE(base_amount, total_amount)) as total_purchases,
+                    COUNT(*) as purchases_count
+                FROM purchases
                 WHERE status != 'cancelled'
             """
 
             # الربح الفعلي من بنود المبيعات
             profit_query = """
-                SELECT SUM(si.profit) 
-                FROM sale_items si 
-                JOIN sales s ON si.sale_id = s.id 
+                SELECT SUM(si.profit)
+                FROM sale_items si
+                JOIN sales s ON si.sale_id = s.id
                 WHERE s.status != 'cancelled'
             """
 
-            params = []
             date_params = []
 
             if filters.start_date:
@@ -663,19 +636,14 @@ class ReportExporter:
 
             # حساب قيمة المخزون الحالي
             inventory_value = (
-                self.db.execute_scalar(
-                    "SELECT SUM(current_stock * cost_price) FROM products WHERE is_active = 1"
-                )
-                or 0
+                self.db.execute_scalar("SELECT SUM(current_stock * cost_price) FROM products WHERE is_active = 1") or 0
             )
 
             summary = {
                 "total_sales": total_sales,
                 "total_purchases": purchases_data["total_purchases"],
                 "gross_profit": gross_profit,
-                "profit_margin": (gross_profit / total_sales * 100)
-                if total_sales > 0
-                else 0,
+                "profit_margin": ((gross_profit / total_sales * 100) if total_sales > 0 else 0),
                 "inventory_value": inventory_value,
                 "sales_count": sales_data["sales_count"],
                 "purchases_count": purchases_data["purchases_count"],
@@ -711,7 +679,7 @@ class ReportExporter:
 
             return ReportData(
                 title="تقرير الملخص المالي",
-                subtitle=f"من {filters.start_date.strftime('%Y-%m-%d') if filters.start_date else 'البداية'} إلى {filters.end_date.strftime('%Y-%m-%d') if filters.end_date else 'النهاية'}",
+                subtitle=f"من {filters.start_date.strftime('%Y-%m-%d') if filters.start_date else 'البداية'} إلى {filters.end_date.strftime('%Y-%m-%d') if filters.end_date else 'النهاية'}",  # noqa: E501
                 generated_at=datetime.now(),
                 filters=filters,
                 data=detailed_data,
@@ -748,17 +716,13 @@ class ReportExporter:
             elif format_type == ExportFormat.PPTX and PPTX_AVAILABLE:
                 return self._export_to_pptx(report_data, filepath)
             else:
-                raise ValueError(
-                    f"تنسيق التصدير غير مدعوم أو المكتبات المطلوبة غير متوفرة: {format_type.value}"
-                )
+                raise ValueError(f"تنسيق التصدير غير مدعوم أو المكتبات المطلوبة غير متوفرة: {format_type.value}")
 
         except Exception as e:
             self.logger.error(f"خطأ في تصدير التقرير: {e}")
             raise
 
-    def export_to_pdf(
-        self, data: List[Dict[str, Any]], title: str, filepath: str
-    ) -> str:
+    def export_to_pdf(self, data: List[Dict[str, Any]], title: str, filepath: str) -> str:
         """
         تصدير بيانات إلى PDF (wrapper method للاستخدام البسيط)
 
@@ -825,9 +789,10 @@ class ReportExporter:
             data["filters"]["start_date"] = report_data.filters.start_date.isoformat()
         if data["filters"].get("end_date"):
             data["filters"]["end_date"] = report_data.filters.end_date.isoformat()
-        
+
         # تحويل الـ Enums في الفلاتر (مثل ReportPeriod)
         from enum import Enum
+
         if "filters" in data:
             for key, value in data["filters"].items():
                 if isinstance(value, Enum):
@@ -856,17 +821,13 @@ class ReportExporter:
 
         # إعداد الأنماط
         header_font = Font(bold=True, color="FFFFFF")
-        header_fill = PatternFill(
-            start_color="366092", end_color="366092", fill_type="solid"
-        )
+        header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
 
         # كتابة العنوان
         ws["A1"] = report_data.title
         ws["A1"].font = Font(bold=True, size=16)
         ws["A2"] = report_data.subtitle
-        ws["A3"] = (
-            f"تاريخ الإنشاء: {report_data.generated_at.strftime('%Y-%m-%d %H:%M:%S')}"
-        )
+        ws["A3"] = f"تاريخ الإنشاء: {report_data.generated_at.strftime('%Y-%m-%d %H:%M:%S')}"
 
         # كتابة البيانات
         if report_data.data:
@@ -905,9 +866,7 @@ class ReportExporter:
     def _export_to_pdf(self, report_data: ReportData, filepath: str) -> str:
         """تصدير إلى PDF"""
         if not PDF_AVAILABLE or HTML is None:
-            raise RuntimeError(
-                "مكتبات WeasyPrint غير متوفرة في هذا البيئة، لا يمكن التصدير إلى PDF"
-            )
+            raise RuntimeError("مكتبات WeasyPrint غير متوفرة في هذا البيئة، لا يمكن التصدير إلى PDF")
         # قالب HTML للتقرير
         html_template = """
         <!DOCTYPE html>
@@ -933,14 +892,14 @@ class ReportExporter:
                 <div class="subtitle">{{ subtitle }}</div>
                 <div>تاريخ الإنشاء: {{ generated_at }}</div>
             </div>
-            
+
             <div class="summary">
                 <h3>ملخص التقرير</h3>
                 {% for key, value in summary.items() %}
                     <p><strong>{{ key }}:</strong> {{ value }}</p>
                 {% endfor %}
             </div>
-            
+
             {% if data %}
             <table class="data-table">
                 <thead>
@@ -961,7 +920,7 @@ class ReportExporter:
                 </tbody>
             </table>
             {% endif %}
-            
+
             <div class="footer">
                 <p>تم إنشاء هذا التقرير بواسطة نظام الإصدار المنطقي</p>
             </div>
@@ -988,16 +947,11 @@ class ReportExporter:
             raise RuntimeError("مكتبات python-pptx غير متوفرة")
 
         try:
-            from .pptx_report_builder import (
-                PptxReportBuilder,
-                PptxReportTheme,
-                ReportTemplates,
-            )
+            from .pptx_report_builder import PptxReportBuilder, PptxReportTheme
         except ImportError:
             from src.services.pptx_report_builder import (
                 PptxReportBuilder,
                 PptxReportTheme,
-                ReportTemplates,
             )
 
         builder = PptxReportBuilder(PptxReportTheme.CORPORATE)
@@ -1016,9 +970,7 @@ class ReportExporter:
             report_data.title,
             {
                 "layout": "list",
-                "body": report_data.data[:20]
-                if len(report_data.data) > 20
-                else report_data.data,
+                "body": (report_data.data[:20] if len(report_data.data) > 20 else report_data.data),
             },
         )
 
@@ -1027,10 +979,10 @@ class ReportExporter:
     def _get_daily_sales_chart_data(self, filters: ReportFilter) -> Dict[str, float]:
         """الحصول على بيانات المبيعات اليومية للرسم البياني"""
         query = """
-            SELECT 
+            SELECT
                 DATE(sale_date) as sale_day,
                 SUM(final_amount) as daily_total
-            FROM sales 
+            FROM sales
             WHERE status != 'cancelled'
         """
 
@@ -1051,7 +1003,7 @@ class ReportExporter:
     def _get_top_customers_chart_data(self, filters: ReportFilter) -> Dict[str, float]:
         """الحصول على بيانات أفضل العملاء للرسم البياني"""
         query = """
-            SELECT 
+            SELECT
                 c.name as customer_name,
                 SUM(s.final_amount) as total_purchases
             FROM sales s
@@ -1073,23 +1025,21 @@ class ReportExporter:
         results = self.db.execute_query(query, params)
         return {row["customer_name"]: row["total_purchases"] for row in results}
 
-    def _get_monthly_financial_trend(
-        self, filters: ReportFilter
-    ) -> Dict[str, Dict[str, float]]:
+    def _get_monthly_financial_trend(self, filters: ReportFilter) -> Dict[str, Dict[str, float]]:
         """الحصول على الاتجاه المالي الشهري"""
         date_params = []
         start_date_str = ""
         end_date_str = ""
 
         if filters.start_date:
-            start_date_str = " AND s.sale_date >= ? "
+            start_date_str = " AND s.sale_date >= ? "  # noqa: F841
             date_params.append(filters.start_date.strftime("%Y-%m-%d"))
         if filters.end_date:
-            end_date_str = " AND s.sale_date <= ? "
+            end_date_str = " AND s.sale_date <= ? "  # noqa: F841
             date_params.append(filters.end_date.strftime("%Y-%m-%d"))
 
         # الربح الشهري الفعلي
-        profit_query = f"""
+        profit_query = """
             SELECT
                 strftime('%Y-%m', s.sale_date) as month,
                 SUM(si.profit) as monthly_profit
@@ -1101,12 +1051,12 @@ class ReportExporter:
         """
 
         # المبيعات الشهرية
-        sales_query = f"""
-            SELECT 
+        sales_query = """
+            SELECT
                 strftime('%Y-%m', sale_date) as month,
                 SUM(final_amount) as monthly_sales
-            FROM sales 
-            WHERE status != 'cancelled' {start_date_str.replace("s.sale_date", "sale_date")} {end_date_str.replace("s.sale_date", "sale_date")}
+            FROM sales
+            WHERE status != 'cancelled' {start_date_str.replace("s.sale_date", "sale_date")} {end_date_str.replace("s.sale_date", "sale_date")}  # noqa: E501
             GROUP BY strftime('%Y-%m', sale_date) ORDER BY month
         """
 
@@ -1211,7 +1161,7 @@ class ReportExporter:
         try:
             # بناء الاستعلام الأساسي
             query = """
-                SELECT 
+                SELECT
                     p.payment_date,
                     p.payment_type,
                     p.payment_method,
@@ -1224,7 +1174,7 @@ class ReportExporter:
                     curr.code as currency_code,
                     curr.name as currency_name,
                     curr.symbol as currency_symbol,
-                    CASE 
+                    CASE
                         WHEN p.payment_type = 'دفعة عميل' THEN c.name
                         WHEN p.payment_type = 'دفعة مورد' THEN s.name
                         ELSE 'غير محدد'
@@ -1295,9 +1245,7 @@ class ReportExporter:
                 exchange_rate = row.get("exchange_rate") or 1.0
 
                 # استخدام base_amount إذا كان متوفراً، وإلا استخدام amount
-                display_amount = (
-                    float(base_amount) if base_amount else float(row.get("amount") or 0)
-                )
+                display_amount = float(base_amount) if base_amount else float(row.get("amount") or 0)
 
                 payment_data = {
                     "payment_date": row.get("payment_date"),
@@ -1311,12 +1259,8 @@ class ReportExporter:
                     "currency_code": currency_code,
                     "currency_name": currency_name,
                     "currency_symbol": currency_symbol,
-                    "base_amount": float(base_amount)
-                    if base_amount
-                    else display_amount,
-                    "converted_amount": float(converted_amount)
-                    if converted_amount
-                    else display_amount,
+                    "base_amount": (float(base_amount) if base_amount else display_amount),
+                    "converted_amount": (float(converted_amount) if converted_amount else display_amount),
                     "exchange_rate": float(exchange_rate),
                     "display_amount": display_amount,  # المبلغ للعرض (بالعملة الأساسية)
                 }
@@ -1335,9 +1279,7 @@ class ReportExporter:
                     }
                 currencies_summary[currency_code]["count"] += 1
                 currencies_summary[currency_code]["amount"] += (
-                    float(converted_amount)
-                    if converted_amount
-                    else float(row.get("amount") or 0)
+                    float(converted_amount) if converted_amount else float(row.get("amount") or 0)
                 )
                 currencies_summary[currency_code]["base_amount"] += amount
 
@@ -1377,7 +1319,7 @@ class ReportExporter:
             aging_periods = filters.aging_periods or [30, 60, 90]
 
             query = """
-                SELECT 
+                SELECT
                     c.id,
                     c.name,
                     c.phone,
@@ -1460,7 +1402,7 @@ class ReportExporter:
             aging_periods = filters.aging_periods or [30, 60, 90]
 
             query = """
-                SELECT 
+                SELECT
                     s.id,
                     s.name,
                     s.phone,
@@ -1541,7 +1483,7 @@ class ReportExporter:
         """توليد تقرير التدفق النقدي"""
         try:
             query = """
-                SELECT 
+                SELECT
                     DATE(p.payment_date) as payment_date,
                     p.payment_type,
                     p.payment_method,
@@ -1606,9 +1548,7 @@ class ReportExporter:
                     daily_flow[date]["methods"][payment_method]["outflow"] += amount
                     total_outflow += amount
 
-                daily_flow[date]["net"] = (
-                    daily_flow[date]["inflow"] - daily_flow[date]["outflow"]
-                )
+                daily_flow[date]["net"] = daily_flow[date]["inflow"] - daily_flow[date]["outflow"]
 
             # تحويل إلى قائمة
             data = list(daily_flow.values())
@@ -1639,7 +1579,7 @@ class ReportExporter:
         try:
             # تحليل المدفوعات حسب النوع والطريقة
             query = """
-                SELECT 
+                SELECT
                     p.payment_type,
                     p.payment_method,
                     COUNT(*) as transaction_count,
@@ -1695,9 +1635,7 @@ class ReportExporter:
             summary = {
                 "total_transactions": total_transactions,
                 "total_amount": total_amount,
-                "average_transaction": total_amount / total_transactions
-                if total_transactions > 0
-                else 0,
+                "average_transaction": (total_amount / total_transactions if total_transactions > 0 else 0),
             }
 
             return ReportData(
@@ -1714,13 +1652,11 @@ class ReportExporter:
                 self.logger.error(f"خطأ في توليد تقرير تحليل المدفوعات: {str(e)}")
             raise
 
-    def generate_payment_methods_analysis_report(
-        self, filters: ReportFilter
-    ) -> ReportData:
+    def generate_payment_methods_analysis_report(self, filters: ReportFilter) -> ReportData:
         """توليد تقرير تحليل طرق الدفع"""
         try:
             query = """
-                SELECT 
+                SELECT
                     p.payment_method,
                     COUNT(*) as usage_count,
                     SUM(p.amount) as total_amount,
@@ -1772,20 +1708,16 @@ class ReportExporter:
                 if total_usage > 0:
                     item["usage_percentage"] = (item["usage_count"] / total_usage) * 100
                 if total_amount > 0:
-                    item["amount_percentage"] = (
-                        item["total_amount"] / total_amount
-                    ) * 100
+                    item["amount_percentage"] = (item["total_amount"] / total_amount) * 100
 
             summary = {
                 "total_methods": len(data),
                 "total_usage": total_usage,
                 "total_amount": total_amount,
                 "most_used_method": data[0]["payment_method"] if data else None,
-                "highest_amount_method": max(data, key=lambda x: x["total_amount"])[
-                    "payment_method"
-                ]
-                if data
-                else None,
+                "highest_amount_method": (
+                    max(data, key=lambda x: x["total_amount"])["payment_method"] if data else None
+                ),
             }
 
             return ReportData(
@@ -1822,9 +1754,7 @@ class ReportExporter:
                     warehouses = [warehouse]
             else:
                 # جميع المستودعات
-                warehouses = warehouse_service.get_all_warehouses(
-                    include_inactive=False
-                )
+                warehouses = warehouse_service.get_all_warehouses(include_inactive=False)
 
             data = []
             total_stock_value = 0
@@ -1851,12 +1781,10 @@ class ReportExporter:
                             "reorder_point": inv.reorder_point,
                             "cost_price": inv.cost_price or 0,
                             "stock_value": stock_value,
-                            "status": "نفد"
-                            if inv.available_quantity <= 0
-                            else (
-                                "منخفض"
-                                if inv.available_quantity <= inv.min_stock
-                                else "جيد"
+                            "status": (
+                                "نفد"
+                                if inv.available_quantity <= 0
+                                else ("منخفض" if inv.available_quantity <= inv.min_stock else "جيد")
                             ),
                         }
                     )
@@ -1888,9 +1816,11 @@ class ReportExporter:
 
             return ReportData(
                 title="تقرير المخزون حسب المستودع",
-                subtitle=f"{warehouses[0].name if len(warehouses) == 1 else 'جميع المستودعات'}"
-                if warehouses
-                else "لا توجد مستودعات",
+                subtitle=(
+                    f"{warehouses[0].name if len(warehouses) == 1 else 'جميع المستودعات'}"
+                    if warehouses
+                    else "لا توجد مستودعات"
+                ),
                 generated_at=datetime.now(),
                 filters=filters,
                 data=data,
@@ -1921,9 +1851,7 @@ class ReportExporter:
                         transfer_date = (
                             transfer.transfer_date
                             if isinstance(transfer.transfer_date, datetime)
-                            else datetime.combine(
-                                transfer.transfer_date, datetime.min.time()
-                            )
+                            else datetime.combine(transfer.transfer_date, datetime.min.time())
                         )
                         if filters.start_date and transfer_date < filters.start_date:
                             continue
@@ -1952,16 +1880,12 @@ class ReportExporter:
                         "product_name": transfer.product_name or "",
                         "quantity": transfer.quantity,
                         "status": transfer.status,
-                        "transfer_date": transfer.transfer_date.strftime(
-                            "%Y-%m-%d %H:%M"
-                        )
-                        if transfer.transfer_date
-                        else "",
-                        "received_date": transfer.received_date.strftime(
-                            "%Y-%m-%d %H:%M"
-                        )
-                        if transfer.received_date
-                        else "",
+                        "transfer_date": (
+                            transfer.transfer_date.strftime("%Y-%m-%d %H:%M") if transfer.transfer_date else ""
+                        ),
+                        "received_date": (
+                            transfer.received_date.strftime("%Y-%m-%d %H:%M") if transfer.received_date else ""
+                        ),
                         "notes": transfer.notes or "",
                     }
                 )
@@ -1971,17 +1895,13 @@ class ReportExporter:
                 "total_quantity": total_quantity,
                 "completed_count": completed_count,
                 "pending_count": pending_count,
-                "in_transit_count": len(
-                    [t for t in transfers if t.status == "in_transit"]
-                ),
-                "cancelled_count": len(
-                    [t for t in transfers if t.status == "cancelled"]
-                ),
+                "in_transit_count": len([t for t in transfers if t.status == "in_transit"]),
+                "cancelled_count": len([t for t in transfers if t.status == "cancelled"]),
             }
 
             return ReportData(
                 title="تقرير حركات النقل بين المستودعات",
-                subtitle=f"من {filters.start_date.strftime('%Y-%m-%d') if filters.start_date else 'البداية'} إلى {filters.end_date.strftime('%Y-%m-%d') if filters.end_date else 'النهاية'}",
+                subtitle=f"من {filters.start_date.strftime('%Y-%m-%d') if filters.start_date else 'البداية'} إلى {filters.end_date.strftime('%Y-%m-%d') if filters.end_date else 'النهاية'}",  # noqa: E501
                 generated_at=datetime.now(),
                 filters=filters,
                 data=data,
@@ -2008,9 +1928,7 @@ class ReportExporter:
                 if warehouse:
                     warehouses = [warehouse]
             else:
-                warehouses = warehouse_service.get_all_warehouses(
-                    include_inactive=False
-                )
+                warehouses = warehouse_service.get_all_warehouses(include_inactive=False)
 
             data = []
 
@@ -2032,21 +1950,15 @@ class ReportExporter:
                                 "available_quantity": inv.available_quantity,
                                 "min_stock": inv.min_stock,
                                 "reorder_point": inv.reorder_point,
-                                "needed_quantity": max(
-                                    0, inv.reorder_point - inv.available_quantity
-                                ),
+                                "needed_quantity": max(0, inv.reorder_point - inv.available_quantity),
                                 "cost_price": inv.cost_price or 0,
                                 "stock_value": stock_value,
-                                "status": "نفد"
-                                if inv.available_quantity <= 0
-                                else "منخفض",
+                                "status": ("نفد" if inv.available_quantity <= 0 else "منخفض"),
                             }
                         )
 
             # ترتيب حسب الأولوية (نفد أولاً، ثم الأكثر حاجة)
-            data.sort(
-                key=lambda x: (0 if x["status"] == "نفد" else 1, -x["needed_quantity"])
-            )
+            data.sort(key=lambda x: (0 if x["status"] == "نفد" else 1, -x["needed_quantity"]))
 
             # تجميع حسب المستودع
             warehouses_summary = {}
@@ -2062,9 +1974,7 @@ class ReportExporter:
                     warehouses_summary[wh_name]["out_of_stock_count"] += 1
                 else:
                     warehouses_summary[wh_name]["low_stock_count"] += 1
-                warehouses_summary[wh_name]["total_needed_value"] += (
-                    item["needed_quantity"] * item["cost_price"]
-                )
+                warehouses_summary[wh_name]["total_needed_value"] += item["needed_quantity"] * item["cost_price"]
 
             summary = {
                 "total_items": len(data),
@@ -2084,9 +1994,7 @@ class ReportExporter:
 
         except Exception as e:
             if self.logger:
-                self.logger.error(
-                    f"خطأ في توليد تقرير المنتجات منخفضة المخزون: {str(e)}"
-                )
+                self.logger.error(f"خطأ في توليد تقرير المنتجات منخفضة المخزون: {str(e)}")
             raise
 
     def generate_warehouse_summary_report(self, filters: ReportFilter) -> ReportData:
@@ -2129,9 +2037,7 @@ class ReportExporter:
                 "active_warehouses": len([w for w in warehouses if w.is_active]),
                 "total_products": total_products,
                 "total_stock_value": total_stock_value,
-                "average_stock_per_warehouse": total_stock_value / len(warehouses)
-                if warehouses
-                else 0,
+                "average_stock_per_warehouse": (total_stock_value / len(warehouses) if warehouses else 0),
             }
 
             return ReportData(

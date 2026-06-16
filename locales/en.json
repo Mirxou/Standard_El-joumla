@@ -1,5 +1,5 @@
-{
-  "app_title": "Logical Version ERP System",
+﻿{
+  "app_title": "Standard El Joumla ERP System",
   "welcome": "Welcome",
   "login": "Login",
   "logout": "Logout",
@@ -116,7 +116,7 @@
   "refresh_data": "Refresh Data",
   "smart_assistant": "Smart Assistant",
   "ask_question": "Ask about sales, inventory, ...",
-  "system_title": "Logical Version - General Commerce Management System",
+  "system_title": "Standard El Joumla - General Commerce Management System",
   "search_customer": "Search for customer...",
   "customer": "Customer",
   "current_balance": "Current Balance",
@@ -263,10 +263,10 @@
   "error_network": "Network Error",
   "error_file_system": "File System Error",
   "error_system": "System Error",
-  "login_title": "Login - Logical Version",
-  "app_name_short": "Logical Version",
+  "login_title": "Login - Standard El Joumla",
+  "app_name_short": "Standard El Joumla",
   "app_description": "Integrated Sales and Inventory Management System",
-  "app_version_copyright": "Version 1.0.0 | © 2024 Logical Version - All Rights Reserved",
+  "app_version_copyright": "Version 1.0.0 | © 2024 Standard El Joumla - All Rights Reserved",
   "username_label": "👤 Username",
   "password_label": "🔒 Password",
   "enter_username": "Enter username",
@@ -412,7 +412,7 @@
   "data_updated_ask_question": "Data updated. You can now ask a question.",
   "refresh_data_failed": "Failed to refresh data: {error}",
   "processing_query": "Processing query...",
-  "welcome_title": "🚀 Logical Version",
+  "welcome_title": "🚀 Standard El Joumla",
   "main_dashboard": "🏠 Main Dashboard",
   "period": "Period",
   "chart_load_error": "⚠️ Unable to load chart. Please install the required library: pip install pyqtgraph",
@@ -432,3 +432,4 @@
   "question": "Question",
   "answer": "Answer"
 }
+

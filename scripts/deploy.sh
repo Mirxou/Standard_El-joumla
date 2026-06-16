@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Unified Commerce ERP Production Deployment Script
+# Standard El-Joumla Production Deployment Script
 # Version: 1.0.0
 # Description: Automated deployment for production environment
 
@@ -125,7 +125,7 @@ run_health_checks() {
     fi
 
     # Check API service health
-    if curl -f http://localhost:8000/health > /dev/null 2>&1; then
+    if curl -f http://localhost:8001/health > /dev/null 2>&1; then
         success "API service is healthy."
     else
         warning "API service health check failed."

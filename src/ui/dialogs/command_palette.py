@@ -1,33 +1,41 @@
+from PySide6.QtCore import QEvent, Qt, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QLineEdit, QListWidget, QListWidgetItem, 
-    QLabel, QGraphicsDropShadowEffect, QWidget
+    QGraphicsDropShadowEffect,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt, Signal, QSize, QEvent
-from PySide6.QtGui import QColor, QFont, QIcon, QAction
 
-class CommandPalette(QDialog):
+from src.ui.widgets.base_dialog import BaseDialog
+
+
+class CommandPalette(BaseDialog):
     """
     Global Command Palette (Ctrl+K)
     - Fuzzy search for actions and navigation.
     - High-performance, keyboard-driven interface.
     """
-    action_triggered = Signal(str) # Emits action ID
-    
+
+    action_triggered = Signal(str)  # Emits action ID
+
     def __init__(self, parent=None):
-        super().__init__(parent)
+        super().__init__(title="", parent=parent)
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Popup)
-        self.setAttribute(Qt.WA_TranslucentBackground)
         self.resize(600, 400)
-        
+
         # Center on parent
         if parent:
             geo = parent.geometry()
             center = geo.center()
             self.move(center.x() - 300, center.y() - 200)
-            
+
         self.setup_ui()
         self.setup_actions()
-        
+
     def setup_ui(self):
         # Main Container (Glass Effect)
         self.container = QWidget(self)
@@ -38,15 +46,15 @@ class CommandPalette(QDialog):
                 border-radius: 12px;
             }
         """)
-        
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.container)
-        
+
         inner_layout = QVBoxLayout(self.container)
         inner_layout.setContentsMargins(10, 10, 10, 10)
         inner_layout.setSpacing(10)
-        
+
         # Search Input
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Type a command or search...")
@@ -65,9 +73,9 @@ class CommandPalette(QDialog):
             }
         """)
         self.search_input.textChanged.connect(self.filter_items)
-        self.search_input.installEventFilter(self) # For Up/Down/Enter formatting
+        self.search_input.installEventFilter(self)  # For Up/Down/Enter formatting
         inner_layout.addWidget(self.search_input)
-        
+
         # Action List
         self.list_widget = QListWidget()
         self.list_widget.setStyleSheet("""
@@ -83,19 +91,19 @@ class CommandPalette(QDialog):
                 font-size: 14px;
             }
             QListWidget::item:selected {
-                background-color: rgba(56, 189, 248, 0.1);
+                background-color: #334155;
                 color: #38bdf8;
             }
         """)
         self.list_widget.itemClicked.connect(self.execute_current)
         inner_layout.addWidget(self.list_widget)
-        
+
         # Footer
         footer = QLabel("Navigate: ↑↓ | Select: Enter | Close: Esc")
-        footer.setStyleSheet("color: #64748b; font-size: 12px; margin-top: 5px;")
+        footer.setStyleSheet("color: #cbd5e1; font-size: 12px; margin-top: 5px;")
         footer.setAlignment(Qt.AlignCenter)
         inner_layout.addWidget(footer)
-        
+
         # Shadow
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(30)
@@ -114,13 +122,11 @@ class CommandPalette(QDialog):
             ("nav:purchases", "🛒", "Go to Purchases", "Navigation"),
             ("nav:reports", "📊", "Go to Reports", "Navigation"),
             ("nav:settings", "⚙️", "Go to Settings", "Navigation"),
-            
             # Actions
             ("act:refresh", "🔄", "Refresh Data", "Action"),
             ("act:theme_toggle", "🌓", "Toggle Dark/Light Mode", "Action"),
             ("act:add_product", "➕", "Add New Product", "Action"),
             ("act:new_sale", "💲", "New Sale Invoice", "Action"),
-            
             # System
             ("sys:logout", "🚪", "Logout", "System"),
             ("sys:exit", "❌", "Exit Application", "System"),
@@ -130,14 +136,14 @@ class CommandPalette(QDialog):
     def filter_items(self, text):
         self.list_widget.clear()
         search_term = text.lower()
-        
+
         for cmd_id, icon, label, category in self.all_commands:
             if search_term in label.lower() or search_term in category.lower():
                 item_text = f"{icon}  {label}"
                 item = QListWidgetItem(item_text)
                 item.setData(Qt.UserRole, cmd_id)
                 self.list_widget.addItem(item)
-        
+
         if self.list_widget.count() > 0:
             self.list_widget.setCurrentRow(0)
 

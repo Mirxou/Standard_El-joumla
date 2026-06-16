@@ -1,3 +1,4 @@
+import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -5,17 +6,13 @@
 توفر تشفير قوي، مصادقة ثنائية، وحماية متقدمة
 """
 
+import base64
+import hashlib
 import os
 import secrets
-import hashlib
-import base64
-import json
 import time
-import logging
-from typing import Optional, Dict, Any, Tuple
 from datetime import datetime, timedelta
-from pathlib import Path
-import sys
+from typing import Any, Dict, Optional, Tuple
 
 # Setup logger
 logger = logging.getLogger(__name__)
@@ -24,14 +21,12 @@ logger = logging.getLogger(__name__)
 
 try:
     from argon2 import PasswordHasher
-    from argon2.exceptions import VerifyMismatchError, VerificationError, InvalidHash
+    from argon2.exceptions import InvalidHash, VerificationError, VerifyMismatchError
 
     ARGON2_AVAILABLE = True
 except ImportError:
     ARGON2_AVAILABLE = False
-    logging.warning(
-        "⚠️ تحذير: مكتبة argon2-cffi غير مثبتة. سيتم استخدام PBKDF2 بدلاً منها."
-    )
+    logging.warning("⚠️ تحذير: مكتبة argon2-cffi غير مثبتة. سيتم استخدام PBKDF2 بدلاً منها.")
 
 try:
     import pyotp
@@ -124,9 +119,7 @@ class AdvancedSecurityService:
         else:
             # استخدام PBKDF2 كبديل
             salt = os.urandom(32)  # 256 بت
-            pwdhash = hashlib.pbkdf2_hmac(
-                "sha256", password.encode("utf-8"), salt, self.pbkdf2_iterations
-            )
+            pwdhash = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, self.pbkdf2_iterations)
             # تخزين الملح مع الـ hash
             storage = salt + pwdhash
             return f"$pbkdf2${base64.b64encode(storage).decode('ascii')}"
@@ -210,9 +203,7 @@ class AdvancedSecurityService:
 
         return pyotp.random_base32()
 
-    def get_totp_uri(
-        self, secret: str, account_name: str, issuer: str = "الإصدار المنطقي"
-    ) -> str:
+    def get_totp_uri(self, secret: str, account_name: str, issuer: str = "الإصدار المنطقي") -> str:
         """
         إنشاء URI للمصادقة الثنائية (لعرضه كـ QR Code)
 
@@ -304,9 +295,7 @@ class AdvancedSecurityService:
             "user_id": user_id,
             "username": username,
             "created_at": datetime.now().isoformat(),
-            "expires_at": (
-                datetime.now() + timedelta(seconds=self.session_timeout)
-            ).isoformat(),
+            "expires_at": (datetime.now() + timedelta(seconds=self.session_timeout)).isoformat(),
             "ip_address": ip_address,
             "user_agent": user_agent,
             "last_activity": datetime.now().isoformat(),
@@ -320,7 +309,7 @@ class AdvancedSecurityService:
             try:
                 self.db.execute_query(
                     """
-                    INSERT INTO user_sessions 
+                    INSERT INTO user_sessions
                     (session_token, user_id, username, created_at, expires_at, ip_address, user_agent)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
@@ -374,7 +363,7 @@ class AdvancedSecurityService:
                     # حفظ في الذاكرة للوصول السريع
                     self._active_sessions[session_token] = session_data
             except Exception:
-                pass
+                logging.getLogger(__name__).warning("Ignored exception in security_service.py")
 
         if not session_data:
             return None
@@ -414,7 +403,7 @@ class AdvancedSecurityService:
                 )
                 return True
             except Exception:
-                pass
+                logging.getLogger(__name__).warning("Ignored exception in security_service.py")
 
         return True
 
@@ -431,11 +420,7 @@ class AdvancedSecurityService:
         count = 0
 
         # حذف من الذاكرة
-        tokens_to_remove = [
-            token
-            for token, data in self._active_sessions.items()
-            if data.get("user_id") == user_id
-        ]
+        tokens_to_remove = [token for token, data in self._active_sessions.items() if data.get("user_id") == user_id]
         for token in tokens_to_remove:
             del self._active_sessions[token]
             count += 1
@@ -450,7 +435,7 @@ class AdvancedSecurityService:
                 if cursor and hasattr(cursor, "rowcount"):
                     count = max(count, cursor.rowcount)
             except Exception:
-                pass
+                logging.getLogger(__name__).warning("Ignored exception in security_service.py")
 
         return count
 
@@ -474,9 +459,7 @@ class AdvancedSecurityService:
 
         # تنظيف المحاولات القديمة (أقدم من مدة الحظر)
         cutoff_time = time.time() - self.lockout_duration
-        self._failed_attempts[username] = [
-            t for t in self._failed_attempts[username] if t > cutoff_time
-        ]
+        self._failed_attempts[username] = [t for t in self._failed_attempts[username] if t > cutoff_time]
 
         # التحقق من تجاوز الحد
         return len(self._failed_attempts[username]) >= self.max_login_attempts
@@ -496,9 +479,7 @@ class AdvancedSecurityService:
 
         # تنظيف المحاولات القديمة
         cutoff_time = time.time() - self.lockout_duration
-        self._failed_attempts[username] = [
-            t for t in self._failed_attempts[username] if t > cutoff_time
-        ]
+        self._failed_attempts[username] = [t for t in self._failed_attempts[username] if t > cutoff_time]
 
         attempts = self._failed_attempts[username]
 
@@ -545,7 +526,7 @@ class AdvancedSecurityService:
         try:
             self.db.execute_query(
                 """
-                INSERT INTO security_audit_log 
+                INSERT INTO security_audit_log
                 (event_type, user_id, username, description, ip_address, severity, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
@@ -626,7 +607,7 @@ if __name__ == "__main__":
         print(f"   URI: {uri[:50]}...")
 
         # إنشاء رمز
-        import pyotp
+        import pyotp  # noqa: F811
 
         totp = pyotp.TOTP(secret)
         token = totp.now()

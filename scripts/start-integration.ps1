@@ -26,7 +26,7 @@ Write-Host ""
 
 # التحقق من قاعدة البيانات
 Write-Host "📋 التحقق من قاعدة البيانات..." -ForegroundColor Yellow
-$dbPath = "data\logical_release.db"
+$dbPath = "data\standard_eljoumla.db"
 if (Test-Path $dbPath) {
     Write-Host "✅ قاعدة البيانات موجودة: $dbPath" -ForegroundColor Green
 } else {
@@ -43,13 +43,13 @@ if (Test-Path $envPath) {
 } else {
     Write-Host "⚠️  ملف .env.local غير موجود" -ForegroundColor Yellow
     Write-Host "   سيتم استخدام القيم الافتراضية" -ForegroundColor Yellow
-    Write-Host "   (NEXT_PUBLIC_API_BASE_URL=http://localhost:8000)" -ForegroundColor Yellow
+    Write-Host "   (NEXT_PUBLIC_API_BASE_URL=http://localhost:8001)" -ForegroundColor Yellow
 }
 Write-Host ""
 
 # عرض الإعدادات
 Write-Host "📊 الإعدادات الحالية:" -ForegroundColor Cyan
-Write-Host "   Backend API: http://localhost:8000" -ForegroundColor White
+Write-Host "   Backend API: http://localhost:8001" -ForegroundColor White
 Write-Host "   Frontend: http://localhost:3000" -ForegroundColor White
 Write-Host ""
 
@@ -68,7 +68,7 @@ if ($choice -eq "1") {
     Write-Host "   اضغط Ctrl+C لإيقاف" -ForegroundColor Yellow
     Write-Host ""
     Set-Location $PSScriptRoot\..
-    python -m uvicorn src.api.app:app --reload --port 8000 --host 0.0.0.0
+    python -m uvicorn src.api.app:app --reload --port 8001 --host 0.0.0.0
 }
 elseif ($choice -eq "2") {
     Write-Host ""
@@ -86,7 +86,7 @@ elseif ($choice -eq "3") {
     
     # تشغيل Backend في نافذة جديدة
     Write-Host "📡 بدء Backend API..." -ForegroundColor Cyan
-    Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PSScriptRoot\..'; python -m uvicorn src.api.app:app --reload --port 8000 --host 0.0.0.0"
+    Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PSScriptRoot\..'; python -m uvicorn src.api.app:app --reload --port 8001 --host 0.0.0.0"
     
     # انتظار قليل
     Start-Sleep -Seconds 3

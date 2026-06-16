@@ -121,7 +121,7 @@ invoice_data = {
     'remaining': 65800,
     'payment_method': 'نقدي + آجل',
     'notes': 'شكراً لتعاملكم معنا',
-    'company_name': 'الإصدار المنطقي',
+    'company_name': 'ستاندرد الجملة',
     'company_phone': '0123456789',
     'company_address': 'الجزائر العاصمة',
     'company_tax_id': '123456789012',
@@ -167,7 +167,7 @@ else:
 
 ```html
 <div class="company-info">
-    <h1>{{ company_name or "الإصدار المنطقي" }}</h1>
+    <h1>{{ company_name or "ستاندرد الجملة" }}</h1>
     <p>
         {{ company_address or "شارع التقنية، الجزائر العاصمة" }}<br>
         هاتف: {{ company_phone or "0123456789" }}<br>
@@ -374,7 +374,7 @@ if success:
 
 ---
 
-**تم إنشاء هذا النظام بواسطة:** Logical Version Team  
+**تم إنشاء هذا النظام بواسطة:** Standard El-Joumla Team  
 **التاريخ:** 2025-01-15  
 **الإصدار:** 1.0.0
 

@@ -55,17 +55,17 @@
 
 @layer utilities {
 
-  /* Responsible Glassmorphism - The "Visionary" Standard */
+  /* Solid Slate Standard - Enterprise Look */
   .glass-panel {
-    @apply bg-white/5 backdrop-blur-2xl border border-white/10 shadow-2xl;
+    @apply bg-slate-900 border border-slate-800 shadow-2xl;
   }
 
   .glass-card {
-    @apply bg-gradient-to-br from-white/10 to-white/0 backdrop-blur-xl border border-white/10 shadow-lg text-white transition-all duration-300;
+    @apply bg-slate-900 border border-slate-800 shadow-lg text-white transition-all duration-300;
   }
 
   .glass-button {
-    @apply bg-white/10 hover:bg-white/20 active:bg-white/30 backdrop-blur-md border border-white/20 transition-all duration-300;
+    @apply bg-slate-800 hover:bg-slate-700 active:bg-slate-600 border border-slate-700 transition-all duration-300;
   }
 
   /* Neon Glows */

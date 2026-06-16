@@ -112,7 +112,7 @@ export default function ReportsManagement() {
                 </div>
                 <div className="flex gap-2">
                     <Select value={period} onValueChange={setPeriod}>
-                        <SelectTrigger className="w-32 bg-white">
+                        <SelectTrigger className="w-32 glass-panel border-white/10 text-white">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -275,7 +275,7 @@ export default function ReportsManagement() {
                         </CardContent>
                     </Card>
 
-                    <Card className="bg-white border-gray-200 shadow-sm">
+                    <Card className="glass-panel border-white/10 shadow-lg">
                         <CardContent className="p-4">
                             <div className="flex justify-between items-start">
                                 <div>

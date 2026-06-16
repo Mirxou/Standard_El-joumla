@@ -1,3 +1,4 @@
+import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -5,34 +6,44 @@
 واجهة تتكيف تلقائياً بين وضع B2B و B2C حسب نوع العميل
 """
 
-from typing import Optional, Dict, List, Any, Callable
+from datetime import date
 from decimal import Decimal
-from datetime import datetime
-import sys
-from pathlib import Path
+from typing import Optional
 
-
+from PySide6.QtCore import QObject, Qt, QThread, Signal
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QTableWidget, QTableWidgetItem, QComboBox, QLineEdit,
-    QTextEdit, QGroupBox, QSplitter, QFrame, QScrollArea,
-    QMessageBox, QProgressBar, QCheckBox, QSpinBox
+    QCheckBox,
+    QComboBox,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QSpinBox,
+    QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt, Signal, QTimer, QThread, QObject
-from PySide6.QtGui import QFont, QPalette, QColor
 
+from src.core.database_manager import DatabaseManager
 from src.models.customer import Customer
-from src.models.product import Product
-from src.services.pricing_service import PricingService
+from src.models.sale import PaymentMethod, Sale, SaleItem, SaleStatus
 from src.services.cpq_service import CPQService
 from src.services.dynamic_pricing_engine import DynamicPricingEngine
-from src.core.database_manager import DatabaseManager
-from src.ui.styles import apply_style_to_widget
+from src.services.pricing_service import PricingService
+from src.services.sales_service import SalesService
 from src.ui.components.ai_components import AIButton, AIPromptInput
 from src.utils.logger import setup_logger
+from src.utils.math_utils import to_decimal
+
 
 class PriceUpdateWorker(QObject):
     """عامل تحديث الأسعار في الخلفية"""
+
     finished = Signal(dict)
     error = Signal(str)
 
@@ -47,9 +58,7 @@ class PriceUpdateWorker(QObject):
     def run(self):
         try:
             # Get base price
-            base_price = self.pricing_service.get_price_for_customer(
-                self.product_id, self.customer, self.quantity
-            )
+            base_price = self.pricing_service.get_price_for_customer(self.product_id, self.customer, self.quantity)
 
             # Get dynamic adjustments
             final_price = self.dynamic_pricing.adjust_price(
@@ -57,12 +66,14 @@ class PriceUpdateWorker(QObject):
             )
 
             # Get pricing insights
-            insights = self.dynamic_pricing.get_pricing_insights(self.product_id, self.customer, Decimal(str(self.quantity)))
+            insights = self.dynamic_pricing.get_pricing_insights(
+                self.product_id, self.customer, Decimal(str(self.quantity))
+            )
 
             result = {
-                'base_price': base_price,
-                'final_price': final_price,
-                'insights': insights
+                "base_price": base_price,
+                "final_price": final_price,
+                "insights": insights,
             }
 
             self.finished.emit(result)
@@ -70,12 +81,86 @@ class PriceUpdateWorker(QObject):
         except Exception as e:
             self.error.emit(str(e))
 
+
+class SaleCreationWorker(QObject):
+    """عامل إنشاء المبيعات وعروض الأسعار في الخلفية"""
+
+    finished = Signal(dict)
+    error = Signal(str)
+
+    def __init__(self, mode, customer, cart_items, cpq_service, sales_service):
+        super().__init__()
+        self.mode = mode  # 'quote' or 'sale'
+        self.customer = customer
+        self.cart_items = cart_items
+        self.cpq_service = cpq_service
+        self.sales_service = sales_service
+
+    def run(self):
+        try:
+            if self.mode == "quote":
+                items_data = []
+                for item in self.cart_items:
+                    items_data.append(
+                        {
+                            "product_id": item["product_id"],
+                            "quantity": item["quantity"],
+                            "custom_discount": 0,
+                        }
+                    )
+                quote = self.cpq_service.create_quote(
+                    self.customer.id,
+                    items_data,
+                    valid_days=30,
+                    notes="تم إنشاؤه من واجهة المبيعات المدمجة",
+                )
+                if quote:
+                    self.finished.emit({"type": "quote", "id": quote.id, "total": float(quote.total)})
+                else:
+                    self.error.emit("فشل في إنشاء عرض الأسعار")
+            else:
+                # إنشاء مبيعة حقيقية
+                sale = Sale(
+                    invoice_number=self.sales_service._generate_invoice_number(),
+                    customer_id=self.customer.id,
+                    sale_date=date.today(),
+                    status=SaleStatus.CONFIRMED,
+                    payment_method=PaymentMethod.CASH,
+                    items=[],
+                )
+                subtotal = sum(item.get("final_price", 0) * item["quantity"] for item in self.cart_items)
+                sale.total_amount = to_decimal(subtotal)
+                sale.final_amount = sale.total_amount
+                sale.paid_amount = sale.final_amount
+                sale.remaining_amount = Decimal("0")
+
+                for item in self.cart_items:
+                    sale_item = SaleItem(
+                        product_id=item["product_id"],
+                        quantity=item["quantity"],
+                        unit_price=to_decimal(item.get("final_price", 0)),
+                        discount=Decimal("0"),
+                    )
+                    sale_item.calculate_totals()
+                    sale.items.append(sale_item)
+
+                # Use sales_service.create_sale to trigger inventory and accounting
+                sale_id = self.sales_service.create_sale(sale)
+                if sale_id:
+                    self.finished.emit({"type": "sale", "id": sale_id, "total": float(subtotal)})
+                else:
+                    self.error.emit("فشل في إنشاء المبيعة في قاعدة البيانات أو الكمية غير متوفرة")
+
+        except Exception as e:
+            self.error.emit(str(e))
+
+
 class BlendedSalesUI(QWidget):
     """واجهة المبيعات المدمجة المتكيفة"""
 
     # Signals
     sale_completed = Signal(dict)  # {'sale_id': int, 'total': float, 'customer': Customer}
-    quote_created = Signal(dict)   # {'quote_id': int, 'total': float, 'customer': Customer}
+    quote_created = Signal(dict)  # {'quote_id': int, 'total': float, 'customer': Customer}
 
     def __init__(self, db_manager: DatabaseManager, user_id: int):
         super().__init__()
@@ -87,6 +172,7 @@ class BlendedSalesUI(QWidget):
         self.pricing_service = PricingService(self.db)
         self.cpq_service = CPQService(self.db, self.pricing_service)
         self.dynamic_pricing = DynamicPricingEngine(self.db)
+        self.sales_service = SalesService(self.db, self.logger)
 
         # UI state
         self.current_customer: Optional[Customer] = None
@@ -154,8 +240,8 @@ class BlendedSalesUI(QWidget):
         self.customer_info = QLabel("لم يتم اختيار عميل")
         self.customer_info.setStyleSheet("""
             QLabel {
-                background-color: #f8f9fa;
-                border: 1px solid #dee2e6;
+                background-color: #1e293b;
+                border: 1px solid #334155;
                 border-radius: 4px;
                 padding: 10px;
                 min-height: 60px;
@@ -240,7 +326,12 @@ class BlendedSalesUI(QWidget):
         self.tax_label = QLabel("الضريبة: €0.00")
         self.total_label = QLabel("الإجمالي: €0.00")
 
-        for label in [self.subtotal_label, self.discount_label, self.tax_label, self.total_label]:
+        for label in [
+            self.subtotal_label,
+            self.discount_label,
+            self.tax_label,
+            self.total_label,
+        ]:
             label.setStyleSheet("font-weight: bold; font-size: 14px;")
             totals_layout.addWidget(label)
 
@@ -301,7 +392,6 @@ class BlendedSalesUI(QWidget):
     def apply_adaptive_styling(self):
         """تطبيق التصميم المتكيف"""
         # Apply base styling
-        apply_style_to_widget(self)
 
         # Adaptive colors based on mode
         self.update_mode_styling()
@@ -314,11 +404,11 @@ class BlendedSalesUI(QWidget):
             mode_text = "وضع B2B"
         else:
             # B2C colors - consumer green
-            mode_color = "#28a745"
+            mode_color = "#28a745"  # noqa: F841
             mode_text = "وضع B2C"
 
         self.mode_indicator.setText(mode_text)
-        self.mode_indicator.setStyleSheet(f"""
+        self.mode_indicator.setStyleSheet("""
             QLabel {{
                 background-color: {mode_color};
                 color: white;
@@ -330,7 +420,7 @@ class BlendedSalesUI(QWidget):
         """)
 
         # Update checkout button color
-        self.checkout_btn.setStyleSheet(f"""
+        self.checkout_btn.setStyleSheet("""
             QPushButton {{
                 background-color: {mode_color};
                 color: white;
@@ -351,8 +441,8 @@ class BlendedSalesUI(QWidget):
     def adjust_color_brightness(self, hex_color: str, brightness_offset: int) -> str:
         """تعديل سطوع اللون"""
         # Convert hex to RGB
-        hex_color = hex_color.lstrip('#')
-        rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        hex_color = hex_color.lstrip("#")
+        rgb = tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
 
         # Adjust brightness
         new_rgb = []
@@ -368,17 +458,17 @@ class BlendedSalesUI(QWidget):
         self.current_customer = customer
 
         # Update UI mode based on customer type
-        self.is_b2b_mode = customer.customer_type == 'b2b'
+        self.is_b2b_mode = customer.customer_type == "b2b"
         self.update_mode_styling()
 
         # Update customer info display
-        customer_info = f"""
+        customer_info = """
         <b>{customer.name}</b><br>
         النوع: {customer.customer_type.title()}<br>
         التصنيف: {customer.pricing_tier or 'قياسي'}
         """
 
-        if hasattr(customer, 'total_purchases') and customer.total_purchases:
+        if hasattr(customer, "total_purchases") and customer.total_purchases:
             customer_info += f"<br>إجمالي المشتريات: €{customer.total_purchases:,.2f}"
 
         self.customer_info.setText(customer_info)
@@ -415,20 +505,15 @@ class BlendedSalesUI(QWidget):
     def show_bulk_pricing_options(self):
         """إظهار خيارات التسعير بالجملة"""
         # This would add bulk discount indicators, minimum order quantities, etc.
-        pass
 
     def hide_bulk_pricing_options(self):
         """إخفاء خيارات التسعير بالجملة"""
-        pass
 
     def load_products(self):
         """تحميل المنتجات مع الأسعار المخصصة"""
         try:
             # Get products (simplified - would use proper product service)
-            products = self.db.execute_query(
-                "SELECT id, name, retail_price, current_stock FROM products LIMIT 100",
-                fetch_all=True
-            )
+            products = self.db.fetch_all("SELECT id, name, retail_price, current_stock FROM products LIMIT 100")
 
             self.products_table.setRowCount(len(products))
 
@@ -437,9 +522,7 @@ class BlendedSalesUI(QWidget):
 
                 # Calculate customer-specific price
                 if self.current_customer:
-                    price = self.pricing_service.get_price_for_customer(
-                        product_id, self.current_customer, 1
-                    )
+                    price = self.pricing_service.get_price_for_customer(product_id, self.current_customer, 1)
                 else:
                     price = Decimal(str(base_price or 0))
 
@@ -472,20 +555,22 @@ class BlendedSalesUI(QWidget):
         # Check if product already in cart
         existing_item = None
         for item in self.cart_items:
-            if item['product_id'] == product_id:
+            if item["product_id"] == product_id:
                 existing_item = item
                 break
 
         if existing_item:
-            existing_item['quantity'] += quantity
+            existing_item["quantity"] += quantity
         else:
             # Add new item
-            self.cart_items.append({
-                'product_id': product_id,
-                'quantity': quantity,
-                'base_price': Decimal('0'),  # Will be calculated
-                'final_price': Decimal('0')   # Will be calculated
-            })
+            self.cart_items.append(
+                {
+                    "product_id": product_id,
+                    "quantity": quantity,
+                    "base_price": Decimal("0"),  # Will be calculated
+                    "final_price": Decimal("0"),  # Will be calculated
+                }
+            )
 
         # Update cart display
         self.update_cart_display()
@@ -498,8 +583,8 @@ class BlendedSalesUI(QWidget):
         self.cart_table.setRowCount(len(self.cart_items))
 
         for row, item in enumerate(self.cart_items):
-            product_id = item['product_id']
-            quantity = item['quantity']
+            product_id = item["product_id"]
+            quantity = item["quantity"]
 
             # Get product name
             product_name = self.get_product_name(product_id)
@@ -512,9 +597,7 @@ class BlendedSalesUI(QWidget):
             quantity_spin = QSpinBox()
             quantity_spin.setValue(quantity)
             quantity_spin.setMinimum(1)
-            quantity_spin.valueChanged.connect(
-                lambda value, pid=product_id: self.update_item_quantity(pid, value)
-            )
+            quantity_spin.valueChanged.connect(lambda value, pid=product_id: self.update_item_quantity(pid, value))
             self.cart_table.setCellWidget(row, 1, quantity_spin)
 
             # Price (will be updated by price calculation)
@@ -522,7 +605,7 @@ class BlendedSalesUI(QWidget):
             self.cart_table.setItem(row, 2, price_item)
 
             # Total
-            total = item.get('final_price', 0) * quantity
+            total = item.get("final_price", 0) * quantity
             total_item = QTableWidgetItem(f"€{total:.2f}")
             self.cart_table.setItem(row, 3, total_item)
 
@@ -551,9 +634,9 @@ class BlendedSalesUI(QWidget):
         worker = PriceUpdateWorker(
             self.pricing_service,
             self.dynamic_pricing,
-            item['product_id'],
+            item["product_id"],
             self.current_customer,
-            item['quantity']
+            item["quantity"],
         )
 
         worker.finished.connect(lambda result: self.on_price_calculated(result, item, index))
@@ -570,9 +653,9 @@ class BlendedSalesUI(QWidget):
 
     def on_price_calculated(self, result: dict, item: dict, index: int):
         """معالجة نتيجة حساب السعر"""
-        item['base_price'] = result['base_price']
-        item['final_price'] = result['final_price']
-        item['insights'] = result['insights']
+        item["base_price"] = result["base_price"]
+        item["final_price"] = result["final_price"]
+        item["insights"] = result["insights"]
 
         # Update progress
         self.price_progress.setValue(self.price_progress.value() + 1)
@@ -589,16 +672,16 @@ class BlendedSalesUI(QWidget):
 
     def update_cart_totals(self):
         """تحديث إجماليات السلة"""
-        subtotal = sum(item.get('final_price', 0) * item['quantity'] for item in self.cart_items)
+        subtotal = sum(item.get("final_price", 0) * item["quantity"] for item in self.cart_items)
 
         # Calculate discounts (simplified)
-        discount = Decimal('0')
+        discount = Decimal("0")
         if self.is_b2b_mode:
             # B2B discounts
-            discount = subtotal * Decimal('0.05')  # 5% B2B discount
+            discount = subtotal * Decimal("0.05")  # 5% B2B discount
 
         # Tax calculation (simplified)
-        tax_rate = Decimal('0.19')  # 19% VAT
+        tax_rate = Decimal("0.19")  # 19% VAT
         taxable_amount = subtotal - discount
         tax = taxable_amount * tax_rate
 
@@ -614,61 +697,75 @@ class BlendedSalesUI(QWidget):
         self.checkout_btn.setEnabled(len(self.cart_items) > 0)
 
     def checkout(self):
-        """إتمام الشراء أو إنشاء عرض أسعار"""
+        """إتمام الشراء أو إنشاء عرض أسعار بشكل غير متزامن"""
         if not self.current_customer or not self.cart_items:
             return
 
         try:
-            if self.quote_mode and self.is_b2b_mode:
-                # Create quote
-                quote = self.create_quote_from_cart()
-                if quote:
-                    self.quote_created.emit({
-                        'quote_id': quote.id,
-                        'total': float(quote.total),
-                        'customer': self.current_customer
-                    })
-                    QMessageBox.information(self, "نجح", f"تم إنشاء عرض الأسعار رقم {quote.id}")
-            else:
-                # Create sale
-                sale_id = self.create_sale_from_cart()
-                if sale_id:
-                    total = sum(item.get('final_price', 0) * item['quantity'] for item in self.cart_items)
-                    self.sale_completed.emit({
-                        'sale_id': sale_id,
-                        'total': float(total),
-                        'customer': self.current_customer
-                    })
-                    QMessageBox.information(self, "نجح", f"تم إتمام المبيعة رقم {sale_id}")
+            self.checkout_btn.setEnabled(False)
+            self.price_progress.setVisible(True)
+            self.price_progress.setRange(0, 0)  # Loading state
 
-            # Clear cart
-            self.clear_cart()
+            mode = "quote" if (self.quote_mode and self.is_b2b_mode) else "sale"
+
+            self.checkout_thread = QThread()
+            self.checkout_worker = SaleCreationWorker(
+                mode=mode,
+                customer=self.current_customer,
+                cart_items=self.cart_items,
+                cpq_service=self.cpq_service,
+                sales_service=self.sales_service,
+            )
+            self.checkout_worker.moveToThread(self.checkout_thread)
+
+            self.checkout_thread.started.connect(self.checkout_worker.run)
+            self.checkout_worker.finished.connect(self._on_checkout_finished)
+            self.checkout_worker.error.connect(self._on_checkout_error)
+
+            self.checkout_worker.finished.connect(self.checkout_thread.quit)
+            self.checkout_worker.error.connect(self.checkout_thread.quit)
+            self.checkout_worker.finished.connect(self.checkout_worker.deleteLater)
+            self.checkout_worker.error.connect(self.checkout_worker.deleteLater)
+            self.checkout_thread.finished.connect(self.checkout_thread.deleteLater)
+
+            self.checkout_thread.start()
 
         except Exception as e:
-            QMessageBox.critical(self, "خطأ", f"فشل في إتمام العملية: {str(e)}")
+            self.checkout_btn.setEnabled(True)
+            self.price_progress.setVisible(False)
+            QMessageBox.critical(self, "خطأ", f"فشل في بدء العملية: {str(e)}")
 
-    def create_quote_from_cart(self) -> Optional[Any]:
-        """إنشاء عرض أسعار من السلة"""
-        items_data = []
-        for item in self.cart_items:
-            items_data.append({
-                'product_id': item['product_id'],
-                'quantity': item['quantity'],
-                'custom_discount': 0  # Could be enhanced
-            })
+    def _on_checkout_finished(self, result: dict):
+        self.checkout_btn.setEnabled(True)
+        self.price_progress.setVisible(False)
+        self.price_progress.setRange(0, 100)
 
-        return self.cpq_service.create_quote(
-            self.current_customer.id,
-            items_data,
-            valid_days=30,
-            notes="تم إنشاؤه من واجهة المبيعات المدمجة"
-        )
+        if result["type"] == "quote":
+            self.quote_created.emit(
+                {
+                    "quote_id": result["id"],
+                    "total": result["total"],
+                    "customer": self.current_customer,
+                }
+            )
+            QMessageBox.information(self, "نجح", f"تم إنشاء عرض الأسعار رقم {result['id']}")
+        else:
+            self.sale_completed.emit(
+                {
+                    "sale_id": result["id"],
+                    "total": result["total"],
+                    "customer": self.current_customer,
+                }
+            )
+            QMessageBox.information(self, "نجح", f"تم إتمام المبيعة رقم {result['id']}")
 
-    def create_sale_from_cart(self) -> Optional[int]:
-        """إنشاء مبيعة من السلة"""
-        # This would integrate with the sales service
-        # For now, return a mock sale ID
-        return 12345  # Mock implementation
+        self.clear_cart()
+
+    def _on_checkout_error(self, error: str):
+        self.checkout_btn.setEnabled(True)
+        self.price_progress.setVisible(False)
+        self.price_progress.setRange(0, 100)
+        QMessageBox.critical(self, "خطأ", f"فشل في إتمام العملية:\n{error}")
 
     def clear_cart(self):
         """إفراغ السلة"""
@@ -678,15 +775,15 @@ class BlendedSalesUI(QWidget):
 
     def remove_from_cart(self, product_id: int):
         """إزالة منتج من السلة"""
-        self.cart_items = [item for item in self.cart_items if item['product_id'] != product_id]
+        self.cart_items = [item for item in self.cart_items if item["product_id"] != product_id]
         self.update_cart_display()
         self.update_cart_totals()
 
     def update_item_quantity(self, product_id: int, new_quantity: int):
         """تحديث كمية المنتج"""
         for item in self.cart_items:
-            if item['product_id'] == product_id:
-                item['quantity'] = new_quantity
+            if item["product_id"] == product_id:
+                item["quantity"] = new_quantity
                 break
 
         self.calculate_cart_prices()
@@ -694,12 +791,13 @@ class BlendedSalesUI(QWidget):
     def get_product_name(self, product_id: int) -> str:
         """الحصول على اسم المنتج"""
         try:
-            product = self.db.execute_query(
-                "SELECT name FROM products WHERE id = ?",
-                (product_id,), fetch_one=True
+            product = self.db.fetch_one("SELECT name FROM products WHERE id = ?", (product_id,))
+            return (
+                product["name"]
+                if isinstance(product, dict) and "name" in product
+                else (product[0] if product else f"منتج {product_id}")
             )
-            return product[0] if product else f"منتج {product_id}"
-        except:
+        except Exception:
             return f"منتج {product_id}"
 
     # Event handlers

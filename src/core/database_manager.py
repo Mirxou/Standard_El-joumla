@@ -1,3 +1,4 @@
+import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -5,28 +6,34 @@
 إدارة الاتصال بقاعدة البيانات والعمليات الأساسية
 """
 
-import sqlite3
-import os
-import shutil
 import json
-import time
+import os
 import re
-from datetime import datetime, timedelta, date
+import shutil
+import sqlite3
+import threading
+import time
+from datetime import date, datetime, timedelta
 
 # Fix for Python 3.12 DeprecationWarning: The default date/datetime adapter is deprecated
 sqlite3.register_adapter(date, lambda val: val.isoformat())
 sqlite3.register_adapter(datetime, lambda val: val.isoformat())
-from pathlib import Path
-from typing import Optional, List, Dict, Any, Tuple, Set
 from contextlib import contextmanager
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set, Tuple
+
+from src.core.database_metrics import get_database_metrics
+from src.core.encrypted_backup_service import EncryptedBackupService
+from src.database.backend import DatabaseBackend
+from src.database.connection_pool import ConnectionPool, PoolConfig
+from src.utils.logger import setup_logger
+
 from .encryption_manager import EncryptionManager
 from .exceptions import DatabaseException
-from src.database.connection_pool import ConnectionPool, PoolConfig
-from src.core.encrypted_backup_service import EncryptedBackupService
-from src.utils.logger import setup_logger
-from src.database.backend import DatabaseBackend
-from src.database.sqlite_backend import SQLiteBackend
-from src.core.database_metrics import get_database_metrics
+
+
+# Intercept clean pytest runs on exit has been moved to tests/unit/conftest.py
+# to avoid double registration and prevent access violations.
 
 
 class DatabaseManager:
@@ -60,6 +67,8 @@ class DatabaseManager:
 
         # للحفاظ على backward compatibility مع الكود القديم
         self.connection = None
+        # Thread-local storage لإدارة المعاملات (Transactions)
+        self._thread_local = threading.local()
         self.pool: Optional[ConnectionPool] = None
         self.encryption_manager = None
         self.encryption_password = encryption_password
@@ -81,9 +90,7 @@ class DatabaseManager:
         # التحقق من حالة التشفير
         if os.path.exists(self.db_path):
             self.encryption_manager = EncryptionManager()
-            self.is_encrypted = self.encryption_manager.is_database_encrypted(
-                self.db_path
-            )
+            self.is_encrypted = self.encryption_manager.is_database_encrypted(self.db_path)
 
     def _ensure_data_directory(self):
         """التأكد من وجود مجلد البيانات"""
@@ -100,6 +107,7 @@ class DatabaseManager:
             conn.close()
             return result[0] == "ok"
         except Exception as e:
+            # استخدام log لتفادي monkey-patch في البيئة الاختبارية
             self.logger.error(f"Database integrity check failed: {e}")
             return False
 
@@ -110,9 +118,7 @@ class DatabaseManager:
             corrupted_path = self.db_path + ".corrupted"
             if os.path.exists(self.db_path):
                 shutil.copy2(self.db_path, corrupted_path)
-                self.logger.warning(
-                    f"Created backup of corrupted database: {corrupted_path}"
-                )
+                self.logger.warning(f"Created backup of corrupted database: {corrupted_path}")
 
             # محاولة إصلاح قاعدة البيانات
             conn = sqlite3.connect(self.db_path)
@@ -122,10 +128,10 @@ class DatabaseManager:
             conn.close()
 
             if result[0] != "ok":
-                self.logger.error(
-                    "Database recovery failed - may need manual intervention"
-                )
+                # استخدام log لتفادي monkey-patch في البيئة الاختبارية
+                self.logger.error("Database recovery failed - may need manual intervention")
         except Exception as e:
+            # استخدام log لتفادي monkey-patch في البيئة الاختبارية
             self.logger.error(f"Database recovery attempt failed: {e}")
 
     def initialize(self) -> bool:
@@ -136,11 +142,10 @@ class DatabaseManager:
                 self.logger.info(f"Creating new database at: {self.db_path}")
 
             # فحص سلامة قاعدة البيانات قبل الاتصال
-            if os.path.exists(self.db_path):
+            if os.path.exists(self.db_path) and not self.is_encrypted:
                 if not self._verify_database_integrity():
-                    self.logger.error(
-                        "Database integrity check failed - attempting recovery"
-                    )
+                    # استخدام log لتفادي monkey-patch في البيئة الاختبارية
+                    self.logger.error("Database integrity check failed - attempting recovery")
                     self._attempt_database_recovery()
 
             # استخدام Backend abstraction إذا كان متوفراً
@@ -174,7 +179,7 @@ class DatabaseManager:
                         try:
                             os.remove(temp_db_path)
                         except OSError:
-                            pass
+                            logging.getLogger(__name__).warning("Ignored exception in database_manager.py")
                     raise DatabaseException(f"فشل فك تشفير قاعدة البيانات: {e}")
 
                 # حذف الملف المؤقت بعد الاتصال بشكل آمن
@@ -219,35 +224,23 @@ class DatabaseManager:
 
             # تهيئة Connection Pool للاستخدام العام (تخطي الذاكرة)
             if self.pool is None and not self.is_encrypted:
-                if self.db_path == ":memory:" or str(self.db_path).startswith(
-                    "file::memory:"
-                ):
+                if self.db_path == ":memory:" or str(self.db_path).startswith("file::memory:"):
                     self.pool = None
                 else:
                     enabled = self._pool_options.get("enabled", True)
                     if enabled:
                         cfg = PoolConfig(
-                            pool_size=int(
-                                self._pool_options.get("pool_size", 15)
-                            ),  # زيادة من 10 إلى 15
-                            max_overflow=int(
-                                self._pool_options.get("max_overflow", 30)
-                            ),  # زيادة من 20 إلى 30
-                            timeout=float(
-                                self._pool_options.get("timeout", 60.0)
-                            ),  # زيادة من 30.0 إلى 60.0
+                            pool_size=int(self._pool_options.get("pool_size", 15)),  # زيادة من 10 إلى 15
+                            max_overflow=int(self._pool_options.get("max_overflow", 30)),  # زيادة من 20 إلى 30
+                            timeout=float(self._pool_options.get("timeout", 60.0)),  # زيادة من 30.0 إلى 60.0
                         )
                         self.pool = ConnectionPool(self.db_path, cfg)
 
             # تهيئة خدمة النسخ الاحتياطي (مشفر عند التمكين)
             if self.encrypted_backup_service is None:
-                backups_dir = str(
-                    self._backup_options.get(
-                        "backup_dir", Path(self.db_path).parent / "backups"
-                    )
-                )
+                backups_dir = str(self._backup_options.get("backup_dir", Path(self.db_path).parent / "backups"))
                 max_b = int(self._backup_options.get("max_backups", 30))
-                enc_enabled = bool(self._backup_options.get("encrypted", True))
+                bool(self._backup_options.get("encrypted", True))
                 key_path = self._backup_options.get("encryption_key_path")
                 key_bytes = None
                 if key_path:
@@ -317,10 +310,13 @@ class DatabaseManager:
                 current_stock INTEGER DEFAULT 0,
                 description TEXT,
                 image_path TEXT,
+                parent_product_id INTEGER DEFAULT NULL,
+                conversion_factor INTEGER DEFAULT 1,
                 is_active BOOLEAN DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (category_id) REFERENCES categories(id)
+                FOREIGN KEY (category_id) REFERENCES categories(id),
+                FOREIGN KEY (parent_product_id) REFERENCES products(id)
             )
         """)
 
@@ -523,7 +519,7 @@ class DatabaseManager:
             )
         """)
 
-        # جدول صلاحيات المستخدمين
+        # جدول صلاحيات المستخدمين (النسخة القديمة للاحتياط)
         self.connection.execute("""
             CREATE TABLE IF NOT EXISTS user_permissions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -535,17 +531,61 @@ class DatabaseManager:
             )
         """)
 
+        # الجداول الجديدة للصلاحيات والأدوار
+        self.connection.execute("""
+            CREATE TABLE IF NOT EXISTS permissions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                code TEXT UNIQUE NOT NULL,
+                resource_type TEXT NOT NULL,
+                action TEXT NOT NULL,
+                description TEXT,
+                is_system BOOLEAN DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        self.connection.execute("""
+            CREATE TABLE IF NOT EXISTS roles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                code TEXT UNIQUE NOT NULL,
+                description TEXT,
+                is_system BOOLEAN DEFAULT 0,
+                is_active BOOLEAN DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        self.connection.execute("""
+            CREATE TABLE IF NOT EXISTS role_permissions (
+                role_id INTEGER NOT NULL,
+                permission_id INTEGER NOT NULL,
+                PRIMARY KEY (role_id, permission_id),
+                FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+                FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE
+            )
+        """)
+
         # جدول المدفوعات
         self.connection.execute("""
             CREATE TABLE IF NOT EXISTS payments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                payment_type TEXT NOT NULL CHECK (payment_type IN ('customer_payment', 'supplier_payment', 'expense', 'other')),
+                payment_type TEXT NOT NULL CHECK (
+                    payment_type IN ('customer_payment', 'supplier_payment', 'expense', 'other')
+                ),
                 entity_id INTEGER NOT NULL,
                 amount DECIMAL(10,2) NOT NULL,
-                payment_method TEXT NOT NULL CHECK (payment_method IN ('cash', 'check', 'bank_transfer', 'credit_card', 'debit_card')),
+                payment_method TEXT NOT NULL CHECK (
+                    payment_method IN ('cash', 'check', 'bank_transfer', 'credit_card', 'debit_card')
+                ),
                 reference_number TEXT,
                 payment_date DATE DEFAULT CURRENT_DATE,
-                status TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('pending', 'completed', 'cancelled', 'failed')),
+                status TEXT NOT NULL DEFAULT 'completed' CHECK (
+                    status IN ('pending', 'completed', 'cancelled', 'failed')
+                ),
                 notes TEXT,
                 user_id INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -663,18 +703,14 @@ class DatabaseManager:
             # إضافة عمود 'status' إذا لم يكن موجوداً
             if "status" not in columns:
                 self.logger.info("Adding 'status' column to sales table")
-                cursor.execute(
-                    "ALTER TABLE sales ADD COLUMN status TEXT DEFAULT 'completed'"
-                )
+                cursor.execute("ALTER TABLE sales ADD COLUMN status TEXT DEFAULT 'completed'")
 
             # إضافة عمود 'return_status' (للمرتجعات)
             if "return_status" not in columns:
                 self.logger.info("Adding 'return_status' column to sales table")
-                cursor.execute(
-                    "ALTER TABLE sales ADD COLUMN return_status TEXT DEFAULT 'none'"
-                )
+                cursor.execute("ALTER TABLE sales ADD COLUMN return_status TEXT DEFAULT 'none'")
 
-            # 2. إضافة company_id إلى جدول users (للدعم Multi-Company)
+            # 2. إضافة company_id و role_id إلى جدول users
             # ----------------------------------------------------
             try:
                 cursor.execute("PRAGMA table_info(users)")
@@ -684,14 +720,17 @@ class DatabaseManager:
                     self.logger.info("Adding 'company_id' column to users table")
                     cursor.execute("ALTER TABLE users ADD COLUMN company_id INTEGER")
                     cursor.execute("""
-                        CREATE INDEX IF NOT EXISTS idx_users_company 
+                        CREATE INDEX IF NOT EXISTS idx_users_company
                         ON users(company_id)
                     """)
-                    self.logger.info(
-                        "Successfully added company_id column to users table"
-                    )
+                    self.logger.info("Successfully added company_id column to users table")
+
+                if "role_id" not in user_columns:
+                    self.logger.info("Adding 'role_id' column to users table")
+                    cursor.execute("ALTER TABLE users ADD COLUMN role_id INTEGER")
+                    self.logger.info("Successfully added role_id column to users table")
             except Exception as e:
-                self.logger.warning(f"Could not add company_id to users: {e}")
+                self.logger.warning(f"Could not update users columns: {e}")
 
             # 3. ترحيل جدول الفئات (إضافة name_en)
             # ----------------------------------------------------
@@ -702,9 +741,7 @@ class DatabaseManager:
                 if "name_en" not in cat_columns:
                     self.logger.info("Adding 'name_en' column to categories table")
                     cursor.execute("ALTER TABLE categories ADD COLUMN name_en TEXT")
-                    self.logger.info(
-                        "Successfully added name_en column to categories table"
-                    )
+                    self.logger.info("Successfully added name_en column to categories table")
             except Exception as e:
                 self.logger.warning(f"Could not add name_en to categories: {e}")
 
@@ -807,9 +844,7 @@ class DatabaseManager:
         existing = self._get_table_columns(table)
         if column not in existing:
             # Use parameterized query for column name validation
-            self.connection.execute(
-                f'ALTER TABLE "{table}" ADD COLUMN "{column}" {definition}'
-            )
+            self.connection.execute(f'ALTER TABLE "{table}" ADD COLUMN "{column}" {definition}')
             self.connection.commit()
 
     def _upgrade_existing_schema(self) -> None:
@@ -827,6 +862,12 @@ class DatabaseManager:
                 ("tax_percentage", "DECIMAL(5,2) DEFAULT 0"),
                 ("paid_amount", "DECIMAL(10,2) DEFAULT 0"),
                 ("remaining_amount", "DECIMAL(10,2) DEFAULT 0"),
+                ("currency_id", "INTEGER"),
+                ("exchange_rate", "DECIMAL(10,4) DEFAULT 1.0"),
+                ("base_amount", "DECIMAL(15,2)"),
+                ("converted_amount", "DECIMAL(15,2)"),
+                ("created_by", "INTEGER"),
+                ("updated_by", "INTEGER"),
             ]
             for column, definition in sales_columns:
                 self._add_column_if_missing("sales", column, definition)
@@ -844,9 +885,29 @@ class DatabaseManager:
                 ("shipping_cost", "DECIMAL(10,2) DEFAULT 0"),
                 ("paid_amount", "DECIMAL(10,2) DEFAULT 0"),
                 ("remaining_amount", "DECIMAL(10,2) DEFAULT 0"),
+                ("currency_id", "INTEGER"),
+                ("exchange_rate", "DECIMAL(10,4) DEFAULT 1.0"),
+                ("base_amount", "DECIMAL(15,2)"),
+                ("converted_amount", "DECIMAL(15,2)"),
+                ("created_by", "INTEGER"),
+                ("updated_by", "INTEGER"),
             ]
             for column, definition in purchase_columns:
                 self._add_column_if_missing("purchases", column, definition)
+
+            # أعمدة جدول عناصر المشتريات
+            purchase_item_columns = [
+                ("quantity_ordered", "DECIMAL(10,2) DEFAULT 0"),
+                ("quantity_received", "DECIMAL(10,2) DEFAULT 0"),
+                ("discount_percent", "DECIMAL(5,2) DEFAULT 0"),
+                ("discount_amount", "DECIMAL(10,2) DEFAULT 0"),
+                ("tax_percent", "DECIMAL(5,2) DEFAULT 19"),
+                ("tax_amount", "DECIMAL(10,2) DEFAULT 0"),
+                ("total_amount", "DECIMAL(10,2) DEFAULT 0"),
+                ("notes", "TEXT"),
+            ]
+            for column, definition in purchase_item_columns:
+                self._add_column_if_missing("purchase_items", column, definition)
 
             # أعمدة جدول الموردين (الرصيد وحد الائتمان)
             supplier_columns = [
@@ -885,22 +946,30 @@ class DatabaseManager:
             for column, definition in schedules_columns:
                 self._add_column_if_missing("payment_schedules", column, definition)
 
+            # أعمدة جدول المنتجات للتحويل التلقائي
+            product_columns = [
+                ("parent_product_id", "INTEGER DEFAULT NULL REFERENCES products(id)"),
+                ("conversion_factor", "INTEGER DEFAULT 1"),
+            ]
+            for column, definition in product_columns:
+                self._add_column_if_missing("products", column, definition)
+
             # تحديث القيم الافتراضية للصفوف الحالية لضمان الاتساق
             self.connection.execute("""
-                UPDATE sales SET 
+                UPDATE sales SET
                     status = COALESCE(status, 'مؤكدة'),
                     paid_amount = COALESCE(paid_amount, total_amount),
                     remaining_amount = COALESCE(remaining_amount, total_amount - COALESCE(paid_amount, total_amount))
             """)
             self.connection.execute("""
-                UPDATE purchases SET 
+                UPDATE purchases SET
                     status = COALESCE(status, 'معلقة'),
                     payment_status = COALESCE(payment_status, 'غير مدفوعة'),
                     paid_amount = COALESCE(paid_amount, 0),
                     remaining_amount = COALESCE(remaining_amount, total_amount - COALESCE(paid_amount, 0))
             """)
             self.connection.execute("""
-                UPDATE payments SET 
+                UPDATE payments SET
                     payment_status = COALESCE(payment_status, status),
                     amount_in_base_currency = COALESCE(amount_in_base_currency, amount)
             """)
@@ -918,7 +987,7 @@ class DatabaseManager:
             "CREATE INDEX IF NOT EXISTS idx_products_name ON products(name)",
             # فهارس مركبة لتحسين البحث والتصفية
             "CREATE INDEX IF NOT EXISTS idx_products_active_category ON products(is_active, category_id)",
-            "CREATE INDEX IF NOT EXISTS idx_products_stock_levels ON products(current_stock, min_stock) WHERE is_active = 1",
+            "CREATE INDEX IF NOT EXISTS idx_products_stock_levels ON products(current_stock, min_stock) WHERE is_active = 1",  # noqa: E501
             "CREATE INDEX IF NOT EXISTS idx_products_search ON products(is_active, category_id, name)",
             "CREATE INDEX IF NOT EXISTS idx_batches_product ON batches(product_id)",
             "CREATE INDEX IF NOT EXISTS idx_batches_expiry ON batches(expiry_date)",
@@ -931,7 +1000,7 @@ class DatabaseManager:
             "CREATE INDEX IF NOT EXISTS idx_purchases_invoice ON purchases(invoice_number)",
             "CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id)",
             "CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp)",
-            "CREATE INDEX IF NOT EXISTS idx_stock_movements_query ON stock_movements(product_id, movement_type, created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_stock_movements_query ON stock_movements(product_id, movement_type, created_at)",  # noqa: E501
             # فهارس جداول المدفوعات
             "CREATE INDEX IF NOT EXISTS idx_payments_type ON payments(payment_type)",
             "CREATE INDEX IF NOT EXISTS idx_payments_entity ON payments(entity_id)",
@@ -955,10 +1024,29 @@ class DatabaseManager:
 
         self.connection.commit()
 
+    def _is_in_transaction(self) -> bool:
+        """التحقق من وجود معاملة نشطة في الخيط الحالي."""
+        return getattr(self._thread_local, "active_transaction", False)
+
+    def _get_transaction_conn(self):
+        """الحصول على اتصال المعاملة النشطة."""
+        return getattr(self._thread_local, "transaction_conn", None)
+
     @contextmanager
     def get_cursor(self):
-        """الحصول على cursor مع إدارة تلقائية للموارد (يدعم الـ Pool)."""
-        # استخدام Pool إن توفر
+        """الحصول على cursor مع إدارة تلقائية للموارد.
+        إذا كانت هناك معاملة نشطة، يُعاد استخدام اتصالها."""
+        # إذا كنا داخل معاملة نشطة، نستخدم اتصال المعاملة
+        txn_conn = self._get_transaction_conn()
+        if txn_conn is not None:
+            cursor = txn_conn.cursor()
+            try:
+                yield cursor
+            finally:
+                cursor.close()
+            return
+
+        # خارج المعاملة: سلوك عادي
         if self.pool is not None:
             with self.pool.get_connection() as conn:
                 cursor = conn.cursor()
@@ -973,15 +1061,72 @@ class DatabaseManager:
             finally:
                 cursor.close()
 
+    @contextmanager
+    def transaction(self):
+        """سياق لإدارة المعاملات (Transactions) بشكل ذري.
+
+        جميع عمليات execute_insert / execute_non_query داخل هذا السياق
+        ستستخدم نفس الاتصال ولن تقوم بـ commit حتى انتهاء السياق بنجاح.
+        في حالة حدوث خطأ، يتم rollback تلقائي.
+
+        Usage:
+            with db_manager.transaction() as cursor:
+                db_manager.execute_insert(query1, params1)
+                db_manager.execute_insert(query2, params2)
+                # commit happens automatically here
+        """
+        # منع التداخل: إذا كنا بالفعل داخل معاملة
+        if self._is_in_transaction():
+            # Nested transaction: نكمل بدون BEGIN/COMMIT إضافي
+            cursor = self._get_transaction_conn().cursor()
+            try:
+                yield cursor
+            finally:
+                cursor.close()
+            return
+
+        if self.pool is not None:
+            # Pool mode: استخدام get_connection() context manager
+            with self.pool.get_connection() as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                self._thread_local.active_transaction = True
+                self._thread_local.transaction_conn = conn
+                cursor = conn.cursor()
+                try:
+                    yield cursor
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+                    raise
+                finally:
+                    cursor.close()
+                    self._thread_local.active_transaction = False
+                    self._thread_local.transaction_conn = None
+        else:
+            # Single connection mode
+            conn = self.connection
+            conn.execute("BEGIN IMMEDIATE")
+            self._thread_local.active_transaction = True
+            self._thread_local.transaction_conn = conn
+            cursor = conn.cursor()
+            try:
+                yield cursor
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                cursor.close()
+                self._thread_local.active_transaction = False
+                self._thread_local.transaction_conn = None
+
     def execute_query(self, query: str, params: Tuple = ()) -> Any:
         """تنفيذ استعلام وإرجاع النتائج أو cursor للعمليات الأخرى"""
         with self.get_cursor() as cursor:
             start_t = time.perf_counter()
             cursor.execute(query, params)
             duration_ms = (time.perf_counter() - start_t) * 1000.0
-            self.metrics.record_query(
-                query, duration_ms, self._detect_query_type(query)
-            )
+            self.metrics.record_query(query, duration_ms, self._detect_query_type(query))
             if duration_ms >= self.slow_query_threshold_ms:
                 self._log_slow_query(query, params, duration_ms)
             # إذا كان الاستعلام يحتوي على نتائج (SELECT)
@@ -1004,9 +1149,7 @@ class DatabaseManager:
             start_t = time.perf_counter_ns()
             cursor.execute(query, params)
             duration_ms = (time.perf_counter_ns() - start_t) / 1_000_000.0
-            self.metrics.record_query(
-                query, duration_ms, self._detect_query_type(query)
-            )
+            self.metrics.record_query(query, duration_ms, self._detect_query_type(query))
             if duration_ms >= self.slow_query_threshold_ms:
                 self._log_slow_query(query, params, duration_ms)
             return cursor.fetchone()
@@ -1017,28 +1160,27 @@ class DatabaseManager:
             start_t = time.perf_counter()
             cursor.execute(query, params)
             duration_ms = (time.perf_counter() - start_t) * 1000.0
-            self.metrics.record_query(
-                query, duration_ms, self._detect_query_type(query)
-            )
+            self.metrics.record_query(query, duration_ms, self._detect_query_type(query))
             if duration_ms >= self.slow_query_threshold_ms:
                 self._log_slow_query(query, params, duration_ms)
             return cursor.fetchall()
 
     def execute_non_query(self, query: str, params: Tuple = ()) -> int:
-        """تنفيذ استعلام INSERT/UPDATE/DELETE وإرجاع عدد الصفوف المتأثرة"""
+        """تنفيذ استعلام INSERT/UPDATE/DELETE وإرجاع عدد الصفوف المتأثرة.
+        يتخطى auto-commit إذا كنا داخل معاملة نشطة."""
         with self.get_cursor() as cursor:
             start_t = time.perf_counter()
             cursor.execute(query, params)
             duration_ms = (time.perf_counter() - start_t) * 1000.0
-            self.metrics.record_query(
-                query, duration_ms, self._detect_query_type(query)
-            )
+            self.metrics.record_query(query, duration_ms, self._detect_query_type(query))
             if duration_ms >= self.slow_query_threshold_ms:
                 self._log_slow_query(query, params, duration_ms)
-            if self.pool is None:
-                self.connection.commit()
-            else:
-                cursor.connection.commit()
+            # تخطي commit داخل المعاملات — سيتم commit في نهاية transaction()
+            if not self._is_in_transaction():
+                if self.pool is None:
+                    self.connection.commit()
+                else:
+                    cursor.connection.commit()
             return cursor.rowcount
 
     def execute_insert(self, query: str, params: Tuple = ()) -> Optional[int]:
@@ -1054,9 +1196,7 @@ class DatabaseManager:
             start_t = time.perf_counter()
             result = self.backend.execute_insert(query, params)
             duration_ms = (time.perf_counter() - start_t) * 1000.0
-            self.metrics.record_query(
-                query, duration_ms, self._detect_query_type(query)
-            )
+            self.metrics.record_query(query, duration_ms, self._detect_query_type(query))
             if duration_ms >= self.slow_query_threshold_ms:
                 self._log_slow_query(query, params, duration_ms)
             return result
@@ -1066,9 +1206,7 @@ class DatabaseManager:
             start_t = time.perf_counter()
             cursor.execute(query, params)
             duration_ms = (time.perf_counter() - start_t) * 1000.0
-            self.metrics.record_query(
-                query, duration_ms, self._detect_query_type(query)
-            )
+            self.metrics.record_query(query, duration_ms, self._detect_query_type(query))
             if duration_ms >= self.slow_query_threshold_ms:
                 self._log_slow_query(query, params, duration_ms)
 
@@ -1076,15 +1214,13 @@ class DatabaseManager:
             # lastrowid يعمل فقط على نفس cursor الذي نفذ INSERT
             lastrowid = cursor.lastrowid
 
-            # Commit يجب أن يتم قبل إغلاق cursor
-            if self.pool is None:
-                self.connection.commit()
-            else:
-                cursor.connection.commit()
+            # تخطي commit داخل المعاملات — سيتم commit في نهاية transaction()
+            if not self._is_in_transaction():
+                if self.pool is None:
+                    self.connection.commit()
+                else:
+                    cursor.connection.commit()
 
-            # إرجاع lastrowid (عادةً يكون > 0 للـ INSERT الناجح)
-            # في SQLite، lastrowid يكون 0 فقط إذا لم يتم إدراج صف أو إذا كان هناك خطأ
-            # لكن يجب التحقق من أن lastrowid موجود و > 0
             if lastrowid is not None and lastrowid > 0:
                 return lastrowid
             return None
@@ -1096,9 +1232,7 @@ class DatabaseManager:
             start_t = time.perf_counter()
             result = self.backend.execute_scalar(query, params)
             duration_ms = (time.perf_counter() - start_t) * 1000.0
-            self.metrics.record_query(
-                query, duration_ms, self._detect_query_type(query)
-            )
+            self.metrics.record_query(query, duration_ms, self._detect_query_type(query))
             if duration_ms >= self.slow_query_threshold_ms:
                 self._log_slow_query(query, params, duration_ms)
             return result
@@ -1108,9 +1242,7 @@ class DatabaseManager:
             start_t = time.perf_counter()
             cursor.execute(query, params)
             duration_ms = (time.perf_counter() - start_t) * 1000.0
-            self.metrics.record_query(
-                query, duration_ms, self._detect_query_type(query)
-            )
+            self.metrics.record_query(query, duration_ms, self._detect_query_type(query))
             if duration_ms >= self.slow_query_threshold_ms:
                 self._log_slow_query(query, params, duration_ms)
             result = cursor.fetchone()
@@ -1130,9 +1262,7 @@ class DatabaseManager:
             sqlite3.Connection: اتصال قاعدة البيانات
         """
         if not self.connection:
-            raise DatabaseException(
-                "Database connection not initialized. Call initialize() first."
-            )
+            raise DatabaseException("Database connection not initialized. Call initialize() first.")
         return self.connection
 
     def _log_slow_query(self, query: str, params: Tuple, duration_ms: float) -> None:
@@ -1158,7 +1288,7 @@ class DatabaseManager:
                 self.connection.commit()
         except Exception:
             # عدم رفع الاستثناء للحفاظ على استقرار التنفيذ الأساسي
-            pass
+            logging.getLogger(__name__).warning("Ignored exception in database_manager.py")
 
     def backup_database(self, backup_path: Optional[str] = None) -> bool:
         """إنشاء نسخة احتياطية من قاعدة البيانات"""
@@ -1176,16 +1306,12 @@ class DatabaseManager:
             self.logger.error(f"Error creating backup: {e}")
             return False
 
-    def backup_database_encrypted(
-        self, metadata: Optional[Dict[str, Any]] = None
-    ) -> Optional[str]:
+    def backup_database_encrypted(self, metadata: Optional[Dict[str, Any]] = None) -> Optional[str]:
         """إنشاء نسخة احتياطية مشفرة باستخدام EncryptedBackupService"""
         try:
             if self.encrypted_backup_service is None:
                 backups_dir = str(Path(self.db_path).parent / "backups")
-                self.encrypted_backup_service = EncryptedBackupService(
-                    self.db_path, backups_dir
-                )
+                self.encrypted_backup_service = EncryptedBackupService(self.db_path, backups_dir)
             backup_file = self.encrypted_backup_service.create_backup(metadata=metadata)
             return str(backup_file) if backup_file else None
         except Exception as e:
@@ -1217,15 +1343,11 @@ class DatabaseManager:
         try:
             if self.encrypted_backup_service is None:
                 backups_dir = str(Path(self.db_path).parent / "backups")
-                self.encrypted_backup_service = EncryptedBackupService(
-                    self.db_path, backups_dir
-                )
+                self.encrypted_backup_service = EncryptedBackupService(self.db_path, backups_dir)
             # إغلاق الاتصال الحالي
             if self.connection:
                 self.connection.close()
-            success = self.encrypted_backup_service.restore_backup(
-                backup_file, restore_path=self.db_path
-            )
+            success = self.encrypted_backup_service.restore_backup(backup_file, restore_path=self.db_path)
             if not success:
                 return False
             # إعادة التهيئة بعد الاستعادة
@@ -1316,12 +1438,8 @@ class DatabaseManager:
 
             if self.connection:
                 try:
-                    info["page_count"] = self.connection.execute(
-                        "PRAGMA page_count"
-                    ).fetchone()[0]
-                    info["page_size"] = self.connection.execute(
-                        "PRAGMA page_size"
-                    ).fetchone()[0]
+                    info["page_count"] = self.connection.execute("PRAGMA page_count").fetchone()[0]
+                    info["page_size"] = self.connection.execute("PRAGMA page_size").fetchone()[0]
                 except Exception:
                     info["page_count"] = 0
                     info["page_size"] = 0
@@ -1329,9 +1447,7 @@ class DatabaseManager:
                 info["page_count"] = 0
                 info["page_size"] = 0
 
-            info["total_size"] = (
-                info["database_size"] + info["wal_size"] + info["shm_size"]
-            )
+            info["total_size"] = info["database_size"] + info["wal_size"] + info["shm_size"]
 
             # تحويل إلى MB
             info["database_size_mb"] = round(info["database_size"] / (1024 * 1024), 2)
@@ -1372,9 +1488,7 @@ class DatabaseManager:
             self.logger.error(f"Error in database cleanup: {e}")
             return False
 
-    def cleanup_old_data(
-        self, days: int = 90, tables: Optional[List[str]] = None
-    ) -> Dict[str, int]:
+    def cleanup_old_data(self, days: int = 90, tables: Optional[List[str]] = None) -> Dict[str, int]:
         """
         تنظيف البيانات القديمة من قاعدة البيانات
 
@@ -1401,9 +1515,7 @@ class DatabaseManager:
             deleted_counts = {}
             cutoff_date = datetime.now() - timedelta(days=days)
 
-            self.logger.info(
-                f"Starting cleanup for data older than {cutoff_date.strftime('%Y-%m-%d')}..."
-            )
+            self.logger.info(f"Starting cleanup for data older than {cutoff_date.strftime('%Y-%m-%d')}...")
 
             for table_name, date_column in supported_tables.items():
                 if not self.table_exists(table_name):
@@ -1416,9 +1528,7 @@ class DatabaseManager:
                         continue
 
                     # التحقق من وجود العمود - استخدام استعلام آمن
-                    cursor = self.connection.execute(
-                        "PRAGMA table_info(?)", (table_name,)
-                    )
+                    cursor = self.connection.execute("PRAGMA table_info(?)", (table_name,))
                     columns = [col[1] for col in cursor.fetchall()]
 
                     if date_column not in columns:
@@ -1502,9 +1612,7 @@ class DatabaseManager:
 
             # تشفير قاعدة البيانات
             self.encryption_manager = EncryptionManager()
-            self.encryption_manager.encrypt_database(
-                self.db_path, password, backup_original=True
-            )
+            self.encryption_manager.encrypt_database(self.db_path, password, backup_original=True)
 
             # تحديث الحالة
             self.is_encrypted = True
@@ -1565,9 +1673,7 @@ class DatabaseManager:
 
             # إعادة التشفير بكلمة المرور الجديدة
             new_encryption_manager = EncryptionManager()
-            encrypted_path = new_encryption_manager.encrypt_file(
-                temp_db_path, self.db_path + ".new_encrypted"
-            )
+            encrypted_path = new_encryption_manager.encrypt_file(temp_db_path, self.db_path + ".new_encrypted")
 
             # استبدال قاعدة البيانات
             os.remove(self.db_path)
@@ -1607,7 +1713,7 @@ class DatabaseManager:
 
             return is_valid
 
-        except Exception as e:
+        except Exception:
             self.logger.warning("Encryption password is incorrect")
             return False
 
@@ -1645,9 +1751,7 @@ class DatabaseManager:
             # الحصول على الـ migrations المطبقة مسبقاً
             applied_migrations = set()
             try:
-                cursor = self.connection.execute(
-                    "SELECT migration_file FROM schema_migrations"
-                )
+                cursor = self.connection.execute("SELECT migration_file FROM schema_migrations")
                 applied_migrations = {row[0] for row in cursor.fetchall()}
             except Exception as e:
                 if self.logger:
@@ -1669,22 +1773,16 @@ class DatabaseManager:
                     # Fix for 028 conflict with fresh DB schema (Already updated audit_log)
                     if "028_fix_user_sessions_fk.sql" in migration_name:
                         try:
-                            cursor_chk = self.connection.execute(
-                                "PRAGMA table_info(audit_log)"
-                            )
+                            cursor_chk = self.connection.execute("PRAGMA table_info(audit_log)")
                             cols = [c[1] for c in cursor_chk.fetchall()]
                             if "module" in cols:
                                 # الجدول محدث، نتخطى قسم audit_log لتجنب الأخطاء
                                 if "-- 4. إصلاح audit_log" in sql_content:
-                                    sql_content = sql_content.split(
-                                        "-- 4. إصلاح audit_log"
-                                    )[0]
+                                    sql_content = sql_content.split("-- 4. إصلاح audit_log")[0]
                                     if self.logger:
-                                        self.logger.info(
-                                            "Skipped audit_log section of 028 migration."
-                                        )
+                                        self.logger.info("Skipped audit_log section of 028 migration.")
                         except Exception:
-                            pass
+                            logging.getLogger(__name__).warning("Ignored exception in database_manager.py")
 
                     # تحسين تقسيم SQL - معالجة أفضل للعبارات المعقدة
                     queries = self._parse_sql_statements(sql_content)
@@ -1733,9 +1831,7 @@ class DatabaseManager:
                             ):
                                 # تسجيل كتحذير فقط
                                 if self.logger:
-                                    self.logger.debug(
-                                        f"تخطي استعلام في {migration_name}: {e}"
-                                    )
+                                    self.logger.debug(f"تخطي استعلام في {migration_name}: {e}")
                                 continue
                             else:
                                 # خطأ غير متوقع - إعادة رفعه
@@ -1752,18 +1848,14 @@ class DatabaseManager:
                             self.connection.commit()
                         except sqlite3.OperationalError:
                             # إذا كان في autocommit mode، تجاهل الخطأ
-                            pass
+                            logging.getLogger(__name__).warning("Ignored exception in database_manager.py")
                     except Exception as e:
                         if self.logger:
-                            self.logger.warning(
-                                f"فشل تسجيل migration {migration_name}: {e}"
-                            )
+                            self.logger.warning(f"فشل تسجيل migration {migration_name}: {e}")
 
                 except Exception as e:
                     if self.logger:
-                        self.logger.warning(
-                            f"فشل تطبيق migration {migration_name}: {e}", exc_info=True
-                        )
+                        self.logger.warning(f"فشل تطبيق migration {migration_name}: {e}", exc_info=True)
                     # نستمر في تطبيق باقي migrations بدلاً من التوقف
 
         except Exception as e:
@@ -1852,9 +1944,7 @@ class DatabaseManager:
         # للـ ALTER TABLE ADD COLUMN - التحقق من وجود العمود
         if "ALTER TABLE" in query_upper and "ADD COLUMN" in query_upper:
             # محاولة استخراج اسم الجدول والعمود
-            match = re.search(
-                r"ALTER TABLE\s+(\w+)\s+ADD COLUMN\s+(\w+)", query_upper, re.IGNORECASE
-            )
+            match = re.search(r"ALTER TABLE\s+(\w+)\s+ADD COLUMN\s+(\w+)", query_upper, re.IGNORECASE)
             if match:
                 table_name = match.group(1)
                 column_name = match.group(2)
@@ -1867,7 +1957,7 @@ class DatabaseManager:
 
                     if column_name.lower() in [col.lower() for col in columns]:
                         return True  # العمود موجود - تخطي
-                except:
+                except Exception:
                     pass  # في حالة الخطأ، ننفذ الاستعلام
 
         return False

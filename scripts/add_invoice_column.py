@@ -5,7 +5,6 @@
 """
 
 import sys
-import os
 from pathlib import Path
 
 # إضافة المسار الجذري
@@ -13,7 +12,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / 'src'))
 
-from src.core.database_manager import DatabaseManager
+from src.core.local_database_manager import LocalDatabaseManager
 
 def run_migration(migration_file: str):
     """تشغيل ملف ترحيل"""
@@ -26,10 +25,10 @@ def run_migration(migration_file: str):
         return False
 
     with open(migration_path, 'r', encoding='utf-8') as f:
-        sql_content = f.read()
+        sql_content = f.read()  # noqa: F841
 
     # تشغيل الترحيل
-    db_manager = DatabaseManager()
+    db_manager = LocalDatabaseManager()
     db_manager.initialize()
 
     try:
@@ -39,38 +38,38 @@ def run_migration(migration_file: str):
             try:
                 cursor.execute("ALTER TABLE sales ADD COLUMN invoice_number TEXT")
                 print("✅ تم إضافة عمود invoice_number")
-            except:
+            except Exception:
                 print("⚠️ عمود invoice_number موجود بالفعل")
 
             try:
                 cursor.execute("ALTER TABLE sale_items ADD COLUMN batch_id TEXT")
                 print("✅ تم إضافة عمود batch_id")
-            except:
+            except Exception:
                 print("⚠️ عمود batch_id موجود بالفعل")
 
             try:
                 cursor.execute("ALTER TABLE sale_items ADD COLUMN discount REAL DEFAULT 0.0")
                 print("✅ تم إضافة عمود discount")
-            except:
+            except Exception:
                 print("⚠️ عمود discount موجود بالفعل")
 
             try:
                 cursor.execute("ALTER TABLE sale_items ADD COLUMN total_price REAL DEFAULT 0.0")
                 print("✅ تم إضافة عمود total_price")
-            except:
+            except Exception:
                 print("⚠️ عمود total_price موجود بالفعل")
 
             # إنشاء الفهارس
             try:
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_sales_invoice_number ON sales(invoice_number)")
                 print("✅ تم إنشاء فهرس invoice_number")
-            except:
+            except Exception:
                 print("⚠️ فهرس invoice_number موجود بالفعل")
 
             try:
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_sales_final_amount ON sales(final_amount)")
                 print("✅ تم إنشاء فهرس final_amount")
-            except:
+            except Exception:
                 print("⚠️ فهرس final_amount موجود بالفعل")
 
             conn.commit()

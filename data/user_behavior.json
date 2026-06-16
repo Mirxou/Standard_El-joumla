@@ -1,0 +1,414 @@
+{
+  "actions": {
+    "nav_dashboard": 125,
+    "nav_inventory": 65,
+    "nav_sales": 64,
+    "nav_purchases": 17,
+    "nav_payments": 17,
+    "nav_reports": 18,
+    "nav_contacts": 13,
+    "nav_settings": 15
+  },
+  "history": [
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T14:12:09.962368"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T14:12:13.119541"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T14:12:15.815720"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T14:12:19.865039"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T14:12:20.004999"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T14:12:23.798049"
+    },
+    {
+      "action": "nav_inventory",
+      "timestamp": "2026-05-23T14:12:23.904046"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T14:12:28.413999"
+    },
+    {
+      "action": "nav_sales",
+      "timestamp": "2026-05-23T14:12:28.546491"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T14:12:32.583810"
+    },
+    {
+      "action": "nav_reports",
+      "timestamp": "2026-05-23T14:12:32.691543"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T14:12:36.972840"
+    },
+    {
+      "action": "nav_settings",
+      "timestamp": "2026-05-23T14:12:37.131897"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T14:12:41.309845"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:32:05.889276"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:32:08.325149"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:32:11.332573"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:32:14.158336"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:32:16.593491"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:32:19.011129"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:32:21.751507"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:32:24.299001"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:32:24.380703"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:32:27.217945"
+    },
+    {
+      "action": "nav_inventory",
+      "timestamp": "2026-05-23T20:32:27.356682"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:32:30.907717"
+    },
+    {
+      "action": "nav_sales",
+      "timestamp": "2026-05-23T20:32:30.995216"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:32:33.556879"
+    },
+    {
+      "action": "nav_reports",
+      "timestamp": "2026-05-23T20:32:33.627003"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:32:36.343248"
+    },
+    {
+      "action": "nav_settings",
+      "timestamp": "2026-05-23T20:32:36.414989"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:32:39.060591"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:35:05.345678"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:35:07.327375"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:35:09.148453"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:35:10.942398"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:35:12.750391"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:35:14.575119"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:35:16.555630"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:35:18.366116"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:35:18.426625"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:35:20.216257"
+    },
+    {
+      "action": "nav_inventory",
+      "timestamp": "2026-05-23T20:35:20.272336"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:35:22.523288"
+    },
+    {
+      "action": "nav_sales",
+      "timestamp": "2026-05-23T20:35:22.578839"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:35:24.442873"
+    },
+    {
+      "action": "nav_reports",
+      "timestamp": "2026-05-23T20:35:24.504627"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:35:26.430743"
+    },
+    {
+      "action": "nav_settings",
+      "timestamp": "2026-05-23T20:35:26.486414"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-23T20:35:28.359430"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T11:26:35.739238"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T11:26:38.250045"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T11:26:41.615441"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T11:26:44.138560"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T11:26:47.096519"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T11:26:49.590740"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T11:26:52.845587"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T11:26:55.439721"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T11:26:55.515559"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T11:26:57.883226"
+    },
+    {
+      "action": "nav_inventory",
+      "timestamp": "2026-05-28T11:26:57.945137"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T11:27:01.376409"
+    },
+    {
+      "action": "nav_sales",
+      "timestamp": "2026-05-28T11:27:01.448098"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T11:27:04.167740"
+    },
+    {
+      "action": "nav_reports",
+      "timestamp": "2026-05-28T11:27:04.360000"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T11:27:07.590280"
+    },
+    {
+      "action": "nav_settings",
+      "timestamp": "2026-05-28T11:27:07.670155"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T11:27:10.271623"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T14:13:26.343119"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T14:13:28.423691"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T14:13:30.554634"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T14:13:32.808597"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T14:13:35.099185"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T14:13:37.610546"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T14:13:39.711406"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T14:13:45.148855"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T14:13:45.321865"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T14:13:51.291366"
+    },
+    {
+      "action": "nav_inventory",
+      "timestamp": "2026-05-28T14:13:51.422517"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T14:13:56.711597"
+    },
+    {
+      "action": "nav_sales",
+      "timestamp": "2026-05-28T14:13:56.834293"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T14:14:03.347546"
+    },
+    {
+      "action": "nav_reports",
+      "timestamp": "2026-05-28T14:14:03.431921"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T14:14:06.675086"
+    },
+    {
+      "action": "nav_settings",
+      "timestamp": "2026-05-28T14:14:06.760763"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-05-28T14:14:09.709452"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-06-16T22:38:45.343486"
+    },
+    {
+      "action": "nav_contacts",
+      "timestamp": "2026-06-16T22:38:55.475388"
+    },
+    {
+      "action": "nav_contacts",
+      "timestamp": "2026-06-16T22:38:57.342357"
+    },
+    {
+      "action": "nav_inventory",
+      "timestamp": "2026-06-16T22:40:20.581086"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-06-16T22:40:27.898368"
+    },
+    {
+      "action": "nav_sales",
+      "timestamp": "2026-06-16T22:40:44.473858"
+    },
+    {
+      "action": "nav_payments",
+      "timestamp": "2026-06-16T22:41:55.778428"
+    },
+    {
+      "action": "nav_reports",
+      "timestamp": "2026-06-16T22:41:56.910894"
+    },
+    {
+      "action": "nav_reports",
+      "timestamp": "2026-06-16T22:41:58.392112"
+    },
+    {
+      "action": "nav_reports",
+      "timestamp": "2026-06-16T22:42:00.166024"
+    },
+    {
+      "action": "nav_payments",
+      "timestamp": "2026-06-16T22:42:00.958708"
+    },
+    {
+      "action": "nav_contacts",
+      "timestamp": "2026-06-16T22:49:50.787670"
+    },
+    {
+      "action": "nav_inventory",
+      "timestamp": "2026-06-16T22:52:41.614392"
+    },
+    {
+      "action": "nav_inventory",
+      "timestamp": "2026-06-16T22:52:43.685380"
+    }
+  ]
+}

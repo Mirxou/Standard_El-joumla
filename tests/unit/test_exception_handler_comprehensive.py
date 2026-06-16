@@ -1,72 +1,68 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Comprehensive Unit Tests for ExceptionHandler
 اختبارات وحدة شاملة لـ ExceptionHandler
 """
 
-import pytest
-import sys
 import logging
-from unittest.mock import Mock, patch, MagicMock
-from pathlib import Path
-from datetime import datetime
+from pathlib import Path  # noqa: F811
+from unittest.mock import patch
 
-import sys
-import os
-from pathlib import Path
+import pytest
+
 # الوصول إلى جذر المشروع
 project_root = str(Path(__file__).resolve().parents[2])
 from src.core.exception_handler import (
-    GlobalExceptionHandler,
-    LogicalVersionError,
-    DatabaseError,
-    ValidationError,
     BusinessLogicError,
-    ExceptionType
+    DatabaseError,
+    ExceptionType,
+    GlobalExceptionHandler,
+    StandardElJoumlaError,
+    ValidationError,
 )
 
 
 class TestExceptionTypes:
     """اختبارات أنواع الاستثناءات المخصصة"""
-    
+
     def test_logical_version_error_init(self):
-        """اختبار تهيئة LogicalVersionError"""
-        error = LogicalVersionError("Test error")
+        """اختبار تهيئة StandardElJoumlaError"""
+        error = StandardElJoumlaError("Test error")
         assert str(error) == "Test error"
         assert error.error_type == ExceptionType.GENERAL
-        assert error.recoverable == True
+        assert error.recoverable is True
         assert error.timestamp is not None
-    
+
     def test_logical_version_error_with_type(self):
-        """اختبار LogicalVersionError مع نوع مخصص"""
-        error = LogicalVersionError("Test error", error_type=ExceptionType.DATABASE_QUERY)
+        """اختبار StandardElJoumlaError مع نوع مخصص"""
+        error = StandardElJoumlaError("Test error", error_type=ExceptionType.DATABASE_QUERY)
         assert error.error_type == ExceptionType.DATABASE_QUERY
-    
+
     def test_logical_version_error_with_details(self):
-        """اختبار LogicalVersionError مع تفاصيل"""
+        """اختبار StandardElJoumlaError مع تفاصيل"""
         details = {"key": "value"}
-        error = LogicalVersionError("Test error", details=details)
+        error = StandardElJoumlaError("Test error", details=details)
         assert error.details == details
-    
+
     def test_logical_version_error_recoverable(self):
-        """اختبار LogicalVersionError مع recoverable"""
-        error = LogicalVersionError("Test error", recoverable=False)
-        assert error.recoverable == False
-    
+        """اختبار StandardElJoumlaError مع recoverable"""
+        error = StandardElJoumlaError("Test error", recoverable=False)
+        assert error.recoverable is False
+
     def test_database_error_init(self):
         """اختبار تهيئة DatabaseError"""
         error = DatabaseError("DB error", query="SELECT * FROM table")
         assert error.error_type == ExceptionType.DATABASE_QUERY
-        assert error.details.get('query') == "SELECT * FROM table"
-    
+        assert error.details.get("query") == "SELECT * FROM table"
+
     def test_validation_error_init(self):
         """اختبار تهيئة ValidationError"""
         error = ValidationError("Validation error", field="username", value="test")
         assert error.error_type == ExceptionType.VALIDATION
-        assert error.details.get('field') == "username"
-        assert error.details.get('value') == "test"
-    
+        assert error.details.get("field") == "username"
+        assert error.details.get("value") == "test"
+
     def test_business_logic_error_init(self):
         """اختبار تهيئة BusinessLogicError"""
         error = BusinessLogicError("Business error")
@@ -75,25 +71,25 @@ class TestExceptionTypes:
 
 class TestGlobalExceptionHandlerInitialization:
     """اختبارات تهيئة GlobalExceptionHandler"""
-    
+
     def test_init_with_defaults(self):
         """اختبار التهيئة بالقيم الافتراضية"""
         handler = GlobalExceptionHandler()
         assert handler.app_name == "الإصدار المنطقي"
-        assert handler.enable_crash_dialog == True
+        assert handler.enable_crash_dialog is True
         assert handler.logger is not None
-    
+
     def test_init_with_custom_app_name(self):
         """اختبار التهيئة مع اسم تطبيق مخصص"""
         handler = GlobalExceptionHandler(app_name="Test App")
         assert handler.app_name == "Test App"
-    
+
     def test_init_with_custom_logger(self):
         """اختبار التهيئة مع logger مخصص"""
         custom_logger = logging.getLogger("test")
         handler = GlobalExceptionHandler(logger=custom_logger)
         assert handler.logger == custom_logger
-    
+
     def test_init_with_crash_report_path(self):
         """اختبار التهيئة مع مسار تقارير الأعطال"""
         report_path = Path("/tmp/crash_reports")
@@ -103,19 +99,20 @@ class TestGlobalExceptionHandlerInitialization:
 
 class TestGlobalExceptionHandlerHandleException:
     """اختبارات معالجة الاستثناءات"""
-    
+
     @pytest.fixture
     def handler(self):
         """إنشاء GlobalExceptionHandler للاختبارات"""
         handler = GlobalExceptionHandler(
             enable_crash_dialog=False,  # تعطيل النوافذ الحوارية للاختبارات
-            logger=logging.getLogger("test")
+            logger=logging.getLogger("test"),
         )
         return handler
-    
+
     def test_handle_exception_with_standard_exception(self, handler):
         """اختبار معالجة استثناء قياسي"""
         import sys
+
         try:
             raise ValueError("Test error")
         except Exception:
@@ -124,23 +121,25 @@ class TestGlobalExceptionHandlerHandleException:
                 handler.handle_exception(exc_type, exc_value, exc_traceback)
             except SystemExit:
                 pass  # SystemExit مقبول
-    
+
     def test_handle_exception_with_logical_version_error(self, handler):
-        """اختبار معالجة LogicalVersionError"""
+        """اختبار معالجة StandardElJoumlaError"""
         import sys
+
         try:
-            raise LogicalVersionError("Test error", error_type=ExceptionType.DATABASE_QUERY)
+            raise StandardElJoumlaError("Test error", error_type=ExceptionType.DATABASE_QUERY)
         except Exception:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             try:
                 handler.handle_exception(exc_type, exc_value, exc_traceback)
             except SystemExit:
                 pass  # SystemExit مقبول
-    
+
     def test_handle_exception_logs_error(self, handler):
         """اختبار تسجيل الخطأ"""
         import sys
-        with patch.object(handler.logger, 'critical') as mock_log:
+
+        with patch.object(handler.logger, "critical") as mock_log:
             try:
                 raise ValueError("Test error")
             except Exception:
@@ -151,24 +150,26 @@ class TestGlobalExceptionHandlerHandleException:
                     pass
                 # يجب أن يتم استدعاء logger.critical
                 assert mock_log.called or True
-    
+
     def test_handle_exception_with_recoverable_error(self, handler):
         """اختبار معالجة خطأ قابل للاستعادة"""
         import sys
+
         try:
-            raise LogicalVersionError("Recoverable error", recoverable=True)
+            raise StandardElJoumlaError("Recoverable error", recoverable=True)
         except Exception:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             try:
                 handler.handle_exception(exc_type, exc_value, exc_traceback)
             except SystemExit:
                 pass
-    
+
     def test_handle_exception_with_non_recoverable_error(self, handler):
         """اختبار معالجة خطأ غير قابل للاستعادة"""
         import sys
+
         try:
-            raise LogicalVersionError("Critical error", recoverable=False)
+            raise StandardElJoumlaError("Critical error", recoverable=False)
         except Exception:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             try:
@@ -179,18 +180,16 @@ class TestGlobalExceptionHandlerHandleException:
 
 class TestGlobalExceptionHandlerErrorTypes:
     """اختبارات أنواع الأخطاء المختلفة"""
-    
+
     @pytest.fixture
     def handler(self):
         """إنشاء GlobalExceptionHandler للاختبارات"""
-        return GlobalExceptionHandler(
-            enable_crash_dialog=False,
-            logger=logging.getLogger("test")
-        )
-    
+        return GlobalExceptionHandler(enable_crash_dialog=False, logger=logging.getLogger("test"))
+
     def test_handle_database_connection_error(self, handler):
         """اختبار معالجة خطأ اتصال قاعدة البيانات"""
         import sys
+
         try:
             raise Exception("Database connection failed")
         except Exception:
@@ -199,10 +198,11 @@ class TestGlobalExceptionHandlerErrorTypes:
                 handler.handle_exception(exc_type, exc_value, exc_traceback)
             except SystemExit:
                 pass
-    
+
     def test_handle_validation_error(self, handler):
         """اختبار معالجة خطأ التحقق"""
         import sys
+
         try:
             raise ValidationError("Invalid input", field="email")
         except Exception:
@@ -211,10 +211,11 @@ class TestGlobalExceptionHandlerErrorTypes:
                 handler.handle_exception(exc_type, exc_value, exc_traceback)
             except SystemExit:
                 pass
-    
+
     def test_handle_business_logic_error(self, handler):
         """اختبار معالجة خطأ منطق الأعمال"""
         import sys
+
         try:
             raise BusinessLogicError("Business rule violated")
         except Exception:
@@ -223,10 +224,11 @@ class TestGlobalExceptionHandlerErrorTypes:
                 handler.handle_exception(exc_type, exc_value, exc_traceback)
             except SystemExit:
                 pass
-    
+
     def test_handle_file_io_error(self, handler):
         """اختبار معالجة خطأ ملفات"""
         import sys
+
         try:
             raise IOError("File not found")
         except Exception:
@@ -235,10 +237,11 @@ class TestGlobalExceptionHandlerErrorTypes:
                 handler.handle_exception(exc_type, exc_value, exc_traceback)
             except SystemExit:
                 pass
-    
+
     def test_handle_permission_error(self, handler):
         """اختبار معالجة خطأ الصلاحيات"""
         import sys
+
         try:
             raise PermissionError("Access denied")
         except Exception:
@@ -251,7 +254,7 @@ class TestGlobalExceptionHandlerErrorTypes:
 
 class TestGlobalExceptionHandlerCrashReports:
     """اختبارات تقارير الأعطال"""
-    
+
     @pytest.fixture
     def handler(self, tmp_path):
         """إنشاء GlobalExceptionHandler مع مسار تقارير"""
@@ -259,17 +262,18 @@ class TestGlobalExceptionHandlerCrashReports:
         return GlobalExceptionHandler(
             enable_crash_dialog=False,
             crash_report_path=report_path,
-            logger=logging.getLogger("test")
+            logger=logging.getLogger("test"),
         )
-    
+
     def test_crash_report_path_created(self, handler):
         """اختبار إنشاء مسار تقارير الأعطال"""
-        if hasattr(handler, 'crash_report_path'):
+        if hasattr(handler, "crash_report_path"):
             assert handler.crash_report_path is not None
-    
+
     def test_crash_report_saved(self, handler):
         """اختبار حفظ تقرير عطل"""
         import sys
+
         try:
             raise ValueError("Test crash")
         except Exception:
@@ -284,55 +288,51 @@ class TestGlobalExceptionHandlerCrashReports:
 
 class TestGlobalExceptionHandlerSignals:
     """اختبارات الإشارات (Signals)"""
-    
+
     @pytest.fixture
     def handler(self):
         """إنشاء GlobalExceptionHandler للاختبارات"""
-        return GlobalExceptionHandler(
-            enable_crash_dialog=False,
-            logger=logging.getLogger("test")
-        )
-    
+        return GlobalExceptionHandler(enable_crash_dialog=False, logger=logging.getLogger("test"))
+
     def test_critical_error_signal_exists(self, handler):
         """اختبار وجود إشارة critical_error_occurred"""
-        assert hasattr(handler, 'critical_error_occurred')
-    
+        assert hasattr(handler, "critical_error_occurred")
+
     def test_critical_error_signal_emitted(self, handler):
         """اختبار إرسال إشارة عند خطأ حرج"""
         import sys
+
         # ربط callback للإشارة
         signal_received = False
+
         def on_critical_error(message, error_type):
             nonlocal signal_received
             signal_received = True
-        
+
         handler.critical_error_occurred.connect(on_critical_error)
-        
+
         # محاولة إثارة خطأ حرج
         try:
-            raise LogicalVersionError("Critical error", recoverable=False)
+            raise StandardElJoumlaError("Critical error", recoverable=False)
         except Exception:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             try:
                 handler.handle_exception(exc_type, exc_value, exc_traceback)
             except SystemExit:
                 pass
-        
+
         # قد يتم إرسال الإشارة أو لا - يعتمد على التنفيذ
         assert True
 
 
 class TestGlobalExceptionHandlerEdgeCases:
     """اختبارات الحالات الحدية"""
-    
+
     @pytest.fixture
     def handler(self):
         """إنشاء GlobalExceptionHandler للاختبارات"""
-        return GlobalExceptionHandler(
-            enable_crash_dialog=False,
-            logger=logging.getLogger("test")
-        )
-    
+        return GlobalExceptionHandler(enable_crash_dialog=False, logger=logging.getLogger("test"))
+
     def test_handle_exception_with_none(self, handler):
         """اختبار معالجة None كاستثناء"""
         # يجب أن يتعامل مع None بشكل صحيح
@@ -341,36 +341,39 @@ class TestGlobalExceptionHandlerEdgeCases:
             assert isinstance(result, bool)
         except Exception:
             pass  # مقبول إذا أثار استثناء
-    
+
     def test_handle_exception_with_empty_message(self, handler):
         """اختبار معالجة استثناء برسالة فارغة"""
         import sys
+
         try:
-            raise LogicalVersionError("")
+            raise StandardElJoumlaError("")
         except Exception:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             try:
                 handler.handle_exception(exc_type, exc_value, exc_traceback)
             except SystemExit:
                 pass
-    
+
     def test_handle_exception_with_very_long_message(self, handler):
         """اختبار معالجة استثناء برسالة طويلة جداً"""
         import sys
+
         try:
-            raise LogicalVersionError("A" * 10000)
+            raise StandardElJoumlaError("A" * 10000)
         except Exception:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             try:
                 handler.handle_exception(exc_type, exc_value, exc_traceback)
             except SystemExit:
                 pass
-    
+
     def test_handle_exception_with_special_characters(self, handler):
         """اختبار معالجة استثناء بأحرف خاصة"""
         import sys
+
         try:
-            raise LogicalVersionError("Error: <>&\"'")
+            raise StandardElJoumlaError("Error: <>&\"'")
         except Exception:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             try:
@@ -381,24 +384,18 @@ class TestGlobalExceptionHandlerEdgeCases:
 
 class TestGlobalExceptionHandlerIntegration:
     """اختبارات التكامل"""
-    
+
     @pytest.fixture
     def handler(self):
         """إنشاء GlobalExceptionHandler للاختبارات"""
-        return GlobalExceptionHandler(
-            enable_crash_dialog=False,
-            logger=logging.getLogger("test")
-    )
-    
+        return GlobalExceptionHandler(enable_crash_dialog=False, logger=logging.getLogger("test"))
+
     def test_handler_with_multiple_exceptions(self, handler):
         """اختبار معالجة عدة استثناءات متتالية"""
         import sys
-        errors = [
-            ValueError("Error 1"),
-            TypeError("Error 2"),
-            KeyError("Error 3")
-        ]
-        
+
+        errors = [ValueError("Error 1"), TypeError("Error 2"), KeyError("Error 3")]
+
         for error_class in errors:
             try:
                 raise error_class
@@ -408,10 +405,11 @@ class TestGlobalExceptionHandlerIntegration:
                     handler.handle_exception(exc_type, exc_value, exc_traceback)
                 except SystemExit:
                     pass
-    
+
     def test_handler_with_nested_exception(self, handler):
         """اختبار معالجة استثناء متداخل"""
         import sys
+
         try:
             try:
                 raise ValueError("Inner error")
@@ -423,8 +421,3 @@ class TestGlobalExceptionHandlerIntegration:
                 handler.handle_exception(exc_type, exc_value, exc_traceback)
             except SystemExit:
                 pass
-
-
-
-
-

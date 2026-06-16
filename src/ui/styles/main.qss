@@ -1,9 +1,0 @@
-/* 
-   FORCED THEME OVERRIDE
-   This file is now strictly a loader for the Active Pro Theme.
-   All legacy imports (general, buttons, independent files) are REMOVED 
-   to prevent css specificity conflicts.
-*/
-
-/* LOAD PREMIUM DARK GLASS THEME */
-@import url(pro_theme.qss);

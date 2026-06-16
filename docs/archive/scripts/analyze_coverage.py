@@ -1,5 +1,4 @@
 import os
-from pathlib import Path
 
 root = r"c:\Users\aboun\Desktop\Logical Version trae"
 src_dir = os.path.join(root, "src")

@@ -7,6 +7,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts'
 import { TrendingUp, Package, AlertCircle, ShoppingCart, Brain } from 'lucide-react'
 import { Badge } from "@/components/ui/badge"
+import { apiClient } from "@/lib/api/client"
+
+const API_CONFIG = { ENDPOINTS: { AI: { FORECAST: "/api/v1/ai/forecast" } } }
+const mockForecastData: any[] = []
+const abcAnalysis = { A: { count: 0, percent: 0, revenue: 0 }, B: { count: 0, percent: 0, revenue: 0 }, C: { count: 0, percent: 0, revenue: 0 } }
+const stockOptimization: any[] = []
 
 export default function AIForecastDashboard() {
   const [selectedProduct, setSelectedProduct] = useState("all")

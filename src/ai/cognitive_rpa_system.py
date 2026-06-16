@@ -1,25 +1,25 @@
+import logging
 #!/usr/bin/env python3
 """
 نظام الأتمتة الروبوتية المعرفية - Cognitive RPA System
 النظام الرئيسي الذي يجمع جميع مكونات الأتمتة الذكية
 """
 
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional
-from dataclasses import dataclass
-from enum import Enum
 import threading
-import time
-import logging
-import json
+from dataclasses import dataclass
+from datetime import datetime
+from enum import Enum
+from typing import Any, Dict, List, Optional
+
 from .cognitive_automation_engine import CognitiveAutomationEngine
-from .rpa_system import RoboticProcessAutomationSystem
 from .process_mining_engine import ProcessMiningEngine
+from .rpa_system import RoboticProcessAutomationSystem
 from .workflow_automation_manager import WorkflowAutomationManager
 
 
 class CognitiveRPAStatus(Enum):
     """حالة النظام المعرفي"""
+
     INITIALIZING = "initializing"
     READY = "ready"
     ACTIVE = "active"
@@ -30,6 +30,7 @@ class CognitiveRPAStatus(Enum):
 
 class AutomationPriority(Enum):
     """أولوية الأتمتة"""
+
     LOW = 1
     MEDIUM = 2
     HIGH = 3
@@ -39,6 +40,7 @@ class AutomationPriority(Enum):
 @dataclass
 class AutomationRequest:
     """طلب أتمتة"""
+
     request_id: str
     request_type: str
     description: str
@@ -60,6 +62,7 @@ class AutomationRequest:
 @dataclass
 class AutomationMetrics:
     """مقاييس الأتمتة"""
+
     total_requests: int = 0
     completed_requests: int = 0
     failed_requests: int = 0
@@ -93,9 +96,7 @@ class CognitiveRPASystem:
         """إعداد نظام التسجيل"""
         self.logger.setLevel(logging.INFO)
         handler = logging.StreamHandler()
-        formatter = logging.Formatter(
-            '%(asctime)s - Cognitive RPA - %(levelname)s - %(message)s'
-        )
+        formatter = logging.Formatter("%(asctime)s - Cognitive RPA - %(levelname)s - %(message)s")
         handler.setFormatter(formatter)
         self.logger.addHandler(handler)
 
@@ -105,7 +106,7 @@ class CognitiveRPASystem:
             self.logger.info("Initializing Cognitive RPA System...")
 
             # بدء المحرك المعرفي
-            cognitive_result = self.cognitive_engine.start_engine()
+            self.cognitive_engine.start_engine()
             self.logger.info("Cognitive Automation Engine started")
 
             # تحديث الحالة
@@ -116,9 +117,14 @@ class CognitiveRPASystem:
             self.status = CognitiveRPAStatus.ERROR
             self.logger.error(f"System initialization failed: {str(e)}")
 
-    def submit_automation_request(self, request_type: str, description: str,
-                                parameters: Dict[str, Any], priority: AutomationPriority = AutomationPriority.MEDIUM,
-                                requester: str = "system") -> str:
+    def submit_automation_request(
+        self,
+        request_type: str,
+        description: str,
+        parameters: Dict[str, Any],
+        priority: AutomationPriority = AutomationPriority.MEDIUM,
+        requester: str = "system",
+    ) -> str:
         """تقديم طلب أتمتة"""
         request_id = f"req_{request_type}_{int(datetime.now().timestamp())}"
 
@@ -128,17 +134,13 @@ class CognitiveRPASystem:
             description=description,
             parameters=parameters,
             priority=priority,
-            requester=requester
+            requester=requester,
         )
 
         self.requests[request_id] = request
 
         # معالجة الطلب في خيط منفصل
-        processing_thread = threading.Thread(
-            target=self._process_automation_request,
-            args=(request,),
-            daemon=True
-        )
+        processing_thread = threading.Thread(target=self._process_automation_request, args=(request,), daemon=True)
         processing_thread.start()
 
         self.logger.info(f"Automation request submitted: {request_id} ({request_type})")
@@ -158,27 +160,26 @@ class CognitiveRPASystem:
             "status": request.status,
             "priority": request.priority.value,
             "created_at": request.created_at.isoformat(),
-            "processed_at": request.processed_at.isoformat() if request.processed_at else None,
-            "completed_at": request.completed_at.isoformat() if request.completed_at else None,
+            "processed_at": (request.processed_at.isoformat() if request.processed_at else None),
+            "completed_at": (request.completed_at.isoformat() if request.completed_at else None),
             "result": request.result,
-            "error_message": request.error_message
+            "error_message": request.error_message,
         }
 
-    def create_business_process_automation(self, process_name: str, steps: List[Dict[str, Any]],
-                                         triggers: Dict[str, Any]) -> Dict[str, Any]:
+    def create_business_process_automation(
+        self, process_name: str, steps: List[Dict[str, Any]], triggers: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """إنشاء أتمتة عملية تجارية"""
         try:
-            rule = self.cognitive_engine.create_business_process_automation(
-                process_name, steps, triggers
-            )
+            rule = self.cognitive_engine.create_business_process_automation(process_name, steps, triggers)
 
-            result = self.cognitive_engine.add_rule(rule)
+            self.cognitive_engine.add_rule(rule)
 
             return {
                 "status": "created",
                 "automation_type": "business_process",
                 "rule_id": rule.rule_id,
-                "process_name": process_name
+                "process_name": process_name,
             }
 
         except Exception as e:
@@ -199,13 +200,16 @@ class CognitiveRPASystem:
             elif script_type == "file":
                 script_id = self.rpa_system.create_file_automation_script(name, description)
             else:
-                return {"status": "error", "error": f"Unknown script type: {script_type}"}
+                return {
+                    "status": "error",
+                    "error": f"Unknown script type: {script_type}",
+                }
 
             return {
                 "status": "created",
                 "automation_type": "rpa_script",
                 "script_id": script_id,
-                "script_type": script_type
+                "script_type": script_type,
             }
 
         except Exception as e:
@@ -220,7 +224,7 @@ class CognitiveRPASystem:
             return {
                 "status": "created",
                 "automation_type": "workflow",
-                "workflow_id": workflow_id
+                "workflow_id": workflow_id,
             }
 
         except Exception as e:
@@ -231,7 +235,7 @@ class CognitiveRPASystem:
         """استخراج العمليات من سجلات الأحداث"""
         try:
             # تحميل سجل الأحداث
-            load_result = self.process_mining.load_event_log(log_id, events)
+            self.process_mining.load_event_log(log_id, events)
 
             # استخراج نموذج العملية
             process_id = self.process_mining.discover_process_model(log_id)
@@ -243,7 +247,7 @@ class CognitiveRPASystem:
                 "status": "discovered",
                 "log_id": log_id,
                 "process_id": process_id,
-                "performance_analysis": performance
+                "performance_analysis": performance,
             }
 
         except Exception as e:
@@ -258,7 +262,7 @@ class CognitiveRPASystem:
             return {
                 "status": "executing",
                 "execution_id": execution_id,
-                "script_id": script_id
+                "script_id": script_id,
             }
 
         except Exception as e:
@@ -273,7 +277,7 @@ class CognitiveRPASystem:
             return {
                 "status": "started",
                 "instance_id": instance_id,
-                "workflow_id": workflow_id
+                "workflow_id": workflow_id,
             }
 
         except Exception as e:
@@ -296,15 +300,15 @@ class CognitiveRPASystem:
             "workflow_manager": workflow_status,
             "process_mining": {
                 "models_count": len(self.process_mining.process_models),
-                "logs_count": len(self.process_mining.event_logs)
+                "logs_count": len(self.process_mining.event_logs),
             },
             "automation_metrics": {
                 "total_requests": self.metrics.total_requests,
                 "completed_requests": self.metrics.completed_requests,
                 "success_rate": self.metrics.success_rate,
-                "avg_processing_time": self.metrics.avg_processing_time
+                "avg_processing_time": self.metrics.avg_processing_time,
             },
-            "last_updated": datetime.now().isoformat()
+            "last_updated": datetime.now().isoformat(),
         }
 
     def generate_automation_report(self) -> Dict[str, Any]:
@@ -330,19 +334,19 @@ class CognitiveRPASystem:
                 "workflow_manager": workflow_status,
                 "process_mining": {
                     "models_count": len(self.process_mining.process_models),
-                    "logs_count": len(self.process_mining.event_logs)
-                }
+                    "logs_count": len(self.process_mining.event_logs),
+                },
             },
             "automation_metrics": {
                 "total_requests": self.metrics.total_requests,
                 "completed_requests": self.metrics.completed_requests,
                 "failed_requests": self.metrics.failed_requests,
                 "success_rate": self.metrics.success_rate,
-                "avg_processing_time": self.metrics.avg_processing_time
+                "avg_processing_time": self.metrics.avg_processing_time,
             },
             "request_statistics": request_stats,
             "recommendations": recommendations,
-            "performance_summary": self._generate_performance_summary()
+            "performance_summary": self._generate_performance_summary(),
         }
 
     def optimize_automations(self) -> Dict[str, Any]:
@@ -351,36 +355,43 @@ class CognitiveRPASystem:
 
         # تحليل الأداء
         if self.metrics.success_rate < 0.9:
-            optimizations.append({
-                "type": "success_rate",
-                "current_value": self.metrics.success_rate,
-                "target": 0.95,
-                "action": "Review and fix failed automations"
-            })
+            optimizations.append(
+                {
+                    "type": "success_rate",
+                    "current_value": self.metrics.success_rate,
+                    "target": 0.95,
+                    "action": "Review and fix failed automations",
+                }
+            )
 
         if self.metrics.avg_processing_time > 300:  # أكثر من 5 دقائق
-            optimizations.append({
-                "type": "processing_time",
-                "current_value": self.metrics.avg_processing_time,
-                "target": 180,
-                "action": "Optimize slow automations and workflows"
-            })
+            optimizations.append(
+                {
+                    "type": "processing_time",
+                    "current_value": self.metrics.avg_processing_time,
+                    "target": 180,
+                    "action": "Optimize slow automations and workflows",
+                }
+            )
 
         # تحسين استخدام الموارد
-        active_count = (self.workflow_manager.get_system_status()["active_instances_count"] +
-                       len(self.rpa_system.active_executions))
+        active_count = self.workflow_manager.get_system_status()["active_instances_count"] + len(
+            self.rpa_system.active_executions
+        )
         if active_count > 20:
-            optimizations.append({
-                "type": "resource_usage",
-                "current_value": active_count,
-                "target": 15,
-                "action": "Implement resource limits and queuing"
-            })
+            optimizations.append(
+                {
+                    "type": "resource_usage",
+                    "current_value": active_count,
+                    "target": 15,
+                    "action": "Implement resource limits and queuing",
+                }
+            )
 
         return {
             "optimizations_count": len(optimizations),
             "optimizations": optimizations,
-            "estimated_improvement": self._estimate_optimization_impact(optimizations)
+            "estimated_improvement": self._estimate_optimization_impact(optimizations),
         }
 
     def _process_automation_request(self, request: AutomationRequest):
@@ -401,7 +412,10 @@ class CognitiveRPASystem:
             elif request.request_type == "process_discovery":
                 result = self._handle_process_discovery_request(request)
             else:
-                result = {"status": "error", "error": f"Unknown request type: {request.request_type}"}
+                result = {
+                    "status": "error",
+                    "error": f"Unknown request type: {request.request_type}",
+                }
 
             request.result = result
             request.status = "completed" if result.get("status") == "success" else "failed"
@@ -422,7 +436,7 @@ class CognitiveRPASystem:
         result = self.create_business_process_automation(
             params.get("process_name", "Unnamed Process"),
             params.get("steps", []),
-            params.get("triggers", {})
+            params.get("triggers", {}),
         )
 
         return result
@@ -434,7 +448,7 @@ class CognitiveRPASystem:
         result = self.create_rpa_script(
             params.get("name", "Unnamed Script"),
             params.get("description", ""),
-            params.get("script_type", "desktop")
+            params.get("script_type", "desktop"),
         )
 
         return result
@@ -446,7 +460,7 @@ class CognitiveRPASystem:
         result = self.create_workflow_automation(
             params.get("name", "Unnamed Workflow"),
             params.get("description", ""),
-            params.get("tasks", [])
+            params.get("tasks", []),
         )
 
         return result
@@ -455,10 +469,7 @@ class CognitiveRPASystem:
         """معالجة طلب استخراج عمليات"""
         params = request.parameters
 
-        result = self.discover_processes_from_logs(
-            params.get("log_id", "default_log"),
-            params.get("events", [])
-        )
+        result = self.discover_processes_from_logs(params.get("log_id", "default_log"), params.get("events", []))
 
         return result
 
@@ -481,9 +492,8 @@ class CognitiveRPASystem:
         if processing_times:
             self.metrics.avg_processing_time = sum(processing_times) / len(processing_times)
 
-        self.metrics.active_automations = (
-            self.workflow_manager.get_system_status()["active_instances_count"] +
-            len(self.rpa_system.active_executions)
+        self.metrics.active_automations = self.workflow_manager.get_system_status()["active_instances_count"] + len(
+            self.rpa_system.active_executions
         )
 
         self.metrics.last_updated = datetime.now()
@@ -511,7 +521,7 @@ class CognitiveRPASystem:
             "request_types": request_types,
             "priorities": priorities,
             "hourly_distribution": hourly_stats,
-            "peak_hour": max(hourly_stats.keys(), key=lambda x: hourly_stats[x]) if hourly_stats else None
+            "peak_hour": (max(hourly_stats.keys(), key=lambda x: hourly_stats[x]) if hourly_stats else None),
         }
 
     def _generate_system_recommendations(self) -> List[str]:
@@ -533,10 +543,10 @@ class CognitiveRPASystem:
     def _generate_performance_summary(self) -> Dict[str, Any]:
         """توليد ملخص الأداء"""
         return {
-            "overall_health": "good" if self.metrics.success_rate > 0.9 else "needs_improvement",
+            "overall_health": ("good" if self.metrics.success_rate > 0.9 else "needs_improvement"),
             "bottlenecks": self._identify_system_bottlenecks(),
             "efficiency_score": self._calculate_efficiency_score(),
-            "automation_coverage": self._estimate_automation_coverage()
+            "automation_coverage": self._estimate_automation_coverage(),
         }
 
     def _identify_system_bottlenecks(self) -> List[str]:
@@ -570,9 +580,7 @@ class CognitiveRPASystem:
         """تقدير تغطية الأتمتة"""
         # تقدير بسيط بناءً على عدد الأتمتة النشطة
         total_automations = (
-            len(self.cognitive_engine.rules) +
-            len(self.rpa_system.scripts) +
-            len(self.workflow_manager.workflows)
+            len(self.cognitive_engine.rules) + len(self.rpa_system.scripts) + len(self.workflow_manager.workflows)
         )
 
         # افتراض تغطية 10% لكل أتمتة
@@ -599,5 +607,5 @@ class CognitiveRPASystem:
         return {
             "estimated_improvement": total_impact,
             "confidence": 0.75,
-            "time_to_implement": "2-4 weeks"
+            "time_to_implement": "2-4 weeks",
         }

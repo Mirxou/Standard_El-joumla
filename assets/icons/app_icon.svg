@@ -1,29 +1,25 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
-  <!-- خلفية دائرية -->
-  <circle cx="128" cy="128" r="120" fill="#2E86AB" stroke="#A23B72" stroke-width="4"/>
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- سلة التسوق الخضراء (Green Basket) -->
+  <path d="M40 100H216V116C216 120.418 212.418 124 208 124H48C43.5817 124 40 120.418 40 116V100Z" fill="#2E7D32"/>
+  <path d="M50 124L65 210C65.8284 214.556 69.7848 218 74.4211 218H181.579C186.215 218 190.172 214.556 191 210L206 124H50Z" fill="#2E7D32"/>
   
-  <!-- شعار التطبيق -->
-  <g transform="translate(128, 128)">
-    <!-- رمز المحاسبة -->
-    <rect x="-40" y="-50" width="80" height="60" rx="8" fill="#F18F01" opacity="0.9"/>
-    
-    <!-- خطوط البيانات -->
-    <line x1="-30" y1="-35" x2="30" y2="-35" stroke="white" stroke-width="3"/>
-    <line x1="-30" y1="-20" x2="20" y2="-20" stroke="white" stroke-width="2"/>
-    <line x1="-30" y1="-5" x2="25" y2="-5" stroke="white" stroke-width="2"/>
-    
-    <!-- رمز العملة -->
-    <circle cx="0" cy="25" r="25" fill="#C73E1D" opacity="0.8"/>
-    <text x="0" y="35" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="24" font-weight="bold">$</text>
-    
-    <!-- نقاط الزينة -->
-    <circle cx="-60" cy="-60" r="8" fill="#F18F01" opacity="0.6"/>
-    <circle cx="60" cy="-60" r="8" fill="#F18F01" opacity="0.6"/>
-    <circle cx="-60" cy="60" r="8" fill="#C73E1D" opacity="0.6"/>
-    <circle cx="60" cy="60" r="8" fill="#C73E1D" opacity="0.6"/>
-  </g>
+  <!-- مقبض السلة -->
+  <path d="M128 124V100C128 88.9543 119.046 80 108 80V80C96.9543 80 88 88.9543 88 100V105" stroke="#2E7D32" stroke-width="12" stroke-linecap="round"/>
   
-  <!-- نص التطبيق -->
-  <text x="128" y="220" text-anchor="middle" fill="#2E86AB" font-family="Arial, sans-serif" font-size="18" font-weight="bold">Logical Version</text>
+  <!-- المنتجات داخل السلة (بشكل مبسط واحترافي) -->
+  <!-- زجاجة -->
+  <rect x="135" y="60" width="30" height="40" rx="4" fill="#1B5E20"/>
+  <rect x="145" y="50" width="10" height="10" fill="#1B5E20"/>
+  <!-- ورق -->
+  <circle cx="95" cy="70" r="20" stroke="#1B5E20" stroke-width="8"/>
+  <path d="M115 70V100" stroke="#1B5E20" stroke-width="8"/>
+  
+  <!-- خطوط السلة -->
+  <line x1="85" y1="140" x2="85" y2="200" stroke="white" stroke-width="8" stroke-linecap="round"/>
+  <line x1="115" y1="140" x2="115" y2="200" stroke="white" stroke-width="8" stroke-linecap="round"/>
+  <line x1="145" y1="140" x2="145" y2="200" stroke="white" stroke-width="8" stroke-linecap="round"/>
+  <line x1="175" y1="140" x2="175" y2="200" stroke="white" stroke-width="8" stroke-linecap="round"/>
+  
+  <!-- خلفية دائرية خفيفة (اختياري للوضوح) -->
+  <circle cx="128" cy="128" r="124" stroke="#2E7D32" stroke-width="2" opacity="0.2"/>
 </svg>

@@ -5,9 +5,8 @@ Focus Style Manager for Keyboard Navigation
 Based on ui-ux-pro-max accessibility guidelines
 """
 
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve
-from PySide6.QtWidgets import QApplication, QWidget
-from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QFont
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QWidget
 
 
 class FocusStyleManager:
@@ -15,33 +14,33 @@ class FocusStyleManager:
     Manages focus styles for keyboard navigation
     Following WCAG 2.1 guidelines for focus visibility
     """
-    
+
     # Focus colors (high contrast for visibility)
     FOCUS_COLORS = {
-        "default": "#2563EB",      # Blue - clear visibility
+        "default": "#2563EB",  # Blue - clear visibility
         "high_contrast": "#000000",  # Black - maximum contrast
-        "gold": "#D4AF37",         # Gold - premium feel
-        "success": "#059669",        # Green - positive action
+        "gold": "#D4AF37",  # Gold - premium feel
+        "success": "#059669",  # Green - positive action
     }
-    
+
     # Focus border widths
     FOCUS_WIDTH = 3
-    
+
     @staticmethod
     def get_focus_stylesheet(color_name="default", border_radius=4):
         """
         Get stylesheet for focused elements
-        
+
         Args:
             color_name: Color key from FOCUS_COLORS
             border_radius: Border radius in pixels
-            
+
         Returns:
             str: CSS stylesheet for focus
         """
-        color = FocusStyleManager.FOCUS_COLORS.get(color_name, FocusStyleManager.FOCUS_COLORS["default"])
-        
-        return f"""
+        color = FocusStyleManager.FOCUS_COLORS.get(color_name, FocusStyleManager.FOCUS_COLORS["default"])  # noqa: F841
+
+        return """
             QPushButton:focus {{
                 outline: none;
                 border: {FocusStyleManager.FOCUS_WIDTH}px solid {color};
@@ -77,41 +76,41 @@ class FocusStyleManager:
                 border: {FocusStyleManager.FOCUS_WIDTH}px solid {color};
             }}
         """
-    
+
     @staticmethod
     def apply_focus_to_app(app, color_name="default"):
         """
         Apply focus styles to entire application
-        
+
         Args:
             app: QApplication instance
             color_name: Color key for focus indication
         """
         stylesheet = FocusStyleManager.get_focus_stylesheet(color_name)
-        
+
         # Get existing stylesheet and append focus styles
         existing = app.styleSheet()
         if existing:
             app.setStyleSheet(existing + "\n" + stylesheet)
         else:
             app.setStyleSheet(stylesheet)
-    
+
     @staticmethod
     def set_focus_indicator(widget, color_name="default"):
         """
         Set custom focus indicator on widget
-        
+
         Args:
             widget: QWidget to set focus on
             color_name: Color key for focus
         """
-        color = FocusStyleManager.FOCUS_COLORS.get(color_name, FocusStyleManager.FOCUS_COLORS["default"])
-        
+        color = FocusStyleManager.FOCUS_COLORS.get(color_name, FocusStyleManager.FOCUS_COLORS["default"])  # noqa: F841
+
         # Set focus policy
         widget.setFocusPolicy(Qt.StrongFocus)
-        
+
         # Install event filter for custom painting
-        widget.setStyleSheet(f"""
+        widget.setStyleSheet("""
             QWidget:focus {{
                 border: {FocusStyleManager.FOCUS_WIDTH}px solid {color};
             }}
@@ -123,40 +122,40 @@ class KeyboardNavigationHelper:
     Helper for keyboard navigation in forms
     Implements proper Tab order and Enter key handling
     """
-    
+
     @staticmethod
     def set_tab_order(widgets):
         """
         Set proper tab order for form widgets
-        
+
         Args:
             widgets: List of widgets in tab order
         """
         for i in range(len(widgets) - 1):
             QWidget.setTabOrder(widgets[i], widgets[i + 1])
-    
+
     @staticmethod
     def connect_enter_key(from_widget, to_widget):
         """
         Connect Enter key to move focus to next widget
-        
+
         Args:
             from_widget: Current widget
             to_widget: Next widget to focus
         """
         from_widget.returnPressed.connect(to_widget.setFocus)
-    
+
     @staticmethod
     def setup_form_navigation(form_widgets):
         """
         Setup complete keyboard navigation for a form
-        
+
         Args:
             form_widgets: List of (widget, is_last) tuples
         """
         for i, (widget, is_last) in enumerate(form_widgets):
             widget.setFocusPolicy(Qt.TabFocus)
-            
+
             if not is_last and i < len(form_widgets) - 1:
                 next_widget = form_widgets[i + 1][0]
                 KeyboardNavigationHelper.connect_enter_key(widget, next_widget)
@@ -166,7 +165,7 @@ class AccessibleColorScheme:
     """
     Color scheme that meets WCAG contrast requirements
     """
-    
+
     # Predefined accessible schemes
     SCHEMES = {
         "professional": {
@@ -213,20 +212,20 @@ class AccessibleColorScheme:
             "error": "#FF0000",
             "success": "#00FF00",
             "warning": "#FFFF00",
-        }
+        },
     }
-    
+
     @staticmethod
     def get_scheme(name="professional"):
         """Get color scheme by name"""
         return AccessibleColorScheme.SCHEMES.get(name, AccessibleColorScheme.SCHEMES["professional"])
-    
+
     @staticmethod
     def get_stylesheet(scheme_name="professional"):
         """Get complete stylesheet for scheme"""
-        scheme = AccessibleColorScheme.get_scheme(scheme_name)
-        
-        return f"""
+        AccessibleColorScheme.get_scheme(scheme_name)
+
+        return """
             QWidget {{
                 background-color: {scheme['background']};
                 color: {scheme['foreground']};

@@ -24,6 +24,6 @@ docker-compose ps
 
 Write-Host ""
 Write-Host "Access Points:" -ForegroundColor Cyan
-Write-Host "  - API: http://localhost:8000"
-Write-Host "  - API Docs: http://localhost:8000/docs"
+Write-Host "  - API: http://localhost:8001"
+Write-Host "  - API Docs: http://localhost:8001/docs"
 

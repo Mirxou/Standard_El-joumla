@@ -20,16 +20,17 @@ Main differences:
 - This file has embedded default translations
 - i18n_api.py loads translations from JSON files only
 """
+import logging
 
 import json
-import os
-from pathlib import Path
-from typing import Dict, Optional
 from enum import Enum
+from pathlib import Path
+from typing import Dict
 
 
 class Language(Enum):
     """اللغات المدعومة"""
+
     ARABIC = "ar"
     ENGLISH = "en"
 
@@ -38,62 +39,58 @@ class TranslationManager:
     """
     مدير الترجمة للتطبيق (قديم - DEPRECATED)
     يدعم اللغة العربية والإنجليزية مع تبديل فوري
-    
+
     ⚠️ DEPRECATED: يُرجى استخدام src.utils.i18n_api.I18n بدلاً منه
     """
-    
+
     def __init__(self, default_language: Language = Language.ARABIC):
         """
         تهيئة مدير الترجمة
-        
+
         Args:
             default_language: اللغة الافتراضية
         """
         import warnings
+
         warnings.warn(
             "TranslationManager is deprecated. Use src.utils.i18n_api.I18n instead.",
             DeprecationWarning,
-            stacklevel=2
+            stacklevel=2,
         )
-        
+
         self.current_language = default_language
         self.translations: Dict[str, Dict[str, str]] = {}
         self.translations_dir = Path("data/translations")
         self.translations_dir.mkdir(parents=True, exist_ok=True)
-        
+
         self._load_translations()
-    
+
     def _load_translations(self):
         """تحميل ملفات الترجمة"""
         for lang in Language:
             translation_file = self.translations_dir / f"{lang.value}.json"
-            
+
             if translation_file.exists():
-                with open(translation_file, 'r', encoding='utf-8') as f:
+                with open(translation_file, "r", encoding="utf-8") as f:
                     self.translations[lang.value] = json.load(f)
             else:
                 # إنشاء ملف الترجمة الافتراضي
                 self.translations[lang.value] = self._get_default_translations(lang)
                 self._save_translation_file(lang)
-    
+
     def _save_translation_file(self, language: Language):
         """حفظ ملف الترجمة"""
         translation_file = self.translations_dir / f"{language.value}.json"
-        with open(translation_file, 'w', encoding='utf-8') as f:
-            json.dump(
-                self.translations[language.value],
-                f,
-                ensure_ascii=False,
-                indent=2
-            )
-    
+        with open(translation_file, "w", encoding="utf-8") as f:
+            json.dump(self.translations[language.value], f, ensure_ascii=False, indent=2)
+
     def _get_default_translations(self, language: Language) -> Dict[str, str]:
         """الحصول على الترجمات الافتراضية"""
         if language == Language.ARABIC:
             return self._get_arabic_translations()
         else:
             return self._get_english_translations()
-    
+
     def _get_arabic_translations(self) -> Dict[str, str]:
         """الترجمات العربية"""
         return {
@@ -127,7 +124,6 @@ class TranslationManager:
             "apply": "تطبيق",
             "reset": "إعادة تعيين",
             "clear": "مسح",
-            
             # Menu Items
             "menu_file": "ملف",
             "menu_edit": "تحرير",
@@ -137,7 +133,6 @@ class TranslationManager:
             "menu_settings": "إعدادات",
             "menu_logout": "تسجيل خروج",
             "menu_exit": "خروج",
-            
             # Main Modules
             "dashboard": "لوحة المعلومات",
             "sales": "المبيعات",
@@ -151,7 +146,6 @@ class TranslationManager:
             "settings": "الإعدادات",
             "users": "المستخدمون",
             "permissions": "الصلاحيات",
-            
             # Sales
             "invoice": "فاتورة",
             "invoices": "الفواتير",
@@ -164,7 +158,6 @@ class TranslationManager:
             "payments": "المدفوعات",
             "payment_plan": "خطة تقسيط",
             "payment_plans": "خطط التقسيط",
-            
             # Purchases
             "purchase_invoice": "فاتورة شراء",
             "purchase_invoices": "فواتير الشراء",
@@ -174,7 +167,6 @@ class TranslationManager:
             "purchase_returns": "مرتجعات المشتريات",
             "supplier": "مورد",
             "receive": "استلام",
-            
             # Inventory
             "product": "منتج",
             "category": "فئة",
@@ -188,7 +180,6 @@ class TranslationManager:
             "counts": "الجرد",
             "adjustment": "تعديل",
             "adjustments": "التعديلات",
-            
             # Accounting
             "account": "حساب",
             "accounts": "الحسابات",
@@ -199,7 +190,6 @@ class TranslationManager:
             "balance_sheet": "الميزانية العمومية",
             "credit": "دائن",
             "debit": "مدين",
-            
             # Reports
             "report": "تقرير",
             "daily_report": "تقرير يومي",
@@ -210,7 +200,6 @@ class TranslationManager:
             "inventory_report": "تقرير المخزون",
             "financial_report": "تقرير مالي",
             "profit_loss": "الأرباح والخسائر",
-            
             # Common Fields
             "date": "التاريخ",
             "from_date": "من تاريخ",
@@ -236,7 +225,6 @@ class TranslationManager:
             "address": "العنوان",
             "city": "المدينة",
             "country": "الدولة",
-            
             # Status Values
             "active": "نشط",
             "inactive": "غير نشط",
@@ -246,7 +234,6 @@ class TranslationManager:
             "completed": "مكتمل",
             "cancelled": "ملغي",
             "draft": "مسودة",
-            
             # Messages
             "msg_save_success": "تم الحفظ بنجاح",
             "msg_delete_success": "تم الحذف بنجاح",
@@ -257,7 +244,6 @@ class TranslationManager:
             "msg_operation_failed": "فشلت العملية",
             "msg_invalid_input": "بيانات غير صحيحة",
             "msg_required_field": "هذا الحقل مطلوب",
-            
             # Login
             "login": "تسجيل دخول",
             "logout": "تسجيل خروج",
@@ -265,7 +251,6 @@ class TranslationManager:
             "password": "كلمة المرور",
             "remember_me": "تذكرني",
             "forgot_password": "نسيت كلمة المرور؟",
-            
             # System Management
             "backup": "نسخة احتياطية",
             "backups": "النسخ الاحتياطية",
@@ -274,7 +259,6 @@ class TranslationManager:
             "maintenance": "الصيانة",
             "optimize": "تحسين",
             "system_settings": "إعدادات النظام",
-            
             # Notifications
             "notification": "إشعار",
             "notifications": "الإشعارات",
@@ -282,14 +266,13 @@ class TranslationManager:
             "alerts": "التنبيهات",
             "reminder": "تذكير",
             "reminders": "التذكيرات",
-            
             # Language
             "language": "اللغة",
             "arabic": "العربية",
             "english": "الإنجليزية",
             "change_language": "تغيير اللغة",
         }
-    
+
     def _get_english_translations(self) -> Dict[str, str]:
         """الترجمات الإنجليزية"""
         return {
@@ -323,7 +306,6 @@ class TranslationManager:
             "apply": "Apply",
             "reset": "Reset",
             "clear": "Clear",
-            
             # Menu Items
             "menu_file": "File",
             "menu_edit": "Edit",
@@ -333,7 +315,6 @@ class TranslationManager:
             "menu_settings": "Settings",
             "menu_logout": "Logout",
             "menu_exit": "Exit",
-            
             # Main Modules
             "dashboard": "Dashboard",
             "sales": "Sales",
@@ -347,7 +328,6 @@ class TranslationManager:
             "settings": "Settings",
             "users": "Users",
             "permissions": "Permissions",
-            
             # Sales
             "invoice": "Invoice",
             "invoices": "Invoices",
@@ -360,7 +340,6 @@ class TranslationManager:
             "payments": "Payments",
             "payment_plan": "Payment Plan",
             "payment_plans": "Payment Plans",
-            
             # Purchases
             "purchase_invoice": "Purchase Invoice",
             "purchase_invoices": "Purchase Invoices",
@@ -370,7 +349,6 @@ class TranslationManager:
             "purchase_returns": "Purchase Returns",
             "supplier": "Supplier",
             "receive": "Receive",
-            
             # Inventory
             "product": "Product",
             "category": "Category",
@@ -384,7 +362,6 @@ class TranslationManager:
             "counts": "Counts",
             "adjustment": "Adjustment",
             "adjustments": "Adjustments",
-            
             # Accounting
             "account": "Account",
             "accounts": "Accounts",
@@ -395,7 +372,6 @@ class TranslationManager:
             "balance_sheet": "Balance Sheet",
             "credit": "Credit",
             "debit": "Debit",
-            
             # Reports
             "report": "Report",
             "daily_report": "Daily Report",
@@ -406,7 +382,6 @@ class TranslationManager:
             "inventory_report": "Inventory Report",
             "financial_report": "Financial Report",
             "profit_loss": "Profit & Loss",
-            
             # Common Fields
             "date": "Date",
             "from_date": "From Date",
@@ -432,7 +407,6 @@ class TranslationManager:
             "address": "Address",
             "city": "City",
             "country": "Country",
-            
             # Status Values
             "active": "Active",
             "inactive": "Inactive",
@@ -442,7 +416,6 @@ class TranslationManager:
             "completed": "Completed",
             "cancelled": "Cancelled",
             "draft": "Draft",
-            
             # Messages
             "msg_save_success": "Saved successfully",
             "msg_delete_success": "Deleted successfully",
@@ -453,7 +426,6 @@ class TranslationManager:
             "msg_operation_failed": "Operation failed",
             "msg_invalid_input": "Invalid input",
             "msg_required_field": "This field is required",
-            
             # Login
             "login": "Login",
             "logout": "Logout",
@@ -461,7 +433,6 @@ class TranslationManager:
             "password": "Password",
             "remember_me": "Remember me",
             "forgot_password": "Forgot password?",
-            
             # System Management
             "backup": "Backup",
             "backups": "Backups",
@@ -470,7 +441,6 @@ class TranslationManager:
             "maintenance": "Maintenance",
             "optimize": "Optimize",
             "system_settings": "System Settings",
-            
             # Notifications
             "notification": "Notification",
             "notifications": "Notifications",
@@ -478,64 +448,61 @@ class TranslationManager:
             "alerts": "Alerts",
             "reminder": "Reminder",
             "reminders": "Reminders",
-            
             # Language
             "language": "Language",
             "arabic": "Arabic",
             "english": "English",
             "change_language": "Change Language",
         }
-    
+
     def t(self, key: str, **kwargs) -> str:
         """
         ترجمة نص
-        
+
         Args:
             key: مفتاح الترجمة
             **kwargs: متغيرات للاستبدال في النص
-            
+
         Returns:
             النص المترجم
         """
-        translation = self.translations.get(
-            self.current_language.value, {}
-        ).get(key, key)
-        
+        translation = self.translations.get(self.current_language.value, {}).get(key, key)
+
         # استبدال المتغيرات
         if kwargs:
             try:
                 translation = translation.format(**kwargs)
             except KeyError:
-                pass
-        
+                logging.getLogger(__name__).warning("Ignored exception in i18n.py")
+
         return translation
-    
+
     def set_language(self, language: Language):
         """
         تغيير اللغة الحالية
-        
+
         Args:
             language: اللغة الجديدة
         """
         self.current_language = language
-    
+
     def get_language(self) -> Language:
         """الحصول على اللغة الحالية"""
         return self.current_language
-    
+
     def is_rtl(self) -> bool:
         """
         هل اللغة الحالية من اليمين إلى اليسار؟
-        
+
         Returns:
             True إذا كانت RTL
         """
         return self.current_language == Language.ARABIC
-    
+
     def add_translation(self, key: str, ar_value: str, en_value: str):
         """
         إضافة ترجمة جديدة
-        
+
         Args:
             key: المفتاح
             ar_value: القيمة بالعربية
@@ -543,7 +510,7 @@ class TranslationManager:
         """
         self.translations[Language.ARABIC.value][key] = ar_value
         self.translations[Language.ENGLISH.value][key] = en_value
-        
+
         # حفظ الملفات
         self._save_translation_file(Language.ARABIC)
         self._save_translation_file(Language.ENGLISH)
@@ -556,16 +523,17 @@ _translation_manager = None
 def get_translation_manager() -> TranslationManager:
     """
     الحصول على instance مدير الترجمة
-    
+
     ⚠️ DEPRECATED: يُرجى استخدام src.utils.i18n_api.I18n بدلاً منه
     """
     import warnings
+
     warnings.warn(
         "get_translation_manager() is deprecated. Use src.utils.i18n_api.I18n instead.",
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
-    
+
     global _translation_manager
     if _translation_manager is None:
         _translation_manager = TranslationManager()
@@ -575,21 +543,22 @@ def get_translation_manager() -> TranslationManager:
 def t(key: str, **kwargs) -> str:
     """
     دالة مختصرة للترجمة
-    
+
     ⚠️ DEPRECATED: يُرجى استخدام src.utils.i18n_api.I18n.get_message() بدلاً منه
-    
+
     Args:
         key: مفتاح الترجمة
         **kwargs: متغيرات للاستبدال
-        
+
     Returns:
         النص المترجم
     """
     import warnings
+
     warnings.warn(
         "t() from i18n.py is deprecated. Use src.utils.i18n_api.I18n.get_message() instead.",
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
-    
+
     return get_translation_manager().t(key, **kwargs)

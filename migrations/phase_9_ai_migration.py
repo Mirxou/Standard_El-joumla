@@ -5,11 +5,14 @@ Migration for Phase 9: Advanced AI & Machine Learning Integration
 
 import sqlite3
 import os
-from datetime import datetime
+from pathlib import Path
+
+# مسار المشروع دائماً من موقع الملف — لا يعتمد على cwd
+_PROJECT_ROOT = Path(__file__).parent.parent
 
 def run_migration():
     """تشغيل migration لـ Phase 9"""
-    db_path = "data/unified_erp.db"
+    db_path = str(_PROJECT_ROOT / "data" / "standard_eljoumla.db")
 
     # إنشاء مجلد data إذا لم يكن موجوداً
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
@@ -203,9 +206,6 @@ def run_migration():
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_predictive_scenarios_type ON predictive_scenarios(scenario_type)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_predictive_scenarios_status ON predictive_scenarios(status)')
 
-            # إدراج بيانات تجريبية
-            _insert_sample_data(cursor)
-
             conn.commit()
             print("✅ تم إنشاء جداول Phase 9 بنجاح")
 
@@ -218,56 +218,8 @@ def run_migration():
         print(f"❌ فشل في Migration Phase 9: {e}")
         raise
 
-def _insert_sample_data(cursor):
-    """إدراج بيانات تجريبية"""
-    try:
-        # نموذج تجريبي
-        cursor.execute('''
-            INSERT OR IGNORE INTO trained_ai_models
-            (model_id, model_name, model_type, algorithm, purpose, performance_metrics, training_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            'sample_model_001',
-            'نموذج تصنيف المبيعات',
-            'classification',
-            'random_forest',
-            'تصنيف أداء المبيعات',
-            '{"accuracy": 0.85, "precision": 0.82, "recall": 0.88}',
-            datetime.now()
-        ))
-
-        # رؤية تجريبية
-        cursor.execute('''
-            INSERT OR IGNORE INTO ai_insights
-            (insight_type, title, content, confidence, impact, category, generated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            'sample_insight',
-            'رؤية تجريبية',
-            'هذه رؤية تجريبية لتجربة النظام',
-            0.9,
-            'medium',
-            'system',
-            datetime.now()
-        ))
-
-        # سيناريو تنبؤي تجريبي
-        cursor.execute('''
-            INSERT OR IGNORE INTO predictive_scenarios
-            (scenario_id, scenario_name, scenario_type, time_horizon, created_at)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (
-            'sample_scenario_001',
-            'سيناريو مبيعات تجريبي',
-            'sales_forecast',
-            '1month',
-            datetime.now()
-        ))
-
-        print("✅ تم إدراج البيانات التجريبية")
-
-    except Exception as e:
-        print(f"⚠️  فشل في إدراج البيانات التجريبية: {e}")
+# ملاحظة: تم حذف _insert_sample_data — البيانات التجريبية لا تنتمي لملفات migration الإنتاجية.
+# استخدم scripts/generate_dummy_data.py إذا كنت بحاجة لبيانات اختبار.
 
 if __name__ == "__main__":
     run_migration()

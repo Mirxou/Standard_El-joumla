@@ -15,7 +15,7 @@ from pathlib import Path
 # إضافة مسار src
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.core.database_manager import DatabaseManager
+from src.core.local_database_manager import LocalDatabaseManager
 from src.models.user import UserManager
 from src.utils.logger import setup_logger
 import secrets
@@ -42,7 +42,7 @@ def reset_admin_password(
         return False
     try:
         print("🔧 تهيئة قاعدة البيانات...")
-        db_manager = DatabaseManager()
+        db_manager = LocalDatabaseManager()
         if not db_manager.initialize():
             print("❌ فشل تهيئة قاعدة البيانات")
             return False

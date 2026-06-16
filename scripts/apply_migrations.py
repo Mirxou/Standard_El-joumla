@@ -134,7 +134,7 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description="تطبيق migrations على قاعدة البيانات")
-    parser.add_argument("--db", default="data/inventory.db", help="مسار قاعدة البيانات")
+    parser.add_argument("--db", default="data/standard_eljoumla.db", help="مسار قاعدة البيانات")
     parser.add_argument("--migrations", default="migrations", help="مسار مجلد migrations")
     parser.add_argument("--force", action="store_true", help="إعادة تطبيق جميع migrations حتى لو طُبّقت مسبقاً")
     

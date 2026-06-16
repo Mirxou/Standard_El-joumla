@@ -1,23 +1,31 @@
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton, 
-    QLabel, QListWidget, QListWidgetItem, QFrame
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QIcon, QPixmap, QColor
+
 
 class ChatterWidget(QWidget):
     """
     Odoo-style Chatter Widget
     Tracks history, logs, and internal notes.
     """
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedWidth(350) # Standard side-panel width
-        
+        self.setFixedWidth(350)  # Standard side-panel width
+
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
         self.layout.setSpacing(0)
-        
+
         # --- 1. Top Input Area ---
         self.input_container = QFrame()
         self.input_container.setStyleSheet("""
@@ -27,12 +35,12 @@ class ChatterWidget(QWidget):
             }
         """)
         input_layout = QVBoxLayout(self.input_container)
-        
+
         # Tabs (Send Message / Log Note)
         tabs_layout = QHBoxLayout()
         self.btn_msg = QPushButton("Send Message")
         self.btn_note = QPushButton("Log Note")
-        
+
         for btn in [self.btn_msg, self.btn_note]:
             btn.setStyleSheet("""
                 QPushButton {
@@ -46,7 +54,7 @@ class ChatterWidget(QWidget):
             tabs_layout.addWidget(btn)
         tabs_layout.addStretch()
         input_layout.addLayout(tabs_layout)
-        
+
         # Text Area
         self.text_input = QTextEdit()
         self.text_input.setPlaceholderText("Write a note...")
@@ -61,7 +69,7 @@ class ChatterWidget(QWidget):
             }
         """)
         input_layout.addWidget(self.text_input)
-        
+
         # Post Button
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
@@ -80,9 +88,9 @@ class ChatterWidget(QWidget):
         self.btn_post.clicked.connect(self.add_note)
         btn_layout.addWidget(self.btn_post)
         input_layout.addLayout(btn_layout)
-        
+
         self.layout.addWidget(self.input_container)
-        
+
         # --- 2. History Feed ---
         self.history_list = QListWidget()
         self.history_list.setStyleSheet("""
@@ -97,23 +105,23 @@ class ChatterWidget(QWidget):
             }
         """)
         self.layout.addWidget(self.history_list)
-        
+
         # Add Mock Data
         self.add_log_item("System", "Document created", "Now")
         self.add_log_item("Admin", "Changed state to: Draft", "2 min ago")
-        
+
     def add_note(self):
         text = self.text_input.toPlainText().strip()
         if text:
             self.add_log_item("You", text, "Just now")
             self.text_input.clear()
-            
+
     def add_log_item(self, user, content, time):
         item = QListWidgetItem()
         widget = QWidget()
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(5, 5, 5, 5)
-        
+
         # Avatar (Circle)
         avatar = QLabel(user[0])
         avatar.setFixedSize(32, 32)
@@ -125,7 +133,7 @@ class ChatterWidget(QWidget):
             font-weight: bold;
         """)
         layout.addWidget(avatar)
-        
+
         # Content
         col = QVBoxLayout()
         top = QHBoxLayout()
@@ -137,14 +145,14 @@ class ChatterWidget(QWidget):
         top.addWidget(t)
         top.addStretch()
         col.addLayout(top)
-        
+
         msg = QLabel(content)
         msg.setWordWrap(True)
         msg.setStyleSheet("color: #cbd5e1;")
         col.addWidget(msg)
-        
+
         layout.addLayout(col)
-        
+
         item.setSizeHint(widget.sizeHint())
         self.history_list.addItem(item)
         self.history_list.setItemWidget(item, widget)

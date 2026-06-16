@@ -1,13 +1,13 @@
 #!/bin/bash
 
-# SSL Certificate Generation Script for Unified Commerce ERP
+# SSL Certificate Generation Script for Standard El-Joumla
 # Version: 1.0.0
 # Description: Generate SSL certificates for production deployment
 
 set -e
 
 # Configuration
-DOMAIN="unifiedcommerce2030.com"
+DOMAIN="standard-eljoumla.com"
 SSL_DIR="./ssl"
 CERT_DIR="$SSL_DIR/certs"
 KEY_DIR="$SSL_DIR/private"
@@ -78,7 +78,7 @@ prompt = no
 C = SA
 ST = Riyadh
 L = Riyadh
-O = Unified Commerce 2030
+O = Standard El-Joumla
 OU = IT Department
 CN = $DOMAIN
 

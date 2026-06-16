@@ -195,7 +195,7 @@ pip install pyqtgraph
 
 ---
 
-**تم إنشاء هذا النظام بواسطة:** Logical Version Team  
+**تم إنشاء هذا النظام بواسطة:** Standard El-Joumla Team  
 **التاريخ:** 2025-01-15  
 **الإصدار:** 1.0.0
 

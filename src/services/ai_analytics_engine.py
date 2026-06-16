@@ -1,3 +1,4 @@
+import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -5,39 +6,35 @@
 محرك الذكاء الاصطناعي للتحليلات والرؤى التنبؤية
 """
 
-from typing import Dict, List, Any, Optional, Tuple
-from decimal import Decimal
-from datetime import datetime, timedelta
 from dataclasses import dataclass
-import json
-import sys
-from pathlib import Path
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Tuple
+
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_absolute_error, mean_squared_error
 
-
-from src.core.database_manager import DatabaseManager
 from src.core.config_manager import ConfigManager
-from src.services.dynamic_pricing_engine import DynamicPricingEngine
+from src.core.database_manager import DatabaseManager
 from src.utils.logger import setup_logger
+
 
 @dataclass
 class SalesPrediction:
     """تنبؤ المبيعات"""
+
     product_id: int
     predicted_sales: float
     confidence_score: float
     prediction_date: datetime
     factors: Dict[str, Any]
 
+
 @dataclass
 class CustomerInsight:
     """رؤية عميل"""
+
     customer_id: int
     insight_type: str  # 'churn_risk', 'upsell_opportunity', 'loyalty_score'
     score: float
@@ -45,22 +42,26 @@ class CustomerInsight:
     recommendations: List[str]
     generated_at: datetime
 
+
 @dataclass
 class ProductRecommendation:
     """توصية منتج"""
+
     customer_id: int
     recommended_products: List[Dict[str, Any]]
     reasoning: str
     confidence_score: float
     generated_at: datetime
 
+
 class AIAnalyticsEngine:
     """محرك التحليلات الذكية المتقدم"""
 
     def __init__(self, db_manager: DatabaseManager):
-        self.db = db_manager
-        self.config = ConfigManager()
         self.logger = setup_logger(__name__)
+        from src.utils.db_utils import SafeDatabaseWrapper
+        self.db = SafeDatabaseWrapper(db_manager, self.logger)
+        self.config = ConfigManager()
 
         # نماذج التعلم الآلي
         self.sales_model = None
@@ -68,9 +69,9 @@ class AIAnalyticsEngine:
         self.scaler = StandardScaler()
 
         # معلمات التكوين
-        self.prediction_horizon_days = self.config.get('ai.prediction_horizon_days', 30)
-        self.min_training_samples = self.config.get('ai.min_training_samples', 100)
-        self.model_update_frequency_hours = self.config.get('ai.model_update_frequency_hours', 24)
+        self.prediction_horizon_days = self.config.get("ai.prediction_horizon_days", 30)
+        self.min_training_samples = self.config.get("ai.min_training_samples", 100)
+        self.model_update_frequency_hours = self.config.get("ai.model_update_frequency_hours", 24)
 
         # تحميل النماذج المدربة
         self._load_trained_models()
@@ -119,7 +120,7 @@ class AIAnalyticsEngine:
                 predicted_sales=float(predicted_sales),
                 confidence_score=confidence_score,
                 prediction_date=datetime.now() + timedelta(days=days_ahead),
-                factors=factors
+                factors=factors,
             )
 
         except Exception as e:
@@ -144,38 +145,44 @@ class AIAnalyticsEngine:
 
             # تحليل خطر الخسارة
             churn_risk = self._analyze_churn_risk(customer_data)
-            if churn_risk['score'] > 0.3:
-                insights.append(CustomerInsight(
-                    customer_id=customer_id,
-                    insight_type='churn_risk',
-                    score=churn_risk['score'],
-                    description=f"خطر خسارة العميل: {churn_risk['description']}",
-                    recommendations=churn_risk['recommendations'],
-                    generated_at=datetime.now()
-                ))
+            if churn_risk["score"] > 0.3:
+                insights.append(
+                    CustomerInsight(
+                        customer_id=customer_id,
+                        insight_type="churn_risk",
+                        score=churn_risk["score"],
+                        description=f"خطر خسارة العميل: {churn_risk['description']}",
+                        recommendations=churn_risk["recommendations"],
+                        generated_at=datetime.now(),
+                    )
+                )
 
             # تحليل فرص البيع الإضافي
             upsell_opportunities = self._analyze_upsell_opportunities(customer_data)
-            if upsell_opportunities['score'] > 0.4:
-                insights.append(CustomerInsight(
-                    customer_id=customer_id,
-                    insight_type='upsell_opportunity',
-                    score=upsell_opportunities['score'],
-                    description=f"فرصة بيع إضافي: {upsell_opportunities['description']}",
-                    recommendations=upsell_opportunities['recommendations'],
-                    generated_at=datetime.now()
-                ))
+            if upsell_opportunities["score"] > 0.4:
+                insights.append(
+                    CustomerInsight(
+                        customer_id=customer_id,
+                        insight_type="upsell_opportunity",
+                        score=upsell_opportunities["score"],
+                        description=f"فرصة بيع إضافي: {upsell_opportunities['description']}",
+                        recommendations=upsell_opportunities["recommendations"],
+                        generated_at=datetime.now(),
+                    )
+                )
 
             # حساب درجة الولاء
             loyalty_score = self._calculate_loyalty_score(customer_data)
-            insights.append(CustomerInsight(
-                customer_id=customer_id,
-                insight_type='loyalty_score',
-                score=loyalty_score['score'],
-                description=f"درجة الولاء: {loyalty_score['description']}",
-                recommendations=loyalty_score['recommendations'],
-                generated_at=datetime.now()
-            ))
+            insights.append(
+                CustomerInsight(
+                    customer_id=customer_id,
+                    insight_type="loyalty_score",
+                    score=loyalty_score["score"],
+                    description=f"درجة الولاء: {loyalty_score['description']}",
+                    recommendations=loyalty_score["recommendations"],
+                    generated_at=datetime.now(),
+                )
+            )
 
         except Exception as e:
             self.logger.error(f"Error analyzing customer behavior: {e}")
@@ -200,42 +207,43 @@ class AIAnalyticsEngine:
 
             # حساب درجات التوصية
             recommendations = []
-            reasoning_parts = []
 
             for product in all_products:
-                if product['id'] in [p['product_id'] for p in customer_history]:
+                if product["id"] in [p["product_id"] for p in customer_history]:
                     continue  # لا نوصي بمنتجات تم شراؤها مؤخراً
 
-                score = self._calculate_product_recommendation_score(
-                    customer_history, product, customer_id
-                )
+                score = self._calculate_product_recommendation_score(customer_history, product, customer_id)
 
                 if score > 0.3:  # حد أدنى للثقة
-                    recommendations.append({
-                        'product_id': product['id'],
-                        'name': product['name'],
-                        'score': score,
-                        'reason': self._get_recommendation_reason(customer_history, product)
-                    })
+                    recommendations.append(
+                        {
+                            "product_id": product["id"],
+                            "name": product["name"],
+                            "score": score,
+                            "reason": self._get_recommendation_reason(customer_history, product),
+                        }
+                    )
 
             # ترتيب وتحديد العدد المطلوب
-            recommendations.sort(key=lambda x: x['score'], reverse=True)
+            recommendations.sort(key=lambda x: x["score"], reverse=True)
             top_recommendations = recommendations[:limit]
 
             # بناء المنطق
             if top_recommendations:
-                reasoning = f"بناءً على مشترياتك السابقة، نوصي بالمنتجات التالية: {', '.join([r['name'] for r in top_recommendations[:3]])}"
+                reasoning = f"بناءً على مشترياتك السابقة، نوصي بالمنتجات التالية: {', '.join([r['name'] for r in top_recommendations[:3]])}"  # noqa: E501
             else:
                 reasoning = "لا توجد توصيات محددة حالياً"
 
-            confidence_score = sum(r['score'] for r in top_recommendations) / len(top_recommendations) if top_recommendations else 0
+            confidence_score = (
+                sum(r["score"] for r in top_recommendations) / len(top_recommendations) if top_recommendations else 0
+            )
 
             return ProductRecommendation(
                 customer_id=customer_id,
                 recommended_products=top_recommendations,
                 reasoning=reasoning,
                 confidence_score=confidence_score,
-                generated_at=datetime.now()
+                generated_at=datetime.now(),
             )
 
         except Exception as e:
@@ -245,7 +253,7 @@ class AIAnalyticsEngine:
                 recommended_products=[],
                 reasoning="خطأ في توليد التوصيات",
                 confidence_score=0,
-                generated_at=datetime.now()
+                generated_at=datetime.now(),
             )
 
     def generate_business_insights(self) -> Dict[str, Any]:
@@ -256,25 +264,25 @@ class AIAnalyticsEngine:
             قاموس يحتوي على الرؤى المختلفة
         """
         insights = {
-            'sales_trends': {},
-            'customer_segments': {},
-            'inventory_alerts': {},
-            'pricing_opportunities': {},
-            'generated_at': datetime.now().isoformat()
+            "sales_trends": {},
+            "customer_segments": {},
+            "inventory_alerts": {},
+            "pricing_opportunities": {},
+            "generated_at": datetime.now().isoformat(),
         }
 
         try:
             # تحليل اتجاهات المبيعات
-            insights['sales_trends'] = self._analyze_sales_trends()
+            insights["sales_trends"] = self._analyze_sales_trends()
 
             # تحليل شرائح العملاء
-            insights['customer_segments'] = self._analyze_customer_segments()
+            insights["customer_segments"] = self._analyze_customer_segments()
 
             # تنبيهات المخزون
-            insights['inventory_alerts'] = self._analyze_inventory_alerts()
+            insights["inventory_alerts"] = self._analyze_inventory_alerts()
 
             # فرص التسعير
-            insights['pricing_opportunities'] = self._analyze_pricing_opportunities()
+            insights["pricing_opportunities"] = self._analyze_pricing_opportunities()
 
         except Exception as e:
             self.logger.error(f"Error generating business insights: {e}")
@@ -298,14 +306,7 @@ class AIAnalyticsEngine:
 
             data = self.db.execute_query(query, (product_id, start_date), fetch_all=True)
 
-            return [
-                {
-                    'date': row[0],
-                    'quantity': row[1],
-                    'revenue': float(row[2])
-                }
-                for row in data
-            ]
+            return [{"date": row[0], "quantity": row[1], "revenue": float(row[2])} for row in data]
 
         except Exception as e:
             self.logger.error(f"Error getting sales history: {e}")
@@ -317,26 +318,33 @@ class AIAnalyticsEngine:
             df = pd.DataFrame(historical_data)
 
             # إنشاء ميزات
-            df['date'] = pd.to_datetime(df['date'])
-            df['day_of_week'] = df['date'].dt.dayofweek
-            df['month'] = df['date'].dt.month
-            df['day_of_month'] = df['date'].dt.day
-            df['is_weekend'] = df['day_of_week'].isin([5, 6]).astype(int)
+            df["date"] = pd.to_datetime(df["date"])
+            df["day_of_week"] = df["date"].dt.dayofweek
+            df["month"] = df["date"].dt.month
+            df["day_of_month"] = df["date"].dt.day
+            df["is_weekend"] = df["day_of_week"].isin([5, 6]).astype(int)
 
             # ميزات إضافية
-            df['quantity_lag_1'] = df['quantity'].shift(1)
-            df['quantity_lag_7'] = df['quantity'].shift(7)
-            df['quantity_rolling_mean_7'] = df['quantity'].rolling(window=7).mean()
+            df["quantity_lag_1"] = df["quantity"].shift(1)
+            df["quantity_lag_7"] = df["quantity"].shift(7)
+            df["quantity_rolling_mean_7"] = df["quantity"].rolling(window=7).mean()
 
             # إزالة الصفوف التي تحتوي على NaN
             df = df.dropna()
 
             # تحديد الميزات والهدف
-            features = ['day_of_week', 'month', 'day_of_month', 'is_weekend',
-                       'quantity_lag_1', 'quantity_lag_7', 'quantity_rolling_mean_7']
+            features = [
+                "day_of_week",
+                "month",
+                "day_of_month",
+                "is_weekend",
+                "quantity_lag_1",
+                "quantity_lag_7",
+                "quantity_rolling_mean_7",
+            ]
 
             X = df[features].values
-            y = df['quantity'].values
+            y = df["quantity"].values
 
             return X, y
 
@@ -351,8 +359,8 @@ class AIAnalyticsEngine:
         # ميزات أساسية
         features = [
             prediction_date.weekday(),  # day_of_week
-            prediction_date.month,      # month
-            prediction_date.day,        # day_of_month
+            prediction_date.month,  # month
+            prediction_date.day,  # day_of_month
             1 if prediction_date.weekday() >= 5 else 0,  # is_weekend
         ]
 
@@ -360,18 +368,20 @@ class AIAnalyticsEngine:
         try:
             recent_sales = self._get_product_sales_history(product_id, days=7)
             if recent_sales:
-                last_quantity = recent_sales[-1]['quantity']
-                week_ago_quantity = recent_sales[0]['quantity'] if len(recent_sales) > 1 else last_quantity
+                last_quantity = recent_sales[-1]["quantity"]
+                week_ago_quantity = recent_sales[0]["quantity"] if len(recent_sales) > 1 else last_quantity
 
-                features.extend([
-                    last_quantity,      # quantity_lag_1
-                    week_ago_quantity,  # quantity_lag_7
-                    np.mean([s['quantity'] for s in recent_sales])  # rolling_mean_7
-                ])
+                features.extend(
+                    [
+                        last_quantity,  # quantity_lag_1
+                        week_ago_quantity,  # quantity_lag_7
+                        np.mean([s["quantity"] for s in recent_sales]),  # rolling_mean_7
+                    ]
+                )
             else:
                 features.extend([0, 0, 0])  # قيم افتراضية
 
-        except Exception as e:
+        except Exception as e:  # noqa: F841
             features.extend([0, 0, 0])
 
         return np.array(features)
@@ -381,7 +391,7 @@ class AIAnalyticsEngine:
         if not historical_data:
             return 0.0
 
-        quantities = [d['quantity'] for d in historical_data]
+        quantities = [d["quantity"] for d in historical_data]
         mean_quantity = np.mean(quantities)
         std_quantity = np.std(quantities)
 
@@ -402,28 +412,30 @@ class AIAnalyticsEngine:
 
         try:
             df = pd.DataFrame(historical_data)
-            df['date'] = pd.to_datetime(df['date'])
+            df["date"] = pd.to_datetime(df["date"])
 
             # تحليل تأثير يوم الأسبوع
-            df['day_of_week'] = df['date'].dt.dayofweek
-            weekday_avg = df.groupby('day_of_week')['quantity'].mean()
+            df["day_of_week"] = df["date"].dt.dayofweek
+            weekday_avg = df.groupby("day_of_week")["quantity"].mean()
 
             best_day = weekday_avg.idxmax()
             worst_day = weekday_avg.idxmin()
 
-            factors['best_sales_day'] = int(best_day)
-            factors['worst_sales_day'] = int(worst_day)
-            factors['day_variation'] = float((weekday_avg.max() - weekday_avg.min()) / weekday_avg.mean())
+            factors["best_sales_day"] = int(best_day)
+            factors["worst_sales_day"] = int(worst_day)
+            factors["day_variation"] = float((weekday_avg.max() - weekday_avg.min()) / weekday_avg.mean())
 
             # تحليل الاتجاه
             if len(df) > 7:
-                recent_avg = df['quantity'].tail(7).mean()
-                older_avg = df['quantity'].head(len(df) - 7).mean()
+                recent_avg = df["quantity"].tail(7).mean()
+                older_avg = df["quantity"].head(len(df) - 7).mean()
 
                 if older_avg > 0:
                     trend = (recent_avg - older_avg) / older_avg
-                    factors['sales_trend'] = float(trend)
-                    factors['trend_direction'] = 'increasing' if trend > 0.1 else 'decreasing' if trend < -0.1 else 'stable'
+                    factors["sales_trend"] = float(trend)
+                    factors["trend_direction"] = (
+                        "increasing" if trend > 0.1 else "decreasing" if trend < -0.1 else "stable"
+                    )
 
         except Exception as e:
             self.logger.error(f"Error analyzing sales factors: {e}")
@@ -435,7 +447,7 @@ class AIAnalyticsEngine:
         try:
             # حساب متوسط المبيعات الأخيرة
             recent_sales = self._get_product_sales_history(product_id, days=30)
-            avg_sales = np.mean([s['quantity'] for s in recent_sales]) if recent_sales else 0
+            avg_sales = np.mean([s["quantity"] for s in recent_sales]) if recent_sales else 0
             confidence_score = 0.3 if recent_sales else 0.0
 
             return SalesPrediction(
@@ -443,16 +455,16 @@ class AIAnalyticsEngine:
                 predicted_sales=float(avg_sales),
                 confidence_score=confidence_score,
                 prediction_date=datetime.now() + timedelta(days=days_ahead),
-                factors={'method': 'simple_average', 'data_points': len(recent_sales)}
+                factors={"method": "simple_average", "data_points": len(recent_sales)},
             )
 
-        except Exception as e:
+        except Exception as e:  # noqa: F841
             return SalesPrediction(
                 product_id=product_id,
                 predicted_sales=0,
                 confidence_score=0,
                 prediction_date=datetime.now() + timedelta(days=days_ahead),
-                factors={'error': 'no_data'}
+                factors={"error": "no_data"},
             )
 
     def _fallback_sales_prediction(self, product_id: int, days_ahead: int) -> SalesPrediction:
@@ -462,7 +474,7 @@ class AIAnalyticsEngine:
             predicted_sales=0,
             confidence_score=0,
             prediction_date=datetime.now() + timedelta(days=days_ahead),
-            factors={'method': 'fallback', 'reason': 'error'}
+            factors={"method": "fallback", "reason": "error"},
         )
 
     def _get_customer_behavior_data(self, customer_id: int) -> Dict[str, Any]:
@@ -478,7 +490,9 @@ class AIAnalyticsEngine:
             purchase_data = self.db.execute_query(total_purchases_query, (customer_id,), fetch_one=True)
 
             # فترة الخمول
-            days_since_last_order = (datetime.now() - purchase_data[3]).days if purchase_data and purchase_data[3] else 999
+            days_since_last_order = (
+                (datetime.now() - purchase_data[3]).days if purchase_data and purchase_data[3] else 999
+            )
 
             # تنوع المنتجات المشتراة
             product_diversity_query = """
@@ -491,12 +505,12 @@ class AIAnalyticsEngine:
             diversity_data = self.db.execute_query(product_diversity_query, (customer_id,), fetch_one=True)
 
             return {
-                'order_count': purchase_data[0] if purchase_data else 0,
-                'total_spent': float(purchase_data[1] or 0) if purchase_data else 0,
-                'avg_order_value': float(purchase_data[2] or 0) if purchase_data else 0,
-                'days_since_last_order': days_since_last_order,
-                'unique_products': diversity_data[0] if diversity_data else 0,
-                'customer_id': customer_id
+                "order_count": purchase_data[0] if purchase_data else 0,
+                "total_spent": float(purchase_data[1] or 0) if purchase_data else 0,
+                "avg_order_value": float(purchase_data[2] or 0) if purchase_data else 0,
+                "days_since_last_order": days_since_last_order,
+                "unique_products": diversity_data[0] if diversity_data else 0,
+                "customer_id": customer_id,
             }
 
         except Exception as e:
@@ -510,7 +524,7 @@ class AIAnalyticsEngine:
         recommendations = []
 
         # تحليل بناءً على فترة الخمول
-        days_inactive = customer_data.get('days_since_last_order', 999)
+        days_inactive = customer_data.get("days_since_last_order", 999)
 
         if days_inactive > 90:
             risk_score += 0.4
@@ -522,7 +536,7 @@ class AIAnalyticsEngine:
             recommendations.append("إرسال تذكير بالعروض المتاحة")
 
         # تحليل بناءً على عدد الطلبات
-        order_count = customer_data.get('order_count', 0)
+        order_count = customer_data.get("order_count", 0)
 
         if order_count < 3:
             risk_score += 0.3
@@ -530,7 +544,7 @@ class AIAnalyticsEngine:
             recommendations.append("تقديم خصومات للطلب الأول")
 
         # تحليل بناءً على قيمة الطلب المتوسطة
-        avg_order_value = customer_data.get('avg_order_value', 0)
+        avg_order_value = customer_data.get("avg_order_value", 0)
 
         if avg_order_value < 50:
             risk_score += 0.1
@@ -539,9 +553,9 @@ class AIAnalyticsEngine:
         description = "; ".join(reasons) if reasons else "خطر خسارة منخفض"
 
         return {
-            'score': min(1.0, risk_score),
-            'description': description,
-            'recommendations': recommendations
+            "score": min(1.0, risk_score),
+            "description": description,
+            "recommendations": recommendations,
         }
 
     def _analyze_upsell_opportunities(self, customer_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -551,7 +565,7 @@ class AIAnalyticsEngine:
         recommendations = []
 
         # تحليل بناءً على قيمة الطلب المتوسطة
-        avg_order_value = customer_data.get('avg_order_value', 0)
+        avg_order_value = customer_data.get("avg_order_value", 0)
 
         if avg_order_value > 200:
             opportunity_score += 0.4
@@ -563,7 +577,7 @@ class AIAnalyticsEngine:
             recommendations.append("اقتراح ترقيات للمنتجات")
 
         # تحليل بناءً على تنوع المنتجات
-        unique_products = customer_data.get('unique_products', 0)
+        unique_products = customer_data.get("unique_products", 0)
 
         if unique_products < 5:
             opportunity_score += 0.3
@@ -571,7 +585,7 @@ class AIAnalyticsEngine:
             recommendations.append("اقتراح فئات منتجات جديدة")
 
         # تحليل بناءً على النشاط الأخير
-        days_inactive = customer_data.get('days_since_last_order', 999)
+        days_inactive = customer_data.get("days_since_last_order", 999)
 
         if days_inactive < 7:
             opportunity_score += 0.2
@@ -581,9 +595,9 @@ class AIAnalyticsEngine:
         description = "; ".join(reasons) if reasons else "فرص بيع إضافي محدودة"
 
         return {
-            'score': min(1.0, opportunity_score),
-            'description': description,
-            'recommendations': recommendations
+            "score": min(1.0, opportunity_score),
+            "description": description,
+            "recommendations": recommendations,
         }
 
     def _calculate_loyalty_score(self, customer_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -593,7 +607,7 @@ class AIAnalyticsEngine:
         recommendations = []
 
         # تحليل بناءً على عدد الطلبات
-        order_count = customer_data.get('order_count', 0)
+        order_count = customer_data.get("order_count", 0)
 
         if order_count > 50:
             loyalty_score += 0.4
@@ -606,7 +620,7 @@ class AIAnalyticsEngine:
             reasons.append("عدد مقبول من الطلبات")
 
         # تحليل بناءً على إجمالي المشتريات
-        total_spent = customer_data.get('total_spent', 0)
+        total_spent = customer_data.get("total_spent", 0)
 
         if total_spent > 10000:
             loyalty_score += 0.3
@@ -619,7 +633,7 @@ class AIAnalyticsEngine:
             reasons.append("إجمالي مشتريات مقبول")
 
         # تحليل بناءً على النشاط الأخير
-        days_inactive = customer_data.get('days_since_last_order', 999)
+        days_inactive = customer_data.get("days_since_last_order", 999)
 
         if days_inactive < 7:
             loyalty_score += 0.2
@@ -645,9 +659,9 @@ class AIAnalyticsEngine:
         description = f"مستوى الولاء: {level} ({loyalty_score:.1%})"
 
         return {
-            'score': loyalty_score,
-            'description': description,
-            'recommendations': recommendations
+            "score": loyalty_score,
+            "description": description,
+            "recommendations": recommendations,
         }
 
     def _get_customer_purchase_history(self, customer_id: int) -> List[Dict[str, Any]]:
@@ -668,11 +682,11 @@ class AIAnalyticsEngine:
 
             return [
                 {
-                    'product_id': row[0],
-                    'product_name': row[1],
-                    'total_quantity': row[2],
-                    'avg_price': float(row[3]),
-                    'last_purchase': row[4]
+                    "product_id": row[0],
+                    "product_name": row[1],
+                    "total_quantity": row[2],
+                    "avg_price": float(row[3]),
+                    "last_purchase": row[4],
                 }
                 for row in data
             ]
@@ -687,21 +701,18 @@ class AIAnalyticsEngine:
             query = "SELECT id, name, category_id FROM products WHERE is_active = 1"
             data = self.db.execute_query(query, fetch_all=True)
 
-            return [
-                {
-                    'id': row[0],
-                    'name': row[1],
-                    'category_id': row[2]
-                }
-                for row in data
-            ]
+            return [{"id": row[0], "name": row[1], "category_id": row[2]} for row in data]
 
         except Exception as e:
             self.logger.error(f"Error getting all products: {e}")
             return []
 
-    def _calculate_product_recommendation_score(self, customer_history: List[Dict[str, Any]],
-                                              product: Dict[str, Any], customer_id: int) -> float:
+    def _calculate_product_recommendation_score(
+        self,
+        customer_history: List[Dict[str, Any]],
+        product: Dict[str, Any],
+        customer_id: int,
+    ) -> float:
         """حساب درجة توصية المنتج"""
         score = 0
 
@@ -728,12 +739,11 @@ class AIAnalyticsEngine:
 
         return min(1.0, score)
 
-    def _get_recommendation_reason(self, customer_history: List[Dict[str, Any]],
-                                 product: Dict[str, Any]) -> str:
+    def _get_recommendation_reason(self, customer_history: List[Dict[str, Any]], product: Dict[str, Any]) -> str:
         """الحصول على سبب التوصية"""
         reasons = []
 
-        purchased_product_names = [p['product_name'] for p in customer_history]
+        purchased_product_names = [p["product_name"] for p in customer_history]
 
         if purchased_product_names:
             reasons.append(f"بناءً على مشترياتك السابقة: {', '.join(purchased_product_names[:2])}")
@@ -758,26 +768,31 @@ class AIAnalyticsEngine:
 
             current_sales = self.db.execute_query(
                 current_sales_query,
-                (current_month, current_month.replace(month=current_month.month + 1) if current_month.month < 12 else current_month.replace(year=current_month.year + 1, month=1)),
-                fetch_one=True
+                (
+                    current_month,
+                    (
+                        current_month.replace(month=current_month.month + 1)
+                        if current_month.month < 12
+                        else current_month.replace(year=current_month.year + 1, month=1)
+                    ),
+                ),
+                fetch_one=True,
             )
 
-            last_sales = self.db.execute_query(
-                current_sales_query,
-                (last_month, current_month),
-                fetch_one=True
-            )
+            last_sales = self.db.execute_query(current_sales_query, (last_month, current_month), fetch_one=True)
 
             current_total = float(current_sales[0] or 0) if current_sales else 0
             last_total = float(last_sales[0] or 0) if last_sales else 0
 
             if last_total > 0:
                 growth_rate = (current_total - last_total) / last_total
-                trends['monthly_growth'] = growth_rate
-                trends['growth_description'] = f"{'زيادة' if growth_rate > 0 else 'انخفاض'} بنسبة {abs(growth_rate):.1%}"
+                trends["monthly_growth"] = growth_rate
+                trends["growth_description"] = (
+                    f"{'زيادة' if growth_rate > 0 else 'انخفاض'} بنسبة {abs(growth_rate):.1%}"
+                )
 
-            trends['current_month_sales'] = current_total
-            trends['last_month_sales'] = last_total
+            trends["current_month_sales"] = current_total
+            trends["last_month_sales"] = last_total
 
         except Exception as e:
             self.logger.error(f"Error analyzing sales trends: {e}")
@@ -813,8 +828,8 @@ class AIAnalyticsEngine:
             for row in data:
                 segment_name = row[0]
                 segments[segment_name] = {
-                    'count': row[1],
-                    'avg_spent': float(row[2] or 0)
+                    "count": row[1],
+                    "avg_spent": float(row[2] or 0),
                 }
 
         except Exception as e:
@@ -837,13 +852,13 @@ class AIAnalyticsEngine:
 
             low_stock_products = self.db.execute_query(low_stock_query, fetch_all=True)
 
-            alerts['low_stock_products'] = [
+            alerts["low_stock_products"] = [
                 {
-                    'id': row[0],
-                    'name': row[1],
-                    'current_stock': row[2],
-                    'min_stock': row[3],
-                    'urgency': 'high' if row[2] <= row[3] else 'medium'
+                    "id": row[0],
+                    "name": row[1],
+                    "current_stock": row[2],
+                    "min_stock": row[3],
+                    "urgency": "high" if row[2] <= row[3] else "medium",
                 }
                 for row in low_stock_products
             ]
@@ -858,12 +873,12 @@ class AIAnalyticsEngine:
 
             excess_stock_products = self.db.execute_query(excess_stock_query, fetch_all=True)
 
-            alerts['excess_stock_products'] = [
+            alerts["excess_stock_products"] = [
                 {
-                    'id': row[0],
-                    'name': row[1],
-                    'current_stock': row[2],
-                    'min_stock': row[3]
+                    "id": row[0],
+                    "name": row[1],
+                    "current_stock": row[2],
+                    "min_stock": row[3],
                 }
                 for row in excess_stock_products
             ]
@@ -892,14 +907,14 @@ class AIAnalyticsEngine:
 
             data = self.db.execute_query(price_increase_opportunities, fetch_all=True)
 
-            opportunities['price_increase_candidates'] = [
+            opportunities["price_increase_candidates"] = [
                 {
-                    'id': row[0],
-                    'name': row[1],
-                    'current_price': float(row[2]),
-                    'avg_sold_price': float(row[3] or 0),
-                    'sales_count': row[4],
-                    'potential_increase': float(row[2] - (row[3] or 0))
+                    "id": row[0],
+                    "name": row[1],
+                    "current_price": float(row[2]),
+                    "avg_sold_price": float(row[3] or 0),
+                    "sales_count": row[4],
+                    "potential_increase": float(row[2] - (row[3] or 0)),
                 }
                 for row in data
             ]
@@ -927,7 +942,7 @@ class AIAnalyticsEngine:
             # تحديث نموذج المبيعات
             all_products = self._get_all_products()
             for product in all_products[:10]:  # تدريب على أول 10 منتجات للاختبار
-                sales_data = self._get_product_sales_history(product['id'], days=90)
+                sales_data = self._get_product_sales_history(product["id"], days=90)
                 if len(sales_data) >= self.min_training_samples:
                     X, y = self._prepare_sales_training_data(sales_data)
                     if len(X) > 0:

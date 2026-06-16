@@ -6,14 +6,12 @@
 """
 
 import sys
-import os
 from pathlib import Path
 
 # إضافة مسار src
 sys.path.insert(0, str(Path(__file__).parent / 'src'))
 
 from core.database_manager import DatabaseManager
-from core.config_manager import ConfigManager
 
 def create_inventory_tables():
     """إنشاء جداول إدارة المخزون المتقدمة"""

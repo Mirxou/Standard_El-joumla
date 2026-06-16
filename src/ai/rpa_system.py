@@ -1,26 +1,49 @@
+import logging
 #!/usr/bin/env python3
 """
 نظام الأتمتة الروبوتية - Robotic Process Automation System
 نظام RPA شامل لأتمتة العمليات التجارية
 """
 
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional, Callable
-from dataclasses import dataclass
-from enum import Enum
 import threading
 import time
-import logging
-import pyautogui
-import pyperclip
-import keyboard
-import mouse
-import os
-import json
+from dataclasses import dataclass
+from datetime import datetime
+from enum import Enum
+from typing import Any, Dict, List, Optional
+
+try:
+    import pyautogui
+
+    PYAUTOGUI_AVAILABLE = True
+except ImportError:
+    PYAUTOGUI_AVAILABLE = False
+
+try:
+    pass
+
+    PYPERCLIP_AVAILABLE = True
+except ImportError:
+    PYPERCLIP_AVAILABLE = False
+
+try:
+    import keyboard
+
+    KEYBOARD_AVAILABLE = True
+except ImportError:
+    KEYBOARD_AVAILABLE = False
+
+try:
+    pass
+
+    MOUSE_AVAILABLE = True
+except ImportError:
+    MOUSE_AVAILABLE = False
 
 
 class RPAType(Enum):
     """نوع RPA"""
+
     DESKTOP_AUTOMATION = "desktop_automation"
     WEB_AUTOMATION = "web_automation"
     API_AUTOMATION = "api_automation"
@@ -30,6 +53,7 @@ class RPAType(Enum):
 
 class RPAStatus(Enum):
     """حالة RPA"""
+
     IDLE = "idle"
     RECORDING = "recording"
     PLAYING = "playing"
@@ -41,6 +65,7 @@ class RPAStatus(Enum):
 @dataclass
 class RPAAction:
     """إجراء RPA"""
+
     action_id: str
     action_type: str
     description: str
@@ -59,6 +84,7 @@ class RPAAction:
 @dataclass
 class RPAScript:
     """سكريبت RPA"""
+
     script_id: str
     name: str
     description: str
@@ -82,6 +108,7 @@ class RPAScript:
 @dataclass
 class RPAExecution:
     """تنفيذ RPA"""
+
     execution_id: str
     script_id: str
     status: RPAStatus = RPAStatus.IDLE
@@ -124,9 +151,7 @@ class RoboticProcessAutomationSystem:
         """إعداد نظام التسجيل"""
         self.logger.setLevel(logging.INFO)
         handler = logging.StreamHandler()
-        formatter = logging.Formatter(
-            '%(asctime)s - RPA - %(levelname)s - %(message)s'
-        )
+        formatter = logging.Formatter("%(asctime)s - RPA - %(levelname)s - %(message)s")
         handler.setFormatter(formatter)
         self.logger.addHandler(handler)
 
@@ -139,7 +164,7 @@ class RoboticProcessAutomationSystem:
             name=name,
             description=description,
             rpa_type=rpa_type,
-            actions=[]
+            actions=[],
         )
 
         self.scripts[script_id] = script
@@ -162,7 +187,7 @@ class RoboticProcessAutomationSystem:
             "status": "added",
             "script_id": script_id,
             "action_id": action.action_id,
-            "actions_count": len(script.actions)
+            "actions_count": len(script.actions),
         }
 
     def start_recording(self, script_id: str) -> Dict[str, Any]:
@@ -178,10 +203,7 @@ class RoboticProcessAutomationSystem:
         self.recording_script_id = script_id
 
         # بدء مراقبة الإجراءات في خيط منفصل
-        recording_thread = threading.Thread(
-            target=self._record_actions,
-            daemon=True
-        )
+        recording_thread = threading.Thread(target=self._record_actions, daemon=True)
         recording_thread.start()
 
         self.logger.info(f"Started recording for script: {script_id}")
@@ -189,7 +211,7 @@ class RoboticProcessAutomationSystem:
         return {
             "status": "recording_started",
             "script_id": script_id,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
     def stop_recording(self) -> Dict[str, Any]:
@@ -215,7 +237,7 @@ class RoboticProcessAutomationSystem:
         return {
             "status": "recording_stopped",
             "script_id": script_id,
-            "actions_recorded": actions_recorded
+            "actions_recorded": actions_recorded,
         }
 
     def execute_script(self, script_id: str, variables: Dict[str, Any] = None) -> str:
@@ -225,11 +247,7 @@ class RoboticProcessAutomationSystem:
 
         execution_id = f"exec_{script_id}_{int(datetime.now().timestamp())}"
 
-        execution = RPAExecution(
-            execution_id=execution_id,
-            script_id=script_id,
-            status=RPAStatus.IDLE
-        )
+        execution = RPAExecution(execution_id=execution_id, script_id=script_id, status=RPAStatus.IDLE)
 
         self.executions[execution_id] = execution
 
@@ -237,7 +255,7 @@ class RoboticProcessAutomationSystem:
         execution_thread = threading.Thread(
             target=self._execute_script_thread,
             args=(execution, variables or {}),
-            daemon=True
+            daemon=True,
         )
 
         self.active_executions[execution_id] = execution_thread
@@ -258,12 +276,12 @@ class RoboticProcessAutomationSystem:
             "execution_id": execution.execution_id,
             "script_id": execution.script_id,
             "status": execution.status.value,
-            "started_at": execution.started_at.isoformat() if execution.started_at else None,
-            "completed_at": execution.completed_at.isoformat() if execution.completed_at else None,
+            "started_at": (execution.started_at.isoformat() if execution.started_at else None),
+            "completed_at": (execution.completed_at.isoformat() if execution.completed_at else None),
             "duration": execution.duration,
             "results": execution.results,
             "errors": execution.errors,
-            "screenshots_count": len(execution.screenshots)
+            "screenshots_count": len(execution.screenshots),
         }
 
     def pause_execution(self, execution_id: str) -> Dict[str, Any]:
@@ -302,7 +320,9 @@ class RoboticProcessAutomationSystem:
         execution = self.executions[execution_id]
         execution.status = RPAStatus.STOPPED
         execution.completed_at = datetime.now()
-        execution.duration = (execution.completed_at - execution.started_at).total_seconds() if execution.started_at else 0
+        execution.duration = (
+            (execution.completed_at - execution.started_at).total_seconds() if execution.started_at else 0
+        )
 
         self.logger.info(f"Execution stopped: {execution_id}")
 
@@ -316,7 +336,7 @@ class RoboticProcessAutomationSystem:
             "active_executions_count": len(self.active_executions),
             "is_recording": self.is_recording,
             "current_recording_script": self.recording_script_id,
-            "last_updated": datetime.now().isoformat()
+            "last_updated": datetime.now().isoformat(),
         }
 
     def create_desktop_automation_script(self, name: str, description: str) -> str:
@@ -346,7 +366,7 @@ class RoboticProcessAutomationSystem:
         try:
             while self.is_recording:
                 # تسجيل النقرات والكتابة
-                if keyboard.is_pressed('esc'):  # مفتاح إيقاف التسجيل
+                if keyboard.is_pressed("esc"):  # مفتاح إيقاف التسجيل
                     break
 
                 time.sleep(0.1)
@@ -457,6 +477,7 @@ class RoboticProcessAutomationSystem:
     def _substitute_variables(self, params: Dict[str, Any], variables: Dict[str, Any]) -> Dict[str, Any]:
         """استبدال المتغيرات في المعلمات"""
         import copy
+
         params_copy = copy.deepcopy(params)
 
         def substitute_value(value):
@@ -538,19 +559,15 @@ class RoboticProcessAutomationSystem:
             "status": "called",
             "url": url,
             "method": method,
-            "response": {"status_code": 200, "data": "mock_response"}
+            "response": {"status_code": 200, "data": "mock_response"},
         }
 
     def _execute_database_query(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """تنفيذ استعلام قاعدة بيانات"""
         # محاكاة استعلام قاعدة البيانات
-        query = params.get("query", "")
+        params.get("query", "")
 
-        return {
-            "status": "executed",
-            "query_type": "SELECT",
-            "rows_affected": 5
-        }
+        return {"status": "executed", "query_type": "SELECT", "rows_affected": 5}
 
     def _execute_file_operation(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """تنفيذ عملية ملف"""
@@ -558,16 +575,25 @@ class RoboticProcessAutomationSystem:
         file_path = params.get("file_path", "")
 
         if operation == "read":
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
-            return {"status": "read", "file_path": file_path, "content_length": len(content)}
+            return {
+                "status": "read",
+                "file_path": file_path,
+                "content_length": len(content),
+            }
         elif operation == "write":
             content = params.get("content", "")
-            with open(file_path, 'w', encoding='utf-8') as f:
+            with open(file_path, "w", encoding="utf-8") as f:
                 f.write(content)
-            return {"status": "written", "file_path": file_path, "content_length": len(content)}
+            return {
+                "status": "written",
+                "file_path": file_path,
+                "content_length": len(content),
+            }
         elif operation == "copy":
             import shutil
+
             dest_path = params.get("dest_path", "")
             shutil.copy2(file_path, dest_path)
             return {"status": "copied", "from": file_path, "to": dest_path}

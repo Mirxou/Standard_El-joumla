@@ -199,7 +199,7 @@ CREATE TABLE IF NOT EXISTS training_data (
 
 -- جدول نتائج الذكاء الاصطناعي
 CREATE TABLE IF NOT EXISTS ai_results (
-    result_id TEXT PRIMARY KEY,
+    result_id INTEGER PRIMARY KEY AUTOINCREMENT,
     model_id TEXT,
     input_data TEXT, -- JSON input
     output_data TEXT, -- JSON output

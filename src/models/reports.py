@@ -1,3 +1,4 @@
+import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -5,10 +6,9 @@
 يحتوي على منطق تجميع البيانات للتقارير المالية والمخزون
 """
 
-from typing import List, Dict, Any, Optional
-from datetime import datetime, date, timedelta
-from decimal import Decimal
-import logging
+from datetime import date, timedelta
+from typing import Any, Dict, List, Optional
+
 
 class ReportManager:
     """مدير التقارير والإحصائيات"""
@@ -17,7 +17,9 @@ class ReportManager:
         self.db_manager = db_manager
         self.logger = logger or logging.getLogger(__name__)
 
-    def get_financial_summary(self, start_date: Optional[date] = None, end_date: Optional[date] = None) -> Dict[str, Any]:
+    def get_financial_summary(
+        self, start_date: Optional[date] = None, end_date: Optional[date] = None
+    ) -> Dict[str, Any]:
         """
         الحصول على ملخص مالي (المبيعات، التكلفة، الأرباح)
         """
@@ -36,8 +38,8 @@ class ReportManager:
             AND status IN ('CONFIRMED', 'PAID', 'PARTIALLY_PAID', 'مؤكدة', 'مدفوعة', 'مدفوعة جزئياً')
             """
             sales_result = self.db_manager.fetch_one(sales_query, (start_date, end_date))
-            total_sales = float(sales_result['total_sales'] or 0) if sales_result else 0.0
-            collected_cash = float(sales_result['collected_cash'] or 0) if sales_result else 0.0
+            total_sales = float(sales_result["total_sales"] or 0) if sales_result else 0.0
+            collected_cash = float(sales_result["collected_cash"] or 0) if sales_result else 0.0
 
             # 2. تكلفة البضاعة المباعة (COGS)
             # نحتاج لحساب تكلفة العناصر في الفواتير المؤكدة
@@ -50,11 +52,11 @@ class ReportManager:
             AND s.status IN ('CONFIRMED', 'PAID', 'PARTIALLY_PAID', 'مؤكدة', 'مدفوعة', 'مدفوعة جزئياً')
             """
             cogs_result = self.db_manager.fetch_one(cogs_query, (start_date, end_date))
-            total_cost = float(cogs_result['total_cogs'] or 0) if cogs_result else 0.0
+            total_cost = float(cogs_result["total_cogs"] or 0) if cogs_result else 0.0
 
             # 3. صافي الربح
             net_profit = total_sales - total_cost
-            
+
             # 4. هامش الربح
             profit_margin = 0
             if total_sales > 0:
@@ -68,8 +70,8 @@ class ReportManager:
                 "collected_cash": collected_cash,
                 "period": {
                     "start": start_date.isoformat(),
-                    "end": end_date.isoformat()
-                }
+                    "end": end_date.isoformat(),
+                },
             }
         except Exception as e:
             self.logger.error(f"Error getting financial summary: {e}")
@@ -81,9 +83,9 @@ class ReportManager:
         """
         try:
             start_date = date.today() - timedelta(days=days)
-            
+
             query = """
-            SELECT date(sale_date) as day, 
+            SELECT date(sale_date) as day,
                    SUM(total_amount) as daily_sales,
                    COUNT(id) as orders_count
             FROM sales
@@ -92,7 +94,7 @@ class ReportManager:
             GROUP BY date(sale_date)
             ORDER BY day ASC
             """
-            
+
             results = self.db_manager.fetch_all(query, (start_date,))
             return [dict(row) for row in results]
         except Exception as e:
@@ -105,7 +107,7 @@ class ReportManager:
         """
         try:
             query = """
-            SELECT p.name, 
+            SELECT p.name,
                    SUM(si.quantity) as units_sold,
                    SUM(si.quantity * si.unit_price) as revenue,
                    (SUM(si.quantity * si.unit_price) - SUM(si.quantity * p.cost_price)) as profit
@@ -130,7 +132,7 @@ class ReportManager:
         try:
             # 1. إجمالي قيمة المخزون (سعر التكلفة وسعر البيع)
             value_query = """
-            SELECT 
+            SELECT
                 SUM(current_stock * cost_price) as total_cost_value,
                 SUM(current_stock * selling_price) as total_sales_value,
                 COUNT(*) as total_products,
@@ -139,22 +141,26 @@ class ReportManager:
             WHERE is_active = 1
             """
             value_result = self.db_manager.fetch_one(value_query)
-            
+
             # 2. المنتجات منخفضة المخزون
             low_stock_query = """
-            SELECT COUNT(*) as count 
-            FROM products 
+            SELECT COUNT(*) as count
+            FROM products
             WHERE current_stock <= min_stock AND is_active = 1
             """
             low_stock_result = self.db_manager.fetch_one(low_stock_query)
 
             return {
-                "total_cost_value": float(value_result['total_cost_value'] or 0) if value_result else 0.0,
-                "total_sales_value": float(value_result['total_sales_value'] or 0) if value_result else 0.0,
-                "potential_profit": float((value_result['total_sales_value'] or 0) - (value_result['total_cost_value'] or 0)) if value_result else 0.0,
-                "total_products": int(value_result['total_products'] or 0) if value_result else 0,
-                "total_items": int(value_result['total_items'] or 0) if value_result else 0,
-                "low_stock_count": int(low_stock_result['count'] or 0) if low_stock_result else 0
+                "total_cost_value": (float(value_result["total_cost_value"] or 0) if value_result else 0.0),
+                "total_sales_value": (float(value_result["total_sales_value"] or 0) if value_result else 0.0),
+                "potential_profit": (
+                    float((value_result["total_sales_value"] or 0) - (value_result["total_cost_value"] or 0))
+                    if value_result
+                    else 0.0
+                ),
+                "total_products": (int(value_result["total_products"] or 0) if value_result else 0),
+                "total_items": (int(value_result["total_items"] or 0) if value_result else 0),
+                "low_stock_count": (int(low_stock_result["count"] or 0) if low_stock_result else 0),
             }
         except Exception as e:
             self.logger.error(f"Error getting inventory analytics: {e}")

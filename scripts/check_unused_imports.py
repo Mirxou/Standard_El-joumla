@@ -6,9 +6,8 @@
 """
 
 import ast
-import os
 from pathlib import Path
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Tuple
 from collections import defaultdict
 
 class ImportChecker:

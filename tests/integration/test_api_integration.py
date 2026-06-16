@@ -1,7 +1,8 @@
-import pytest
-from unittest.mock import MagicMock
-from fastapi.testclient import TestClient
 import importlib
+from unittest.mock import MagicMock
+
+import pytest
+from fastapi.testclient import TestClient
 
 app_module = importlib.import_module("src.api.app")
 pg_module = importlib.import_module("src.database.postgresql_backend")
@@ -84,8 +85,5 @@ class TestAPIEndpoints:
             assert "access-control-allow-origin" in response.headers or response.status_code in [200, 404]
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
-
-
-
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

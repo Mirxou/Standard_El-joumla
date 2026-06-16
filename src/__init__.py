@@ -1,6 +1,6 @@
 """
-نظام إدارة المخزون والمبيعات - الإصدار المنطقي
-Inventory and Sales Management System - Logical Version
+نظام إدارة المخزون والمبيعات - ستاندرد الجملة
+Inventory and Sales Management System - Standard El Joumla
 
 نظام شامل لإدارة المخزون والمبيعات مع واجهة مستخدم عربية حديثة
 A comprehensive inventory and sales management system with modern Arabic UI

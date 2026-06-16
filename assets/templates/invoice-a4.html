@@ -33,10 +33,11 @@
                 {% if company_logo %}
                 <img src="{{ company_logo }}" alt="شعار الشركة" class="company-logo">
                 {% endif %}
-                <h1>{{ company_name or "الإصدار المنطقي" }}</h1>
-                <p>
-                    {{ company_address or "شارع التقنية، الجزائر العاصمة" }}<br>
-                    هاتف: {{ company_phone or "0123456789" }}<br>
+                <div class="company-name">{{ company_name or "ستاندرد الجملة" }}</div>
+                <div class="company-details">
+                    {{ company_address or "الجزائر، قسنطينة، زيغود يوسف" }}<br>
+                    هاتف: {{ company_phone or "0699313705 / 0554030517" }}
+                </div>
                     {% if company_email %}
                     البريد: {{ company_email }}<br>
                     {% endif %}

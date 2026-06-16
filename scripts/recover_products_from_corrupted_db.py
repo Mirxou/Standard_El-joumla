@@ -8,8 +8,6 @@ import sqlite3
 import sys
 from pathlib import Path
 import io
-import shutil
-from datetime import datetime
 
 # لضمان عرض الأحرف العربية بشكل صحيح في PowerShell
 if sys.platform == 'win32':
@@ -30,7 +28,7 @@ def recover_products(corrupted_db_path: str, target_db_path: str = None):
     
     # تحديد ملف الهدف
     if target_db_path is None:
-        target_db_path = Path(__file__).parent.parent / "data" / "logical_release.db"
+        target_db_path = Path(__file__).parent.parent / "data" / "standard_eljoumla.db"
     else:
         target_db_path = Path(target_db_path)
     
@@ -119,7 +117,7 @@ def recover_products(corrupted_db_path: str, target_db_path: str = None):
                                     print(f"  ✅ تم استعادة {recovered_count:,} منتج...")
                                     target_conn.commit()
                                     
-                            except Exception as e:
+                            except Exception as e:  # noqa: F841
                                 # تخطي المنتجات التي لا يمكن إدراجها
                                 continue
                         

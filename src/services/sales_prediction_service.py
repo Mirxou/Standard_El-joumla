@@ -1,3 +1,4 @@
+import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -5,29 +6,27 @@
 خدمة متخصصة في التنبؤ بالمبيعات والطلب
 """
 
-from typing import Dict, List, Any, Optional, Tuple
-from decimal import Decimal
-from datetime import datetime, timedelta
 from dataclasses import dataclass
-import sys
-from pathlib import Path
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Tuple
+
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
 from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import cross_val_score
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-
-from src.core.database_manager import DatabaseManager
 from src.core.config_manager import ConfigManager
+from src.core.database_manager import DatabaseManager
 from src.services.ai_analytics_engine import AIAnalyticsEngine
 from src.utils.logger import setup_logger
+
 
 @dataclass
 class DemandForecast:
     """تنبؤ بالطلب"""
+
     product_id: int
     forecast_date: datetime
     predicted_demand: float
@@ -35,9 +34,11 @@ class DemandForecast:
     accuracy_score: float
     factors: Dict[str, Any]
 
+
 @dataclass
 class SeasonalPattern:
     """نمط موسمي"""
+
     product_id: int
     pattern_type: str  # 'weekly', 'monthly', 'yearly'
     peak_periods: List[str]
@@ -45,9 +46,11 @@ class SeasonalPattern:
     seasonality_strength: float
     detected_at: datetime
 
+
 @dataclass
 class InventoryRecommendation:
     """توصية مخزون"""
+
     product_id: int
     recommended_stock_level: int
     safety_stock: int
@@ -56,14 +59,16 @@ class InventoryRecommendation:
     confidence_score: float
     generated_at: datetime
 
+
 class SalesPredictionService:
     """خدمة التنبؤ بالمبيعات المتقدمة"""
 
     def __init__(self, db_manager: DatabaseManager, ai_engine: AIAnalyticsEngine):
-        self.db = db_manager
+        self.logger = setup_logger(__name__)
+        from src.utils.db_utils import SafeDatabaseWrapper
+        self.db = SafeDatabaseWrapper(db_manager, self.logger)
         self.ai_engine = ai_engine
         self.config = ConfigManager()
-        self.logger = setup_logger(__name__)
 
         # نماذج التعلم الآلي
         self.demand_model = None
@@ -71,10 +76,10 @@ class SalesPredictionService:
         self.scaler = StandardScaler()
 
         # معلمات التكوين
-        self.forecast_horizon_days = self.config.get('prediction.forecast_horizon_days', 90)
-        self.min_training_samples = self.config.get('prediction.min_training_samples', 30)
-        self.model_accuracy_threshold = self.config.get('prediction.accuracy_threshold', 0.7)
-        self.seasonal_analysis_period = self.config.get('prediction.seasonal_period_days', 365)
+        self.forecast_horizon_days = self.config.get("prediction.forecast_horizon_days", 90)
+        self.min_training_samples = self.config.get("prediction.min_training_samples", 30)
+        self.model_accuracy_threshold = self.config.get("prediction.accuracy_threshold", 0.7)
+        self.seasonal_analysis_period = self.config.get("prediction.seasonal_period_days", 365)
 
         # تحميل النماذج المدربة
         self._load_prediction_models()
@@ -128,7 +133,7 @@ class SalesPredictionService:
                 predicted_demand=float(max(0, predicted_demand)),
                 confidence_interval=confidence_interval,
                 accuracy_score=accuracy_score,
-                factors=factors
+                factors=factors,
             )
 
         except Exception as e:
@@ -152,11 +157,11 @@ class SalesPredictionService:
             if len(historical_data) < 60:  # تحتاج 60 يوم على الأقل للتحليل الموسمي
                 return SeasonalPattern(
                     product_id=product_id,
-                    pattern_type='insufficient_data',
+                    pattern_type="insufficient_data",
                     peak_periods=[],
                     low_periods=[],
                     seasonality_strength=0,
-                    detected_at=datetime.now()
+                    detected_at=datetime.now(),
                 )
 
             # تحليل النمط الأسبوعي
@@ -166,16 +171,16 @@ class SalesPredictionService:
             monthly_patterns = self._analyze_monthly_patterns(historical_data)
 
             # تحديد النمط الأقوى
-            if weekly_patterns['strength'] > monthly_patterns['strength']:
-                pattern_type = 'weekly'
-                peak_periods = weekly_patterns['peaks']
-                low_periods = weekly_patterns['lows']
-                strength = weekly_patterns['strength']
+            if weekly_patterns["strength"] > monthly_patterns["strength"]:
+                pattern_type = "weekly"
+                peak_periods = weekly_patterns["peaks"]
+                low_periods = weekly_patterns["lows"]
+                strength = weekly_patterns["strength"]
             else:
-                pattern_type = 'monthly'
-                peak_periods = monthly_patterns['peaks']
-                low_periods = monthly_patterns['lows']
-                strength = monthly_patterns['strength']
+                pattern_type = "monthly"
+                peak_periods = monthly_patterns["peaks"]
+                low_periods = monthly_patterns["lows"]
+                strength = monthly_patterns["strength"]
 
             return SeasonalPattern(
                 product_id=product_id,
@@ -183,18 +188,18 @@ class SalesPredictionService:
                 peak_periods=peak_periods,
                 low_periods=low_periods,
                 seasonality_strength=strength,
-                detected_at=datetime.now()
+                detected_at=datetime.now(),
             )
 
         except Exception as e:
             self.logger.error(f"Error analyzing seasonal patterns: {e}")
             return SeasonalPattern(
                 product_id=product_id,
-                pattern_type='error',
+                pattern_type="error",
                 peak_periods=[],
                 low_periods=[],
                 seasonality_strength=0,
-                detected_at=datetime.now()
+                detected_at=datetime.now(),
             )
 
     def recommend_inventory_levels(self, product_id: int) -> InventoryRecommendation:
@@ -218,9 +223,9 @@ class SalesPredictionService:
             daily_demand_avg = forecast.predicted_demand / 90
 
             # حساب مستوى المخزون الموصى به
-            lead_time_days = product_data.get('lead_time_days', 7)
-            safety_stock_days = self.config.get('inventory.safety_stock_days', 14)
-            service_level = self.config.get('inventory.service_level', 0.95)
+            lead_time_days = product_data.get("lead_time_days", 7)
+            self.config.get("inventory.safety_stock_days", 14)
+            service_level = self.config.get("inventory.service_level", 0.95)
 
             # حساب الطلب أثناء وقت الانتظار
             lead_time_demand = daily_demand_avg * lead_time_days
@@ -239,7 +244,7 @@ class SalesPredictionService:
                 f"الطلب اليومي المتوقع: {daily_demand_avg:.1f}",
                 f"وقت الانتظار: {lead_time_days} أيام",
                 f"المخزون الآمن: {safety_stock:.1f}",
-                f"نقطة إعادة الطلب: {reorder_point:.1f}"
+                f"نقطة إعادة الطلب: {reorder_point:.1f}",
             ]
 
             reasoning = "; ".join(reasoning_parts)
@@ -251,7 +256,7 @@ class SalesPredictionService:
                 reorder_point=int(np.ceil(reorder_point)),
                 reasoning=reasoning,
                 confidence_score=forecast.accuracy_score,
-                generated_at=datetime.now()
+                generated_at=datetime.now(),
             )
 
         except Exception as e:
@@ -263,7 +268,7 @@ class SalesPredictionService:
                 reorder_point=0,
                 reasoning="خطأ في حساب التوصية",
                 confidence_score=0,
-                generated_at=datetime.now()
+                generated_at=datetime.now(),
             )
 
     def predict_seasonal_demand(self, product_id: int, target_date: datetime) -> float:
@@ -280,12 +285,12 @@ class SalesPredictionService:
         try:
             seasonal_pattern = self.analyze_seasonal_patterns(product_id)
 
-            if seasonal_pattern.pattern_type == 'insufficient_data':
+            if seasonal_pattern.pattern_type == "insufficient_data":
                 return 0
 
             # الحصول على متوسط الطلب التاريخي
             historical_data = self._get_demand_history(product_id, days=365)
-            avg_demand = np.mean([d['quantity'] for d in historical_data])
+            avg_demand = np.mean([d["quantity"] for d in historical_data])
 
             # تطبيق المعامل الموسمي
             seasonal_multiplier = self._get_seasonal_multiplier(target_date, seasonal_pattern)
@@ -313,46 +318,40 @@ class SalesPredictionService:
 
             data = self.db.execute_query(query, (product_id, start_date), fetch_all=True)
 
-            return [
-                {
-                    'date': row[0],
-                    'quantity': row[1],
-                    'order_count': row[2]
-                }
-                for row in data
-            ]
+            return [{"date": row[0], "quantity": row[1], "order_count": row[2]} for row in data]
 
         except Exception as e:
             self.logger.error(f"Error getting demand history: {e}")
             return []
 
-    def _prepare_demand_training_data(self, historical_data: List[Dict[str, Any]],
-                                    seasonal_patterns: SeasonalPattern) -> Tuple[np.ndarray, np.ndarray]:
+    def _prepare_demand_training_data(
+        self, historical_data: List[Dict[str, Any]], seasonal_patterns: SeasonalPattern
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """إعداد بيانات التدريب للتنبؤ بالطلب"""
         try:
             df = pd.DataFrame(historical_data)
-            df['date'] = pd.to_datetime(df['date'])
+            df["date"] = pd.to_datetime(df["date"])
 
             # ميزات زمنية
-            df['day_of_week'] = df['date'].dt.dayofweek
-            df['month'] = df['date'].dt.month
-            df['day_of_month'] = df['date'].dt.day
-            df['week_of_year'] = df['date'].dt.isocalendar().week
-            df['is_weekend'] = df['day_of_week'].isin([5, 6]).astype(int)
+            df["day_of_week"] = df["date"].dt.dayofweek
+            df["month"] = df["date"].dt.month
+            df["day_of_month"] = df["date"].dt.day
+            df["week_of_year"] = df["date"].dt.isocalendar().week
+            df["is_weekend"] = df["day_of_week"].isin([5, 6]).astype(int)
 
             # ميزات متأخرة
-            df['quantity_lag_1'] = df['quantity'].shift(1)
-            df['quantity_lag_7'] = df['quantity'].shift(7)
-            df['quantity_lag_30'] = df['quantity'].shift(30)
+            df["quantity_lag_1"] = df["quantity"].shift(1)
+            df["quantity_lag_7"] = df["quantity"].shift(7)
+            df["quantity_lag_30"] = df["quantity"].shift(30)
 
             # متوسطات متحركة
-            df['quantity_rolling_mean_7'] = df['quantity'].rolling(window=7).mean()
-            df['quantity_rolling_std_7'] = df['quantity'].rolling(window=7).std()
+            df["quantity_rolling_mean_7"] = df["quantity"].rolling(window=7).mean()
+            df["quantity_rolling_std_7"] = df["quantity"].rolling(window=7).std()
 
             # ميزات موسمية
-            df['seasonal_multiplier'] = df.apply(
-                lambda row: self._get_seasonal_multiplier(row['date'], seasonal_patterns),
-                axis=1
+            df["seasonal_multiplier"] = df.apply(
+                lambda row: self._get_seasonal_multiplier(row["date"], seasonal_patterns),
+                axis=1,
             )
 
             # إزالة الصفوف التي تحتوي على NaN
@@ -360,14 +359,21 @@ class SalesPredictionService:
 
             # تحديد الميزات والهدف
             features = [
-                'day_of_week', 'month', 'day_of_month', 'week_of_year', 'is_weekend',
-                'quantity_lag_1', 'quantity_lag_7', 'quantity_lag_30',
-                'quantity_rolling_mean_7', 'quantity_rolling_std_7',
-                'seasonal_multiplier'
+                "day_of_week",
+                "month",
+                "day_of_month",
+                "week_of_year",
+                "is_weekend",
+                "quantity_lag_1",
+                "quantity_lag_7",
+                "quantity_lag_30",
+                "quantity_rolling_mean_7",
+                "quantity_rolling_std_7",
+                "seasonal_multiplier",
             ]
 
             X = df[features].values
-            y = df['quantity'].values
+            y = df["quantity"].values
 
             return X, y
 
@@ -379,17 +385,34 @@ class SalesPredictionService:
         """اختيار أفضل نموذج للتنبؤ"""
         try:
             models = {
-                'RandomForest': RandomForestRegressor(n_estimators=100, random_state=42),
-                'GradientBoosting': GradientBoostingRegressor(n_estimators=100, random_state=42),
-                'LinearRegression': LinearRegression()
+                "RandomForest": RandomForestRegressor(n_estimators=100, random_state=42),
+                "GradientBoosting": GradientBoostingRegressor(n_estimators=100, random_state=42),
+                "LinearRegression": LinearRegression(),
             }
 
             best_model = None
             best_score = -np.inf
+            cv_val = min(3, len(X))
 
             for name, model in models.items():
-                scores = cross_val_score(model, X, y, cv=3, scoring='r2')
-                avg_score = np.mean(scores)
+                if cv_val >= 2:
+                    try:
+                        scores = cross_val_score(model, X, y, cv=cv_val, scoring="r2")
+                        avg_score = np.mean(scores)
+                    except Exception:
+                        try:
+                            model.fit(X, y)
+                            from sklearn.metrics import r2_score
+                            avg_score = float(r2_score(y, model.predict(X)))
+                        except Exception:
+                            avg_score = -1.0
+                else:
+                    try:
+                        model.fit(X, y)
+                        from sklearn.metrics import r2_score
+                        avg_score = float(r2_score(y, model.predict(X)))
+                    except Exception:
+                        avg_score = -1.0
 
                 if avg_score > best_score:
                     best_score = avg_score
@@ -406,15 +429,19 @@ class SalesPredictionService:
             self.logger.error(f"Error selecting best model: {e}")
             return RandomForestRegressor(n_estimators=100, random_state=42)
 
-    def _get_forecast_features(self, product_id: int, forecast_date: datetime,
-                             seasonal_patterns: SeasonalPattern) -> np.ndarray:
+    def _get_forecast_features(
+        self,
+        product_id: int,
+        forecast_date: datetime,
+        seasonal_patterns: SeasonalPattern,
+    ) -> np.ndarray:
         """الحصول على ميزات التنبؤ"""
         try:
             # ميزات زمنية أساسية
             features = [
                 forecast_date.weekday(),  # day_of_week
-                forecast_date.month,      # month
-                forecast_date.day,        # day_of_month
+                forecast_date.month,  # month
+                forecast_date.day,  # day_of_month
                 forecast_date.isocalendar()[1],  # week_of_year
                 1 if forecast_date.weekday() >= 5 else 0,  # is_weekend
             ]
@@ -422,14 +449,14 @@ class SalesPredictionService:
             # ميزات متأخرة (من البيانات الأخيرة)
             recent_data = self._get_demand_history(product_id, days=30)
             if recent_data:
-                last_quantity = recent_data[-1]['quantity']
-                week_ago = recent_data[-7]['quantity'] if len(recent_data) > 7 else last_quantity
-                month_ago = recent_data[0]['quantity'] if recent_data else last_quantity
+                last_quantity = recent_data[-1]["quantity"]
+                week_ago = recent_data[-7]["quantity"] if len(recent_data) > 7 else last_quantity
+                month_ago = recent_data[0]["quantity"] if recent_data else last_quantity
 
                 features.extend([last_quantity, week_ago, month_ago])
 
                 # حساب المتوسطات المتحركة
-                quantities = [d['quantity'] for d in recent_data[-7:]]
+                quantities = [d["quantity"] for d in recent_data[-7:]]
                 rolling_mean = np.mean(quantities)
                 rolling_std = np.std(quantities)
 
@@ -447,8 +474,7 @@ class SalesPredictionService:
             self.logger.error(f"Error getting forecast features: {e}")
             return np.array([0] * 11)
 
-    def _calculate_confidence_interval(self, X: np.ndarray, y: np.ndarray,
-                                    prediction: float) -> Tuple[float, float]:
+    def _calculate_confidence_interval(self, X: np.ndarray, y: np.ndarray, prediction: float) -> Tuple[float, float]:
         """حساب فترة الثقة للتنبؤ"""
         try:
             # استخدام الانحراف المعياري للهدف كتقدير للخطأ
@@ -473,45 +499,56 @@ class SalesPredictionService:
                 return 0
 
             # تقييم باستخدام cross-validation
-            scores = cross_val_score(self.demand_model, X, y, cv=3, scoring='r2')
-            return float(np.mean(scores))
+            cv_val = min(3, len(X))
+            if cv_val >= 2:
+                scores = cross_val_score(self.demand_model, X, y, cv=cv_val, scoring="r2")
+                return float(np.mean(scores))
+            else:
+                from sklearn.metrics import r2_score
+                return float(r2_score(y, self.demand_model.predict(X)))
 
         except Exception as e:
             self.logger.error(f"Error evaluating model accuracy: {e}")
             return 0
 
-    def _analyze_demand_factors(self, product_id: int, historical_data: List[Dict[str, Any]],
-                              seasonal_patterns: SeasonalPattern) -> Dict[str, Any]:
+    def _analyze_demand_factors(
+        self,
+        product_id: int,
+        historical_data: List[Dict[str, Any]],
+        seasonal_patterns: SeasonalPattern,
+    ) -> Dict[str, Any]:
         """تحليل العوامل المؤثرة على الطلب"""
         factors = {}
 
         try:
             df = pd.DataFrame(historical_data)
-            df['date'] = pd.to_datetime(df['date'])
+            df["date"] = pd.to_datetime(df["date"])
 
             # تحليل تأثير يوم الأسبوع
-            df['day_of_week'] = df['date'].dt.dayofweek
-            weekday_avg = df.groupby('day_of_week')['quantity'].mean()
+            df["day_of_week"] = df["date"].dt.dayofweek
+            weekday_avg = df.groupby("day_of_week")["quantity"].mean()
 
             best_day = weekday_avg.idxmax()
             worst_day = weekday_avg.idxmin()
 
-            factors['best_sales_day'] = int(best_day)
-            factors['worst_sales_day'] = int(worst_day)
-            factors['day_variation_coefficient'] = float(weekday_avg.std() / weekday_avg.mean())
+            factors["best_sales_day"] = int(best_day)
+            factors["worst_sales_day"] = int(worst_day)
+            factors["day_variation_coefficient"] = float(weekday_avg.std() / weekday_avg.mean())
 
             # قوة النمط الموسمي
-            factors['seasonality_strength'] = seasonal_patterns.seasonality_strength
+            factors["seasonality_strength"] = seasonal_patterns.seasonality_strength
 
             # اتجاه الطلب
             if len(df) > 30:
-                recent_avg = df['quantity'].tail(30).mean()
-                older_avg = df['quantity'].head(len(df) - 30).mean()
+                recent_avg = df["quantity"].tail(30).mean()
+                older_avg = df["quantity"].head(len(df) - 30).mean()
 
                 if older_avg > 0:
                     trend = (recent_avg - older_avg) / older_avg
-                    factors['demand_trend'] = float(trend)
-                    factors['trend_direction'] = 'increasing' if trend > 0.05 else 'decreasing' if trend < -0.05 else 'stable'
+                    factors["demand_trend"] = float(trend)
+                    factors["trend_direction"] = (
+                        "increasing" if trend > 0.05 else "decreasing" if trend < -0.05 else "stable"
+                    )
 
         except Exception as e:
             self.logger.error(f"Error analyzing demand factors: {e}")
@@ -522,11 +559,11 @@ class SalesPredictionService:
         """تحليل الأنماط الأسبوعية"""
         try:
             df = pd.DataFrame(historical_data)
-            df['date'] = pd.to_datetime(df['date'])
-            df['day_of_week'] = df['date'].dt.dayofweek
+            df["date"] = pd.to_datetime(df["date"])
+            df["day_of_week"] = df["date"].dt.dayofweek
 
             # حساب متوسط المبيعات لكل يوم من الأسبوع
-            weekly_avg = df.groupby('day_of_week')['quantity'].mean()
+            weekly_avg = df.groupby("day_of_week")["quantity"].mean()
 
             # تحديد الأيام ذات المبيعات العالية والمنخفضة
             mean_quantity = weekly_avg.mean()
@@ -542,25 +579,25 @@ class SalesPredictionService:
             strength = std_quantity / mean_quantity if mean_quantity > 0 else 0
 
             return {
-                'peaks': peaks,
-                'lows': lows,
-                'strength': float(strength),
-                'daily_averages': weekly_avg.to_dict()
+                "peaks": peaks,
+                "lows": lows,
+                "strength": float(strength),
+                "daily_averages": weekly_avg.to_dict(),
             }
 
         except Exception as e:
             self.logger.error(f"Error analyzing weekly patterns: {e}")
-            return {'peaks': [], 'lows': [], 'strength': 0, 'daily_averages': {}}
+            return {"peaks": [], "lows": [], "strength": 0, "daily_averages": {}}
 
     def _analyze_monthly_patterns(self, historical_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         """تحليل الأنماط الشهرية"""
         try:
             df = pd.DataFrame(historical_data)
-            df['date'] = pd.to_datetime(df['date'])
-            df['month'] = df['date'].dt.month
+            df["date"] = pd.to_datetime(df["date"])
+            df["month"] = df["date"].dt.month
 
             # حساب متوسط المبيعات لكل شهر
-            monthly_avg = df.groupby('month')['quantity'].mean()
+            monthly_avg = df.groupby("month")["quantity"].mean()
 
             # تحديد الأشهر ذات المبيعات العالية والمنخفضة
             mean_quantity = monthly_avg.mean()
@@ -576,20 +613,20 @@ class SalesPredictionService:
             strength = std_quantity / mean_quantity if mean_quantity > 0 else 0
 
             return {
-                'peaks': peaks,
-                'lows': lows,
-                'strength': float(strength),
-                'monthly_averages': monthly_avg.to_dict()
+                "peaks": peaks,
+                "lows": lows,
+                "strength": float(strength),
+                "monthly_averages": monthly_avg.to_dict(),
             }
 
         except Exception as e:
             self.logger.error(f"Error analyzing monthly patterns: {e}")
-            return {'peaks': [], 'lows': [], 'strength': 0, 'monthly_averages': {}}
+            return {"peaks": [], "lows": [], "strength": 0, "monthly_averages": {}}
 
     def _get_seasonal_multiplier(self, target_date: datetime, seasonal_pattern: SeasonalPattern) -> float:
         """الحصول على المعامل الموسمي لتاريخ محدد"""
         try:
-            if seasonal_pattern.pattern_type == 'weekly':
+            if seasonal_pattern.pattern_type == "weekly":
                 day_of_week = target_date.weekday()
                 day_key = f"day_{day_of_week}"
 
@@ -600,7 +637,7 @@ class SalesPredictionService:
                 else:
                     return 1.0
 
-            elif seasonal_pattern.pattern_type == 'monthly':
+            elif seasonal_pattern.pattern_type == "monthly":
                 month = target_date.month
                 month_key = f"month_{month}"
 
@@ -622,7 +659,7 @@ class SalesPredictionService:
         """تنبؤ بسيط بالطلب عندما تكون البيانات محدودة"""
         try:
             recent_data = self._get_demand_history(product_id, days=30)
-            avg_demand = np.mean([d['quantity'] for d in recent_data]) if recent_data else 0
+            avg_demand = np.mean([d["quantity"] for d in recent_data]) if recent_data else 0
 
             return DemandForecast(
                 product_id=product_id,
@@ -630,17 +667,17 @@ class SalesPredictionService:
                 predicted_demand=float(avg_demand),
                 confidence_interval=(max(0, avg_demand * 0.7), avg_demand * 1.3),
                 accuracy_score=0.5,
-                factors={'method': 'simple_average', 'data_points': len(recent_data)}
+                factors={"method": "simple_average", "data_points": len(recent_data)},
             )
 
-        except Exception as e:
+        except Exception as e:  # noqa: F841
             return DemandForecast(
                 product_id=product_id,
                 forecast_date=datetime.now() + timedelta(days=days_ahead),
                 predicted_demand=0,
                 confidence_interval=(0, 0),
                 accuracy_score=0,
-                factors={'error': 'no_data'}
+                factors={"error": "no_data"},
             )
 
     def _fallback_demand_forecast(self, product_id: int, days_ahead: int) -> DemandForecast:
@@ -651,7 +688,7 @@ class SalesPredictionService:
             predicted_demand=0,
             confidence_interval=(0, 0),
             accuracy_score=0,
-            factors={'method': 'fallback', 'reason': 'error'}
+            factors={"method": "fallback", "reason": "error"},
         )
 
     def _get_product_inventory_data(self, product_id: int) -> Dict[str, Any]:
@@ -666,21 +703,26 @@ class SalesPredictionService:
             data = self.db.execute_query(query, (product_id,), fetch_one=True)
 
             return {
-                'current_stock': data[0] if data else 0,
-                'min_stock': data[1] if data else 0,
-                'max_stock': data[2] if data else 0,
-                'lead_time_days': 7  # قيمة افتراضية، يمكن تخصيصها
+                "current_stock": data[0] if data else 0,
+                "min_stock": data[1] if data else 0,
+                "max_stock": data[2] if data else 0,
+                "lead_time_days": 7,  # قيمة افتراضية، يمكن تخصيصها
             }
 
         except Exception as e:
             self.logger.error(f"Error getting product inventory data: {e}")
-            return {'current_stock': 0, 'min_stock': 0, 'max_stock': 0, 'lead_time_days': 7}
+            return {
+                "current_stock": 0,
+                "min_stock": 0,
+                "max_stock": 0,
+                "lead_time_days": 7,
+            }
 
     def _calculate_demand_std(self, product_id: int) -> float:
         """حساب انحراف معياري الطلب"""
         try:
             historical_data = self._get_demand_history(product_id, days=90)
-            quantities = [d['quantity'] for d in historical_data]
+            quantities = [d["quantity"] for d in historical_data]
 
             return np.std(quantities) if quantities else 0
 
@@ -691,11 +733,7 @@ class SalesPredictionService:
     def _get_safety_factor(self, service_level: float) -> float:
         """الحصول على معامل الأمان بناءً على مستوى الخدمة"""
         # جدول تقريبي لمعامل الأمان
-        safety_factors = {
-            0.90: 1.28,
-            0.95: 1.65,
-            0.99: 2.33
-        }
+        safety_factors = {0.90: 1.28, 0.95: 1.65, 0.99: 2.33}
 
         # إيجاد أقرب قيمة
         closest_level = min(safety_factors.keys(), key=lambda x: abs(x - service_level))
@@ -717,7 +755,7 @@ class SalesPredictionService:
             # تحديث نموذج الطلب
             all_products = self._get_all_products()
             for product in all_products[:5]:  # تدريب على أول 5 منتجات للاختبار
-                demand_data = self._get_demand_history(product['id'], days=180)
+                demand_data = self._get_demand_history(product["id"], days=180)
                 if len(demand_data) >= self.min_training_samples:
                     seasonal_patterns = self._analyze_seasonal_patterns(demand_data)
                     X, y = self._prepare_demand_training_data(demand_data, seasonal_patterns)
@@ -735,10 +773,7 @@ class SalesPredictionService:
             query = "SELECT id, name FROM products WHERE is_active = 1"
             data = self.db.execute_query(query, fetch_all=True)
 
-            return [
-                {'id': row[0], 'name': row[1]}
-                for row in data
-            ]
+            return [{"id": row[0], "name": row[1]} for row in data]
 
         except Exception as e:
             self.logger.error(f"Error getting all products: {e}")

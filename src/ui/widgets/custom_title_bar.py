@@ -1,16 +1,20 @@
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton
-from PySide6.QtCore import Qt, QPoint
+from pathlib import Path
+
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QWidget
+
 
 class CustomTitleBar(QWidget):
     """
     شريط عنوان مخصص للنافذة (Quantum Edition)
     Reusable Quantum Title Bar for all windows
     """
+
     def __init__(self, parent=None, title="", is_dialog=False):
         super().__init__(parent)
         self.parent = parent
         self.setFixedHeight(40)
-        
+
         # Quantum Gradient & Border - System 2.0 Integrated
         self.setStyleSheet("""
             CustomTitleBar {
@@ -44,42 +48,51 @@ class CustomTitleBar(QWidget):
                 border-top-right-radius: 10px;
             }
         """)
-        
+
         layout = QHBoxLayout(self)
         layout.setContentsMargins(15, 0, 0, 0)
         layout.setSpacing(10)
-        
+
         # Icon
-        self.icon_label = QLabel("⚛️")
-        self.icon_label.setStyleSheet("font-size: 18px; margin-right: 5px; background: transparent;")
+        self.icon_label = QLabel()
+        self.icon_label.setStyleSheet("background: transparent; margin-right: 5px;")
+        logo_path = Path(__file__).parent.parent.parent.parent / "assets" / "images" / "standard_eljoumla_logo.png"
+        if logo_path.exists():
+            from PySide6.QtGui import QPixmap
+
+            pixmap = QPixmap(str(logo_path))
+            self.icon_label.setPixmap(pixmap.scaled(20, 20, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        else:
+            self.icon_label.setText("🛒")
+            self.icon_label.setStyleSheet("font-size: 18px; margin-right: 5px; background: transparent;")
         layout.addWidget(self.icon_label)
-        
+
         # Title
-        self.title_label = QLabel(title or "Logical Trae")
+        self.title_label = QLabel(title or "ستاندرد الجملة")
         self.title_label.setStyleSheet("background: transparent;")
         layout.addWidget(self.title_label)
-        
+
         if parent:
-            parent.setWindowTitle(title or "Logical Trae")
-        
+            parent.setWindowTitle(title or "ستاندرد الجملة")
+
         layout.addStretch()
-        
+
         # Window Controls
         # Only show Min/Max if it's NOT a refined dialog (or if requested)
         if not is_dialog:
             self.btn_min = QPushButton("─")
             self.btn_min.clicked.connect(self.minimize_window)
             layout.addWidget(self.btn_min)
-            
+
             self.btn_max = QPushButton("☐")
             self.btn_max.clicked.connect(self.maximize_restore_window)
             layout.addWidget(self.btn_max)
-        
+
         self.btn_close = QPushButton("✕")
         self.btn_close.setObjectName("btnClose")
         self.btn_close.clicked.connect(self.close_window)
         layout.addWidget(self.btn_close)
-        
+
         # Drag Logic
         self.start_pos = None
 
@@ -97,20 +110,20 @@ class CustomTitleBar(QWidget):
     def mouseReleaseEvent(self, event):
         self.start_pos = None
         event.accept()
-        
+
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.maximize_restore_window()
             event.accept()
-        
+
     def minimize_window(self):
         self.parent.showMinimized()
-        
+
     def maximize_restore_window(self):
         if self.parent.isMaximized():
             self.parent.showNormal()
         else:
             self.parent.showMaximized()
-            
+
     def close_window(self):
         self.parent.close()

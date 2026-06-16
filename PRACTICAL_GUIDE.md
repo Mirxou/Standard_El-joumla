@@ -1,5 +1,5 @@
-# الدليل العملي لاستخدام الإصدار المنطقي
-# Logical Version - Practical Usage Guide
+# الدليل العملي لاستخدام ستاندرد الجملة
+# Standard El-Joumla - Practical Usage Guide
 
 ---
 
@@ -20,7 +20,7 @@
 
 ### الخطوة 1: إنشاء البيئة الافتراضية
 ```powershell
-cd "c:\Users\aboun\Desktop\Logical Version trae"
+cd "c:\Users\aboun\Desktop\Standard El-Joumla trae"
 python -m venv .venv
 .venv\Scripts\activate
 ```

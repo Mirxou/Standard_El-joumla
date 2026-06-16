@@ -1,4 +1,4 @@
-# الإصدار المنطقي - Logical Version
+# ستاندرد الجملة - Standard El-Joumla
 
 > نظام ERP متكامل لإدارة المخزون والمبيعات يضم تطبيق سطح مكتب (PySide6)، واجهة ويب (Next.js)، وواجهة برمجية REST (FastAPI) مع قاعدة بيانات SQLite/PostgreSQL.
 
@@ -100,8 +100,8 @@
 ### 2. Desktop App (Local / Hybrid)
 ```bash
 # Clone repository
-git clone <repo-url>
-cd trae
+git clone https://github.com/Mirxou/Standard_El-joumla.git
+cd Standard_El-joumla
 
 # Create virtual environment
 python -m venv .venv
@@ -327,7 +327,7 @@ graph TD
 
 ## 📜 License
 **MIT License**
-Copyright (c) 2025 Logical Version Team.
+Copyright (c) 2025 Standard El-Joumla Team.
 
 ## ✅ قائمة المطور
 1.  **فوري**: انسخ `.env.example` إلى `.env` وعيّن مفاتيح أمان قوية.
@@ -352,5 +352,5 @@ Copyright (c) 2025 Logical Version Team.
 
 ## 📜 الرخصة
 **MIT License**
-Copyright (c) 2025 Logical Version Team.
+Copyright (c) 2025 Standard El-Joumla Team.
 

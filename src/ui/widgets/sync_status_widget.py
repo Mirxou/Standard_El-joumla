@@ -5,20 +5,22 @@ Sync Status Widget
 Widget لعرض حالة المزامنة في Main Window
 """
 
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QToolButton
-from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor
-from typing import Optional, Dict, Any
 from datetime import datetime
+from typing import Any, Dict, Optional
+
+from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QPainter, QPixmap
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QToolButton, QWidget
+
 from src.utils.logger import setup_logger
 
 
 class SyncStatusWidget(QWidget):
     """Widget حالة المزامنة"""
-    
+
     sync_requested = Signal()
     offline_mode_toggled = Signal(bool)
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.logger = setup_logger(__name__)
@@ -27,25 +29,25 @@ class SyncStatusWidget(QWidget):
         self.last_synced: Optional[datetime] = None
         self.pending_count = 0
         self.manual_offline = False
-        
+
         self.setup_ui()
-        
+
         # Timer للتحديث التلقائي
         self.update_timer = QTimer(self)
         self.update_timer.timeout.connect(self.update_display)
         self.update_timer.start(5000)  # تحديث كل 5 ثوان
-    
+
     def setup_ui(self):
         """إعداد الواجهة"""
         layout = QHBoxLayout(self)
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(10)
-        
+
         # أيقونة الحالة
         self.status_icon = QLabel()
         self.status_icon.setFixedSize(16, 16)
         layout.addWidget(self.status_icon)
-        
+
         # نص الحالة
         self.status_label = QLabel("جاري الاتصال...")
         self.status_label.setStyleSheet("""
@@ -55,7 +57,7 @@ class SyncStatusWidget(QWidget):
             }
         """)
         layout.addWidget(self.status_label)
-        
+
         # زر المزامنة اليدوية
         self.sync_btn = QToolButton()
         self.sync_btn.setText("🔄")
@@ -74,7 +76,7 @@ class SyncStatusWidget(QWidget):
             }
         """)
         layout.addWidget(self.sync_btn)
-        
+
         # زر وضع الطوارئ
         self.offline_btn = QToolButton()
         self.offline_btn.setText("🔴")
@@ -93,22 +95,22 @@ class SyncStatusWidget(QWidget):
             }
         """)
         layout.addWidget(self.offline_btn)
-        
+
         layout.addStretch()
-    
+
     def update_status(self, status: Dict[str, Any]):
         """
         تحديث حالة المزامنة
-        
+
         Args:
             status: معلومات الحالة
         """
-        self.is_online = status.get('is_online', True)
-        self.is_syncing = status.get('is_syncing', False)
-        self.pending_count = status.get('pending_count', 0)
-        self.manual_offline = status.get('manual_offline', False)
-        
-        last_synced_str = status.get('last_synced_at')
+        self.is_online = status.get("is_online", True)
+        self.is_syncing = status.get("is_syncing", False)
+        self.pending_count = status.get("pending_count", 0)
+        self.manual_offline = status.get("manual_offline", False)
+
+        last_synced_str = status.get("last_synced_at")
         if last_synced_str:
             try:
                 self.last_synced = datetime.fromisoformat(last_synced_str)
@@ -116,9 +118,9 @@ class SyncStatusWidget(QWidget):
                 self.last_synced = None
         else:
             self.last_synced = None
-        
+
         self.update_display()
-    
+
     def update_display(self):
         """تحديث العرض"""
         # تحديث الأيقونة
@@ -146,9 +148,9 @@ class SyncStatusWidget(QWidget):
                     status_text = "متزامن"
             else:
                 status_text = "متزامن"
-        
+
         self.status_label.setText(status_text)
-        
+
         # تحديث Tooltip
         tooltip = f"حالة المزامنة: {status_text}"
         if self.last_synced:
@@ -156,33 +158,33 @@ class SyncStatusWidget(QWidget):
         if self.pending_count > 0:
             tooltip += f"\nعناصر معلقة: {self.pending_count}"
         self.setToolTip(tooltip)
-    
+
     def _set_status_icon(self, color: str):
         """تعيين أيقونة الحالة"""
         pixmap = QPixmap(16, 16)
         pixmap.fill(Qt.transparent)
-        
+
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.Antialiasing)
-        
+
         if color == "green":
             painter.setBrush(QColor(16, 185, 129))  # Emerald 500
         elif color == "yellow":
             painter.setBrush(QColor(245, 158, 11))  # Amber 500
         else:  # red
             painter.setBrush(QColor(239, 68, 68))  # Red 500
-        
+
         painter.setPen(Qt.NoPen)
         painter.drawEllipse(2, 2, 12, 12)
         painter.end()
-        
+
         self.status_icon.setPixmap(pixmap)
-    
+
     def toggle_offline_mode(self):
         """تبديل وضع الطوارئ"""
         self.manual_offline = not self.manual_offline
         self.offline_mode_toggled.emit(self.manual_offline)
-        
+
         if self.manual_offline:
             self.offline_btn.setText("🟢")
             self.offline_btn.setToolTip("إلغاء وضع الطوارئ")

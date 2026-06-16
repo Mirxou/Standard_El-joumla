@@ -1,29 +1,29 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """محاكاة تحميل بيانات المخزون كما يفعل التطبيق"""
-import sys
-import io
-from pathlib import Path
-import sqlite3
 
-if sys.platform == 'win32':
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+import io
+import sqlite3
+import sys
+
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 
 from src.core.config_manager import ConfigManager
 
 config = ConfigManager()
 db_path = config.get_database_path()
 
-print(f"=== محاكاة تحميل المخزون ===")
-print(f"DB Path: {db_path}")
+# print("=== محاكاة تحميل المخزون ===")
+# print(f"DB Path: {db_path}")
 
 # محاكاة الاستعلام المستخدم في InventoryDataLoaderThread
 conn = sqlite3.connect(db_path)
 conn.row_factory = sqlite3.Row
 
 query = """
-    SELECT 
+    SELECT
         p.id,
         p.barcode,
         p.name,
@@ -42,34 +42,35 @@ query = """
 cursor = conn.execute(query)
 results = cursor.fetchall()
 
-print(f"\n✅ تم جلب {len(results)} منتج (أول 10)")
+# print(f"\n✅ تم جلب {len(results)} منتج (أول 10)")
 
 if results:
-    print("\n=== عينة من البيانات ===")
+    # print("\n=== عينة من البيانات ===")
     for i, row in enumerate(results[:3]):
-        print(f"\n{i+1}. {row['name']}")
-        print(f"   ID: {row['id']}")
-        print(f"   Barcode: {row['barcode']}")
-        print(f"   Category: {row['category']}")
-        print(f"   Stock: {row['current_stock']}")
-        print(f"   Price: {row['selling_price']}")
+        # print(f"\n{i+1}. {row['name']}")
+        pass
+        # print(f"   ID: {row['id']}")
+        # print(f"   Barcode: {row['barcode']}")
+        # print(f"   Category: {row['category']}")
+        # print(f"   Stock: {row['current_stock']}")
+        # print(f"   Price: {row['selling_price']}")
 else:
-    print("\n❌ لم يتم العثور على أي منتجات!")
-    
+    # print("\n❌ لم يتم العثور على أي منتجات!")
+    pass
+
     # فحص المشكلة
     total_check = conn.execute("SELECT COUNT(*) as count FROM products").fetchone()
-    print(f"   إجمالي المنتجات في الجدول: {total_check['count']}")
-    
+    # print(f"   إجمالي المنتجات في الجدول: {total_check['count']}")
+
     active_check = conn.execute("SELECT COUNT(*) as count FROM products WHERE is_active = 1").fetchone()
-    print(f"   المنتجات النشطة: {active_check['count']}")
+    # print(f"   المنتجات النشطة: {active_check['count']}")
 
 conn.close()
 
-print("\n=== النتيجة ===")
+# print("\n=== النتيجة ===")
 if results:
-    print("✅ الاستعلام يعمل بشكل صحيح - المنتجات يجب أن تظهر في الواجهة")
+    # print("✅ الاستعلام يعمل بشكل صحيح - المنتجات يجب أن تظهر في الواجهة")
+    pass
 else:
-    print("❌ الاستعلام لا يرجع بيانات - هناك مشكلة في البيانات")
-
-
-
+    # print("❌ الاستعلام لا يرجع بيانات - هناك مشكلة في البيانات")
+    pass

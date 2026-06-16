@@ -48,13 +48,13 @@
 
 #### للوصول من localhost فقط:
 ```bash
-cd "C:\Users\pc\Desktop\Logical Version trae"
+cd "C:\Users\pc\Desktop\Standard El-Joumla trae"
 python -m uvicorn src.api.app:app --host 127.0.0.1 --port 8000
 ```
 
 #### للوصول من الشبكة المحلية:
 ```bash
-cd "C:\Users\pc\Desktop\Logical Version trae"
+cd "C:\Users\pc\Desktop\Standard El-Joumla trae"
 python scripts/start-backend.py
 ```
 
@@ -67,7 +67,7 @@ python scripts/start-backend.py
 ### الخطوة 2: تشغيل Desktop Application
 
 ```bash
-cd "C:\Users\pc\Desktop\Logical Version trae"
+cd "C:\Users\pc\Desktop\Standard El-Joumla trae"
 python main.py
 ```
 
@@ -76,7 +76,7 @@ python main.py
 ### الخطوة 3: تشغيل Web Application
 
 ```bash
-cd "C:\Users\pc\Desktop\Logical Version trae\web"
+cd "C:\Users\pc\Desktop\Standard El-Joumla trae\web"
 npm install  # أول مرة فقط
 npm run dev
 ```

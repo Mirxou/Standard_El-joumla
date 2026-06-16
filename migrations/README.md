@@ -46,7 +46,7 @@ python scripts/apply_migrations.py
 ```
 
 خيارات:
-- `--db`: مسار قاعدة البيانات (افتراضي: `data/inventory.db`)
+- `--db`: مسار قاعدة البيانات (افتراضي: `data/standard_eljoumla.db`)
 - `--migrations`: مسار مجلد migrations (افتراضي: `migrations`)
 - `--force`: إعادة تطبيق جميع migrations حتى لو طُبّقت مسبقاً
 

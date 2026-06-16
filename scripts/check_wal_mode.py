@@ -11,9 +11,9 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.core.database_manager import DatabaseManager
+from src.core.local_database_manager import LocalDatabaseManager
 
-def check_wal_mode(db_path: str = "data/logical_release.db"):
+def check_wal_mode(db_path: str = "data/standard_eljoumla.db"):
     """التحقق من وضع WAL"""
     db_file = Path(db_path)
     wal_file = db_file.parent / f"{db_file.name}-wal"
@@ -34,7 +34,7 @@ def check_wal_mode(db_path: str = "data/logical_release.db"):
     
     try:
         # الاتصال بقاعدة البيانات
-        db_manager = DatabaseManager(str(db_file))
+        db_manager = LocalDatabaseManager(str(db_file))
         db_manager.initialize()
         cursor = db_manager.connection.cursor()
         
@@ -77,7 +77,7 @@ def check_wal_mode(db_path: str = "data/logical_release.db"):
     return False
 
 if __name__ == '__main__':
-    db_path = sys.argv[1] if len(sys.argv) > 1 else "data/logical_release.db"
+    db_path = sys.argv[1] if len(sys.argv) > 1 else "data/standard_eljoumla.db"
     success = check_wal_mode(db_path)
     sys.exit(0 if success else 1)
 

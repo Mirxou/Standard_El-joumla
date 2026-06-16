@@ -24,7 +24,7 @@ def build_app():
             "build.spec"
         ]
         
-        result = subprocess.run(cmd, cwd=project_root, check=True)
+        result = subprocess.run(cmd, cwd=project_root, check=True)  # noqa: F841
         
         print("✅ تم بناء التطبيق بنجاح!")
         print(f"📦 الملف: {project_root / 'dist' / 'LogicalERP.exe'}")

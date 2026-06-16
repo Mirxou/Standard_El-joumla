@@ -49,7 +49,7 @@ def test_health_check(base_url):
         try:
             response = json.loads(data)
             print(f"      Response: {response}")
-        except:
+        except Exception:
             pass
     
     return 1 if success else 0, 0 if success else 1
@@ -68,7 +68,7 @@ def test_api_health_check(base_url):
         try:
             response = json.loads(data)
             print(f"      Response: {response}")
-        except:
+        except Exception:
             pass
     
     return 1 if success else 0, 0 if success else 1
@@ -115,7 +115,7 @@ def test_login_endpoint(base_url):
         )
         
         try:
-            with urllib.request.urlopen(req, timeout=5) as response:
+            with urllib.request.urlopen(req, timeout=5) as response:  # noqa: F841
                 # Login should fail with invalid credentials
                 print("   ⚠️ Login نجح (غير متوقع)")
                 return 0, 1
@@ -133,7 +133,7 @@ def test_login_endpoint(base_url):
 
 def main():
     """الدالة الرئيسية"""
-    base_url = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8000"
+    base_url = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8001"
     
     print(f"🧪 اختبار REST API على: {base_url}")
     print("=" * 50)

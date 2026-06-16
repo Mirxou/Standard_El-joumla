@@ -5,23 +5,29 @@
 إدارة تشفير قاعدة البيانات والملفات الحساسة
 """
 
-import os
-import sqlite3
-import shutil
-from pathlib import Path
-from typing import Optional, Union
-from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import base64
 import hashlib
 import json
-from datetime import datetime
-import re
 import logging
+import os
+import re
+import shutil
+import sqlite3
+from datetime import datetime
+from typing import Union
 
 # Setup logger
 logger = logging.getLogger(__name__)
+
+try:
+    from cryptography.fernet import Fernet
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    CRYPTO_AVAILABLE = True
+except ImportError:
+    CRYPTO_AVAILABLE = False
+    Fernet = None
+    logger.warning("cryptography library not available. EncryptionManager will not work.")
 
 
 class EncryptionManager:
@@ -71,9 +77,7 @@ class EncryptionManager:
         if EncryptionManager.REQUIRE_DIGITS and not re.search(r"\d", password):
             errors.append("رقم")
 
-        if EncryptionManager.REQUIRE_SPECIAL and not re.search(
-            r'[!@#$%^&*(),.?":{}|<>]', password
-        ):
+        if EncryptionManager.REQUIRE_SPECIAL and not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
             errors.append("رمز خاص")
 
         if errors:
@@ -195,18 +199,14 @@ class EncryptionManager:
 
         return output_path
 
-    def encrypt_database(
-        self, db_path: str, password: str, backup_original: bool = True
-    ) -> str:
+    def encrypt_database(self, db_path: str, password: str, backup_original: bool = True) -> str:
         """تشفير قاعدة البيانات"""
         if not os.path.exists(db_path):
             raise FileNotFoundError(f"قاعدة البيانات غير موجودة: {db_path}")
 
         # إنشاء نسخة احتياطية إذا طُلب ذلك
         if backup_original:
-            backup_path = (
-                db_path + f".backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            )
+            backup_path = db_path + f".backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             shutil.copy2(db_path, backup_path)
             logger.info(f"تم إنشاء نسخة احتياطية: {backup_path}")
 
@@ -221,9 +221,7 @@ class EncryptionManager:
         logger.info(f"تم تشفير قاعدة البيانات: {db_path}")
         return db_path
 
-    def decrypt_database(
-        self, encrypted_db_path: str, password: str, output_path: str = None
-    ) -> str:
+    def decrypt_database(self, encrypted_db_path: str, password: str, output_path: str = None) -> str:
         """فك تشفير قاعدة البيانات"""
         self.password = password
 
@@ -245,7 +243,7 @@ class EncryptionManager:
 
             return result[0] == "ok"
         except Exception as e:
-            logger.error(f"خطأ في التحقق من سلامة قاعدة البيانات: {e}")
+            logger.log(logging.ERROR, f"خطأ في التحقق من سلامة قاعدة البيانات: {e}")
             return False
         finally:
             if conn:
@@ -262,12 +260,9 @@ class EncryptionManager:
                     if 0 < info_length < 1000:  # حجم معقول لمعلومات التشفير
                         info_json = file.read(info_length).decode("utf-8")
                         encryption_info = json.loads(info_json)
-                        return (
-                            "salt" in encryption_info
-                            and "encrypted_at" in encryption_info
-                        )
+                        return "salt" in encryption_info and "encrypted_at" in encryption_info
             return False
-        except:
+        except Exception:
             return False
 
     @staticmethod
@@ -313,9 +308,7 @@ class EncryptionManager:
         return pwdhash, salt
 
     @staticmethod
-    def verify_password(
-        stored_password: bytes, stored_salt: bytes, provided_password: str
-    ) -> bool:
+    def verify_password(stored_password: bytes, stored_salt: bytes, provided_password: str) -> bool:
         """التحقق من كلمة المرور"""
         pwdhash, _ = EncryptionManager.hash_password(provided_password, stored_salt)
         return pwdhash == stored_password

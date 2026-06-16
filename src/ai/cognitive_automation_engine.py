@@ -1,21 +1,21 @@
+import logging
 #!/usr/bin/env python3
 """
 محرك الأتمتة الذكية - Cognitive Automation Engine
 محرك أتمتة ذكي يجمع بين الذكاء الاصطناعي والأتمتة الروبوتية
 """
 
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional, Callable
-from dataclasses import dataclass
-from enum import Enum
 import threading
 import time
-import logging
-import json
+from dataclasses import dataclass
+from datetime import datetime
+from enum import Enum
+from typing import Any, Dict, List, Optional
 
 
 class AutomationType(Enum):
     """نوع الأتمتة"""
+
     BUSINESS_PROCESS = "business_process"
     DATA_PROCESSING = "data_processing"
     DECISION_MAKING = "decision_making"
@@ -26,6 +26,7 @@ class AutomationType(Enum):
 
 class AutomationStatus(Enum):
     """حالة الأتمتة"""
+
     IDLE = "idle"
     RUNNING = "running"
     PAUSED = "paused"
@@ -37,6 +38,7 @@ class AutomationStatus(Enum):
 @dataclass
 class AutomationRule:
     """قاعدة أتمتة"""
+
     rule_id: str
     name: str
     description: str
@@ -56,6 +58,7 @@ class AutomationRule:
 @dataclass
 class AutomationTask:
     """مهمة أتمتة"""
+
     task_id: str
     automation_type: AutomationType
     description: str
@@ -91,9 +94,7 @@ class CognitiveAutomationEngine:
         """إعداد نظام التسجيل"""
         self.logger.setLevel(logging.INFO)
         handler = logging.StreamHandler()
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
+        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         handler.setFormatter(formatter)
         self.logger.addHandler(handler)
 
@@ -105,17 +106,14 @@ class CognitiveAutomationEngine:
         self.is_running = True
 
         # بدء مراقبة القواعد
-        self.monitoring_thread = threading.Thread(
-            target=self._monitor_and_execute_rules,
-            daemon=True
-        )
+        self.monitoring_thread = threading.Thread(target=self._monitor_and_execute_rules, daemon=True)
         self.monitoring_thread.start()
 
         self.logger.info("Cognitive Automation Engine started")
         return {
             "status": "started",
             "rules_count": len(self.rules),
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
     def stop_engine(self) -> Dict[str, Any]:
@@ -139,7 +137,7 @@ class CognitiveAutomationEngine:
         return {
             "status": "stopped",
             "active_tasks_stopped": len(self.active_tasks),
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
     def add_rule(self, rule: AutomationRule) -> Dict[str, Any]:
@@ -153,7 +151,7 @@ class CognitiveAutomationEngine:
         return {
             "status": "added",
             "rule_id": rule.rule_id,
-            "rules_count": len(self.rules)
+            "rules_count": len(self.rules),
         }
 
     def remove_rule(self, rule_id: str) -> Dict[str, Any]:
@@ -164,11 +162,7 @@ class CognitiveAutomationEngine:
         del self.rules[rule_id]
         self.logger.info(f"Rule removed: {rule_id}")
 
-        return {
-            "status": "removed",
-            "rule_id": rule_id,
-            "rules_count": len(self.rules)
-        }
+        return {"status": "removed", "rule_id": rule_id, "rules_count": len(self.rules)}
 
     def execute_task(self, task: AutomationTask) -> Dict[str, Any]:
         """تنفيذ مهمة أتمتة"""
@@ -180,22 +174,14 @@ class CognitiveAutomationEngine:
         task.started_at = datetime.now()
 
         # تنفيذ المهمة في خيط منفصل
-        thread = threading.Thread(
-            target=self._execute_task_thread,
-            args=(task,),
-            daemon=True
-        )
+        thread = threading.Thread(target=self._execute_task_thread, args=(task,), daemon=True)
 
         self.active_tasks[task.task_id] = thread
         thread.start()
 
         self.logger.info(f"Task started: {task.description} ({task.task_id})")
 
-        return {
-            "status": "started",
-            "task_id": task.task_id,
-            "thread_id": thread.ident
-        }
+        return {"status": "started", "task_id": task.task_id, "thread_id": thread.ident}
 
     def get_task_status(self, task_id: str) -> Dict[str, Any]:
         """الحصول على حالة المهمة"""
@@ -208,9 +194,9 @@ class CognitiveAutomationEngine:
             "status": task.status.value,
             "created_at": task.created_at.isoformat(),
             "started_at": task.started_at.isoformat() if task.started_at else None,
-            "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+            "completed_at": (task.completed_at.isoformat() if task.completed_at else None),
             "result": task.result,
-            "error_message": task.error_message
+            "error_message": task.error_message,
         }
 
     def get_engine_status(self) -> Dict[str, Any]:
@@ -221,12 +207,12 @@ class CognitiveAutomationEngine:
             "active_tasks_count": len(self.active_tasks),
             "total_tasks_count": len(self.tasks),
             "enabled_rules": len([r for r in self.rules.values() if r.enabled]),
-            "last_updated": datetime.now().isoformat()
+            "last_updated": datetime.now().isoformat(),
         }
 
-    def create_business_process_automation(self, process_name: str,
-                                         steps: List[Dict[str, Any]],
-                                         triggers: Dict[str, Any]) -> AutomationRule:
+    def create_business_process_automation(
+        self, process_name: str, steps: List[Dict[str, Any]], triggers: Dict[str, Any]
+    ) -> AutomationRule:
         """إنشاء أتمتة عملية تجارية"""
         rule_id = f"bpa_{process_name}_{int(datetime.now().timestamp())}"
 
@@ -236,21 +222,24 @@ class CognitiveAutomationEngine:
             description=f"Automated business process for {process_name}",
             trigger_conditions=triggers,
             actions=steps,
-            priority=2
+            priority=2,
         )
 
         return rule
 
-    def create_data_processing_automation(self, data_source: str,
-                                        processing_steps: List[Dict[str, Any]],
-                                        schedule: str = "daily") -> AutomationRule:
+    def create_data_processing_automation(
+        self,
+        data_source: str,
+        processing_steps: List[Dict[str, Any]],
+        schedule: str = "daily",
+    ) -> AutomationRule:
         """إنشاء أتمتة معالجة البيانات"""
         rule_id = f"dpa_{data_source}_{int(datetime.now().timestamp())}"
 
         triggers = {
             "schedule": schedule,
             "data_source": data_source,
-            "type": "scheduled"
+            "type": "scheduled",
         }
 
         rule = AutomationRule(
@@ -259,14 +248,17 @@ class CognitiveAutomationEngine:
             description=f"Automated data processing for {data_source}",
             trigger_conditions=triggers,
             actions=processing_steps,
-            priority=1
+            priority=1,
         )
 
         return rule
 
-    def create_decision_automation(self, decision_name: str,
-                                 conditions: Dict[str, Any],
-                                 actions: List[Dict[str, Any]]) -> AutomationRule:
+    def create_decision_automation(
+        self,
+        decision_name: str,
+        conditions: Dict[str, Any],
+        actions: List[Dict[str, Any]],
+    ) -> AutomationRule:
         """إنشاء أتمتة اتخاذ القرارات"""
         rule_id = f"da_{decision_name}_{int(datetime.now().timestamp())}"
 
@@ -276,7 +268,7 @@ class CognitiveAutomationEngine:
             description=f"Automated decision making for {decision_name}",
             trigger_conditions=conditions,
             actions=actions,
-            priority=3
+            priority=3,
         )
 
         return rule
@@ -314,9 +306,7 @@ class CognitiveAutomationEngine:
             elif schedule == "daily":
                 return current_time.hour == 0 and current_time.minute == 0
             elif schedule == "weekly":
-                return (current_time.weekday() == 0 and
-                       current_time.hour == 0 and
-                       current_time.minute == 0)
+                return current_time.weekday() == 0 and current_time.hour == 0 and current_time.minute == 0
 
         # فحص الشروط المخصصة
         if "custom_conditions" in conditions:
@@ -338,7 +328,7 @@ class CognitiveAutomationEngine:
                 task_id=f"rule_{rule.rule_id}_{int(datetime.now().timestamp())}",
                 automation_type=AutomationType.BUSINESS_PROCESS,
                 description=f"Rule execution: {rule.name}",
-                parameters={"rule": rule.rule_id, "actions": rule.actions}
+                parameters={"rule": rule.rule_id, "actions": rule.actions},
             )
 
             # تنفيذ الإجراءات
@@ -420,11 +410,7 @@ class CognitiveAutomationEngine:
             result = self._execute_action(step)
             results.append(result)
 
-        return {
-            "status": "completed",
-            "steps_executed": len(steps),
-            "results": results
-        }
+        return {"status": "completed", "steps_executed": len(steps), "results": results}
 
     def _execute_data_processing(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """تنفيذ معالجة البيانات"""
@@ -434,24 +420,17 @@ class CognitiveAutomationEngine:
         # محاكاة معالجة البيانات
         processed_data = {"source": data_source, "steps": len(processing_steps)}
 
-        return {
-            "status": "completed",
-            "data_processed": processed_data
-        }
+        return {"status": "completed", "data_processed": processed_data}
 
     def _execute_decision_making(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """تنفيذ اتخاذ القرار"""
-        conditions = parameters.get("conditions", {})
+        parameters.get("conditions", {})
         options = parameters.get("options", [])
 
         # محاكاة اتخاذ القرار
         decision = options[0] if options else "default"
 
-        return {
-            "status": "completed",
-            "decision": decision,
-            "confidence": 0.85
-        }
+        return {"status": "completed", "decision": decision, "confidence": 0.85}
 
     def _evaluate_custom_conditions(self, conditions: Dict[str, Any]) -> bool:
         """تقييم الشروط المخصصة"""
@@ -469,23 +448,15 @@ class CognitiveAutomationEngine:
         recipient = action.get("recipient", "system")
 
         # محاكاة إرسال الإشعار
-        return {
-            "status": "sent",
-            "message": message,
-            "recipient": recipient
-        }
+        return {"status": "sent", "message": message, "recipient": recipient}
 
     def _update_database(self, action: Dict[str, Any]) -> Dict[str, Any]:
         """تحديث قاعدة البيانات"""
         table = action.get("table", "unknown")
-        data = action.get("data", {})
+        action.get("data", {})
 
         # محاكاة تحديث قاعدة البيانات
-        return {
-            "status": "updated",
-            "table": table,
-            "records_affected": 1
-        }
+        return {"status": "updated", "table": table, "records_affected": 1}
 
     def _generate_report(self, action: Dict[str, Any]) -> Dict[str, Any]:
         """توليد تقرير"""
@@ -495,7 +466,7 @@ class CognitiveAutomationEngine:
         return {
             "status": "generated",
             "report_type": report_type,
-            "file_path": f"report_{int(datetime.now().timestamp())}.pdf"
+            "file_path": f"report_{int(datetime.now().timestamp())}.pdf",
         }
 
     def _execute_workflow(self, action: Dict[str, Any]) -> Dict[str, Any]:
@@ -503,8 +474,4 @@ class CognitiveAutomationEngine:
         workflow_name = action.get("workflow_name", "unknown")
 
         # محاكاة تنفيذ سير العمل
-        return {
-            "status": "executed",
-            "workflow": workflow_name,
-            "duration": 2.5
-        }
+        return {"status": "executed", "workflow": workflow_name, "duration": 2.5}

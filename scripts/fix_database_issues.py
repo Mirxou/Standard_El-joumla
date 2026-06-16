@@ -4,7 +4,6 @@
 إصلاح مشاكل قاعدة البيانات
 """
 
-import sqlite3
 import sys
 from pathlib import Path
 import io
@@ -17,20 +16,20 @@ if sys.platform == 'win32':
 # إضافة مسار src
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.core.database_manager import DatabaseManager
+from src.core.local_database_manager import LocalDatabaseManager
 
 def fix_database_issues():
     """إصلاح مشاكل قاعدة البيانات"""
     print("🔧 إصلاح مشاكل قاعدة البيانات...\n")
     
-    db_path = Path(__file__).parent.parent / "data" / "logical_release.db"
+    db_path = Path(__file__).parent.parent / "data" / "standard_eljoumla.db"
     
     if not db_path.exists():
         print(f"❌ قاعدة البيانات غير موجودة: {db_path}")
         return False
     
     try:
-        db_manager = DatabaseManager()
+        db_manager = LocalDatabaseManager()
         if not db_manager.initialize():
             print("❌ فشل تهيئة قاعدة البيانات")
             return False
@@ -59,12 +58,9 @@ def fix_database_issues():
                     CREATE TABLE IF NOT EXISTS role_permissions_temp (
                         role_id INTEGER NOT NULL,
                         permission_id INTEGER NOT NULL,
-                        granted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        granted_by INTEGER,
                         PRIMARY KEY (role_id, permission_id),
                         FOREIGN KEY (role_id) REFERENCES roles(role_id) ON DELETE CASCADE,
-                        FOREIGN KEY (permission_id) REFERENCES permissions(permission_id) ON DELETE CASCADE,
-                        FOREIGN KEY (granted_by) REFERENCES users(id) ON DELETE SET NULL
+                        FOREIGN KEY (permission_id) REFERENCES permissions(permission_id) ON DELETE CASCADE
                     )
                 """)
                 

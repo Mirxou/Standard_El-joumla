@@ -5,7 +5,6 @@ Auto-Icon Downloader - Feather Icons
 سكريبت تحميل الأيقونات تلقائياً من Feather Icons
 """
 
-import os
 import urllib.request
 from pathlib import Path
 

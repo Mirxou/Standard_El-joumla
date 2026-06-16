@@ -5,15 +5,8 @@ Accessibility Utilities for UI - Compliance with WCAG 2.1
 Based on ui-ux-pro-max guidelines
 """
 
-from PySide6.QtWidgets import (
-    QLabel,
-    QPushButton,
-    QLineEdit,
-    QComboBox,
-    QCheckBox,
-    QRadioButton,
-)
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QCheckBox, QComboBox, QLabel, QLineEdit, QPushButton
 
 
 class AccessibilityUtils:
@@ -63,9 +56,7 @@ class AccessibilityUtils:
         return widget
 
     @staticmethod
-    def create_accessible_button(
-        text, object_name, accessible_name, min_size=(100, 44)
-    ):
+    def create_accessible_button(text, object_name, accessible_name, min_size=(100, 44)):
         """
         Create an accessible push button with proper sizing
 
@@ -184,23 +175,17 @@ class AccessibleFormBuilder:
         self.widgets = []
 
     def add_label(self, text, object_name, accessible_name):
-        label = AccessibilityUtils.create_accessible_label(
-            text, object_name, accessible_name
-        )
+        label = AccessibilityUtils.create_accessible_label(text, object_name, accessible_name)
         self.widgets.append(("label", label))
         return self
 
     def add_input(self, object_name, accessible_name, description, placeholder=""):
-        input_field = AccessibilityUtils.create_accessible_input(
-            object_name, accessible_name, description, placeholder
-        )
+        input_field = AccessibilityUtils.create_accessible_input(object_name, accessible_name, description, placeholder)
         self.widgets.append(("input", input_field))
         return self
 
     def add_combo(self, object_name, accessible_name, description, items):
-        combo = AccessibilityUtils.create_accessible_combo(
-            object_name, accessible_name, description, items
-        )
+        combo = AccessibilityUtils.create_accessible_combo(object_name, accessible_name, description, items)
         self.widgets.append(("combo", combo))
         return self
 
@@ -212,9 +197,7 @@ class AccessibleFormBuilder:
         return self
 
     def add_button(self, text, object_name, accessible_name):
-        button = AccessibilityUtils.create_accessible_button(
-            text, object_name, accessible_name
-        )
+        button = AccessibilityUtils.create_accessible_button(text, object_name, accessible_name)
         self.widgets.append(("button", button))
         return self
 

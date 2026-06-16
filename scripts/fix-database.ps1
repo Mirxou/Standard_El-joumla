@@ -4,8 +4,8 @@
 Write-Host "🔧 إصلاح قاعدة البيانات..." -ForegroundColor Yellow
 Write-Host ""
 
-$dbPath = "data\logical_release.db"
-$backupPath = "data\backups\logical_release_corrupted_$(Get-Date -Format 'yyyyMMdd_HHmmss').db"
+$dbPath = "data\standard_eljoumla.db"
+$backupPath = "data\backups\standard_eljoumla_corrupted_$(Get-Date -Format 'yyyyMMdd_HHmmss').db"
 
 # التحقق من وجود قاعدة البيانات
 if (-not (Test-Path $dbPath)) {

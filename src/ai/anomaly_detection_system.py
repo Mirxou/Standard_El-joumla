@@ -4,17 +4,16 @@
 نظام ذكي لكشف الأنماط الشاذة والتنبيه عنها
 """
 
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional, Tuple
-from collections import defaultdict, deque
 import statistics
-import math
-import random
+from collections import defaultdict
+from datetime import datetime, timedelta
 from enum import Enum
+from typing import Any, Dict, List
 
 
 class SeverityLevel(Enum):
     """مستوى الشدة"""
+
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -33,16 +32,16 @@ class AnomalyDetectionSystem:
     def perform_comprehensive_anomaly_detection(self, context: Dict[str, Any] = None) -> Dict[str, Any]:
         """إجراء كشف شامل للشذوذ"""
         context = context or {}
-        sales_anomalies = self.detect_sales_anomalies([]) # تمرير قائمة فارغة للمحاكاة
+        sales_anomalies = self.detect_sales_anomalies([])  # تمرير قائمة فارغة للمحاكاة
         inventory_anomalies = self.detect_inventory_anomalies([])
         transaction_anomalies = self.detect_transaction_anomalies([])
         user_anomalies = self.detect_user_behavior_anomalies([])
 
         total_anomalies = (
-            len(sales_anomalies["anomalies"]) +
-            len(inventory_anomalies["anomalies"]) +
-            len(transaction_anomalies["anomalies"]) +
-            len(user_anomalies["anomalies"])
+            len(sales_anomalies["anomalies"])
+            + len(inventory_anomalies["anomalies"])
+            + len(transaction_anomalies["anomalies"])
+            + len(user_anomalies["anomalies"])
         )
 
         return {
@@ -51,7 +50,7 @@ class AnomalyDetectionSystem:
             "inventory_anomalies": inventory_anomalies,
             "transaction_anomalies": transaction_anomalies,
             "user_anomalies": user_anomalies,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
     def detect_real_time_anomalies(self, metrics: Dict[str, Any]) -> Dict[str, Any]:
@@ -60,21 +59,22 @@ class AnomalyDetectionSystem:
         detected = []
         cpu_usage = metrics.get("cpu_usage", 0)
         if cpu_usage > 90:
-            detected.append({
-                "type": "high_cpu",
-                "severity": "high",
-                "description": f"استخدام CPU مرتفع جداً: {cpu_usage}%",
-                "timestamp": datetime.now().isoformat()
-            })
+            detected.append(
+                {
+                    "type": "high_cpu",
+                    "severity": "high",
+                    "description": f"استخدام CPU مرتفع جداً: {cpu_usage}%",
+                    "timestamp": datetime.now().isoformat(),
+                }
+            )
 
         return {
             "detected_anomalies": detected,
             "anomaly_count": len(detected),
-            "status": "warning" if detected else "healthy"
+            "status": "warning" if detected else "healthy",
         }
 
     def detect_sales_anomalies(self, current_data: List[Dict[str, Any]]) -> Dict[str, Any]:
-
         """كشف شذوذ المبيعات"""
         anomalies = []
 
@@ -86,34 +86,38 @@ class AnomalyDetectionSystem:
             anomaly_score = self._calculate_anomaly_score(amount, baseline)
 
             if anomaly_score > self.alert_thresholds["sales"]["high"]:
-                anomalies.append({
-                    "type": "sales_volume",
-                    "date": date,
-                    "value": amount,
-                    "expected": baseline["mean"],
-                    "deviation": amount - baseline["mean"],
-                    "severity": "high",
-                    "score": anomaly_score,
-                    "description": f"مبيعات استثنائية: {amount:.2f} (متوقع: {baseline['mean']:.2f})"
-                })
+                anomalies.append(
+                    {
+                        "type": "sales_volume",
+                        "date": date,
+                        "value": amount,
+                        "expected": baseline["mean"],
+                        "deviation": amount - baseline["mean"],
+                        "severity": "high",
+                        "score": anomaly_score,
+                        "description": f"مبيعات استثنائية: {amount:.2f} (متوقع: {baseline['mean']:.2f})",
+                    }
+                )
             elif anomaly_score > self.alert_thresholds["sales"]["medium"]:
-                anomalies.append({
-                    "type": "sales_volume",
-                    "date": date,
-                    "value": amount,
-                    "expected": baseline["mean"],
-                    "deviation": amount - baseline["mean"],
-                    "severity": "medium",
-                    "score": anomaly_score,
-                    "description": f"مبيعات غير طبيعية: {amount:.2f}"
-                })
+                anomalies.append(
+                    {
+                        "type": "sales_volume",
+                        "date": date,
+                        "value": amount,
+                        "expected": baseline["mean"],
+                        "deviation": amount - baseline["mean"],
+                        "severity": "medium",
+                        "score": anomaly_score,
+                        "description": f"مبيعات غير طبيعية: {amount:.2f}",
+                    }
+                )
 
         return {
             "anomalies": anomalies,
             "total_analyzed": len(daily_sales),
             "anomaly_rate": len(anomalies) / len(daily_sales) if daily_sales else 0,
-            "most_severe": max(anomalies, key=lambda x: x["score"]) if anomalies else None,
-            "recommendations": self._generate_anomaly_recommendations(anomalies, "sales")
+            "most_severe": (max(anomalies, key=lambda x: x["score"]) if anomalies else None),
+            "recommendations": self._generate_anomaly_recommendations(anomalies, "sales"),
         }
 
     def detect_inventory_anomalies(self, inventory_data: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -133,36 +137,40 @@ class AnomalyDetectionSystem:
                 anomaly_score = self._calculate_anomaly_score(stock_level, baseline)
 
                 if anomaly_score > self.alert_thresholds["inventory"]["high"]:
-                    anomalies.append({
-                        "type": "inventory_level",
-                        "product": product,
-                        "date": record.get("date"),
-                        "value": stock_level,
-                        "expected": baseline["mean"],
-                        "severity": "high",
-                        "score": anomaly_score,
-                        "description": f"مستوى مخزون استثنائي لـ {product}: {stock_level}"
-                    })
+                    anomalies.append(
+                        {
+                            "type": "inventory_level",
+                            "product": product,
+                            "date": record.get("date"),
+                            "value": stock_level,
+                            "expected": baseline["mean"],
+                            "severity": "high",
+                            "score": anomaly_score,
+                            "description": f"مستوى مخزون استثنائي لـ {product}: {stock_level}",
+                        }
+                    )
 
                 # كشف نقص المخزون
                 reorder_point = record.get("reorder_point", 20)
                 if stock_level <= reorder_point and stock_level > 0:
-                    anomalies.append({
-                        "type": "low_inventory",
-                        "product": product,
-                        "date": record.get("date"),
-                        "value": stock_level,
-                        "threshold": reorder_point,
-                        "severity": "medium",
-                        "score": 0.7,
-                        "description": f"مخزون منخفض لـ {product}: {stock_level} (نقطة إعادة الطلب: {reorder_point})"
-                    })
+                    anomalies.append(
+                        {
+                            "type": "low_inventory",
+                            "product": product,
+                            "date": record.get("date"),
+                            "value": stock_level,
+                            "threshold": reorder_point,
+                            "severity": "medium",
+                            "score": 0.7,
+                            "description": f"مخزون منخفض لـ {product}: {stock_level} (نقطة إعادة الطلب: {reorder_point})",  # noqa: E501
+                        }
+                    )
 
         return {
             "anomalies": anomalies,
             "products_analyzed": len(product_inventory),
-            "anomaly_rate": len(anomalies) / len(product_inventory) if product_inventory else 0,
-            "recommendations": self._generate_anomaly_recommendations(anomalies, "inventory")
+            "anomaly_rate": (len(anomalies) / len(product_inventory) if product_inventory else 0),
+            "recommendations": self._generate_anomaly_recommendations(anomalies, "inventory"),
         }
 
     def detect_transaction_anomalies(self, transactions: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -177,32 +185,36 @@ class AnomalyDetectionSystem:
 
             # كشف معاملات كبيرة جداً
             if anomaly_score > self.alert_thresholds["transactions"]["high"]:
-                anomalies.append({
-                    "type": "large_transaction",
-                    "transaction_id": transaction.get("id"),
-                    "amount": amount,
-                    "expected": baseline["mean"],
-                    "severity": "high",
-                    "score": anomaly_score,
-                    "description": f"معاملة كبيرة جداً: {amount:.2f}"
-                })
+                anomalies.append(
+                    {
+                        "type": "large_transaction",
+                        "transaction_id": transaction.get("id"),
+                        "amount": amount,
+                        "expected": baseline["mean"],
+                        "severity": "high",
+                        "score": anomaly_score,
+                        "description": f"معاملة كبيرة جداً: {amount:.2f}",
+                    }
+                )
 
             # كشف معاملات مشبوهة (نمط غير طبيعي)
             if self._is_suspicious_pattern(transaction):
-                anomalies.append({
-                    "type": "suspicious_pattern",
-                    "transaction_id": transaction.get("id"),
-                    "amount": amount,
-                    "severity": "high",
-                    "score": 0.9,
-                    "description": "نمط معاملة مشبوه"
-                })
+                anomalies.append(
+                    {
+                        "type": "suspicious_pattern",
+                        "transaction_id": transaction.get("id"),
+                        "amount": amount,
+                        "severity": "high",
+                        "score": 0.9,
+                        "description": "نمط معاملة مشبوه",
+                    }
+                )
 
         return {
             "anomalies": anomalies,
             "transactions_analyzed": len(transactions),
             "anomaly_rate": len(anomalies) / len(transactions) if transactions else 0,
-            "recommendations": self._generate_anomaly_recommendations(anomalies, "transactions")
+            "recommendations": self._generate_anomaly_recommendations(anomalies, "transactions"),
         }
 
     def detect_user_behavior_anomalies(self, user_actions: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -222,33 +234,37 @@ class AnomalyDetectionSystem:
             anomaly_score = self._calculate_anomaly_score(activity_count, baseline)
 
             if anomaly_score > self.alert_thresholds["user_behavior"]["high"]:
-                anomalies.append({
-                    "type": "unusual_activity",
-                    "user_id": user_id,
-                    "activity_count": activity_count,
-                    "expected": baseline["mean"],
-                    "severity": "high",
-                    "score": anomaly_score,
-                    "description": f"نشاط غير طبيعي للمستخدم {user_id}: {activity_count} عملية"
-                })
+                anomalies.append(
+                    {
+                        "type": "unusual_activity",
+                        "user_id": user_id,
+                        "activity_count": activity_count,
+                        "expected": baseline["mean"],
+                        "severity": "high",
+                        "score": anomaly_score,
+                        "description": f"نشاط غير طبيعي للمستخدم {user_id}: {activity_count} عملية",
+                    }
+                )
 
             # كشف أنماط مشبوهة
             suspicious_patterns = self._detect_suspicious_user_patterns(actions)
             for pattern in suspicious_patterns:
-                anomalies.append({
-                    "type": "suspicious_user_pattern",
-                    "user_id": user_id,
-                    "pattern": pattern["type"],
-                    "severity": "medium",
-                    "score": 0.8,
-                    "description": f"نمط مشبوه: {pattern['description']}"
-                })
+                anomalies.append(
+                    {
+                        "type": "suspicious_user_pattern",
+                        "user_id": user_id,
+                        "pattern": pattern["type"],
+                        "severity": "medium",
+                        "score": 0.8,
+                        "description": f"نمط مشبوه: {pattern['description']}",
+                    }
+                )
 
         return {
             "anomalies": anomalies,
             "users_analyzed": len(user_activities),
-            "anomaly_rate": len(anomalies) / len(user_activities) if user_activities else 0,
-            "recommendations": self._generate_anomaly_recommendations(anomalies, "user_behavior")
+            "anomaly_rate": (len(anomalies) / len(user_activities) if user_activities else 0),
+            "recommendations": self._generate_anomaly_recommendations(anomalies, "user_behavior"),
         }
 
     def update_baseline(self, data_type: str, data: List[float]):
@@ -263,7 +279,7 @@ class AnomalyDetectionSystem:
             "min": min(data),
             "max": max(data),
             "last_updated": datetime.now(),
-            "sample_size": len(data)
+            "sample_size": len(data),
         }
 
     def get_anomaly_summary(self, days: int = 7) -> Dict[str, Any]:
@@ -273,8 +289,7 @@ class AnomalyDetectionSystem:
         recent_anomalies = {}
         for anomaly_type, anomalies in self.anomaly_history.items():
             recent_anomalies[anomaly_type] = [
-                a for a in anomalies
-                if datetime.fromisoformat(a.get("timestamp", "2000-01-01")) > cutoff_date
+                a for a in anomalies if datetime.fromisoformat(a.get("timestamp", "2000-01-01")) > cutoff_date
             ]
 
         return {
@@ -282,32 +297,16 @@ class AnomalyDetectionSystem:
             "total_anomalies": sum(len(anoms) for anoms in recent_anomalies.values()),
             "by_type": {k: len(v) for k, v in recent_anomalies.items()},
             "severity_distribution": self._calculate_severity_distribution(recent_anomalies),
-            "trend": self._calculate_anomaly_trend(recent_anomalies, days)
+            "trend": self._calculate_anomaly_trend(recent_anomalies, days),
         }
 
     def _load_default_thresholds(self) -> Dict[str, Dict[str, float]]:
         """تحميل الحدود الافتراضية للتنبيهات"""
         return {
-            "sales": {
-                "low": 1.5,    # انحراف معياري
-                "medium": 2.0,
-                "high": 2.5
-            },
-            "inventory": {
-                "low": 1.0,
-                "medium": 1.5,
-                "high": 2.0
-            },
-            "transactions": {
-                "low": 2.0,
-                "medium": 3.0,
-                "high": 4.0
-            },
-            "user_behavior": {
-                "low": 1.5,
-                "medium": 2.0,
-                "high": 2.5
-            }
+            "sales": {"low": 1.5, "medium": 2.0, "high": 2.5},  # انحراف معياري
+            "inventory": {"low": 1.0, "medium": 1.5, "high": 2.0},
+            "transactions": {"low": 2.0, "medium": 3.0, "high": 4.0},
+            "user_behavior": {"low": 1.5, "medium": 2.0, "high": 2.5},
         }
 
     def _aggregate_daily_sales(self, sales_data: List[Dict[str, Any]]) -> Dict[str, float]:
@@ -331,7 +330,7 @@ class AnomalyDetectionSystem:
             "inventory_laptop": {"mean": 25.0, "stdev": 5.0},
             "inventory_phone": {"mean": 40.0, "stdev": 8.0},
             "transactions": {"mean": 150.0, "stdev": 50.0},
-            "user_default": {"mean": 10.0, "stdev": 3.0}
+            "user_default": {"mean": 10.0, "stdev": 3.0},
         }
 
         # إنشاء خط أساس عام إذا لم يكن محدد
@@ -374,18 +373,22 @@ class AnomalyDetectionSystem:
         # فحص محاولات تسجيل دخول فاشلة متكررة
         failed_logins = [a for a in actions if a.get("action") == "failed_login"]
         if len(failed_logins) > 5:
-            patterns.append({
-                "type": "multiple_failed_logins",
-                "description": f"{len(failed_logins)} محاولة تسجيل دخول فاشلة"
-            })
+            patterns.append(
+                {
+                    "type": "multiple_failed_logins",
+                    "description": f"{len(failed_logins)} محاولة تسجيل دخول فاشلة",
+                }
+            )
 
         # فحص الوصول إلى مناطق محظورة
         unauthorized_access = [a for a in actions if a.get("action") == "unauthorized_access"]
         if unauthorized_access:
-            patterns.append({
-                "type": "unauthorized_access_attempts",
-                "description": f"{len(unauthorized_access)} محاولة وصول غير مصرح"
-            })
+            patterns.append(
+                {
+                    "type": "unauthorized_access_attempts",
+                    "description": f"{len(unauthorized_access)} محاولة وصول غير مصرح",
+                }
+            )
 
         # فحص الأنشطة في أوقات غير طبيعية
         late_night_actions = []
@@ -396,10 +399,12 @@ class AnomalyDetectionSystem:
                     late_night_actions.append(action)
 
         if len(late_night_actions) > len(actions) * 0.3:  # أكثر من 30%
-            patterns.append({
-                "type": "unusual_timing",
-                "description": f"{len(late_night_actions)} نشاط في أوقات غير طبيعية"
-            })
+            patterns.append(
+                {
+                    "type": "unusual_timing",
+                    "description": f"{len(late_night_actions)} نشاط في أوقات غير طبيعية",
+                }
+            )
 
         return patterns
 
@@ -430,11 +435,13 @@ class AnomalyDetectionSystem:
             recommendations.append("تدريب المستخدمين على الممارسات الأمنية")
 
         # توصيات عامة
-        recommendations.extend([
-            "إعداد تنبيهات تلقائية للشذوذ المستقبلي",
-            "توثيق الحالات الاستثنائية وأسبابها",
-            "مراجعة دورية للحدود والمعايير"
-        ])
+        recommendations.extend(
+            [
+                "إعداد تنبيهات تلقائية للشذوذ المستقبلي",
+                "توثيق الحالات الاستثنائية وأسبابها",
+                "مراجعة دورية للحدود والمعايير",
+            ]
+        )
 
         return recommendations
 
@@ -472,7 +479,7 @@ class AnomalyDetectionSystem:
             return {"trend": "stable", "change_percent": 0.0}
 
         if older_count == 0:
-            change_percent = float('inf') if recent_count > 0 else 0.0
+            change_percent = float("inf") if recent_count > 0 else 0.0
         else:
             change_percent = ((recent_count - older_count) / older_count) * 100
 
@@ -487,7 +494,7 @@ class AnomalyDetectionSystem:
             "trend": trend,
             "change_percent": change_percent,
             "recent_period": recent_count,
-            "older_period": older_count
+            "older_period": older_count,
         }
 
     def set_alert_threshold(self, data_type: str, severity: str, threshold: float):
@@ -512,24 +519,25 @@ class AnomalyDetectionSystem:
         report_anomalies = {}
         for anomaly_type, anomalies in self.anomaly_history.items():
             report_anomalies[anomaly_type] = [
-                a for a in anomalies
+                a
+                for a in anomalies
                 if start_date <= datetime.fromisoformat(a.get("timestamp", "2000-01-01")) <= end_date
             ]
 
         return {
             "report_period": {
                 "start": start_date.isoformat(),
-                "end": end_date.isoformat()
+                "end": end_date.isoformat(),
             },
             "summary": {
                 "total_anomalies": sum(len(anoms) for anoms in report_anomalies.values()),
                 "by_type": {k: len(v) for k, v in report_anomalies.items()},
-                "severity_breakdown": self._calculate_severity_distribution(report_anomalies)
+                "severity_breakdown": self._calculate_severity_distribution(report_anomalies),
             },
             "details": report_anomalies,
             "recommendations": [
                 "مراجعة دورية للشذوذ المكتشفة",
                 "تحديث خطوط الأساس بانتظام",
-                "تطوير آليات الاستجابة التلقائية"
-            ]
+                "تطوير آليات الاستجابة التلقائية",
+            ],
         }

@@ -12,11 +12,11 @@ if sys.platform == 'win32':
 
 sys.path.insert(0, str(Path.cwd()))
 
-from src.core.database_manager import DatabaseManager
+from src.core.local_database_manager import LocalDatabaseManager
 from src.core.config_manager import ConfigManager
 
 config = ConfigManager()
-db = DatabaseManager(config.get_database_path())
+db = LocalDatabaseManager(config.get_database_path())
 db.initialize()
 
 print("=" * 60)
@@ -72,8 +72,8 @@ print("✅ النظام يبدو في حالة جيدة!")
 print("=" * 60)
 
 # تحقق من قاعدة البيانات
-from src.core.database_manager import DatabaseManager
-db = DatabaseManager(config.get_database_path())
+from src.core.local_database_manager import LocalDatabaseManager
+db = LocalDatabaseManager(config.get_database_path())
 db_init = db.initialize()
 print('=== Database Check ===')
 print(f'DB initialized: {db_init}')

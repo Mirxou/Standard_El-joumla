@@ -4,13 +4,11 @@
 نظام تنبؤ شامل يجمع بين نماذج متعددة للتنبؤ بالمبيعات والمخزون والعملاء
 """
 
+import random  # nosec B311
 from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional, Tuple
-from collections import defaultdict
-import statistics
-import math
-import random
-from .machine_learning_model import SalesPredictionModel, InventoryPredictionModel
+from typing import Any, Dict, List, Optional
+
+from .machine_learning_model import InventoryPredictionModel, SalesPredictionModel
 
 
 class AdvancedPredictionSystem:
@@ -67,11 +65,12 @@ class AdvancedPredictionSystem:
             "status": "initialized",
             "models_trained": len(results),
             "results": results,
-            "timestamp": self.last_updated.isoformat()
+            "timestamp": self.last_updated.isoformat(),
         }
 
-    def generate_comprehensive_forecast(self, forecast_period_days: int = 30,
-                                      context: Dict[str, Any] = None) -> Dict[str, Any]:
+    def generate_comprehensive_forecast(
+        self, forecast_period_days: int = 30, context: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
         """توليد تنبؤ شامل"""
         context = context or {}
         start_date = datetime.now()
@@ -91,7 +90,11 @@ class AdvancedPredictionSystem:
 
         # دمج التنبؤات
         integrated_forecast = self._integrate_forecasts(
-            sales_forecast, inventory_forecast, customer_forecast, market_forecast, context
+            sales_forecast,
+            inventory_forecast,
+            customer_forecast,
+            market_forecast,
+            context,
         )
 
         # حساب المخاطر والفرص
@@ -104,7 +107,7 @@ class AdvancedPredictionSystem:
             "forecast_period": {
                 "start_date": start_date.isoformat(),
                 "end_date": end_date.isoformat(),
-                "days": forecast_period_days
+                "days": forecast_period_days,
             },
             "forecast_period_days": forecast_period_days,
             "sales_forecast": sales_forecast,
@@ -115,11 +118,12 @@ class AdvancedPredictionSystem:
             "risk_assessment": risk_assessment,
             "recommendations": recommendations,
             "confidence_score": self._calculate_overall_confidence(integrated_forecast),
-            "generated_at": datetime.now().isoformat()
+            "generated_at": datetime.now().isoformat(),
         }
 
-    def predict_product_performance(self, product_id: str, days_ahead: int = 30,
-                                   context: Dict[str, Any] = None) -> Dict[str, Any]:
+    def predict_product_performance(
+        self, product_id: str, days_ahead: int = 30, context: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
         """تنبؤ أداء منتج محدد"""
         context = context or {}
 
@@ -146,12 +150,16 @@ class AdvancedPredictionSystem:
                 product_sales_forecast, profitability_analysis, competition_analysis
             ),
             "recommendations": self._generate_product_recommendations(
-                product_id, product_sales_forecast, inventory_needs, profitability_analysis
-            )
+                product_id,
+                product_sales_forecast,
+                inventory_needs,
+                profitability_analysis,
+            ),
         }
 
-    def predict_customer_segment_behavior(self, segment_id: str, days_ahead: int = 30,
-                                        context: Dict[str, Any] = None) -> Dict[str, Any]:
+    def predict_customer_segment_behavior(
+        self, segment_id: str, days_ahead: int = 30, context: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
         """تنبؤ سلوك شريحة عملاء"""
         return self.customer_model.predict_segment_behavior(segment_id, days_ahead, context)
 
@@ -186,21 +194,29 @@ class AdvancedPredictionSystem:
             "status": "updated",
             "models_updated": len(update_results),
             "results": update_results,
-            "timestamp": self.last_updated.isoformat()
+            "timestamp": self.last_updated.isoformat(),
         }
 
     def get_system_health(self) -> Dict[str, Any]:
         """حالة النظام"""
         return {
             "models_status": {
-                "sales_model": "trained" if self.sales_model.model_parameters else "not_trained",
+                "sales_model": ("trained" if self.sales_model.model_parameters else "not_trained"),
                 "inventory_model": f"{len(self.inventory_model.product_models)} products trained",
-                "customer_model": "trained" if hasattr(self.customer_model, 'model_parameters') and self.customer_model.model_parameters else "not_trained",
-                "market_model": "trained" if hasattr(self.market_model, 'model_parameters') and self.market_model.model_parameters else "not_trained"
+                "customer_model": (
+                    "trained"
+                    if hasattr(self.customer_model, "model_parameters") and self.customer_model.model_parameters
+                    else "not_trained"
+                ),
+                "market_model": (
+                    "trained"
+                    if hasattr(self.market_model, "model_parameters") and self.market_model.model_parameters
+                    else "not_trained"
+                ),
             },
-            "last_updated": self.last_updated.isoformat() if self.last_updated else None,
+            "last_updated": (self.last_updated.isoformat() if self.last_updated else None),
             "cache_size": len(self.prediction_cache),
-            "overall_health": self._assess_system_health()
+            "overall_health": self._assess_system_health(),
         }
 
     def get_prediction_summary(self, forecast_result: Dict[str, Any]) -> Dict[str, Any]:
@@ -208,7 +224,7 @@ class AdvancedPredictionSystem:
         return {
             "summary": "تنبؤ شامل للأداء",
             "confidence": forecast_result.get("confidence_score", 0.5),
-            "period": forecast_result.get("forecast_period_days", 30)
+            "period": forecast_result.get("forecast_period_days", 30),
         }
 
     def _generate_inventory_forecast(self, days_ahead: int, context: Dict[str, Any]) -> Dict[str, Any]:
@@ -238,9 +254,9 @@ class AdvancedPredictionSystem:
                 "total_products": len(inventory_forecasts),
                 "shortage_risk_products": total_shortage_risk,
                 "overstock_risk_products": total_overstock_risk,
-                "healthy_products": len(inventory_forecasts) - total_shortage_risk - total_overstock_risk
+                "healthy_products": len(inventory_forecasts) - total_shortage_risk - total_overstock_risk,
             },
-            "recommendations": self._generate_inventory_recommendations(inventory_forecasts)
+            "recommendations": self._generate_inventory_recommendations(inventory_forecasts),
         }
 
     def _predict_product_sales(self, product_id: str, days_ahead: int, context: Dict[str, Any]) -> Dict[str, Any]:
@@ -248,9 +264,7 @@ class AdvancedPredictionSystem:
         # في التطبيق الحقيقي، سيتم تخصيص نموذج لكل منتج
         # هنا نستخدم نموذج المبيعات العام مع تعديلات
         base_forecast = self.sales_model.predict_range(
-            datetime.now(),
-            datetime.now() + timedelta(days=days_ahead),
-            context
+            datetime.now(), datetime.now() + timedelta(days=days_ahead), context
         )
 
         # افتراض توزيع المبيعات على المنتجات
@@ -261,7 +275,7 @@ class AdvancedPredictionSystem:
             "predicted_sales": round(base_forecast.get("total_prediction", 0) * product_share, 2),
             "average_daily": round(base_forecast.get("average_daily", 0) * product_share, 2),
             "confidence": base_forecast.get("average_confidence", 0.5),
-            "trend": "increasing" if random.random() > 0.5 else "stable"
+            "trend": "increasing" if random.random() > 0.5 else "stable",
         }
 
     def _analyze_product_profitability(self, product_id: str, sales_forecast: Dict[str, Any]) -> Dict[str, Any]:
@@ -278,11 +292,17 @@ class AdvancedPredictionSystem:
             "gross_margin": round(margin * 100, 2),
             "predicted_profit": round(predicted_units * (price_per_unit - cost_per_unit), 2),
             "break_even_units": round(cost_per_unit / (price_per_unit - cost_per_unit), 2),
-            "profitability_score": "high" if margin > 0.3 else "medium" if margin > 0.2 else "low"
+            "profitability_score": ("high" if margin > 0.3 else "medium" if margin > 0.2 else "low"),
         }
 
-    def _integrate_forecasts(self, sales: Dict, inventory: Dict, customer: Dict,
-                           market: Dict, context: Dict[str, Any]) -> Dict[str, Any]:
+    def _integrate_forecasts(
+        self,
+        sales: Dict,
+        inventory: Dict,
+        customer: Dict,
+        market: Dict,
+        context: Dict[str, Any],
+    ) -> Dict[str, Any]:
         """دمج التنبؤات"""
         # حساب التنبؤ المتكامل
         total_sales = sales.get("total_prediction", 0)
@@ -297,7 +317,7 @@ class AdvancedPredictionSystem:
             "market_adjustment_factor": round(0.7 + 0.3 * market_confidence, 3),
             "customer_adjustment_factor": round(0.8 + 0.2 * customer_sentiment, 3),
             "overall_confidence": round((market_confidence + customer_sentiment) / 2, 3),
-            "key_drivers": self._identify_key_drivers(sales, inventory, customer, market)
+            "key_drivers": self._identify_key_drivers(sales, inventory, customer, market),
         }
 
     def _assess_forecast_risks(self, integrated_forecast: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
@@ -307,34 +327,42 @@ class AdvancedPredictionSystem:
         confidence = integrated_forecast.get("overall_confidence", 0.5)
 
         if confidence < 0.6:
-            risks.append({
-                "type": "low_confidence",
-                "severity": "high",
-                "description": "ثقة التنبؤ منخفضة بسبب محدودية البيانات"
-            })
+            risks.append(
+                {
+                    "type": "low_confidence",
+                    "severity": "high",
+                    "description": "ثقة التنبؤ منخفضة بسبب محدودية البيانات",
+                }
+            )
 
         if context.get("economic_uncertainty"):
-            risks.append({
-                "type": "economic",
-                "severity": "medium",
-                "description": "عدم استقرار اقتصادي قد يؤثر على التنبؤات"
-            })
+            risks.append(
+                {
+                    "type": "economic",
+                    "severity": "medium",
+                    "description": "عدم استقرار اقتصادي قد يؤثر على التنبؤات",
+                }
+            )
 
         if context.get("competition_increase"):
-            risks.append({
-                "type": "competition",
-                "severity": "medium",
-                "description": "زيادة المنافسة قد تقلل من المبيعات المتوقعة"
-            })
+            risks.append(
+                {
+                    "type": "competition",
+                    "severity": "medium",
+                    "description": "زيادة المنافسة قد تقلل من المبيعات المتوقعة",
+                }
+            )
 
         return {
             "risk_count": len(risks),
             "high_severity_risks": len([r for r in risks if r["severity"] == "high"]),
             "risks": risks,
-            "mitigation_strategies": self._suggest_risk_mitigations(risks)
+            "mitigation_strategies": self._suggest_risk_mitigations(risks),
         }
 
-    def _generate_business_recommendations(self, forecast: Dict[str, Any], risks: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _generate_business_recommendations(
+        self, forecast: Dict[str, Any], risks: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         """توليد توصيات العمل"""
         recommendations = []
 
@@ -342,29 +370,35 @@ class AdvancedPredictionSystem:
 
         # توصيات مبيعات
         if integrated_sales > 10000:  # عتبة عالية
-            recommendations.append({
-                "category": "sales",
-                "priority": "high",
-                "action": "زيادة المخزون والتسويق",
-                "reason": "توقعات مبيعات عالية"
-            })
+            recommendations.append(
+                {
+                    "category": "sales",
+                    "priority": "high",
+                    "action": "زيادة المخزون والتسويق",
+                    "reason": "توقعات مبيعات عالية",
+                }
+            )
 
         # توصيات مخاطر
         if risks["high_severity_risks"] > 0:
-            recommendations.append({
-                "category": "risk_management",
-                "priority": "high",
-                "action": "تطوير خطط طوارئ",
-                "reason": "مخاطر عالية الخطورة"
-            })
+            recommendations.append(
+                {
+                    "category": "risk_management",
+                    "priority": "high",
+                    "action": "تطوير خطط طوارئ",
+                    "reason": "مخاطر عالية الخطورة",
+                }
+            )
 
         # توصيات عامة
-        recommendations.append({
-            "category": "monitoring",
-            "priority": "medium",
-            "action": "مراقبة الأداء الأسبوعي",
-            "reason": "ضمان دقة التنبؤات"
-        })
+        recommendations.append(
+            {
+                "category": "monitoring",
+                "priority": "medium",
+                "action": "مراقبة الأداء الأسبوعي",
+                "reason": "ضمان دقة التنبؤات",
+            }
+        )
 
         return recommendations
 
@@ -375,12 +409,18 @@ class AdvancedPredictionSystem:
     def _calculate_product_score(self, sales_forecast: Dict, profitability: Dict, competition: Dict) -> float:
         """حساب نقاط المنتج"""
         sales_score = min(sales_forecast.get("confidence", 0.5) * 2, 1.0)
-        profit_score = 1.0 if profitability.get("profitability_score") == "high" else 0.7 if profitability.get("profitability_score") == "medium" else 0.4
+        profit_score = (
+            1.0
+            if profitability.get("profitability_score") == "high"
+            else 0.7 if profitability.get("profitability_score") == "medium" else 0.4
+        )
         competition_score = 1.0 - (competition.get("intensity", 0.5) * 0.5)
 
         return round((sales_score + profit_score + competition_score) / 3, 3)
 
-    def _generate_product_recommendations(self, product_id: str, sales: Dict, inventory: Dict, profitability: Dict) -> List[str]:
+    def _generate_product_recommendations(
+        self, product_id: str, sales: Dict, inventory: Dict, profitability: Dict
+    ) -> List[str]:
         """توليد توصيات المنتج"""
         recommendations = []
 
@@ -399,11 +439,15 @@ class AdvancedPredictionSystem:
         """توليد توصيات المخزون"""
         recommendations = []
 
-        shortage_products = [pid for pid, f in forecasts.items() if f.get("predicted_demand", 0) > f.get("recommended_stock_level", 0)]
+        shortage_products = [
+            pid for pid, f in forecasts.items() if f.get("predicted_demand", 0) > f.get("recommended_stock_level", 0)
+        ]
         if shortage_products:
             recommendations.append(f"إعادة طلب فورية للمنتجات: {', '.join(shortage_products[:3])}")
 
-        healthy_products = len([f for f in forecasts.values() if f.get("predicted_demand", 0) <= f.get("recommended_stock_level", 0)])
+        healthy_products = len(
+            [f for f in forecasts.values() if f.get("predicted_demand", 0) <= f.get("recommended_stock_level", 0)]
+        )
         if healthy_products > len(forecasts) * 0.7:
             recommendations.append("مستويات المخزون متوازنة بشكل عام")
 
@@ -440,12 +484,14 @@ class AdvancedPredictionSystem:
 
     def _assess_system_health(self) -> str:
         """تقييم صحة النظام"""
-        trained_models = sum([
-            1 if self.sales_model.model_parameters else 0,
-            1 if self.inventory_model.product_models else 0,
-            1 if hasattr(self.customer_model, 'model_parameters') and self.customer_model.model_parameters else 0,
-            1 if hasattr(self.market_model, 'model_parameters') and self.market_model.model_parameters else 0
-        ])
+        trained_models = sum(
+            [
+                1 if self.sales_model.model_parameters else 0,
+                1 if self.inventory_model.product_models else 0,
+                (1 if hasattr(self.customer_model, "model_parameters") and self.customer_model.model_parameters else 0),
+                (1 if hasattr(self.market_model, "model_parameters") and self.market_model.model_parameters else 0),
+            ]
+        )
 
         if trained_models == 4:
             return "excellent"
@@ -466,10 +512,7 @@ class CustomerPredictionModel:
     def train(self, customer_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         """تدريب النموذج"""
         # تنفيذ بسيط للتدريب
-        self.model_parameters = {
-            "total_customers": len(customer_data),
-            "trained": True
-        }
+        self.model_parameters = {"total_customers": len(customer_data), "trained": True}
         return {"status": "trained"}
 
     def predict_customer_behavior(self, days_ahead: int, context: Dict[str, Any]) -> Dict[str, Any]:
@@ -477,7 +520,7 @@ class CustomerPredictionModel:
         return {
             "average_sentiment": 0.7,
             "predicted_churn_rate": 0.05,
-            "predicted_new_customers": 25
+            "predicted_new_customers": 25,
         }
 
     def predict_segment_behavior(self, segment_id: str, days_ahead: int, context: Dict[str, Any]) -> Dict[str, Any]:
@@ -485,7 +528,7 @@ class CustomerPredictionModel:
         return {
             "segment_id": segment_id,
             "predicted_behavior": "stable",
-            "confidence": 0.8
+            "confidence": 0.8,
         }
 
     def update_model(self, new_data: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -501,18 +544,17 @@ class MarketPredictionModel:
 
     def train(self, market_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         """تدريب النموذج"""
-        self.model_parameters = {
-            "total_data_points": len(market_data),
-            "trained": True
-        }
+        self.model_parameters = {"total_data_points": len(market_data), "trained": True}
         return {"status": "trained"}
 
-    def predict_market_conditions(self, start_date: datetime, end_date: datetime, context: Dict[str, Any]) -> Dict[str, Any]:
+    def predict_market_conditions(
+        self, start_date: datetime, end_date: datetime, context: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """تنبؤ ظروف السوق"""
         return {
             "growth_rate": 0.03,
             "overall_confidence": 0.75,
-            "market_trend": "growing"
+            "market_trend": "growing",
         }
 
     def predict_market_trends(self, context: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -521,10 +563,7 @@ class MarketPredictionModel:
 
     def analyze_competition(self, product_id: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """تحليل المنافسة"""
-        return {
-            "intensity": 0.6,
-            "competitive_advantage": "medium"
-        }
+        return {"intensity": 0.6, "competitive_advantage": "medium"}
 
     def update_model(self, new_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         """تحديث النموذج"""

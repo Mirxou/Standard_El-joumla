@@ -7,4 +7,4 @@ Local Migrations Package
 
 from .migration_manager import LocalMigrationManager
 
-__all__ = ['LocalMigrationManager']
+__all__ = ["LocalMigrationManager"]

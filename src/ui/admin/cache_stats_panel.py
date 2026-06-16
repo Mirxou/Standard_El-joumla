@@ -1,8 +1,14 @@
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget,
-    QTableWidgetItem, QLabel
-)
+import logging
 from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 from ...services.cache_service import get_cache_service
 
@@ -28,9 +34,19 @@ class CacheStatsPanel(QWidget):
         # الجدول الرئيسي لملخص كل ذاكرة مؤقتة
         self.caches_table = QTableWidget(self)
         self.caches_table.setColumnCount(9)
-        self.caches_table.setHorizontalHeaderLabels([
-            "الاسم", "الحجم", "الحد الأقصى", "نسبة الاستخدام%", "Hits", "Misses", "Hit%", "Evictions", "Expirations"
-        ])
+        self.caches_table.setHorizontalHeaderLabels(
+            [
+                "الاسم",
+                "الحجم",
+                "الحد الأقصى",
+                "نسبة الاستخدام%",
+                "Hits",
+                "Misses",
+                "Hit%",
+                "Evictions",
+                "Expirations",
+            ]
+        )
         self.caches_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.caches_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.caches_table.itemSelectionChanged.connect(self._update_top_items)
@@ -39,9 +55,7 @@ class CacheStatsPanel(QWidget):
         # جدول العناصر الأعلى استخداماً
         self.top_items_table = QTableWidget(self)
         self.top_items_table.setColumnCount(4)
-        self.top_items_table.setHorizontalHeaderLabels([
-            "المفتاح", "Hits", "العمر (ثواني)", "آخر وصول"
-        ])
+        self.top_items_table.setHorizontalHeaderLabels(["المفتاح", "Hits", "العمر (ثواني)", "آخر وصول"])
         self.top_items_table.setEditTriggers(QTableWidget.NoEditTriggers)
         layout.addWidget(self.top_items_table)
 
@@ -79,20 +93,20 @@ class CacheStatsPanel(QWidget):
             stats = {}
 
         # استبعاد مجاميع _totals من الجدول الأول
-        cache_names = [n for n in stats.keys() if n != '_totals']
+        cache_names = [n for n in stats.keys() if n != "_totals"]
         self.caches_table.setRowCount(len(cache_names))
         for row, name in enumerate(cache_names):
             s = stats.get(name, {})
             values = [
                 name,
-                str(s.get('size', '')),
-                str(s.get('max_size', '')),
-                f"{round(s.get('usage_percent', 0),2)}",
-                str(s.get('hits', '')),
-                str(s.get('misses', '')),
-                f"{round(s.get('hit_rate', 0),2)}",
-                str(s.get('evictions', '')),
-                str(s.get('expirations', ''))
+                str(s.get("size", "")),
+                str(s.get("max_size", "")),
+                f"{round(s.get('usage_percent', 0),2)}",  # noqa: E231
+                str(s.get("hits", "")),
+                str(s.get("misses", "")),
+                f"{round(s.get('hit_rate', 0),2)}",  # noqa: E231
+                str(s.get("evictions", "")),
+                str(s.get("expirations", "")),
             ]
             for col, val in enumerate(values):
                 item = QTableWidgetItem(val)
@@ -118,21 +132,21 @@ class CacheStatsPanel(QWidget):
         cache_obj = self.cache.caches.get(cache_name)
         top = []
         try:
-            if hasattr(cache_obj, 'get_top_items'):
+            if hasattr(cache_obj, "get_top_items"):
                 top = cache_obj.get_top_items(limit=15)
         except Exception:
             top = []
         self.top_items_table.setRowCount(len(top))
         for row, entry in enumerate(top):
             vals = [
-                entry.get('key', ''),
-                str(entry.get('hits', '')),
-                str(entry.get('age_seconds', '')),
-                entry.get('last_accessed', '')
+                entry.get("key", ""),
+                str(entry.get("hits", "")),
+                str(entry.get("age_seconds", "")),
+                entry.get("last_accessed", ""),
             ]
             for col, val in enumerate(vals):
                 item = QTableWidgetItem(val)
-                if col in (1,2):
+                if col in (1, 2):
                     item.setTextAlignment(Qt.AlignCenter)
                 self.top_items_table.setItem(row, col, item)
 
@@ -143,12 +157,12 @@ class CacheStatsPanel(QWidget):
         try:
             self.cache.clear_cache(name)
         except Exception:
-            pass
+            logging.getLogger(__name__).warning("Ignored exception in cache_stats_panel.py")
         self.refresh()
 
     def _clear_all_caches(self):
         try:
             self.cache.clear_cache()
         except Exception:
-            pass
+            logging.getLogger(__name__).warning("Ignored exception in cache_stats_panel.py")
         self.refresh()

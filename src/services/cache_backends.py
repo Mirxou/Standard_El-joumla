@@ -2,13 +2,15 @@
 Optional cache backends (Redis).
 Provides RedisCache if redis library and REDIS_URL are available.
 """
+
 from __future__ import annotations
-from typing import Optional, Any, Dict
-from datetime import datetime
+
 import os
+from typing import Any, Dict, Optional
 
 try:
     import redis
+
     _REDIS_AVAILABLE = True
 except Exception:
     redis = None  # type: ignore
@@ -37,14 +39,35 @@ class RedisCache:
         self._hits += 1
         try:
             import pickle
-            return pickle.loads(val)
+            import hmac
+            import hashlib
+
+            if len(val) < 32:
+                return val
+
+            signature = val[:32]
+            serialized_data = val[32:]
+
+            secret = os.environ.get("APP_ENCRYPTION_KEY", "StandardElJoumlaERPSecureHMACDefaultKey").encode()
+            expected_signature = hmac.new(secret, serialized_data, hashlib.sha256).digest()
+
+            if not hmac.compare_digest(signature, expected_signature):
+                return val
+
+            return pickle.loads(serialized_data)
         except Exception:
             return val
 
     def set(self, key: str, value: Any, ttl: Optional[int] = None):
         try:
             import pickle
-            data = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
+            import hmac
+            import hashlib
+
+            serialized_data = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
+            secret = os.environ.get("APP_ENCRYPTION_KEY", "StandardElJoumlaERPSecureHMACDefaultKey").encode()
+            signature = hmac.new(secret, serialized_data, hashlib.sha256).digest()
+            data = signature + serialized_data
         except Exception:
             data = value
         if ttl and ttl > 0:
@@ -74,14 +97,14 @@ class RedisCache:
         total = self._hits + self._misses
         hit_rate = (self._hits / total * 100) if total else 0.0
         return {
-            'size': None,
-            'max_size': None,
-            'usage_percent': None,
-            'hits': self._hits,
-            'misses': self._misses,
-            'hit_rate': round(hit_rate, 2),
-            'evictions': None,
-            'expirations': None
+            "size": None,
+            "max_size": None,
+            "usage_percent": None,
+            "hits": self._hits,
+            "misses": self._misses,
+            "hit_rate": round(hit_rate, 2),
+            "evictions": None,
+            "expirations": None,
         }
 
     def get_top_items(self, limit: int = 10):

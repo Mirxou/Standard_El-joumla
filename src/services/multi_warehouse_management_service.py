@@ -1,3 +1,4 @@
+import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -6,20 +7,22 @@
 """
 
 import json
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import List, Dict, Optional, Any, Tuple
-from dataclasses import dataclass, asdict
+from typing import Any, Dict, List, Optional
 
 from src.core.database_manager import DatabaseManager
-from src.core.config_manager import ConfigManager
-from src.services.advanced_inventory_management_service import AdvancedInventoryManagementService
-from src.services.supply_chain_integration_service import SupplyChainIntegrationService
+from src.services.advanced_inventory_management_service import (
+    AdvancedInventoryManagementService,
+)
 from src.utils.logger import setup_logger
+
 
 @dataclass
 class Warehouse:
     """فئة تمثل المخزن"""
+
     warehouse_id: str
     name: str
     location: str
@@ -33,9 +36,11 @@ class Warehouse:
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
+
 @dataclass
 class WarehouseTransfer:
     """فئة تمثل نقل بين المخازن"""
+
     transfer_id: str
     from_warehouse_id: str
     to_warehouse_id: str
@@ -51,9 +56,11 @@ class WarehouseTransfer:
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
+
 @dataclass
 class WarehouseZone:
     """فئة تمثل منطقة داخل المخزن"""
+
     zone_id: str
     warehouse_id: str
     zone_name: str
@@ -64,9 +71,11 @@ class WarehouseZone:
     security_level: str  # 'low', 'medium', 'high'
     coordinates: Optional[Dict[str, Any]] = None
 
+
 @dataclass
 class InventoryDistribution:
     """فئة تمثل توزيع المخزون"""
+
     product_id: int
     total_stock: int
     distribution: Dict[str, int]  # warehouse_id -> quantity
@@ -74,12 +83,17 @@ class InventoryDistribution:
     redistribution_needed: bool
     recommendations: List[str]
 
+
 class MultiWarehouseManagementService:
     """
     خدمة إدارة المخازن المتعددة
     """
 
-    def __init__(self, db_manager: DatabaseManager, inventory_service: AdvancedInventoryManagementService):
+    def __init__(
+        self,
+        db_manager: DatabaseManager,
+        inventory_service: AdvancedInventoryManagementService,
+    ):
         self.db = db_manager
         self.inventory_service = inventory_service
         self.logger = setup_logger(__name__)
@@ -98,18 +112,18 @@ class MultiWarehouseManagementService:
             warehouse_id = f"WH_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
             data = {
-                'warehouse_id': warehouse_id,
-                'name': warehouse.name,
-                'location': warehouse.location,
-                'type': warehouse.type,
-                'capacity': warehouse.capacity,
-                'current_utilization': warehouse.current_utilization,
-                'status': warehouse.status,
-                'manager_id': warehouse.manager_id,
-                'contact_info': json.dumps(warehouse.contact_info) if warehouse.contact_info else None,
-                'operating_hours': json.dumps(warehouse.operating_hours) if warehouse.operating_hours else None,
-                'created_at': datetime.now().isoformat(),
-                'updated_at': datetime.now().isoformat()
+                "warehouse_id": warehouse_id,
+                "name": warehouse.name,
+                "location": warehouse.location,
+                "type": warehouse.type,
+                "capacity": warehouse.capacity,
+                "current_utilization": warehouse.current_utilization,
+                "status": warehouse.status,
+                "manager_id": warehouse.manager_id,
+                "contact_info": (json.dumps(warehouse.contact_info) if warehouse.contact_info else None),
+                "operating_hours": (json.dumps(warehouse.operating_hours) if warehouse.operating_hours else None),
+                "created_at": datetime.now().isoformat(),
+                "updated_at": datetime.now().isoformat(),
             }
 
             self._insert_warehouse(data)
@@ -138,34 +152,36 @@ class MultiWarehouseManagementService:
             transfer_id = f"WT_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
             # حساب القيمة الإجمالية
-            total_value = Decimal('0')
+            total_value = Decimal("0")
             for item in transfer.items:
-                total_value += Decimal(str(item['quantity'])) * Decimal(str(item['unit_price']))
+                total_value += Decimal(str(item["quantity"])) * Decimal(str(item["unit_price"]))
 
             # تحويل العناصر إلى JSON
             serializable_items = []
             for item in transfer.items:
                 serializable_item = {
-                    'product_id': item['product_id'],
-                    'batch_id': item.get('batch_id'),
-                    'quantity': str(item['quantity']),
-                    'unit_price': str(item['unit_price'])
+                    "product_id": item["product_id"],
+                    "batch_id": item.get("batch_id"),
+                    "quantity": str(item["quantity"]),
+                    "unit_price": str(item["unit_price"]),
                 }
                 serializable_items.append(serializable_item)
 
             data = {
-                'transfer_id': transfer_id,
-                'from_warehouse_id': transfer.from_warehouse_id,
-                'to_warehouse_id': transfer.to_warehouse_id,
-                'items': json.dumps(serializable_items),
-                'status': transfer.status,
-                'transfer_type': transfer.transfer_type,
-                'priority': transfer.priority,
-                'estimated_delivery': transfer.estimated_delivery.isoformat() if transfer.estimated_delivery else None,
-                'total_value': str(total_value),
-                'created_by': transfer.created_by,
-                'created_at': datetime.now().isoformat(),
-                'updated_at': datetime.now().isoformat()
+                "transfer_id": transfer_id,
+                "from_warehouse_id": transfer.from_warehouse_id,
+                "to_warehouse_id": transfer.to_warehouse_id,
+                "items": json.dumps(serializable_items),
+                "status": transfer.status,
+                "transfer_type": transfer.transfer_type,
+                "priority": transfer.priority,
+                "estimated_delivery": (
+                    transfer.estimated_delivery.isoformat() if transfer.estimated_delivery else None
+                ),
+                "total_value": str(total_value),
+                "created_by": transfer.created_by,
+                "created_at": datetime.now().isoformat(),
+                "updated_at": datetime.now().isoformat(),
             }
 
             self._insert_transfer(data)
@@ -194,22 +210,24 @@ class MultiWarehouseManagementService:
             if not transfer_data:
                 raise ValueError(f"طلب النقل غير موجود: {transfer_id}")
 
-            if transfer_data['status'] != 'draft':
+            if transfer_data["status"] != "draft":
                 raise ValueError(f"لا يمكن الموافقة على طلب النقل في حالة: {transfer_data['status']}")
 
             # التحقق من توفر المخزون
-            items = json.loads(transfer_data['items'])
+            items = json.loads(transfer_data["items"])
             for item in items:
                 available_stock = self._get_warehouse_stock(
-                    transfer_data['from_warehouse_id'],
-                    item['product_id'],
-                    item.get('batch_id')
+                    transfer_data["from_warehouse_id"],
+                    item["product_id"],
+                    item.get("batch_id"),
                 )
-                if available_stock < int(item['quantity']):
-                    raise ValueError(f"مخزون غير كافٍ للمنتج {item['product_id']} في المخزن {transfer_data['from_warehouse_id']}")
+                if available_stock < int(item["quantity"]):
+                    raise ValueError(
+                        f"مخزون غير كافٍ للمنتج {item['product_id']} في المخزن {transfer_data['from_warehouse_id']}"
+                    )
 
             # تحديث حالة الطلب
-            self._update_transfer_status(transfer_id, 'approved', approved_by)
+            self._update_transfer_status(transfer_id, "approved", approved_by)
 
             self.logger.info(f"تمت الموافقة على طلب النقل: {transfer_id}")
             return True
@@ -232,36 +250,36 @@ class MultiWarehouseManagementService:
         try:
             # التحقق من حالة الطلب
             transfer_data = self._get_transfer(transfer_id)
-            if not transfer_data or transfer_data['status'] != 'approved':
+            if not transfer_data or transfer_data["status"] != "approved":
                 raise ValueError(f"لا يمكن تنفيذ طلب النقل في حالة: {transfer_data['status']}")
 
             # تحديث الحالة إلى قيد النقل
-            self._update_transfer_status(transfer_id, 'in_transit', executed_by)
+            self._update_transfer_status(transfer_id, "in_transit", executed_by)
 
             # إزالة المخزون من المخزن المصدر
-            items = json.loads(transfer_data['items'])
+            items = json.loads(transfer_data["items"])
             for item in items:
                 self.inventory_service.remove_inventory_item(
-                    product_id=item['product_id'],
-                    warehouse_id=transfer_data['from_warehouse_id'],
-                    batch_id=item.get('batch_id'),
-                    quantity=int(item['quantity']),
-                    reason=f"transfer_to_{transfer_data['to_warehouse_id']}"
+                    product_id=item["product_id"],
+                    warehouse_id=transfer_data["from_warehouse_id"],
+                    batch_id=item.get("batch_id"),
+                    quantity=int(item["quantity"]),
+                    reason=f"transfer_to_{transfer_data['to_warehouse_id']}",
                 )
 
             # تحديث الحالة إلى تم الاستلام
-            self._update_transfer_status(transfer_id, 'received', executed_by)
+            self._update_transfer_status(transfer_id, "received", executed_by)
             self._update_transfer_delivery(transfer_id, datetime.now())
 
             # إضافة المخزون إلى المخزن الوجهة
             for item in items:
                 self.inventory_service.add_inventory_item(
-                    product_id=item['product_id'],
-                    warehouse_id=transfer_data['to_warehouse_id'],
-                    batch_id=item.get('batch_id'),
-                    quantity=int(item['quantity']),
-                    unit_cost=Decimal(item['unit_price']),
-                    expiry_date=None  # سيتم تحديده لاحقاً
+                    product_id=item["product_id"],
+                    warehouse_id=transfer_data["to_warehouse_id"],
+                    batch_id=item.get("batch_id"),
+                    quantity=int(item["quantity"]),
+                    unit_cost=Decimal(item["unit_price"]),
+                    expiry_date=None,  # سيتم تحديده لاحقاً
                 )
 
             self.logger.info(f"تم تنفيذ النقل: {transfer_id}")
@@ -305,7 +323,7 @@ class MultiWarehouseManagementService:
                 distribution=current_distribution,
                 optimal_distribution=optimal_distribution,
                 redistribution_needed=redistribution_needed,
-                recommendations=recommendations
+                recommendations=recommendations,
             )
 
             return distribution
@@ -328,20 +346,22 @@ class MultiWarehouseManagementService:
             products = self._get_active_products()
 
             for product in products:
-                distribution = self.get_inventory_distribution(product['id'])
+                distribution = self.get_inventory_distribution(product["id"])
 
                 if distribution.redistribution_needed:
-                    recommendations.append({
-                        'product_id': distribution.product_id,
-                        'product_name': product['name'],
-                        'current_distribution': distribution.distribution,
-                        'optimal_distribution': distribution.optimal_distribution,
-                        'recommendations': distribution.recommendations,
-                        'priority': self._calculate_redistribution_priority(distribution)
-                    })
+                    recommendations.append(
+                        {
+                            "product_id": distribution.product_id,
+                            "product_name": product["name"],
+                            "current_distribution": distribution.distribution,
+                            "optimal_distribution": distribution.optimal_distribution,
+                            "recommendations": distribution.recommendations,
+                            "priority": self._calculate_redistribution_priority(distribution),
+                        }
+                    )
 
             # ترتيب التوصيات حسب الأولوية
-            recommendations.sort(key=lambda x: x['priority'], reverse=True)
+            recommendations.sort(key=lambda x: x["priority"], reverse=True)
 
             self.logger.info(f"تم تحليل توزيع المخزون لـ {len(products)} منتج")
             return recommendations
@@ -350,7 +370,9 @@ class MultiWarehouseManagementService:
             self.logger.error(f"خطأ في تحسين توزيع المخزون: {e}")
             raise
 
-    def get_warehouse_performance_report(self, warehouse_id: str, start_date: datetime, end_date: datetime) -> Dict[str, Any]:
+    def get_warehouse_performance_report(
+        self, warehouse_id: str, start_date: datetime, end_date: datetime
+    ) -> Dict[str, Any]:
         """
         الحصول على تقرير أداء المخزن
 
@@ -364,24 +386,24 @@ class MultiWarehouseManagementService:
         """
         try:
             report = {
-                'warehouse_id': warehouse_id,
-                'period': {
-                    'start': start_date.isoformat(),
-                    'end': end_date.isoformat()
+                "warehouse_id": warehouse_id,
+                "period": {
+                    "start": start_date.isoformat(),
+                    "end": end_date.isoformat(),
                 },
-                'metrics': {},
-                'transfers': {},
-                'alerts': []
+                "metrics": {},
+                "transfers": {},
+                "alerts": [],
             }
 
             # مقاييس الأداء الأساسية
-            report['metrics'] = self._calculate_warehouse_metrics(warehouse_id, start_date, end_date)
+            report["metrics"] = self._calculate_warehouse_metrics(warehouse_id, start_date, end_date)
 
             # إحصائيات النقل
-            report['transfers'] = self._calculate_transfer_statistics(warehouse_id, start_date, end_date)
+            report["transfers"] = self._calculate_transfer_statistics(warehouse_id, start_date, end_date)
 
             # التنبيهات والمشاكل
-            report['alerts'] = self._get_warehouse_alerts(warehouse_id)
+            report["alerts"] = self._get_warehouse_alerts(warehouse_id)
 
             return report
 
@@ -401,39 +423,39 @@ class MultiWarehouseManagementService:
             warehouses = self._get_all_warehouses()
 
             report = {
-                'generated_at': datetime.now().isoformat(),
-                'total_warehouses': len(warehouses),
-                'warehouses': [],
-                'network_overview': {},
-                'recommendations': []
+                "generated_at": datetime.now().isoformat(),
+                "total_warehouses": len(warehouses),
+                "warehouses": [],
+                "network_overview": {},
+                "recommendations": [],
             }
 
             for warehouse in warehouses:
                 warehouse_report = {
-                    'warehouse_id': warehouse['warehouse_id'],
-                    'name': warehouse['name'],
-                    'type': warehouse['type'],
-                    'location': warehouse['location'],
-                    'status': warehouse['status'],
-                    'utilization': warehouse['current_utilization'],
-                    'capacity': warehouse['capacity']
+                    "warehouse_id": warehouse["warehouse_id"],
+                    "name": warehouse["name"],
+                    "type": warehouse["type"],
+                    "location": warehouse["location"],
+                    "status": warehouse["status"],
+                    "utilization": warehouse["current_utilization"],
+                    "capacity": warehouse["capacity"],
                 }
 
                 # إضافة مقاييس سريعة
                 metrics = self._calculate_warehouse_metrics(
-                    warehouse['warehouse_id'],
+                    warehouse["warehouse_id"],
                     datetime.now() - timedelta(days=30),
-                    datetime.now()
+                    datetime.now(),
                 )
-                warehouse_report['recent_metrics'] = metrics
+                warehouse_report["recent_metrics"] = metrics
 
-                report['warehouses'].append(warehouse_report)
+                report["warehouses"].append(warehouse_report)
 
             # نظرة عامة على الشبكة
-            report['network_overview'] = self._calculate_network_overview()
+            report["network_overview"] = self._calculate_network_overview()
 
             # التوصيات العامة
-            report['recommendations'] = self._generate_network_recommendations()
+            report["recommendations"] = self._generate_network_recommendations()
 
             return report
 
@@ -452,10 +474,18 @@ class MultiWarehouseManagementService:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         params = (
-            data['warehouse_id'], data['name'], data['location'], data['type'],
-            data['capacity'], data['current_utilization'], data['status'],
-            data['manager_id'], data['contact_info'], data['operating_hours'],
-            data['created_at'], data['updated_at']
+            data["warehouse_id"],
+            data["name"],
+            data["location"],
+            data["type"],
+            data["capacity"],
+            data["current_utilization"],
+            data["status"],
+            data["manager_id"],
+            data["contact_info"],
+            data["operating_hours"],
+            data["created_at"],
+            data["updated_at"],
         )
         self.db.execute_non_query(query, params)
 
@@ -469,20 +499,28 @@ class MultiWarehouseManagementService:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         params = (
-            data['transfer_id'], data['from_warehouse_id'], data['to_warehouse_id'],
-            data['items'], data['status'], data['transfer_type'], data['priority'],
-            data['estimated_delivery'], data['total_value'], data['created_by'],
-            data['created_at'], data['updated_at']
+            data["transfer_id"],
+            data["from_warehouse_id"],
+            data["to_warehouse_id"],
+            data["items"],
+            data["status"],
+            data["transfer_type"],
+            data["priority"],
+            data["estimated_delivery"],
+            data["total_value"],
+            data["created_by"],
+            data["created_at"],
+            data["updated_at"],
         )
         self.db.execute_non_query(query, params)
 
     def _create_default_zones(self, warehouse_id: str) -> None:
         """إنشاء مناطق افتراضية للمخزن"""
         default_zones = [
-            {'name': 'Receiving', 'type': 'receiving'},
-            {'name': 'Storage', 'type': 'storage'},
-            {'name': 'Picking', 'type': 'picking'},
-            {'name': 'Shipping', 'type': 'shipping'}
+            {"name": "Receiving", "type": "receiving"},
+            {"name": "Storage", "type": "storage"},
+            {"name": "Picking", "type": "picking"},
+            {"name": "Shipping", "type": "shipping"},
         ]
 
         for zone in default_zones:
@@ -494,8 +532,14 @@ class MultiWarehouseManagementService:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """
             params = (
-                zone_id, warehouse_id, zone['name'], zone['type'],
-                1000, 0, False, 'medium'
+                zone_id,
+                warehouse_id,
+                zone["name"],
+                zone["type"],
+                1000,
+                0,
+                False,
+                "medium",
             )
             self.db.execute_non_query(query, params)
 
@@ -573,7 +617,7 @@ class MultiWarehouseManagementService:
         optimal = {}
         for i, warehouse in enumerate(warehouses):
             quantity = base_quantity + (1 if i < remainder else 0)
-            optimal[warehouse['warehouse_id']] = quantity
+            optimal[warehouse["warehouse_id"]] = quantity
 
         return optimal
 
@@ -592,7 +636,9 @@ class MultiWarehouseManagementService:
         total_stock = sum(current.values())
         return total_difference > (total_stock * 0.1) if total_stock > 0 else False
 
-    def _generate_distribution_recommendations(self, product_id: int, current: Dict[str, int], optimal: Dict[str, int]) -> List[str]:
+    def _generate_distribution_recommendations(
+        self, product_id: int, current: Dict[str, int], optimal: Dict[str, int]
+    ) -> List[str]:
         """توليد توصيات إعادة التوزيع"""
         recommendations = []
 
@@ -642,14 +688,16 @@ class MultiWarehouseManagementService:
         results = self.db.fetch_all(query)
         return [dict(row) for row in results] if results else []
 
-    def _calculate_warehouse_metrics(self, warehouse_id: str, start_date: datetime, end_date: datetime) -> Dict[str, Any]:
+    def _calculate_warehouse_metrics(
+        self, warehouse_id: str, start_date: datetime, end_date: datetime
+    ) -> Dict[str, Any]:
         """حساب مقاييس أداء المخزن"""
         metrics = {
-            'total_transfers_out': 0,
-            'total_transfers_in': 0,
-            'on_time_delivery_rate': 0.0,
-            'average_transfer_value': 0.0,
-            'current_utilization': 0.0
+            "total_transfers_out": 0,
+            "total_transfers_in": 0,
+            "on_time_delivery_rate": 0.0,
+            "average_transfer_value": 0.0,
+            "current_utilization": 0.0,
         }
 
         # عدد النقل الصادر
@@ -658,7 +706,7 @@ class MultiWarehouseManagementService:
             WHERE from_warehouse_id = ? AND created_at BETWEEN ? AND ?
         """
         result_out = self.db.fetch_one(query_out, (warehouse_id, start_date.isoformat(), end_date.isoformat()))
-        metrics['total_transfers_out'] = result_out[0] if result_out else 0
+        metrics["total_transfers_out"] = result_out[0] if result_out else 0
 
         # عدد النقل الوارد
         query_in = """
@@ -666,7 +714,7 @@ class MultiWarehouseManagementService:
             WHERE to_warehouse_id = ? AND created_at BETWEEN ? AND ?
         """
         result_in = self.db.fetch_one(query_in, (warehouse_id, start_date.isoformat(), end_date.isoformat()))
-        metrics['total_transfers_in'] = result_in[0] if result_in else 0
+        metrics["total_transfers_in"] = result_in[0] if result_in else 0
 
         # معدل التسليم في الوقت المحدد
         query_ontime = """
@@ -675,10 +723,13 @@ class MultiWarehouseManagementService:
             AND status = 'received' AND actual_delivery <= estimated_delivery
             AND created_at BETWEEN ? AND ?
         """
-        result_ontime = self.db.fetch_one(query_ontime, (warehouse_id, warehouse_id, start_date.isoformat(), end_date.isoformat()))
-        total_completed = metrics['total_transfers_out'] + metrics['total_transfers_in']
+        result_ontime = self.db.fetch_one(
+            query_ontime,
+            (warehouse_id, warehouse_id, start_date.isoformat(), end_date.isoformat()),
+        )
+        total_completed = metrics["total_transfers_out"] + metrics["total_transfers_in"]
         if total_completed > 0:
-            metrics['on_time_delivery_rate'] = (result_ontime[0] / total_completed) * 100 if result_ontime else 0
+            metrics["on_time_delivery_rate"] = (result_ontime[0] / total_completed) * 100 if result_ontime else 0
 
         # متوسط قيمة النقل
         query_value = """
@@ -686,24 +737,27 @@ class MultiWarehouseManagementService:
             WHERE (from_warehouse_id = ? OR to_warehouse_id = ?)
             AND created_at BETWEEN ? AND ?
         """
-        result_value = self.db.fetch_one(query_value, (warehouse_id, warehouse_id, start_date.isoformat(), end_date.isoformat()))
-        metrics['average_transfer_value'] = float(result_value[0]) if result_value and result_value[0] else 0.0
+        result_value = self.db.fetch_one(
+            query_value,
+            (warehouse_id, warehouse_id, start_date.isoformat(), end_date.isoformat()),
+        )
+        metrics["average_transfer_value"] = float(result_value[0]) if result_value and result_value[0] else 0.0
 
         # معدل الاستغلال الحالي
-        warehouse_info = self.db.fetch_one("SELECT capacity, current_utilization FROM warehouses WHERE warehouse_id = ?", (warehouse_id,))
+        warehouse_info = self.db.fetch_one(
+            "SELECT capacity, current_utilization FROM warehouses WHERE warehouse_id = ?",
+            (warehouse_id,),
+        )
         if warehouse_info:
-            metrics['current_utilization'] = warehouse_info[1]
+            metrics["current_utilization"] = warehouse_info[1]
 
         return metrics
 
-    def _calculate_transfer_statistics(self, warehouse_id: str, start_date: datetime, end_date: datetime) -> Dict[str, Any]:
+    def _calculate_transfer_statistics(
+        self, warehouse_id: str, start_date: datetime, end_date: datetime
+    ) -> Dict[str, Any]:
         """حساب إحصائيات النقل"""
-        stats = {
-            'by_status': {},
-            'by_type': {},
-            'by_priority': {},
-            'total_value': 0.0
-        }
+        stats = {"by_status": {}, "by_type": {}, "by_priority": {}, "total_value": 0.0}
 
         # إحصائيات حسب الحالة
         query_status = """
@@ -712,8 +766,11 @@ class MultiWarehouseManagementService:
             AND created_at BETWEEN ? AND ?
             GROUP BY status
         """
-        results_status = self.db.fetch_all(query_status, (warehouse_id, warehouse_id, start_date.isoformat(), end_date.isoformat()))
-        stats['by_status'] = {row[0]: row[1] for row in results_status} if results_status else {}
+        results_status = self.db.fetch_all(
+            query_status,
+            (warehouse_id, warehouse_id, start_date.isoformat(), end_date.isoformat()),
+        )
+        stats["by_status"] = {row[0]: row[1] for row in results_status} if results_status else {}
 
         # إحصائيات حسب النوع
         query_type = """
@@ -722,8 +779,11 @@ class MultiWarehouseManagementService:
             AND created_at BETWEEN ? AND ?
             GROUP BY transfer_type
         """
-        results_type = self.db.fetch_all(query_type, (warehouse_id, warehouse_id, start_date.isoformat(), end_date.isoformat()))
-        stats['by_type'] = {row[0]: row[1] for row in results_type} if results_type else {}
+        results_type = self.db.fetch_all(
+            query_type,
+            (warehouse_id, warehouse_id, start_date.isoformat(), end_date.isoformat()),
+        )
+        stats["by_type"] = {row[0]: row[1] for row in results_type} if results_type else {}
 
         # إحصائيات حسب الأولوية
         query_priority = """
@@ -732,8 +792,11 @@ class MultiWarehouseManagementService:
             AND created_at BETWEEN ? AND ?
             GROUP BY priority
         """
-        results_priority = self.db.fetch_all(query_priority, (warehouse_id, warehouse_id, start_date.isoformat(), end_date.isoformat()))
-        stats['by_priority'] = {row[0]: row[1] for row in results_priority} if results_priority else {}
+        results_priority = self.db.fetch_all(
+            query_priority,
+            (warehouse_id, warehouse_id, start_date.isoformat(), end_date.isoformat()),
+        )
+        stats["by_priority"] = {row[0]: row[1] for row in results_priority} if results_priority else {}
 
         # إجمالي القيمة
         query_value = """
@@ -741,8 +804,11 @@ class MultiWarehouseManagementService:
             WHERE (from_warehouse_id = ? OR to_warehouse_id = ?)
             AND created_at BETWEEN ? AND ?
         """
-        result_value = self.db.fetch_one(query_value, (warehouse_id, warehouse_id, start_date.isoformat(), end_date.isoformat()))
-        stats['total_value'] = float(result_value[0]) if result_value and result_value[0] else 0.0
+        result_value = self.db.fetch_one(
+            query_value,
+            (warehouse_id, warehouse_id, start_date.isoformat(), end_date.isoformat()),
+        )
+        stats["total_value"] = float(result_value[0]) if result_value and result_value[0] else 0.0
 
         return stats
 
@@ -751,49 +817,56 @@ class MultiWarehouseManagementService:
         alerts = []
 
         # التحقق من معدل الاستغلال
-        warehouse_info = self.db.fetch_one("SELECT capacity, current_utilization FROM warehouses WHERE warehouse_id = ?", (warehouse_id,))
+        warehouse_info = self.db.fetch_one(
+            "SELECT capacity, current_utilization FROM warehouses WHERE warehouse_id = ?",
+            (warehouse_id,),
+        )
         if warehouse_info:
             capacity, utilization = warehouse_info
             if utilization > 90:
-                alerts.append({
-                    'type': 'high_utilization',
-                    'severity': 'high',
-                    'message': f"معدل استغلال المخزن مرتفع: {utilization}%"
-                })
+                alerts.append(
+                    {
+                        "type": "high_utilization",
+                        "severity": "high",
+                        "message": f"معدل استغلال المخزن مرتفع: {utilization}%",
+                    }
+                )
             elif utilization > 80:
-                alerts.append({
-                    'type': 'high_utilization',
-                    'severity': 'medium',
-                    'message': f"معدل استغلال المخزن متوسط: {utilization}%"
-                })
+                alerts.append(
+                    {
+                        "type": "high_utilization",
+                        "severity": "medium",
+                        "message": f"معدل استغلال المخزن متوسط: {utilization}%",
+                    }
+                )
 
         return alerts
 
     def _calculate_network_overview(self) -> Dict[str, Any]:
         """حساب نظرة عامة على شبكة المخازن"""
         overview = {
-            'total_capacity': 0,
-            'total_utilization': 0.0,
-            'warehouses_by_type': {},
-            'active_transfers': 0
+            "total_capacity": 0,
+            "total_utilization": 0.0,
+            "warehouses_by_type": {},
+            "active_transfers": 0,
         }
 
         # إجمالي السعة والاستغلال
         query_capacity = "SELECT SUM(capacity), AVG(current_utilization) FROM warehouses WHERE status = 'active'"
         result_capacity = self.db.fetch_one(query_capacity)
         if result_capacity:
-            overview['total_capacity'] = result_capacity[0] or 0
-            overview['total_utilization'] = float(result_capacity[1] or 0)
+            overview["total_capacity"] = result_capacity[0] or 0
+            overview["total_utilization"] = float(result_capacity[1] or 0)
 
         # المخازن حسب النوع
         query_types = "SELECT type, COUNT(*) FROM warehouses WHERE status = 'active' GROUP BY type"
         results_types = self.db.fetch_all(query_types)
-        overview['warehouses_by_type'] = {row[0]: row[1] for row in results_types} if results_types else {}
+        overview["warehouses_by_type"] = {row[0]: row[1] for row in results_types} if results_types else {}
 
         # النقل النشط
         query_transfers = "SELECT COUNT(*) FROM warehouse_transfers WHERE status IN ('approved', 'in_transit')"
         result_transfers = self.db.fetch_one(query_transfers)
-        overview['active_transfers'] = result_transfers[0] if result_transfers else 0
+        overview["active_transfers"] = result_transfers[0] if result_transfers else 0
 
         return overview
 
@@ -804,13 +877,13 @@ class MultiWarehouseManagementService:
         overview = self._calculate_network_overview()
 
         # توصيات حول الاستغلال
-        if overview['total_utilization'] > 85:
+        if overview["total_utilization"] > 85:
             recommendations.append("إضافة مخازن جديدة أو توسيع السعة الحالية")
-        elif overview['total_utilization'] < 60:
+        elif overview["total_utilization"] < 60:
             recommendations.append("تحسين توزيع المخزون لزيادة الاستغلال")
 
         # توصيات حول النقل النشط
-        if overview['active_transfers'] > 10:
+        if overview["active_transfers"] > 10:
             recommendations.append("مراجعة عملية النقل وتحسين الكفاءة")
 
         return recommendations

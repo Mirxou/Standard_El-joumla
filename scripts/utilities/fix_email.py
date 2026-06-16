@@ -1,9 +1,8 @@
 import sqlite3
-import os
 from pathlib import Path
 
 project_root = Path(__file__).parent.parent.parent
-DB_PATH = str(project_root / "data" / "logical_release.db")
+DB_PATH = str(project_root / "data" / "standard_eljoumla.db")
 
 try:
     conn = sqlite3.connect(DB_PATH)

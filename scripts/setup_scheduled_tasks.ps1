@@ -35,7 +35,7 @@ Write-Host ""
 Write-Host "1️⃣  إعداد مهمة تنظيف السجلات اليومية..." -ForegroundColor Yellow
 
 $taskName1 = "LogicalRelease_CleanupLogs"
-$taskDescription1 = "تنظيف تلقائي لسجلات الاختبارات القديمة - الإصدار المنطقي"
+$taskDescription1 = "تنظيف تلقائي لسجلات الاختبارات القديمة - ستاندرد الجملة"
 
 # حذف المهمة إذا كانت موجودة
 $existingTask = Get-ScheduledTask -TaskName $taskName1 -ErrorAction SilentlyContinue
@@ -66,7 +66,7 @@ Write-Host "   💡 هذه المهمة تعمل كل 5 دقائق لمراقب�
 Write-Host ""
 
 $taskName2 = "LogicalRelease_MonitorLogs"
-$taskDescription2 = "مراقبة مستمرة لسجلات التطبيق - الإصدار المنطقي"
+$taskDescription2 = "مراقبة مستمرة لسجلات التطبيق - ستاندرد الجملة"
 
 # حذف المهمة إذا كانت موجودة
 $existingTask2 = Get-ScheduledTask -TaskName $taskName2 -ErrorAction SilentlyContinue

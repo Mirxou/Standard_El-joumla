@@ -1,22 +1,23 @@
+import logging
 #!/usr/bin/env python3
 """
 مدير أتمتة سير العمل - Workflow Automation Manager
 مدير شامل لأتمتة سير العمل التجارية
 """
 
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional, Callable
-from dataclasses import dataclass
-from enum import Enum
 import threading
 import time
-import logging
-import json
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from enum import Enum
+from typing import Any, Callable, Dict, List, Optional
 
 
 class WorkflowStatus(Enum):
     """حالة سير العمل"""
+
     DRAFT = "draft"
     ACTIVE = "active"
     RUNNING = "running"
@@ -28,6 +29,7 @@ class WorkflowStatus(Enum):
 
 class TaskStatus(Enum):
     """حالة المهمة"""
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -38,6 +40,7 @@ class TaskStatus(Enum):
 
 class WorkflowTrigger(Enum):
     """مشغل سير العمل"""
+
     MANUAL = "manual"
     SCHEDULED = "scheduled"
     EVENT = "event"
@@ -48,13 +51,14 @@ class WorkflowTrigger(Enum):
 @dataclass
 class WorkflowTask:
     """مهمة سير العمل"""
+
     task_id: str
     name: str
     description: str
     task_type: str
     parameters: Dict[str, Any]
     predecessors: List[str]  # task_ids
-    successors: List[str]   # task_ids
+    successors: List[str]  # task_ids
     timeout: Optional[int] = None  # seconds
     retry_count: int = 0
     retry_delay: int = 5
@@ -74,6 +78,7 @@ class WorkflowTask:
 @dataclass
 class WorkflowDefinition:
     """تعريف سير العمل"""
+
     workflow_id: str
     name: str
     description: str
@@ -96,6 +101,7 @@ class WorkflowDefinition:
 @dataclass
 class WorkflowInstance:
     """مثيل سير العمل"""
+
     instance_id: str
     workflow_id: str
     status: WorkflowStatus = WorkflowStatus.RUNNING
@@ -138,9 +144,7 @@ class WorkflowAutomationManager:
         """إعداد نظام التسجيل"""
         self.logger.setLevel(logging.INFO)
         handler = logging.StreamHandler()
-        formatter = logging.Formatter(
-            '%(asctime)s - Workflow Manager - %(levelname)s - %(message)s'
-        )
+        formatter = logging.Formatter("%(asctime)s - Workflow Manager - %(levelname)s - %(message)s")
         handler.setFormatter(formatter)
         self.logger.addHandler(handler)
 
@@ -159,8 +163,14 @@ class WorkflowAutomationManager:
         self.task_handlers[task_type] = handler
         self.logger.info(f"Task handler registered: {task_type}")
 
-    def create_workflow(self, name: str, description: str, tasks: List[WorkflowTask],
-                       triggers: List[WorkflowTrigger] = None, variables: Dict[str, Any] = None) -> str:
+    def create_workflow(
+        self,
+        name: str,
+        description: str,
+        tasks: List[WorkflowTask],
+        triggers: List[WorkflowTrigger] = None,
+        variables: Dict[str, Any] = None,
+    ) -> str:
         """إنشاء سير عمل جديد"""
         workflow_id = f"wf_{name.lower().replace(' ', '_')}_{int(datetime.now().timestamp())}"
 
@@ -177,7 +187,7 @@ class WorkflowAutomationManager:
             version="1.0.0",
             tasks=task_dict,
             triggers=triggers or [WorkflowTrigger.MANUAL],
-            variables=variables or {}
+            variables=variables or {},
         )
 
         self.workflows[workflow_id] = workflow
@@ -207,7 +217,7 @@ class WorkflowAutomationManager:
                 timeout=task.timeout,
                 retry_count=task.retry_count,
                 retry_delay=task.retry_delay,
-                on_failure=task.on_failure
+                on_failure=task.on_failure,
             )
             task_instances[task_id] = task_copy
 
@@ -215,17 +225,13 @@ class WorkflowAutomationManager:
             instance_id=instance_id,
             workflow_id=workflow_id,
             variables={**workflow.variables, **(input_variables or {})},
-            task_instances=task_instances
+            task_instances=task_instances,
         )
 
         self.instances[instance_id] = instance
 
         # بدء التنفيذ في خيط منفصل
-        execution_thread = threading.Thread(
-            target=self._execute_workflow_instance,
-            args=(instance,),
-            daemon=True
-        )
+        execution_thread = threading.Thread(target=self._execute_workflow_instance, args=(instance,), daemon=True)
 
         self.active_instances[instance_id] = execution_thread
         execution_thread.start()
@@ -290,9 +296,9 @@ class WorkflowAutomationManager:
             task_statuses[task_id] = {
                 "status": task.status.value,
                 "started_at": task.started_at.isoformat() if task.started_at else None,
-                "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+                "completed_at": (task.completed_at.isoformat() if task.completed_at else None),
                 "result": task.result,
-                "error_message": task.error_message
+                "error_message": task.error_message,
             }
 
         return {
@@ -300,12 +306,12 @@ class WorkflowAutomationManager:
             "workflow_id": instance.workflow_id,
             "status": instance.status.value,
             "created_at": instance.created_at.isoformat(),
-            "started_at": instance.started_at.isoformat() if instance.started_at else None,
-            "completed_at": instance.completed_at.isoformat() if instance.completed_at else None,
-            "duration": instance.duration.total_seconds() if instance.duration else None,
+            "started_at": (instance.started_at.isoformat() if instance.started_at else None),
+            "completed_at": (instance.completed_at.isoformat() if instance.completed_at else None),
+            "duration": (instance.duration.total_seconds() if instance.duration else None),
             "variables": instance.variables,
             "task_statuses": task_statuses,
-            "progress": self._calculate_progress(instance)
+            "progress": self._calculate_progress(instance),
         }
 
     def get_system_status(self) -> Dict[str, Any]:
@@ -316,7 +322,7 @@ class WorkflowAutomationManager:
             "total_instances_count": len(self.instances),
             "registered_handlers_count": len(self.task_handlers),
             "is_running": self.is_running,
-            "last_updated": datetime.now().isoformat()
+            "last_updated": datetime.now().isoformat(),
         }
 
     def _build_task_relationships(self, tasks: Dict[str, WorkflowTask]):
@@ -342,14 +348,17 @@ class WorkflowAutomationManager:
             workflow = self.workflows[instance.workflow_id]
 
             # العثور على المهام التي لا تحتوي على سابقين (مهام البداية)
-            ready_tasks = [task for task in instance.task_instances.values()
-                          if not task.predecessors and task.status == TaskStatus.PENDING]
+            ready_tasks = [
+                task
+                for task in instance.task_instances.values()
+                if not task.predecessors and task.status == TaskStatus.PENDING
+            ]
 
             # تنفيذ المهام
             while ready_tasks and instance.status == WorkflowStatus.RUNNING:
                 # تنفيذ المهام الجاهزة بالتوازي
                 futures = []
-                for task in ready_tasks[:workflow.max_concurrent_tasks]:
+                for task in ready_tasks[: workflow.max_concurrent_tasks]:
                     future = self.executor.submit(self._execute_task, task, instance)
                     futures.append((task.task_id, future))
 
@@ -389,8 +398,10 @@ class WorkflowAutomationManager:
 
             if instance.status == WorkflowStatus.RUNNING:
                 # فحص ما إذا كانت جميع المهام مكتملة
-                all_completed = all(task.status in [TaskStatus.COMPLETED, TaskStatus.SKIPPED]
-                                  for task in instance.task_instances.values())
+                all_completed = all(
+                    task.status in [TaskStatus.COMPLETED, TaskStatus.SKIPPED]
+                    for task in instance.task_instances.values()
+                )
                 if all_completed:
                     instance.status = WorkflowStatus.COMPLETED
                 else:
@@ -465,6 +476,7 @@ class WorkflowAutomationManager:
     def _substitute_variables(self, params: Dict[str, Any], variables: Dict[str, Any]) -> Dict[str, Any]:
         """استبدال المتغيرات في المعلمات"""
         import copy
+
         params_copy = copy.deepcopy(params)
 
         def substitute_value(value):
@@ -486,8 +498,7 @@ class WorkflowAutomationManager:
         if total_tasks == 0:
             return 100.0
 
-        completed_tasks = sum(1 for task in instance.task_instances.values()
-                            if task.status == TaskStatus.COMPLETED)
+        completed_tasks = sum(1 for task in instance.task_instances.values() if task.status == TaskStatus.COMPLETED)
         return (completed_tasks / total_tasks) * 100.0
 
     # معالجات المهام الافتراضية
@@ -501,7 +512,7 @@ class WorkflowAutomationManager:
             "status": "success",
             "url": url,
             "method": method,
-            "response": {"status_code": 200, "data": "mock_response"}
+            "response": {"status_code": 200, "data": "mock_response"},
         }
 
     def _handle_database_query(self, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -509,11 +520,7 @@ class WorkflowAutomationManager:
         # محاكاة استعلام قاعدة البيانات
         query = params.get("query", "")
 
-        return {
-            "status": "success",
-            "query": query,
-            "rows_affected": 5
-        }
+        return {"status": "success", "query": query, "rows_affected": 5}
 
     def _handle_file_operation(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """معالجة عملية ملف"""
@@ -522,9 +529,13 @@ class WorkflowAutomationManager:
 
         if operation == "read":
             try:
-                with open(file_path, 'r', encoding='utf-8') as f:
+                with open(file_path, "r", encoding="utf-8") as f:
                     content = f.read()
-                return {"status": "success", "operation": "read", "content_length": len(content)}
+                return {
+                    "status": "success",
+                    "operation": "read",
+                    "content_length": len(content),
+                }
             except Exception as e:
                 return {"status": "error", "error": str(e)}
 
@@ -536,11 +547,7 @@ class WorkflowAutomationManager:
         to = params.get("to", "")
         subject = params.get("subject", "")
 
-        return {
-            "status": "success",
-            "to": to,
-            "subject": subject
-        }
+        return {"status": "success", "to": to, "subject": subject}
 
     def _handle_wait(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """معالجة انتظار"""
@@ -559,20 +566,20 @@ class WorkflowAutomationManager:
 
     def _handle_script(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """معالجة سكريبت"""
-        script = params.get("script", "")
+        params.get("script", "")
         # محاكاة تنفيذ سكريبت
         return {"status": "success", "script_executed": True}
 
 
 # ==================== كلاسات وواجهات متوافقة مع الاختبارات ====================
 
-from enum import Enum as _Enum
-from collections import defaultdict as _defaultdict
 import uuid as _uuid
+from enum import Enum as _Enum
 
 
 class WorkflowState(_Enum):
     """حالة سير العمل للاختبارات"""
+
     PENDING = "pending"
     RUNNING = "running"
     PAUSED = "paused"
@@ -584,6 +591,7 @@ class WorkflowState(_Enum):
 @dataclass
 class WorkflowResult:
     """نتيجة سير العمل"""
+
     instance_id: str
     workflow_id: str
     success: bool
@@ -593,13 +601,22 @@ class WorkflowResult:
 
 
 # إعادة تعريف WorkflowDefinition للتوافق مع الاختبارات
-class WorkflowDefinition:
+class WorkflowDefinition:  # noqa: F811
     """تعريف سير العمل - متوافق مع الاختبارات"""
-    def __init__(self, workflow_id: str, name: str, description: str = "",
-                 created_by: str = "", created_at: datetime = None,
-                 steps: list = None, version: str = "1.0",
-                 tasks: Dict[str, Any] = None, triggers: list = None,
-                 variables: Dict[str, Any] = None):
+
+    def __init__(
+        self,
+        workflow_id: str,
+        name: str,
+        description: str = "",
+        created_by: str = "",
+        created_at: datetime = None,
+        steps: list = None,
+        version: str = "1.0",
+        tasks: Dict[str, Any] = None,
+        triggers: list = None,
+        variables: Dict[str, Any] = None,
+    ):
         self.workflow_id = workflow_id
         self.name = name
         self.description = description
@@ -615,13 +632,22 @@ class WorkflowDefinition:
 # إعادة تعريف WorkflowInstance للتوافق مع الاختبارات
 class WorkflowInstance:
     """نسخة سير العمل - متوافق مع الاختبارات"""
-    def __init__(self, instance_id: str, workflow_id: str,
-                 state: WorkflowState = WorkflowState.RUNNING,
-                 initiated_by: str = "", started_at: datetime = None,
-                 completed_at=None, context: Dict[str, Any] = None,
-                 current_step: str = None, step_results: Dict[str, Any] = None,
-                 status: WorkflowStatus = None, variables: Dict[str, Any] = None,
-                 task_instances: Dict[str, Any] = None):
+
+    def __init__(
+        self,
+        instance_id: str,
+        workflow_id: str,
+        state: WorkflowState = WorkflowState.RUNNING,
+        initiated_by: str = "",
+        started_at: datetime = None,
+        completed_at=None,
+        context: Dict[str, Any] = None,
+        current_step: str = None,
+        step_results: Dict[str, Any] = None,
+        status: WorkflowStatus = None,
+        variables: Dict[str, Any] = None,
+        task_instances: Dict[str, Any] = None,
+    ):
         self.instance_id = instance_id
         self.workflow_id = workflow_id
         self.state = state
@@ -636,7 +662,7 @@ class WorkflowInstance:
         self.task_instances = task_instances or {}
 
 
-class WorkflowAutomationManager:
+class WorkflowAutomationManager:  # noqa: F811
     """مدير أتمتة سير العمل - متوافق مع الاختبارات"""
 
     def __init__(self, db_manager=None):
@@ -646,35 +672,37 @@ class WorkflowAutomationManager:
         self.workflow_history: List[Dict[str, Any]] = []
         self.logger = logging.getLogger(__name__)
 
-    def create_workflow(self, workflow_id: str, name: str,
-                        description: str = "") -> WorkflowDefinition:
+    def create_workflow(self, workflow_id: str, name: str, description: str = "") -> WorkflowDefinition:
         """إنشاء سير عمل"""
-        workflow = WorkflowDefinition(
-            workflow_id=workflow_id,
-            name=name,
-            description=description
-        )
+        workflow = WorkflowDefinition(workflow_id=workflow_id, name=name, description=description)
         self.workflows[workflow_id] = workflow
         return workflow
 
-    def add_workflow_step(self, workflow_id: str, step_id: str,
-                          step_type: str, name: str,
-                          config: Dict[str, Any] = None) -> bool:
+    def add_workflow_step(
+        self,
+        workflow_id: str,
+        step_id: str,
+        step_type: str,
+        name: str,
+        config: Dict[str, Any] = None,
+    ) -> bool:
         """إضافة خطوة لسير العمل"""
         if workflow_id not in self.workflows:
             return False
         workflow = self.workflows[workflow_id]
-        workflow.steps.append({
-            "step_id": step_id,
-            "step_type": step_type,
-            "name": name,
-            "config": config or {}
-        })
+        workflow.steps.append(
+            {
+                "step_id": step_id,
+                "step_type": step_type,
+                "name": name,
+                "config": config or {},
+            }
+        )
         return True
 
-    def start_workflow_instance(self, workflow_id: str,
-                                initiated_by: str = "",
-                                context: Dict[str, Any] = None) -> WorkflowInstance:
+    def start_workflow_instance(
+        self, workflow_id: str, initiated_by: str = "", context: Dict[str, Any] = None
+    ) -> WorkflowInstance:
         """بدء نسخة من سير العمل"""
         instance_id = f"inst_{_uuid.uuid4().hex[:8]}"
         instance = WorkflowInstance(
@@ -682,14 +710,13 @@ class WorkflowAutomationManager:
             workflow_id=workflow_id,
             state=WorkflowState.RUNNING,
             initiated_by=initiated_by,
-            context=context or {}
+            context=context or {},
         )
         self.running_instances[instance_id] = instance
         self.workflow_history.append({"instance_id": instance_id, "workflow_id": workflow_id})
         return instance
 
-    def execute_workflow_step(self, instance_id: str,
-                              step_id: str) -> Dict[str, Any]:
+    def execute_workflow_step(self, instance_id: str, step_id: str) -> Dict[str, Any]:
         """تنفيذ خطوة من سير العمل"""
         return {"status": "executed", "step_id": step_id, "instance_id": instance_id}
 
@@ -703,7 +730,7 @@ class WorkflowAutomationManager:
             "workflow_id": instance.workflow_id,
             "state": instance.state.value,
             "current_step": instance.current_step,
-            "initiated_by": instance.initiated_by
+            "initiated_by": instance.initiated_by,
         }
 
     def pause_workflow(self, instance_id: str) -> bool:
@@ -734,4 +761,4 @@ class WorkflowAutomationManager:
         """الحصول على سجل سير العمل"""
         if workflow_id:
             return [h for h in self.workflow_history if h.get("workflow_id") == workflow_id]
-        return self.workflow_history
+        return self.workflow_history

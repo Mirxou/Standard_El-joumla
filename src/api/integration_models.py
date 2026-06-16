@@ -1,6 +1,7 @@
 """
 نماذج التكاملات الخارجية (Webhooks & Integrations)
 """
+
 try:
     from pydantic import BaseModel
 except ImportError:
@@ -10,7 +11,6 @@ except ImportError:
             for key, value in kwargs.items():
                 setattr(self, key, value)
 
-from typing import Optional
 
 class AccountingWebhookPayload(BaseModel):
     invoice_id: int
@@ -18,11 +18,13 @@ class AccountingWebhookPayload(BaseModel):
     customer: str
     date: str
 
+
 class PaymentWebhookPayload(BaseModel):
     order_id: int
     status: str
     amount: float
     payment_method: str
+
 
 class SMSNotificationPayload(BaseModel):
     to: str

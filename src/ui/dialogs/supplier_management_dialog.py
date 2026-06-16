@@ -1,105 +1,69 @@
+import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 نافذة إدارة الموردين
 """
 
-from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
-    QPushButton, QLineEdit, QLabel, QMessageBox, QHeaderView, QFrame,
-    QGraphicsDropShadowEffect, QWidget
-)
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QHeaderView,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+)
 
-from src.ui.widgets.custom_title_bar import CustomTitleBar
+from src.ui.widgets.base_dialog import BaseDialog
 from src.ui.widgets.quantum_notification import NotificationManager
 
 
-class SupplierManagementDialog(QDialog):
+class SupplierManagementDialog(BaseDialog):
     """نافذة إدارة الموردين"""
-    
+
     def __init__(self, db_manager, logger=None, parent=None):
-        super().__init__(parent)
+        super().__init__(title="إدارة الموردين", parent=parent)
         self.db_manager = db_manager
         self.logger = logger
         self.suppliers = []
-        
+
         # self.setWindowTitle("إدارة الموردين") # Handled by CustomTitleBar
         # self.setGeometry(100, 100, 800, 500)
-        
+
         # --- Quantum Window Setup ---
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        
         # Notifications
         self.notify = NotificationManager(self)
-        
+
         self.resize(800, 600)
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
-        
+
         self.init_ui()
         self.load_suppliers()
-    
+
     def init_ui(self):
         """تهيئة واجهة المستخدم"""
-        # تخطيط جذري شفاف
-        root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(10, 10, 10, 10)
-        root_layout.setSpacing(0)
-        
-        # الإطار الرئيسي
-        self.main_frame = QFrame()
-        self.main_frame.setStyleSheet("""
-            QFrame#MainFrame {
-                background-color: #f5f5f5;
-                border: 1px solid #3498db;
-                border-radius: 10px;
-            }
-        """)
-        self.main_frame.setObjectName("MainFrame")
-        
-        # Shadow
-        shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(20)
-        shadow.setColor(QColor("#3498db"))
-        shadow.setOffset(0, 0)
-        self.main_frame.setGraphicsEffect(shadow)
-        
-        root_layout.addWidget(self.main_frame)
-        
-        # تخطيط النافذة الداخلية
-        layout = QVBoxLayout(self.main_frame)
-        layout.setContentsMargins(0, 0, 0, 10) # Bottom margin for content
-        layout.setSpacing(10)
-        
-        # 1. Custom Title Bar
-        self.title_bar = CustomTitleBar(self, title="إدارة الموردين", is_dialog=True)
-        layout.addWidget(self.title_bar)
-        
-        # Container for content
-        content_widget = QWidget()
-        content_layout = QVBoxLayout(content_widget)
-        layout.addWidget(content_widget)
-        
+        layout = self.content_layout
+
         # Re-assign layout to content_layout for the rest of the elements
-        layout = content_layout
-        
+        layout = self.content_layout
+
         # شريط البحث والإضافة
         search_layout = QHBoxLayout()
-        
+
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("ابحث عن مورد...")
         self.search_input.textChanged.connect(self.on_search)
         search_layout.addWidget(self.search_input)
-        
+
         add_btn = QPushButton("+ مورد جديد")
         add_btn.setMinimumHeight(32)
         add_btn.clicked.connect(self.add_supplier)
         search_layout.addWidget(add_btn)
-        
+
         layout.addLayout(search_layout)
-        
+
         # جدول الموردين
         self.table = QTableWidget()
         self.table.setColumnCount(5)
@@ -118,14 +82,14 @@ class SupplierManagementDialog(QDialog):
                 padding: 5px;
             }
             QHeaderView::section {
-                background-color: #34495e;
+                background-color: #1e293b;
                 color: white;
                 padding: 5px;
                 border: none;
             }
         """)
         layout.addWidget(self.table)
-        
+
         # أزرار الإغلاق
         close_layout = QHBoxLayout()
         close_btn = QPushButton("إغلاق")
@@ -133,125 +97,126 @@ class SupplierManagementDialog(QDialog):
         close_layout.addStretch()
         close_layout.addWidget(close_btn)
         layout.addLayout(close_layout)
-    
+
     def load_suppliers(self):
         """تحميل قائمة الموردين"""
         try:
             query = "SELECT id, name, phone, email, contact_person, is_active FROM suppliers ORDER BY name"
             results = self.db_manager.fetch_all(query)
-            
+
             self.suppliers = []
             for row in results:
                 supp_id, name, phone, email, contact_person, is_active = row
-                self.suppliers.append({
-                    'id': supp_id,
-                    'name': name,
-                    'phone': phone or '',
-                    'email': email or '',
-                    'contact_person': contact_person or '',
-                    'is_active': is_active
-                })
-            
+                self.suppliers.append(
+                    {
+                        "id": supp_id,
+                        "name": name,
+                        "phone": phone or "",
+                        "email": email or "",
+                        "contact_person": contact_person or "",
+                        "is_active": is_active,
+                    }
+                )
+
             self.display_suppliers(self.suppliers)
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في تحميل الموردين: {str(e)}")
             self.notify.show_error("خطأ", f"فشل في تحميل الموردين: {str(e)}")
-    
+
     def display_suppliers(self, suppliers):
         """عرض الموردين في الجدول"""
         self.table.setRowCount(0)
-        
+
         for supp in suppliers:
             row = self.table.rowCount()
             self.table.insertRow(row)
-            
+
             # الاسم
-            name_item = QTableWidgetItem(supp['name'])
-            name_item.setData(Qt.ItemDataRole.UserRole, supp['id'])
+            name_item = QTableWidgetItem(supp["name"])
+            name_item.setData(Qt.ItemDataRole.UserRole, supp["id"])
             self.table.setItem(row, 0, name_item)
-            
+
             # الهاتف
-            phone_item = QTableWidgetItem(supp['phone'])
+            phone_item = QTableWidgetItem(supp["phone"])
             self.table.setItem(row, 1, phone_item)
-            
+
             # البريد الإلكتروني
-            email_item = QTableWidgetItem(supp['email'])
+            email_item = QTableWidgetItem(supp["email"])
             self.table.setItem(row, 2, email_item)
-            
+
             # جهة الاتصال
-            contact_item = QTableWidgetItem(supp['contact_person'])
+            contact_item = QTableWidgetItem(supp["contact_person"])
             self.table.setItem(row, 3, contact_item)
-            
+
             # أزرار الإجراءات
             actions_layout = QHBoxLayout()
-            
+
             edit_btn = QPushButton("تعديل")
             edit_btn.setMaximumWidth(60)
-            edit_btn.clicked.connect(lambda checked, supp_id=supp['id']: self.edit_supplier(supp_id))
-            
+            edit_btn.clicked.connect(lambda checked, supp_id=supp["id"]: self.edit_supplier(supp_id))
+
             delete_btn = QPushButton("حذف")
             delete_btn.setMaximumWidth(60)
-            delete_btn.setStyleSheet("background-color: #e74c3c; color: white;")
-            delete_btn.clicked.connect(lambda checked, supp_id=supp['id']: self.delete_supplier(supp_id))
-            
+            delete_btn.setStyleSheet("background-color: #ef4444; color: white;")
+            delete_btn.clicked.connect(lambda checked, supp_id=supp["id"]: self.delete_supplier(supp_id))
+
             actions_layout.addWidget(edit_btn)
             actions_layout.addWidget(delete_btn)
             actions_layout.addStretch()
-            
+
             actions_widget = self.create_widget_from_layout(actions_layout)
             self.table.setCellWidget(row, 4, actions_widget)
-    
+
     def create_widget_from_layout(self, layout):
         """إنشاء widget من layout"""
         from PySide6.QtWidgets import QWidget
+
         widget = QWidget()
         widget.setLayout(layout)
         return widget
-    
+
     def on_search(self, text):
         """البحث في الموردين"""
-        filtered = [s for s in self.suppliers if text.lower() in s['name'].lower() or text in s['phone']]
+        filtered = [s for s in self.suppliers if text.lower() in s["name"].lower() or text in s["phone"]]
         self.display_suppliers(filtered)
-    
+
     def add_supplier(self):
         """إضافة مورد جديد"""
         from src.ui.dialogs.supplier_form_dialog import SupplierFormDialog
+
         dialog = SupplierFormDialog(self.db_manager, parent=self)
         if dialog.exec():
             self.load_suppliers()
-    
+
     def edit_supplier(self, supplier_id):
         """تعديل مورد"""
         from src.ui.dialogs.supplier_form_dialog import SupplierFormDialog
+
         dialog = SupplierFormDialog(self.db_manager, supplier_id=supplier_id, parent=self)
         if dialog.exec():
             self.load_suppliers()
-    
+
     def delete_supplier(self, supplier_id):
         """حذف مورد"""
         # تحقق من عدد المنتجات المرتبطة
         try:
             count_result = self.db_manager.fetch_one(
-                "SELECT COUNT(*) FROM products WHERE supplier_id = ?",
-                (supplier_id,)
+                "SELECT COUNT(*) FROM products WHERE supplier_id = ?", (supplier_id,)
             )
             count = count_result[0] if count_result else 0
-            
+
             if count > 0:
-                self.notify.show_warning(
-                    "تحذير",
-                    f"لا يمكن حذف هذا المورد. هناك {count} منتج مرتبط به."
-                )
+                self.notify.show_warning("تحذير", f"لا يمكن حذف هذا المورد. هناك {count} منتج مرتبط به.")
                 return
-            
+
             reply = QMessageBox.question(
                 self,
                 "تأكيد الحذف",
                 "هل تريد حذف هذا المورد؟",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
-            
+
             if reply == QMessageBox.StandardButton.Yes:
                 self.db_manager.execute_query("DELETE FROM suppliers WHERE id = ?", (supplier_id,))
                 self.load_suppliers()
