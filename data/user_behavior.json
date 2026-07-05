@@ -1,63 +1,15 @@
 {
   "actions": {
-    "nav_dashboard": 125,
-    "nav_inventory": 65,
-    "nav_sales": 64,
-    "nav_purchases": 17,
-    "nav_payments": 17,
-    "nav_reports": 18,
-    "nav_contacts": 13,
-    "nav_settings": 15
+    "nav_dashboard": 128,
+    "nav_inventory": 67,
+    "nav_sales": 66,
+    "nav_purchases": 18,
+    "nav_payments": 18,
+    "nav_reports": 19,
+    "nav_contacts": 14,
+    "nav_settings": 16
   },
   "history": [
-    {
-      "action": "nav_dashboard",
-      "timestamp": "2026-05-23T14:12:09.962368"
-    },
-    {
-      "action": "nav_dashboard",
-      "timestamp": "2026-05-23T14:12:13.119541"
-    },
-    {
-      "action": "nav_dashboard",
-      "timestamp": "2026-05-23T14:12:15.815720"
-    },
-    {
-      "action": "nav_dashboard",
-      "timestamp": "2026-05-23T14:12:19.865039"
-    },
-    {
-      "action": "nav_dashboard",
-      "timestamp": "2026-05-23T14:12:20.004999"
-    },
-    {
-      "action": "nav_dashboard",
-      "timestamp": "2026-05-23T14:12:23.798049"
-    },
-    {
-      "action": "nav_inventory",
-      "timestamp": "2026-05-23T14:12:23.904046"
-    },
-    {
-      "action": "nav_dashboard",
-      "timestamp": "2026-05-23T14:12:28.413999"
-    },
-    {
-      "action": "nav_sales",
-      "timestamp": "2026-05-23T14:12:28.546491"
-    },
-    {
-      "action": "nav_dashboard",
-      "timestamp": "2026-05-23T14:12:32.583810"
-    },
-    {
-      "action": "nav_reports",
-      "timestamp": "2026-05-23T14:12:32.691543"
-    },
-    {
-      "action": "nav_dashboard",
-      "timestamp": "2026-05-23T14:12:36.972840"
-    },
     {
       "action": "nav_settings",
       "timestamp": "2026-05-23T14:12:37.131897"
@@ -409,6 +361,54 @@
     {
       "action": "nav_inventory",
       "timestamp": "2026-06-16T22:52:43.685380"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-06-17T14:48:35.637345"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-06-17T14:48:45.537038"
+    },
+    {
+      "action": "nav_inventory",
+      "timestamp": "2026-06-17T14:48:48.751358"
+    },
+    {
+      "action": "nav_sales",
+      "timestamp": "2026-06-17T14:49:01.807096"
+    },
+    {
+      "action": "nav_dashboard",
+      "timestamp": "2026-06-17T14:49:20.819109"
+    },
+    {
+      "action": "nav_inventory",
+      "timestamp": "2026-06-17T14:50:00.344662"
+    },
+    {
+      "action": "nav_sales",
+      "timestamp": "2026-06-17T14:50:26.774705"
+    },
+    {
+      "action": "nav_purchases",
+      "timestamp": "2026-06-17T14:50:32.031274"
+    },
+    {
+      "action": "nav_payments",
+      "timestamp": "2026-06-17T14:50:42.485139"
+    },
+    {
+      "action": "nav_reports",
+      "timestamp": "2026-06-17T14:50:51.591678"
+    },
+    {
+      "action": "nav_contacts",
+      "timestamp": "2026-06-17T14:53:03.883941"
+    },
+    {
+      "action": "nav_settings",
+      "timestamp": "2026-06-17T14:53:53.907505"
     }
   ]
 }
