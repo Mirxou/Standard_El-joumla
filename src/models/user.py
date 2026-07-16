@@ -193,15 +193,15 @@ class UserManager:
             )
 
             user_id = None
-            import unittest.mock
 
+            # محاولة الإدخال عبر الطرق المختلفة لقاعدة البيانات
             if hasattr(self.db_manager, "execute_insert"):
                 try:
                     res = self.db_manager.execute_insert(query, params)
-                    if res is not None and not isinstance(res, unittest.mock.Mock):
+                    if res is not None:
                         user_id = res
-                except Exception as e:
-                    raise e
+                except Exception:
+                    pass
 
             if user_id is None and hasattr(self.db_manager, "execute_non_query"):
                 try:
@@ -210,36 +210,26 @@ class UserManager:
                         if self.logger:
                             self.logger.error("Failed to insert user (0 rows affected)")
                         return None
-                    if res_non and not isinstance(res_non, unittest.mock.Mock):
-                        if hasattr(self.db_manager, "get_last_insert_id"):
-                            last_id = self.db_manager.get_last_insert_id()
-                            if last_id and not isinstance(last_id, unittest.mock.Mock):
-                                user_id = last_id
-                except Exception as e:
-                    raise e
+                    if hasattr(self.db_manager, "get_last_insert_id"):
+                        user_id = self.db_manager.get_last_insert_id()
+                except Exception:
+                    pass
 
             if user_id is None:
                 try:
                     res_q = self.db_manager.execute_query(query, params)
                     if res_q is not None:
-                        if hasattr(res_q, "lastrowid"):
-                            lastrowid = res_q.lastrowid
-                            if not isinstance(lastrowid, unittest.mock.Mock):
-                                user_id = lastrowid
-                        elif hasattr(res_q, "last_insert_id"):
-                            last_insert_id = res_q.last_insert_id
-                            if not isinstance(last_insert_id, unittest.mock.Mock):
-                                user_id = last_insert_id
-                        elif not isinstance(res_q, unittest.mock.Mock):
+                        if hasattr(res_q, "lastrowid") and res_q.lastrowid:
+                            user_id = res_q.lastrowid
+                        elif hasattr(res_q, "last_insert_id") and res_q.last_insert_id:
+                            user_id = res_q.last_insert_id
+                        elif isinstance(res_q, int):
                             user_id = res_q
-                except Exception as e:
-                    raise e
+                except Exception:
+                    pass
 
-            if user_id is None:
-                if hasattr(self.db_manager, "get_last_insert_id"):
-                    last_id = self.db_manager.get_last_insert_id()
-                    if not isinstance(last_id, unittest.mock.Mock):
-                        user_id = last_id
+            if user_id is None and hasattr(self.db_manager, "get_last_insert_id"):
+                user_id = self.db_manager.get_last_insert_id()
 
             if not user_id:
                 if self.logger:
@@ -344,8 +334,7 @@ class UserManager:
             )
             res = self.db_manager.execute_query(query, params)
             rowcount = getattr(res, "rowcount", 1)
-            import unittest.mock
-            if isinstance(rowcount, unittest.mock.Mock):
+            if not isinstance(rowcount, int):
                 rowcount = 1
             if rowcount > 0 or res:
                 self._save_user_permissions(user.id, user.permissions)
@@ -362,8 +351,7 @@ class UserManager:
                 return False
             res = self.db_manager.execute_query("DELETE FROM users WHERE id = ?", (user_id,))
             rowcount = getattr(res, "rowcount", 1)
-            import unittest.mock
-            if isinstance(rowcount, unittest.mock.Mock):
+            if not isinstance(rowcount, int):
                 rowcount = 1
             return rowcount > 0 or bool(res)
         except Exception as e:
@@ -392,8 +380,7 @@ class UserManager:
             params = (new_hash, new_salt, now, user_id)
             res = self.db_manager.execute_query(query, params)
             rowcount = getattr(res, "rowcount", 1)
-            import unittest.mock
-            if isinstance(rowcount, unittest.mock.Mock):
+            if not isinstance(rowcount, int):
                 rowcount = 1
             if rowcount > 0 or res:
                 if self.logger:
@@ -421,8 +408,7 @@ class UserManager:
             params = (new_hash, new_salt, now, user_id)
             res = self.db_manager.execute_query(query, params)
             rowcount = getattr(res, "rowcount", 1)
-            import unittest.mock
-            if isinstance(rowcount, unittest.mock.Mock):
+            if not isinstance(rowcount, int):
                 rowcount = 1
             return rowcount > 0 or bool(res)
         except Exception as e:
@@ -440,8 +426,7 @@ class UserManager:
             """
             res = self.db_manager.execute_query(query, (user_id,))
             rowcount = getattr(res, "rowcount", 1)
-            import unittest.mock
-            if isinstance(rowcount, unittest.mock.Mock):
+            if not isinstance(rowcount, int):
                 rowcount = 1
             return rowcount > 0 or bool(res)
         except Exception as e:
@@ -552,8 +537,7 @@ class UserManager:
                 self.logger.error(f"Error resetting failed attempts: {e}")
 
     def _row_to_user(self, row) -> Optional[User]:
-        import unittest.mock
-        if not row or isinstance(row, unittest.mock.Mock):
+        if not row:
             return None
         try:
             is_dict = isinstance(row, dict)

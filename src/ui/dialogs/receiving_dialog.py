@@ -571,7 +571,7 @@ class ReceivingDialog(BaseDialog):
 
     def on_receive(self):
         """تنفيذ الاستلام"""
-        return self._save() or True
+        return self._save()
 
     def on_partial_receive(self):
         """الاستلام الجزئي"""

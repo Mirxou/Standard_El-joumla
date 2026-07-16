@@ -256,7 +256,7 @@ class AdvancedNLPEngine:
         return {
             "date": r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|\b\d{4}-\d{2}-\d{2}\b",
             "time": r"\b\d{1,2}:\d{2}\b",
-            "money": r"\$\d+(?:\.\d{2})?|\d+(?:\.\d{2})?\s*(?:USD|EUR|SAR|EGP)",
+            "money": r"\$\d+(?:\.\d{2})?|\d+(?:\.\d{2})?\s*(?:USD|EUR|DZD|SAR|EGP)",
             "product_id": r"\bPROD\d{3,}\b|\bPRD-\d{3,}\b",
             "customer_id": r"\bCUST\d{3,}\b|\bCUS-\d{3,}\b",
             "order_id": r"\bORD\d{3,}\b|\bORDER-\d{3,}\b",

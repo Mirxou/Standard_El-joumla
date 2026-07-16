@@ -98,5 +98,5 @@ class BaseRunnable(QRunnable):
         if self.callback:
             try:
                 self.callback(None, error)
-            except Exception:
-                logging.getLogger(__name__).warning("Ignored exception in thread_pool_manager.py")
+            except Exception as e:
+                self.logger.debug(f"on_error callback failed (non-critical): {e}")

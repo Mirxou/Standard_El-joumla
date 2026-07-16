@@ -191,60 +191,63 @@ class WholesaleQuoteService:
              paid_amount, remaining_amount, discount_amount, tax_amount)
             VALUES (?, ?, ?, ?, 'نقدي', 'paid', DATE('now'), DATETIME('now'), ?, 0, 0, 0)
         """
-        sale_id = self.db.execute_update(
-            sql_sale,
-            [
-                invoice_number,
-                customer_name,
-                total_val,
-                total_val,
-                total_val,  # paid_amount matches total
-            ],
-        )
+        try:
+            sale_id = self.db.execute_update(
+                sql_sale,
+                [
+                    invoice_number,
+                    customer_name,
+                    total_val,
+                    total_val,
+                    total_val,  # paid_amount matches total
+                ],
+            )
 
-        if not sale_id:
-            raise Exception("Failed to create sale record")
+            if not sale_id:
+                raise Exception("Failed to create sale record")
 
             # 4. Insert Items & Update Stock
-        for item in items:
-            p_id = item["id"]
-            qty = item["quantity"]
-            price = item["wholesale_price"]
-            total = item["total_val"]
+            for item in items:
+                p_id = item["id"]
+                qty = item["quantity"]
+                price = item["wholesale_price"]
+                total = item["total_val"]
 
-            # Enrich with cost/profit if available in item data
-            cost = item.get("cost_price", 0)
-            profit = item.get("total_profit", 0)
+                # Enrich with cost/profit if available in item data
+                cost = item.get("cost_price", 0)
+                profit = item.get("total_profit", 0)
 
-            # Find Batch (Simple Logic: Pick batch with positive stock or just latest)
-            # In a full system, this would be FIFO. Here we satisfy the constraint.
-            sql_batch = "SELECT id FROM product_batches WHERE product_id = ? ORDER BY current_quantity DESC LIMIT 1"
-            batch_row = self.db.fetch_one(sql_batch, [p_id])
-            if batch_row:
-                batch_id = batch_row[0]
-                # Update Batch Qty
-                sql_update_batch = "UPDATE product_batches SET current_quantity = current_quantity - ? WHERE id = ?"
-                self.db.execute_update(sql_update_batch, [qty, batch_id])
-            else:
-                # Fallback: Validation should arguably fail here if strict,
-                # but for now we might insert NULL if allowed or handle error.
-                # Schema said NOT NULL, so we MUST have a batch.
-                # If no batch exists, we can't sell in this strict schema.
-                # However, for legacy/migration data, maybe we check if we can create one?
-                # Let's assume there's always a batch or fail.
-                # Actually, let's try to find ANY batch or raise.
-                # If product exists but no batch, it's a data consistency issue in strict mode.
-                raise Exception(f"No batch found for product {p_id}")
+                # Find Batch (Simple Logic: Pick batch with positive stock or just latest)
+                # In a full system, this would be FIFO. Here we satisfy the constraint.
+                sql_batch = "SELECT id FROM product_batches WHERE product_id = ? ORDER BY current_quantity DESC LIMIT 1"
+                batch_row = self.db.fetch_one(sql_batch, [p_id])
+                if batch_row:
+                    batch_id = batch_row[0]
+                    # Update Batch Qty
+                    sql_update_batch = "UPDATE product_batches SET current_quantity = current_quantity - ? WHERE id = ?"
+                    self.db.execute_update(sql_update_batch, [qty, batch_id])
+                else:
+                    # Fallback: Validation should arguably fail here if strict,
+                    # but for now we might insert NULL if allowed or handle error.
+                    # Schema said NOT NULL, so we MUST have a batch.
+                    # If no batch exists, we can't sell in this strict schema.
+                    # However, for legacy/migration data, maybe we check if we can create one?
+                    # Let's assume there's always a batch or fail.
+                    # Actually, let's try to find ANY batch or raise.
+                    # If product exists but no batch, it's a data consistency issue in strict mode.
+                    raise Exception(f"No batch found for product {p_id}")
 
-            # Add Sale Item
-            sql_item = """
-                INSERT INTO sale_items (sale_id, product_id, batch_id, quantity, unit_price, total_price, cost_price, profit)  # noqa: E501
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """
-            self.db.execute_update(sql_item, [sale_id, p_id, batch_id, qty, price, total, cost, profit])
+                # Add Sale Item
+                sql_item = """
+                    INSERT INTO sale_items (sale_id, product_id, batch_id, quantity, unit_price, total_price, cost_price, profit)  # noqa: E501
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """
+                self.db.execute_update(sql_item, [sale_id, p_id, batch_id, qty, price, total, cost, profit])
 
-            # Update Stock (Product Level)
-            sql_stock = "UPDATE products SET current_stock = current_stock - ? WHERE id = ?"
-            self.db.execute_update(sql_stock, [qty, p_id])
+                # Update Stock (Product Level)
+                sql_stock = "UPDATE products SET current_stock = current_stock - ? WHERE id = ?"
+                self.db.execute_update(sql_stock, [qty, p_id])
 
-        return invoice_number
+            return invoice_number
+        except Exception as e:
+            raise Exception(f"Failed to convert quote to sale: {e}") from e

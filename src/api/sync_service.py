@@ -268,8 +268,8 @@ class SyncService:
                         "remote_data": remote_data,
                         "reason": "local_newer",
                     }
-            except Exception:
-                logging.getLogger(__name__).warning("Ignored exception in sync_service.py")
+            except Exception as e:
+                self.logger.debug(f"_check_conflict failed (non-critical): {e}")
 
         return None
 

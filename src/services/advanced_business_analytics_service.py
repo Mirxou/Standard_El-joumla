@@ -781,9 +781,12 @@ class AdvancedBusinessAnalyticsService:
             insights = []
 
             # توقع المبيعات المستقبلية
-            from src.services.intelligent_forecasting_service import (
-                IntelligentForecastingService,
-            )
+            try:
+                from src.services.intelligent_forecasting_service import (
+                    IntelligentForecastingService,
+                )
+            except ImportError:
+                return []
 
             forecasting_service = IntelligentForecastingService(self.db)
 

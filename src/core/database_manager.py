@@ -748,7 +748,7 @@ class DatabaseManager:
             # 4. إنشاء جداول المرتجعات (Returns Tables) - للميزات المحسنة
             # ----------------------------------------------------
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS returns (
+                CREATE TABLE IF NOT EXISTS return_invoices (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     original_invoice_id INTEGER,
                     return_date DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -766,7 +766,7 @@ class DatabaseManager:
                     product_id INTEGER,
                     quantity REAL,
                     refund_price REAL,
-                    FOREIGN KEY(return_id) REFERENCES returns(id),
+                    FOREIGN KEY(return_id) REFERENCES return_invoices(id),
                     FOREIGN KEY(product_id) REFERENCES products(id)
                 )
             """)
@@ -785,7 +785,7 @@ class DatabaseManager:
         """إنشاء جداول الميزات المحسنة (المرتجعات، الاسترداد)"""
         # جدول المرتجعات
         self.connection.execute("""
-            CREATE TABLE IF NOT EXISTS returns (
+            CREATE TABLE IF NOT EXISTS return_invoices (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 sale_id INTEGER NOT NULL,
                 reason TEXT,
@@ -802,7 +802,7 @@ class DatabaseManager:
                 product_id INTEGER NOT NULL,
                 quantity INTEGER NOT NULL,
                 unit_price DECIMAL(10,2) NOT NULL,
-                FOREIGN KEY (return_id) REFERENCES returns(id),
+                FOREIGN KEY (return_id) REFERENCES return_invoices(id),
                 FOREIGN KEY (product_id) REFERENCES products(id)
             )
         """)

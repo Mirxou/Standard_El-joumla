@@ -1152,6 +1152,10 @@ class PurchaseManager:
                 self.logger.error(f"Error receiving purchase items: {e}")
             return False
 
+    # NOTE: This is the LEGACY purchase receiving path. It updates stock directly
+    # without going through receiving notes or quality checks.
+    # New code should use the receiving notes workflow (ReceivingDialog / receiving_note service)
+    # which includes quality inspection and proper audit trails.
     def _update_product_stock(self, product_id: int, quantity: Decimal, unit_cost: Decimal, expiry_date=None, batch_number=None):
         try:
             query = "UPDATE products SET current_stock = current_stock + ? WHERE id = ?"
@@ -1180,6 +1184,18 @@ class PurchaseManager:
                        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""",
                     (product_id, default_batch, float(quantity), float(unit_cost), expiry_date)
                 )
+
+            # تسجيل حركة المخزون للمراجعة والتدقيق (audit trail)
+            # Legacy path: directly recording stock movement for old purchase receiving
+            try:
+                self.db_manager.execute_non_query(
+                    """INSERT INTO stock_movements (product_id, movement_type, quantity, reference_type, notes)
+                       VALUES (?, 'in', ?, 'purchase_receive', 'استلام مشتريات - مسار قديم (بدون فحص جودة)')""",
+                    (product_id, float(quantity))
+                )
+            except Exception as mov_err:
+                if self.logger:
+                    self.logger.warning(f"Failed to record stock_movement for product {product_id}: {mov_err}")
         except Exception as e:
             if self.logger:
                 self.logger.error(f"Error updating product stock: {e}")

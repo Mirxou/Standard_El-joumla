@@ -205,20 +205,16 @@ class ReportExporter:
             elif report_type == ReportType.PAYMENT_METHODS_ANALYSIS:
                 return self.generate_payment_methods_analysis_report(filters)
             elif report_type == ReportType.CUSTOMER_ANALYSIS:
-                # استخدام تقرير المبيعات كبديل مؤقت
-                return self.generate_sales_summary_report(filters)
+                return self.generate_customer_analysis_report(filters)
             elif report_type == ReportType.SUPPLIER_ANALYSIS:
-                # استخدام تقرير المبيعات كبديل مؤقت
-                return self.generate_sales_summary_report(filters)
+                return self.generate_supplier_analysis_report(filters)
             elif report_type == ReportType.PRODUCT_PERFORMANCE:
-                # استخدام تقرير المخزون كبديل مؤقت
-                return self.generate_inventory_status_report(filters)
+                return self.generate_product_performance_report(filters)
             elif report_type == ReportType.PROFIT_LOSS:
                 # استخدام التقرير المالي كبديل مؤقت
                 return self.generate_financial_summary_report(filters)
             elif report_type == ReportType.STOCK_MOVEMENT:
-                # استخدام تقرير المخزون كبديل مؤقت
-                return self.generate_inventory_status_report(filters)
+                return self.generate_stock_movement_report(filters)
             elif report_type == ReportType.WAREHOUSE_INVENTORY:
                 return self.generate_warehouse_inventory_report(filters)
             elif report_type == ReportType.WAREHOUSE_TRANSFERS:
@@ -1313,78 +1309,533 @@ class ReportExporter:
                 self.logger.error(f"خطأ في توليد تقرير ملخص المدفوعات: {str(e)}")
             raise
 
-    def generate_receivables_aging_report(self, filters: ReportFilter) -> ReportData:
-        """توليد تقرير أعمار الذمم المدينة"""
+    def generate_customer_analysis_report(self, filters: ReportFilter) -> ReportData:
+        """توليد تقرير تحليل العملاء - إحصائيات الشراء لكل عميل"""
         try:
-            aging_periods = filters.aging_periods or [30, 60, 90]
-
             query = """
                 SELECT
                     c.id,
                     c.name,
                     c.phone,
-                    c.email,
-                    COALESCE(SUM(
-                        CASE WHEN p.payment_type = 'دفعة عميل' THEN p.amount ELSE 0 END
-                    ), 0) as total_payments,
-                    COALESCE(SUM(
-                        CASE WHEN s.customer_id = c.id THEN COALESCE(s.base_amount, s.final_amount) ELSE 0 END
-                    ), 0) as total_sales,
-                    (COALESCE(SUM(
-                        CASE WHEN s.customer_id = c.id THEN COALESCE(s.base_amount, s.final_amount) ELSE 0 END
-                    ), 0) - COALESCE(SUM(
-                        CASE WHEN p.payment_type = 'دفعة عميل' THEN COALESCE(p.base_amount, p.amount) ELSE 0 END
-                    ), 0)) as balance
+                    COALESCE(c.email, '') as email,
+                    COUNT(DISTINCT s.id) as total_orders,
+                    COALESCE(SUM(s.final_amount), 0) as total_purchases,
+                    COALESCE(AVG(s.final_amount), 0) as avg_order_value,
+                    MAX(s.sale_date) as last_order_date
                 FROM customers c
-                LEFT JOIN payments p ON c.id = p.entity_id
                 LEFT JOIN sales s ON c.id = s.customer_id
-                GROUP BY c.id, c.name, c.phone, c.email
+                    AND s.is_active = 1
             """
+            params = []
 
-            if not filters.include_zero_balances:
-                query += " HAVING balance > 0"
+            if filters.start_date:
+                query += " AND s.sale_date >= ?"
+                params.append(filters.start_date.strftime("%Y-%m-%d"))
 
-            query += " ORDER BY balance DESC"
+            if filters.end_date:
+                query += " AND s.sale_date <= ?"
+                params.append(filters.end_date.strftime("%Y-%m-%d"))
 
-            cursor = self.db_manager.connection.cursor()
-            cursor.execute(query)
-            results = cursor.fetchall()
+            if filters.customer_id:
+                query += " AND c.id = ?"
+                params.append(filters.customer_id)
+
+            if filters.min_amount:
+                query += " HAVING total_purchases >= ?"
+                params.append(filters.min_amount)
+
+            query += " GROUP BY c.id, c.name, c.phone, c.email ORDER BY total_purchases DESC"
+
+            rows = self.db.execute_query(query, tuple(params))
+
+            data = []
+            total_revenue = 0
+            total_orders = 0
+            active_customers = 0
+
+            for row in rows:
+                total_purchases = float(row.get("total_purchases") or 0)
+                total_orders_count = int(row.get("total_orders") or 0)
+
+                if total_purchases > 0:
+                    active_customers += 1
+
+                total_revenue += total_purchases
+                total_orders += total_orders_count
+
+                data.append({
+                    "customer_id": row.get("id"),
+                    "customer_name": row.get("name", ""),
+                    "phone": row.get("phone") or "",
+                    "email": row.get("email") or "",
+                    "total_orders": total_orders_count,
+                    "total_purchases": total_purchases,
+                    "avg_order_value": float(row.get("avg_order_value") or 0),
+                    "last_order_date": row.get("last_order_date") or "",
+                })
+
+            summary = {
+                "total_customers": len(data),
+                "active_customers": active_customers,
+                "total_revenue": total_revenue,
+                "total_orders": total_orders,
+                "avg_purchase_per_customer": total_revenue / len(data) if data else 0,
+            }
+
+            return ReportData(
+                title="تقرير تحليل العملاء",
+                subtitle=f"من {filters.start_date.strftime('%Y-%m-%d') if filters.start_date else 'البداية'} إلى {filters.end_date.strftime('%Y-%m-%d') if filters.end_date else 'النهاية'}",
+                generated_at=datetime.now(),
+                filters=filters,
+                data=data,
+                summary=summary,
+            )
+
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في توليد تقرير تحليل العملاء: {str(e)}")
+            raise
+
+    def generate_supplier_analysis_report(self, filters: ReportFilter) -> ReportData:
+        """توليد تقرير تحليل الموردين - إحصائيات الشراء من كل مورد"""
+        try:
+            query = """
+                SELECT
+                    s.id,
+                    s.name,
+                    s.phone,
+                    COALESCE(s.email, '') as email,
+                    COUNT(DISTINCT pur.id) as total_purchase_orders,
+                    COALESCE(SUM(pur.final_amount), 0) as total_purchase_amount,
+                    COALESCE(AVG(pur.final_amount), 0) as avg_order_value,
+                    MAX(pur.purchase_date) as last_order_date
+                FROM suppliers s
+                LEFT JOIN purchases pur ON s.id = pur.supplier_id
+                    AND pur.is_active = 1
+            """
+            params = []
+
+            if filters.start_date:
+                query += " AND pur.purchase_date >= ?"
+                params.append(filters.start_date.strftime("%Y-%m-%d"))
+
+            if filters.end_date:
+                query += " AND pur.purchase_date <= ?"
+                params.append(filters.end_date.strftime("%Y-%m-%d"))
+
+            if filters.supplier_id:
+                query += " AND s.id = ?"
+                params.append(filters.supplier_id)
+
+            query += " GROUP BY s.id, s.name, s.phone, s.email ORDER BY total_purchase_amount DESC"
+
+            rows = self.db.execute_query(query, tuple(params))
+
+            data = []
+            total_spend = 0
+            total_orders = 0
+
+            for row in rows:
+                total_amount = float(row.get("total_purchase_amount") or 0)
+                orders_count = int(row.get("total_purchase_orders") or 0)
+
+                total_spend += total_amount
+                total_orders += orders_count
+
+                data.append({
+                    "supplier_id": row.get("id"),
+                    "supplier_name": row.get("name", ""),
+                    "phone": row.get("phone") or "",
+                    "email": row.get("email") or "",
+                    "total_purchase_orders": orders_count,
+                    "total_purchase_amount": total_amount,
+                    "avg_order_value": float(row.get("avg_order_value") or 0),
+                    "last_order_date": row.get("last_order_date") or "",
+                })
+
+            summary = {
+                "total_suppliers": len(data),
+                "active_suppliers": len([d for d in data if d["total_purchase_amount"] > 0]),
+                "total_spend": total_spend,
+                "total_orders": total_orders,
+                "avg_spend_per_supplier": total_spend / len(data) if data else 0,
+            }
+
+            return ReportData(
+                title="تقرير تحليل الموردين",
+                subtitle=f"من {filters.start_date.strftime('%Y-%m-%d') if filters.start_date else 'البداية'} إلى {filters.end_date.strftime('%Y-%m-%d') if filters.end_date else 'النهاية'}",
+                generated_at=datetime.now(),
+                filters=filters,
+                data=data,
+                summary=summary,
+            )
+
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في توليد تقرير تحليل الموردين: {str(e)}")
+            raise
+
+    def generate_product_performance_report(self, filters: ReportFilter) -> ReportData:
+        """توليد تقرير أداء المنتجات - مبيعات وكمية وإيرادات لكل منتج"""
+        try:
+            query = """
+                SELECT
+                    p.id,
+                    p.name,
+                    p.barcode,
+                    p.unit,
+                    p.cost_price,
+                    p.selling_price,
+                    COALESCE(c.name, '') as category_name,
+                    COALESCE(SUM(si.quantity), 0) as total_qty_sold,
+                    COALESCE(SUM(si.total_price), 0) as total_revenue,
+                    COALESCE(SUM(si.cost_price * si.quantity), 0) as total_cost,
+                    COALESCE(SUM(si.profit), 0) as total_profit,
+                    COUNT(DISTINCT si.sale_id) as number_of_sales,
+                    p.current_stock
+                FROM products p
+                LEFT JOIN categories c ON p.category_id = c.id
+                LEFT JOIN sale_items si ON p.id = si.product_id
+                LEFT JOIN sales s ON si.sale_id = s.id
+                    AND s.is_active = 1
+            """
+            params = []
+
+            if filters.start_date:
+                query += " AND s.sale_date >= ?"
+                params.append(filters.start_date.strftime("%Y-%m-%d"))
+
+            if filters.end_date:
+                query += " AND s.sale_date <= ?"
+                params.append(filters.end_date.strftime("%Y-%m-%d"))
+
+            if filters.category_id:
+                query += " AND p.category_id = ?"
+                params.append(filters.category_id)
+
+            if filters.product_id:
+                query += " AND p.id = ?"
+                params.append(filters.product_id)
+
+            query += " GROUP BY p.id, p.name, p.barcode, p.unit, p.cost_price, p.selling_price, c.name, p.current_stock"
+            query += " ORDER BY total_revenue DESC"
+
+            rows = self.db.execute_query(query, tuple(params))
+
+            data = []
+            total_revenue = 0
+            total_profit = 0
+            total_qty = 0
+
+            for row in rows:
+                revenue = float(row.get("total_revenue") or 0)
+                profit = float(row.get("total_profit") or 0)
+                qty = int(row.get("total_qty_sold") or 0)
+
+                total_revenue += revenue
+                total_profit += profit
+                total_qty += qty
+
+                cost_price = float(row.get("cost_price") or 0)
+                selling_price = float(row.get("selling_price") or 0)
+                total_cost = float(row.get("total_cost") or 0)
+
+                margin_pct = (profit / revenue * 100) if revenue > 0 else 0
+
+                data.append({
+                    "product_id": row.get("id"),
+                    "product_name": row.get("name", ""),
+                    "barcode": row.get("barcode") or "",
+                    "unit": row.get("unit") or "",
+                    "category_name": row.get("category_name") or "",
+                    "cost_price": cost_price,
+                    "selling_price": selling_price,
+                    "total_qty_sold": qty,
+                    "total_revenue": revenue,
+                    "total_cost": total_cost,
+                    "total_profit": profit,
+                    "profit_margin_pct": round(margin_pct, 2),
+                    "number_of_sales": int(row.get("number_of_sales") or 0),
+                    "current_stock": int(row.get("current_stock") or 0),
+                })
+
+            summary = {
+                "total_products": len(data),
+                "total_revenue": total_revenue,
+                "total_profit": total_profit,
+                "total_qty_sold": total_qty,
+                "avg_margin_pct": round(
+                    (total_profit / total_revenue * 100) if total_revenue > 0 else 0, 2
+                ),
+            }
+
+            return ReportData(
+                title="تقرير أداء المنتجات",
+                subtitle=f"من {filters.start_date.strftime('%Y-%m-%d') if filters.start_date else 'البداية'} إلى {filters.end_date.strftime('%Y-%m-%d') if filters.end_date else 'النهاية'}",
+                generated_at=datetime.now(),
+                filters=filters,
+                data=data,
+                summary=summary,
+            )
+
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في توليد تقرير أداء المنتجات: {str(e)}")
+            raise
+
+    def generate_stock_movement_report(self, filters: ReportFilter) -> ReportData:
+        """توليد تقرير حركة المخزون - من جدول stock_movements"""
+        try:
+            query = """
+                SELECT
+                    sm.id,
+                    sm.product_id,
+                    COALESCE(p.name, 'غير محدد') as product_name,
+                    p.barcode,
+                    sm.movement_type,
+                    sm.quantity,
+                    sm.reference_type,
+                    sm.reference_id,
+                    sm.notes,
+                    sm.movement_date,
+                    sm.created_at,
+                    COALESCE(u.username, '') as user_name
+                FROM stock_movements sm
+                LEFT JOIN products p ON sm.product_id = p.id
+                LEFT JOIN users u ON sm.user_id = u.id
+                WHERE 1=1
+            """
+            params = []
+
+            if filters.start_date:
+                query += " AND DATE(sm.created_at) >= ?"
+                params.append(filters.start_date.strftime("%Y-%m-%d"))
+
+            if filters.end_date:
+                query += " AND DATE(sm.created_at) <= ?"
+                params.append(filters.end_date.strftime("%Y-%m-%d"))
+
+            if filters.product_id:
+                query += " AND sm.product_id = ?"
+                params.append(filters.product_id)
+
+            query += " ORDER BY sm.created_at DESC"
+
+            rows = self.db.execute_query(query, tuple(params))
+
+            # ترجمة أنواع الحركة
+            movement_type_map = {
+                "in": "إدخال",
+                "out": "إخراج",
+                "adjustment": "تسوية",
+                "return": "مرتجع",
+                "transfer_in": "تحويل وارد",
+                "transfer_out": "تحويل صادر",
+                "إدخال": "إدخال",
+                "إخراج": "إخراج",
+                "تسوية": "تسوية",
+                "مرتجع": "مرتجع",
+            }
+
+            data = []
+            total_in = 0
+            total_out = 0
+
+            for row in rows:
+                qty = int(row.get("quantity") or 0)
+                mtype = str(row.get("movement_type") or "").lower()
+
+                if mtype in ("in", "إدخال", "return", "مرتجع", "transfer_in"):
+                    total_in += qty
+                elif mtype in ("out", "إخراج", "transfer_out"):
+                    total_out += qty
+
+                data.append({
+                    "id": row.get("id"),
+                    "product_id": row.get("product_id"),
+                    "product_name": row.get("product_name", ""),
+                    "barcode": row.get("barcode") or "",
+                    "movement_type": movement_type_map.get(
+                        row.get("movement_type"), row.get("movement_type", "")
+                    ),
+                    "quantity": qty,
+                    "reference_type": row.get("reference_type") or "",
+                    "reference_id": row.get("reference_id"),
+                    "notes": row.get("notes") or "",
+                    "movement_date": row.get("movement_date") or "",
+                    "created_at": row.get("created_at") or "",
+                    "user_name": row.get("user_name") or "",
+                })
+
+            summary = {
+                "total_movements": len(data),
+                "total_in": total_in,
+                "total_out": total_out,
+                "net_movement": total_in - total_out,
+            }
+
+            return ReportData(
+                title="تقرير حركة المخزون",
+                subtitle=f"من {filters.start_date.strftime('%Y-%m-%d') if filters.start_date else 'البداية'} إلى {filters.end_date.strftime('%Y-%m-%d') if filters.end_date else 'النهاية'}",
+                generated_at=datetime.now(),
+                filters=filters,
+                data=data,
+                summary=summary,
+            )
+
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في توليد تقرير حركة المخزون: {str(e)}")
+            raise
+
+    def generate_receivables_aging_report(self, filters: ReportFilter) -> ReportData:
+        """توليد تقرير أعمار الذمم المدينة - بناءً على الفواتير غير المدفوعة"""
+        try:
+            from datetime import date as _date
+            aging_periods = filters.aging_periods or [30, 60, 90]
+            today = _date.today()
+
+            # استعلام الفواتير غير المدفوعة مع مراعاة أعمدة due_date / paid_amount
+            query = """
+                SELECT
+                    s.customer_id,
+                    COALESCE(c.name, 'غير محدد') as customer_name,
+                    COALESCE(c.phone, '') as phone,
+                    COALESCE(c.email, '') as email,
+                    s.id as invoice_id,
+                    s.invoice_number,
+                    s.sale_date,
+                    s.final_amount,
+                    COALESCE(s.paid_amount, 0) as paid_amount
+                FROM sales s
+                LEFT JOIN customers c ON s.customer_id = c.id
+                WHERE s.is_active = 1
+                  AND s.status NOT IN ('مدفوعة', 'paid', 'ملغية', 'cancelled',
+                                       'مسودة', 'draft', 'مرتجعة', 'returned')
+                  AND (s.final_amount - COALESCE(s.paid_amount, 0)) > 0
+            """
+            params = []
+
+            if filters.start_date:
+                query += " AND s.sale_date >= ?"
+                params.append(filters.start_date.strftime("%Y-%m-%d"))
+
+            if filters.end_date:
+                query += " AND s.sale_date <= ?"
+                params.append(filters.end_date.strftime("%Y-%m-%d"))
+
+            if filters.customer_id:
+                query += " AND s.customer_id = ?"
+                params.append(filters.customer_id)
+
+            # تجربة استخدام due_date إن وُجد؛ إن لم يوجد نستخدم sale_date
+            try:
+                test_query = "SELECT due_date FROM sales LIMIT 1"
+                self.db_manager.connection.execute(test_query)
+                query = query.replace(
+                    "s.sale_date,",
+                    "s.sale_date, COALESCE(s.due_date, s.sale_date) as ref_date,",
+                )
+                use_due_date = True
+            except Exception:
+                query = query.replace(
+                    "s.sale_date,",
+                    "s.sale_date, s.sale_date as ref_date,",
+                )
+                use_due_date = False
+
+            rows = self.db.execute_query(query, tuple(params))
+
+            # تجميع المبالغ حسب العميل وفترة التأخير
+            buckets = {}
+
+            for row in rows:
+                customer_id = row.get("customer_id")
+                remaining = float(row.get("final_amount") or 0) - float(row.get("paid_amount") or 0)
+
+                if remaining <= 0:
+                    continue
+
+                ref_date_str = row.get("ref_date")
+                if ref_date_str:
+                    try:
+                        if isinstance(ref_date_str, str):
+                            ref_date = _date.fromisoformat(ref_date_str)
+                        else:
+                            ref_date = ref_date_str
+                    except (ValueError, TypeError):
+                        ref_date = today
+                else:
+                    ref_date = today
+
+                days_overdue = (today - ref_date).days
+
+                if days_overdue <= 0:
+                    bucket_key = "current"
+                elif days_overdue <= 30:
+                    bucket_key = "aging_0_30"
+                elif days_overdue <= 60:
+                    bucket_key = "aging_31_60"
+                elif days_overdue <= 90:
+                    bucket_key = "aging_61_90"
+                else:
+                    bucket_key = "aging_over_90"
+
+                if customer_id not in buckets:
+                    buckets[customer_id] = {
+                        "customer_id": customer_id,
+                        "customer_name": row.get("customer_name", ""),
+                        "phone": row.get("phone", ""),
+                        "email": row.get("email", ""),
+                        "total_sales": 0,
+                        "total_paid": 0,
+                        "balance": 0,
+                        "current": 0,
+                        "aging_0_30": 0,
+                        "aging_31_60": 0,
+                        "aging_61_90": 0,
+                        "aging_over_90": 0,
+                    }
+
+                buckets[customer_id]["balance"] += remaining
+                buckets[customer_id]["total_sales"] += float(row.get("final_amount") or 0)
+                buckets[customer_id]["total_paid"] += float(row.get("paid_amount") or 0)
+                buckets[customer_id][bucket_key] += remaining
 
             data = []
             total_balance = 0
+            sum_current = 0
+            sum_0_30 = 0
+            sum_31_60 = 0
+            sum_61_90 = 0
+            sum_over_90 = 0
 
-            for row in results:
-                customer_data = {
-                    "customer_id": row[0],
-                    "customer_name": row[1],
-                    "phone": row[2] or "",
-                    "email": row[3] or "",
-                    "total_payments": float(row[4]),
-                    "total_sales": float(row[5]),
-                    "balance": float(row[6]),
-                    "aging_0_30": 0,
-                    "aging_31_60": 0,
-                    "aging_61_90": 0,
-                    "aging_over_90": 0,
-                }
-
-                # حساب الأعمار (يمكن تطويرها لاحقاً بناءً على تواريخ الفواتير)
-                balance = float(row[6])
-                if balance > 0:
-                    customer_data["aging_0_30"] = balance  # مؤقتاً
-
-                data.append(customer_data)
-                total_balance += balance
+            for cust_id in sorted(buckets, key=lambda k: buckets[k]["balance"], reverse=True):
+                entry = buckets[cust_id]
+                if not filters.include_zero_balances and entry["balance"] <= 0:
+                    continue
+                data.append(entry)
+                total_balance += entry["balance"]
+                sum_current += entry["current"]
+                sum_0_30 += entry["aging_0_30"]
+                sum_31_60 += entry["aging_31_60"]
+                sum_61_90 += entry["aging_61_90"]
+                sum_over_90 += entry["aging_over_90"]
 
             summary = {
                 "total_customers": len(data),
                 "total_balance": total_balance,
                 "aging_periods": aging_periods,
+                "sum_current": sum_current,
+                "sum_0_30": sum_0_30,
+                "sum_31_60": sum_31_60,
+                "sum_61_90": sum_61_90,
+                "sum_over_90": sum_over_90,
             }
 
             return ReportData(
                 title="تقرير أعمار الذمم المدينة",
-                subtitle=f"كما في {datetime.now().strftime('%Y-%m-%d')}",
+                subtitle=f"كما في {today.isoformat()}",
                 generated_at=datetime.now(),
                 filters=filters,
                 data=data,
@@ -1397,77 +1848,152 @@ class ReportExporter:
             raise
 
     def generate_payables_aging_report(self, filters: ReportFilter) -> ReportData:
-        """توليد تقرير أعمار الذمم الدائنة"""
+        """توليد تقرير أعمار الذمم الدائنة - بناءً على فواتير المشتريات غير المدفوعة"""
         try:
+            from datetime import date as _date
             aging_periods = filters.aging_periods or [30, 60, 90]
+            today = _date.today()
 
+            # استعلام فواتير المشتريات غير المدفوعة
             query = """
                 SELECT
-                    s.id,
-                    s.name,
-                    s.phone,
-                    s.email,
-                    COALESCE(SUM(
-                        CASE WHEN p.payment_type = 'دفعة مورد' THEN p.amount ELSE 0 END
-                    ), 0) as total_payments,
-                    COALESCE(SUM(
-                        CASE WHEN pur.supplier_id = s.id THEN COALESCE(pur.base_amount, pur.total_amount) ELSE 0 END
-                    ), 0) as total_purchases,
-                    (COALESCE(SUM(
-                        CASE WHEN pur.supplier_id = s.id THEN COALESCE(pur.base_amount, pur.total_amount) ELSE 0 END
-                    ), 0) - COALESCE(SUM(
-                        CASE WHEN p.payment_type = 'دفعة مورد' THEN COALESCE(p.base_amount, p.amount) ELSE 0 END
-                    ), 0)) as balance
-                FROM suppliers s
-                LEFT JOIN payments p ON s.id = p.entity_id
-                LEFT JOIN purchases pur ON s.id = pur.supplier_id
-                GROUP BY s.id, s.name, s.phone, s.email
+                    p.supplier_id,
+                    COALESCE(sup.name, 'غير محدد') as supplier_name,
+                    COALESCE(sup.phone, '') as phone,
+                    COALESCE(sup.email, '') as email,
+                    p.id as invoice_id,
+                    p.invoice_number,
+                    p.purchase_date,
+                    COALESCE(p.final_amount, p.total_amount) as final_amount,
+                    COALESCE(p.paid_amount, 0) as paid_amount
+                FROM purchases p
+                LEFT JOIN suppliers sup ON p.supplier_id = sup.id
+                WHERE p.is_active = 1
+                  AND p.status NOT IN ('مدفوعة', 'paid', 'ملغية', 'cancelled', 'مرتجعة', 'returned')
+                  AND (COALESCE(p.final_amount, p.total_amount) - COALESCE(p.paid_amount, 0)) > 0
             """
+            params = []
 
-            if not filters.include_zero_balances:
-                query += " HAVING balance > 0"
+            if filters.start_date:
+                query += " AND p.purchase_date >= ?"
+                params.append(filters.start_date.strftime("%Y-%m-%d"))
 
-            query += " ORDER BY balance DESC"
+            if filters.end_date:
+                query += " AND p.purchase_date <= ?"
+                params.append(filters.end_date.strftime("%Y-%m-%d"))
 
-            cursor = self.db_manager.connection.cursor()
-            cursor.execute(query)
-            results = cursor.fetchall()
+            if filters.supplier_id:
+                query += " AND p.supplier_id = ?"
+                params.append(filters.supplier_id)
+
+            # تجربة استخدام due_date إن وُجد
+            try:
+                test_query = "SELECT due_date FROM purchases LIMIT 1"
+                self.db_manager.connection.execute(test_query)
+                query = query.replace(
+                    "p.purchase_date,",
+                    "p.purchase_date, COALESCE(p.due_date, p.purchase_date) as ref_date,",
+                )
+            except Exception:
+                query = query.replace(
+                    "p.purchase_date,",
+                    "p.purchase_date, p.purchase_date as ref_date,",
+                )
+
+            rows = self.db.execute_query(query, tuple(params))
+
+            # تجميع المبالغ حسب المورد وفترة التأخير
+            buckets = {}
+
+            for row in rows:
+                supplier_id = row.get("supplier_id")
+                final_amount = float(row.get("final_amount") or 0)
+                paid_amount = float(row.get("paid_amount") or 0)
+                remaining = final_amount - paid_amount
+
+                if remaining <= 0:
+                    continue
+
+                ref_date_str = row.get("ref_date")
+                if ref_date_str:
+                    try:
+                        if isinstance(ref_date_str, str):
+                            ref_date = _date.fromisoformat(ref_date_str)
+                        else:
+                            ref_date = ref_date_str
+                    except (ValueError, TypeError):
+                        ref_date = today
+                else:
+                    ref_date = today
+
+                days_overdue = (today - ref_date).days
+
+                if days_overdue <= 0:
+                    bucket_key = "current"
+                elif days_overdue <= 30:
+                    bucket_key = "aging_0_30"
+                elif days_overdue <= 60:
+                    bucket_key = "aging_31_60"
+                elif days_overdue <= 90:
+                    bucket_key = "aging_61_90"
+                else:
+                    bucket_key = "aging_over_90"
+
+                if supplier_id not in buckets:
+                    buckets[supplier_id] = {
+                        "supplier_id": supplier_id,
+                        "supplier_name": row.get("supplier_name", ""),
+                        "phone": row.get("phone", ""),
+                        "email": row.get("email", ""),
+                        "total_purchases": 0,
+                        "total_paid": 0,
+                        "balance": 0,
+                        "current": 0,
+                        "aging_0_30": 0,
+                        "aging_31_60": 0,
+                        "aging_61_90": 0,
+                        "aging_over_90": 0,
+                    }
+
+                buckets[supplier_id]["balance"] += remaining
+                buckets[supplier_id]["total_purchases"] += final_amount
+                buckets[supplier_id]["total_paid"] += paid_amount
+                buckets[supplier_id][bucket_key] += remaining
 
             data = []
             total_balance = 0
+            sum_current = 0
+            sum_0_30 = 0
+            sum_31_60 = 0
+            sum_61_90 = 0
+            sum_over_90 = 0
 
-            for row in results:
-                supplier_data = {
-                    "supplier_id": row[0],
-                    "supplier_name": row[1],
-                    "phone": row[2] or "",
-                    "email": row[3] or "",
-                    "total_payments": float(row[4]),
-                    "total_purchases": float(row[5]),
-                    "balance": float(row[6]),
-                    "aging_0_30": 0,
-                    "aging_31_60": 0,
-                    "aging_61_90": 0,
-                    "aging_over_90": 0,
-                }
-
-                # حساب الأعمار (يمكن تطويرها لاحقاً بناءً على تواريخ الفواتير)
-                balance = float(row[6])
-                if balance > 0:
-                    supplier_data["aging_0_30"] = balance  # مؤقتاً
-
-                data.append(supplier_data)
-                total_balance += balance
+            for sup_id in sorted(buckets, key=lambda k: buckets[k]["balance"], reverse=True):
+                entry = buckets[sup_id]
+                if not filters.include_zero_balances and entry["balance"] <= 0:
+                    continue
+                data.append(entry)
+                total_balance += entry["balance"]
+                sum_current += entry["current"]
+                sum_0_30 += entry["aging_0_30"]
+                sum_31_60 += entry["aging_31_60"]
+                sum_61_90 += entry["aging_61_90"]
+                sum_over_90 += entry["aging_over_90"]
 
             summary = {
                 "total_suppliers": len(data),
                 "total_balance": total_balance,
                 "aging_periods": aging_periods,
+                "sum_current": sum_current,
+                "sum_0_30": sum_0_30,
+                "sum_31_60": sum_31_60,
+                "sum_61_90": sum_61_90,
+                "sum_over_90": sum_over_90,
             }
 
             return ReportData(
                 title="تقرير أعمار الذمم الدائنة",
-                subtitle=f"كما في {datetime.now().strftime('%Y-%m-%d')}",
+                subtitle=f"كما في {today.isoformat()}",
                 generated_at=datetime.now(),
                 filters=filters,
                 data=data,

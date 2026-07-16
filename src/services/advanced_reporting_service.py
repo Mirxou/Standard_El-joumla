@@ -526,7 +526,7 @@ class AdvancedReportingService:
                     name="إجمالي المبيعات",
                     value=current_value,
                     target_value=target_value,
-                    unit="SAR",
+                    unit="DZD",
                     trend=trend,
                     calculation_date=datetime.now(),
                 )
@@ -602,7 +602,7 @@ class AdvancedReportingService:
                     name="متوسط قيمة الطلب",
                     value=current_value,
                     target_value=500.0,
-                    unit="SAR",
+                    unit="DZD",
                     trend="stable",
                     calculation_date=datetime.now(),
                 )

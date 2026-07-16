@@ -118,11 +118,8 @@ class WholesaleDashboardDialog(BaseDialog):
         return frame
 
     def _load_data(self):
-        # NPCs/Mocks handling
         try:
             data = self.service.get_kpi_summary()
-            if "Mock" in type(data).__name__:
-                data = {"total_revenue": 0.0, "total_profit": 0.0, "deal_count": 0}
         except Exception:
             data = {"total_revenue": 0.0, "total_profit": 0.0, "deal_count": 0}
 
@@ -142,8 +139,6 @@ class WholesaleDashboardDialog(BaseDialog):
         # Top Customers
         try:
             customers = self.service.get_top_customers()
-            if "Mock" in type(customers).__name__:
-                customers = []
         except Exception:
             customers = []
         self.cust_table.setRowCount(len(customers))
@@ -155,8 +150,6 @@ class WholesaleDashboardDialog(BaseDialog):
         # Top Products
         try:
             products = self.service.get_top_products()
-            if "Mock" in type(products).__name__:
-                products = []
         except Exception:
             products = []
         self.prod_table.setRowCount(len(products))
@@ -174,8 +167,6 @@ class WholesaleDashboardDialog(BaseDialog):
     def load_orders(self) -> bool:
         try:
             orders = self.sales_service.get_wholesale_orders()
-            if "Mock" in type(orders).__name__:
-                orders = []
         except Exception:
             orders = []
         self.orders_table.setRowCount(len(orders))
@@ -188,8 +179,6 @@ class WholesaleDashboardDialog(BaseDialog):
     def load_top_customers(self) -> bool:
         try:
             customers = self.sales_service.get_top_wholesale_customers()
-            if "Mock" in type(customers).__name__:
-                customers = []
         except Exception:
             customers = []
         self.top_customers_table.setRowCount(len(customers))

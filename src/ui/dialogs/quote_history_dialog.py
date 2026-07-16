@@ -141,26 +141,25 @@ class QuoteHistoryDialog(BaseDialog):
         if not self.quote_service:
             return
 
-        from unittest.mock import Mock
         quotes = None
         if hasattr(self.sales_service, "get_all_quotes"):
             try:
                 quotes = self.sales_service.get_all_quotes()
             except Exception:
                 pass
-        
-        if quotes is None or isinstance(quotes, Mock):
+
+        if quotes is None or not isinstance(quotes, list):
             try:
                 quotes = self.quote_service.get_recent_quotes()
             except Exception:
                 quotes = []
 
-        if isinstance(quotes, Mock) or not isinstance(quotes, list):
+        if not isinstance(quotes, list):
             quotes = []
 
         self.table.setRowCount(len(quotes))
         for row, quote in enumerate(quotes):
-            if isinstance(quote, Mock) or not isinstance(quote, dict):
+            if not isinstance(quote, dict):
                 continue
             # ID
             item_id = QTableWidgetItem(str(quote.get("id", "")))

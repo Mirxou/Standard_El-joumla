@@ -18,13 +18,6 @@ warnings.filterwarnings('ignore', message='.*WeasyPrint.*', category=UserWarning
 # قمع تحذيرات pydantic
 warnings.filterwarnings('ignore', message='.*orm_mode.*', category=UserWarning)
 
-# قمع stdout/stderr مؤقتاً قبل أي استيراد قد يسبب تحذيرات
-# هذا يمنع WeasyPrint من طباعة تحذيرات عند الاستيراد
-# _original_stdout = sys.stdout
-# _original_stderr = sys.stderr
-# sys.stdout = open(os.devnull, 'w')
-# sys.stderr = open(os.devnull, 'w')
-
 # إضافة مجلد src إلى sys.path
 project_root = Path(__file__).parent
 src_path = project_root / "src"
@@ -55,12 +48,6 @@ from src.utils.logger import setup_logger
 
 # استيراد نظام التصميم الحديث
 from src.ui.modern_theme import get_modern_theme
-
-# استعادة stdout/stderr بعد قمع الاستيرادات الأولية
-# sys.stdout.close()
-# sys.stderr.close()
-# sys.stdout = _original_stdout
-# sys.stderr = _original_stderr
 
 if not _TEST_MODE:
     # استيراد الخدمات

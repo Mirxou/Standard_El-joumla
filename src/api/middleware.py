@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -6,6 +5,7 @@ Middleware للـ REST API
 Middleware for REST API
 """
 
+import logging
 import time
 from typing import Callable, Optional
 
@@ -228,9 +228,9 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                         time.strftime("%Y-%m-%d %H:%M:%S"),
                     ),
                 )
-            except Exception:
+            except Exception as e:
                 # إذا فشل (ربما جدول api_logs غير موجود)، لا مشكلة
-                logging.getLogger(__name__).warning("Ignored exception in middleware.py")
+                self.logger.debug(f"لم يتم تسجيل الطلب في DB: {e}")
 
         return response
 
@@ -281,6 +281,30 @@ class CORSMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Middleware لإضافة رؤوس الأمان لجميع الاستجابات.
+
+    يحمي من: XSS, Clickjacking, MIME Sniffing, وغيرها.
+    المرجع: https://securityheaders.com
+    """
+
+    # الرؤوس التي تُضاف لكل استجابة
+    SECURITY_HEADERS = {
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "X-XSS-Protection": "1; mode=block",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+        "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'",
+    }
+
+    async def dispatch(self, request: Request, call_next: Callable):
+        response = await call_next(request)
+        for header, value in self.SECURITY_HEADERS.items():
+            response.headers[header] = value
+        return response
+
+
 def setup_middleware(
     app: ASGIApp,
     db_manager: DatabaseManager,
@@ -301,6 +325,9 @@ def setup_middleware(
         cors_origins: قائمة الـ Origins المسموحة لـ CORS
     """
     from starlette.middleware.cors import CORSMiddleware as StarletteCORS
+
+    # Security Headers Middleware (يُنفَّذ أولاً على كل استجابة)
+    app.add_middleware(SecurityHeadersMiddleware)
 
     # CORS Middleware (يجب أن يكون أولاً - قبل Auth)
     if enable_cors:

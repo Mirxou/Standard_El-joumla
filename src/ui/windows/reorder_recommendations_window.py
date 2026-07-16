@@ -229,20 +229,21 @@ class ReorderRecommendationsWindow(QMainWindow):
             self.table.setItem(row, 6, QTableWidgetItem(f"{rec.safety_stock:,.2f}"))
 
             # الكمية المقترحة
-            suggested_item = QTableWidgetItem(f"{rec.suggested_order_quantity:,.2f}")
+            suggested_item = QTableWidgetItem(f"{rec.suggested_quantity:,.2f}")
             suggested_item.setFont(QFont("Arial", 10, QFont.Bold))
             suggested_item.setBackground(QColor(200, 255, 200))
             self.table.setItem(row, 7, suggested_item)
 
-            # معلومات الطلب
-            self.table.setItem(row, 8, QTableWidgetItem(f"{rec.average_daily_demand:,.2f}"))
+            # التكلفة المقدرة
+            self.table.setItem(row, 8, QTableWidgetItem(f"{rec.estimated_cost:,.2f}"))
 
             # أيام حتى النفاد
-            days_item = QTableWidgetItem(str(rec.days_until_stockout) if rec.days_until_stockout else "N/A")
-            if rec.days_until_stockout:
-                if rec.days_until_stockout <= 3:
+            days_of_stock = getattr(rec, 'days_of_stock', None)
+            days_item = QTableWidgetItem(str(days_of_stock) if days_of_stock else "N/A")
+            if days_of_stock:
+                if days_of_stock <= 3:
                     days_item.setBackground(QColor(255, 100, 100))
-                elif rec.days_until_stockout <= 7:
+                elif days_of_stock <= 7:
                     days_item.setBackground(QColor(255, 200, 100))
             self.table.setItem(row, 9, days_item)
 
@@ -288,8 +289,8 @@ class ReorderRecommendationsWindow(QMainWindow):
         # حساب التكلفة المقدرة
         estimated_cost = Decimal("0")
         for rec in self.recommendations:
-            if rec.estimated_order_cost:
-                estimated_cost += rec.estimated_order_cost
+            if rec.estimated_cost:
+                estimated_cost += rec.estimated_cost
 
         self.summary_labels["total"].setText(str(total))
         self.summary_labels["urgent"].setText(str(urgent))

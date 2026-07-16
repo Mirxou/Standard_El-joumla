@@ -109,16 +109,8 @@ class PaymentDialog(BaseDialog):
         entity_id: Optional[int] = None,
         amount: Optional[Decimal] = None,
     ):
-        # Detect if we are initialized under test mode with an invoice Mock
-        is_test_mode = hasattr(db_manager, "total") and hasattr(db_manager, "id")
-        if is_test_mode:
-            invoice = db_manager
-            from unittest.mock import Mock
-            db_manager = Mock()
-            payment_service = Mock()
-            payment_type = PaymentType.CUSTOMER_PAYMENT
-            entity_id = getattr(invoice, "id", None)
-            amount = getattr(invoice, "total", None)
+        if db_manager is None:
+            raise TypeError("PaymentDialog requires a valid db_manager instance, got None")
 
         super().__init__(title="", parent=parent)
         self.payment_type = payment_type or PaymentType.CUSTOMER_PAYMENT
@@ -142,19 +134,12 @@ class PaymentDialog(BaseDialog):
         self.i18n = I18n(locales_dir=str(Path(__file__).parent.parent.parent.parent / "locales"))
 
         # إعداد الواجهة
-        if is_test_mode:
-            # Skip full setup_ui/connections/load_data to avoid raising GUI errors on unit tests
-            from PySide6.QtWidgets import QLineEdit, QComboBox
-            self.amount_input = QLineEdit()
-            self.payment_method_combo = QComboBox()
-            self.notify = Mock()
-        else:
-            self.setup_ui()
-            self.setup_connections()
-            self.setup_styles()
-            self.load_data()
-            self.apply_prefill_data()
-            self.notify = NotificationManager(self)
+        self.setup_ui()
+        self.setup_connections()
+        self.setup_styles()
+        self.load_data()
+        self.apply_prefill_data()
+        self.notify = NotificationManager(self)
 
         self.setModal(True)
         self.resize(800, 600)

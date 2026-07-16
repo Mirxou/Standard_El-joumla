@@ -9,7 +9,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from src.ui.components.bi.graph_view import GraphView
 from src.ui.components.chatter_widget import ChatterWidget
 
 # System 4.0 Components
@@ -58,9 +57,7 @@ class SalesOrderView(QWidget):
 
         # Analytics Graph (Embedded BI)
         left_layout.addWidget(QLabel("<b>Order Analytics</b>"))
-        self.graph = GraphView()
-        self.graph.setFixedHeight(300)
-        left_layout.addWidget(self.graph)
+        left_layout.addWidget(QLabel("<i>Graph placeholder — analytics widget pending real data source.</i>"))
 
         left_layout.addStretch()
         splitter.addWidget(left_panel)

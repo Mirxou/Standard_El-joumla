@@ -558,9 +558,9 @@ class HybridDataService:
                     )
 
                 cur.connection.commit()
-        except Exception:
+        except Exception as e:
             # في حالة فشل، نتجاهل (لا نريد إيقاف العملية)
-            logging.getLogger(__name__).warning("Ignored exception in api_client.py")
+            self.logger.debug(f"_sync_product_to_local failed (non-critical): {e}")
 
     def _mark_for_sync(self, entity_type: str, entity_id: int, operation: str):
         """

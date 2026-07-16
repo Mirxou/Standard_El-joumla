@@ -549,6 +549,30 @@ class InventoryCountService:
         now = datetime.now()
         self.db.execute_query(query, (adjustment.adjustment_quantity, now, adjustment.product_id))
 
+        # تسجيل حركة المخزون (سجل التدقيق)
+        try:
+            movement_query = """
+                INSERT INTO stock_movements (
+                    product_id, movement_type, quantity, reference_id,
+                    reference_type, notes, user_id, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """
+            self.db.execute_query(
+                movement_query,
+                (
+                    adjustment.product_id,
+                    "adjustment",
+                    float(adjustment.adjustment_quantity),
+                    adjustment.id,
+                    "stock_adjustment",
+                    f"تسوية من الجرد - {adjustment.adjustment_number}",
+                    adjustment.created_by,
+                ),
+            )
+        except Exception:
+            # لا نمنع التسوية إذا فشل تسجيل الحركة
+            pass
+
         # وضع علامة مطبقة
         adjustment.mark_applied()
         update_query = """

@@ -46,25 +46,11 @@ class InstallmentPaymentDialog(BaseDialog):
     ):
         super().__init__(title="", parent=parent)
         
-        # Test mode detection format: InstallmentPaymentDialog(payment_service, invoice)
-        if isinstance(db_manager, dict) or (hasattr(plan, "mock_calls") and isinstance(db_manager, dict)):
-            invoice_dict = db_manager
-            payment_service = plan
-            
-            from unittest.mock import MagicMock
-            dummy_plan = MagicMock(spec=PaymentPlan)
-            dummy_plan.id = invoice_dict.get("id", 1)
-            dummy_plan.plan_number = f"PLAN-{dummy_plan.id}"
-            dummy_plan.customer_name = "عميل تجريبي"
-            dummy_plan.total_amount = invoice_dict.get("total", Decimal("1000.00"))
-            dummy_plan.total_remaining = invoice_dict.get("remaining", Decimal("1000.00"))
-            dummy_plan.total_paid = dummy_plan.total_amount - dummy_plan.total_remaining
-            dummy_plan.completion_percentage = float((dummy_plan.total_paid / dummy_plan.total_amount) * 100) if dummy_plan.total_amount else 0.0
-            dummy_plan.installments = []
-            
-            self.plan = dummy_plan
-            self.db_manager = payment_service
-            self.service = payment_service
+        if db_manager is None:
+            QMessageBox.critical(self, "خطأ", "قاعدة البيانات غير متوفرة")
+            self.plan = plan
+            self.db_manager = None
+            self.service = None
         else:
             self.plan = plan
             self.db_manager = db_manager
@@ -431,38 +417,38 @@ class InstallmentPaymentDialog(BaseDialog):
         return self.plan.total_amount / count
 
     def calculate_installments(self, count: int) -> list:
-        """حساب وتوليد الأقساط للاختبارات"""
-        from unittest.mock import MagicMock
+        """حساب وتوليد الأقساط"""
         amount = self.get_installment_amount(count)
         installments = []
         for i in range(1, count + 1):
-            inst = MagicMock()
-            inst.installment_number = i
-            inst.due_date = date.today()
-            inst.principal_amount = amount
-            inst.interest_amount = Decimal("0.00")
-            inst.late_fee = Decimal("0.00")
-            inst.total_amount = amount
-            inst.remaining_amount = amount
-            inst.status = "pending"
+            inst = PaymentInstallment(
+                installment_number=i,
+                due_date=date.today(),
+                principal_amount=amount,
+                interest_amount=Decimal("0.00"),
+                late_fee=Decimal("0.00"),
+                total_amount=amount,
+                remaining_amount=amount,
+                status=InstallmentStatus.PENDING.value,
+            )
             installments.append(inst)
         return installments
 
     def add_installment(self, due_date: date, amount: Decimal) -> Any:
         """إضافة قسط جديد لجدول المعاينة"""
-        from unittest.mock import MagicMock
-        inst = MagicMock()
-        inst.id = len(self.plan.installments) + 1
-        inst.installment_number = len(self.plan.installments) + 1
-        inst.due_date = due_date
-        inst.principal_amount = amount
-        inst.interest_amount = Decimal("0.00")
-        inst.late_fee = Decimal("0.00")
-        inst.total_amount = amount
-        inst.remaining_amount = amount
-        inst.amount_paid = Decimal("0.00")
-        inst.status = "pending"
-        inst.is_overdue = False
+        next_num = len(self.plan.installments) + 1
+        inst = PaymentInstallment(
+            id=next_num,
+            installment_number=next_num,
+            due_date=due_date,
+            principal_amount=amount,
+            interest_amount=Decimal("0.00"),
+            late_fee=Decimal("0.00"),
+            total_amount=amount,
+            remaining_amount=amount,
+            amount_paid=Decimal("0.00"),
+            status=InstallmentStatus.PENDING.value,
+        )
         self.plan.installments.append(inst)
         self.load_installments()
         return inst

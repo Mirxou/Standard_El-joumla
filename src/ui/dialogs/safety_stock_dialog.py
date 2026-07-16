@@ -279,13 +279,13 @@ class SafetyStockDialog(BaseDialog):
 
             if stats["avg_daily_demand"] > 0:
                 self.avg_demand_spin.setValue(float(stats["avg_daily_demand"]))
-                self.std_dev_spin.setValue(float(stats["demand_std_dev"]))
+                self.std_dev_spin.setValue(float(stats["std_deviation"]))
 
                 self.notify.show_info(
                     "نجح",
                     "تم حساب الإحصائيات من بيانات آخر 90 يوم:\n"
                     f"متوسط الطلب اليومي: {stats['avg_daily_demand']:.2f}\n"
-                    f"الانحراف المعياري: {stats['demand_std_dev']:.2f}",
+                    f"الانحراف المعياري: {stats['std_deviation']:.2f}",
                 )
 
                 self.calculate_values()

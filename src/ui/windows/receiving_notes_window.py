@@ -9,7 +9,10 @@ Receiving Notes Window
 from PySide6.QtCore import QDate
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
+    QComboBox,
     QDateEdit,
+    QDialog,
+    QFormLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -19,6 +22,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
+    QTextEdit,
     QVBoxLayout,
 )
 
@@ -124,10 +128,10 @@ class ReceivingNotesWindow(QMainWindow):
         try:
             cursor = self.db.get_cursor()
             cursor.execute("""
-                SELECT id, note_number, note_date, supplier_id, quantity,
+                SELECT id, receiving_number, receiving_date, supplier_id,
                        status, notes
                 FROM receiving_notes
-                ORDER BY note_date DESC
+                ORDER BY receiving_date DESC
                 LIMIT 100
             """)
 
@@ -181,9 +185,151 @@ class ReceivingNotesWindow(QMainWindow):
     def on_note_selected(self):
         """عند اختيار ملاحظة"""
 
+    def _load_suppliers_for_combo(self, combo, current_supplier_id=None):
+        """تحميل قائمة المورّدين في combos"""
+        try:
+            with self.db.get_cursor() as cursor:
+                cursor.execute("SELECT id, name FROM suppliers ORDER BY name")
+                suppliers = cursor.fetchall()
+            combo.clear()
+            combo.addItem("-- اختر المورد --", None)
+            for sid, name in suppliers:
+                combo.addItem(name, sid)
+                if current_supplier_id and sid == current_supplier_id:
+                    combo.setCurrentIndex(combo.count() - 1)
+        except Exception as e:
+            self.logger.error(f"خطأ في تحميل المورّدين: {e}")
+
+    def _generate_receiving_number(self):
+        """توليد رقم استلام جديد"""
+        try:
+            with self.db.get_cursor() as cursor:
+                cursor.execute("SELECT MAX(CAST(receiving_number AS INTEGER)) FROM receiving_notes")
+                row = cursor.fetchone()
+            last_num = row[0] if row and row[0] else 0
+            return str(int(last_num) + 1)
+        except Exception:
+            return "1"
+
+    def _show_note_dialog(self, note_id=None):
+        """فتح حوار إنشاء/تعديل ملاحظة استلام"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ملاحظة استلام جديدة" if note_id is None else "تعديل ملاحظة الاستلام")
+        dialog.setMinimumWidth(500)
+        dialog.setStyleSheet("background-color: #0f172a; color: #f8fafc;")
+
+        layout = QFormLayout(dialog)
+
+        # رقم الاستلام
+        number_input = QLineEdit()
+        number_input.setPlaceholderText("رقم الاستلام")
+        layout.addRow("رقم الاستلام:", number_input)
+
+        # التاريخ
+        date_input = QDateEdit()
+        date_input.setDate(QDate.currentDate())
+        date_input.setCalendarPopup(True)
+        layout.addRow("التاريخ:", date_input)
+
+        # المورد
+        supplier_combo = QComboBox()
+        self._load_suppliers_for_combo(supplier_combo)
+        layout.addRow("المورد:", supplier_combo)
+
+        # الملاحظات
+        notes_input = QTextEdit()
+        notes_input.setMaximumHeight(80)
+        notes_input.setPlaceholderText("ملاحظات...")
+        layout.addRow("الملاحظات:", notes_input)
+
+        # أزرار
+        btn_layout = QHBoxLayout()
+        save_btn = QPushButton("حفظ")
+        save_btn.setStyleSheet("background-color: #2196F3; color: white; padding: 8px 24px;")
+        cancel_btn = QPushButton("إلغاء")
+        cancel_btn.setStyleSheet("background-color: #757575; color: white; padding: 8px 24px;")
+        btn_layout.addStretch()
+        btn_layout.addWidget(save_btn)
+        btn_layout.addWidget(cancel_btn)
+        layout.addRow(btn_layout)
+
+        # تعبئة البيانات للتعديل
+        if note_id is not None:
+            try:
+                with self.db.get_cursor() as cursor:
+                    cursor.execute(
+                        "SELECT receiving_number, receiving_date, supplier_id, notes FROM receiving_notes WHERE id = ?",
+                        (note_id,),
+                    )
+                    row = cursor.fetchone()
+                if row:
+                    number_input.setText(str(row[0] or ""))
+                    if row[1]:
+                        try:
+                            d = QDate.fromString(str(row[1]), "yyyy-MM-dd")
+                            if d.isValid():
+                                date_input.setDate(d)
+                        except Exception:
+                            pass
+                    # تحديد المورد في الكومبو
+                    supplier_id = row[2]
+                    for i in range(supplier_combo.count()):
+                        if supplier_combo.itemData(i) == supplier_id:
+                            supplier_combo.setCurrentIndex(i)
+                            break
+                    notes_input.setText(str(row[3] or ""))
+            except Exception as e:
+                self.logger.error(f"خطأ في تحميل بيانات الملاحظة: {e}")
+                QMessageBox.critical(self, "خطأ", f"خطأ في تحميل البيانات: {str(e)}")
+                return
+        else:
+            number_input.setText(self._generate_receiving_number())
+
+        result = [False]
+
+        def on_save():
+            rn_number = number_input.text().strip()
+            if not rn_number:
+                QMessageBox.warning(dialog, "تحذير", "يرجى إدخال رقم الاستلام")
+                return
+            supplier_id = supplier_combo.currentData()
+            if not supplier_id:
+                QMessageBox.warning(dialog, "تحذير", "يرجى اختيار المورد")
+                return
+            recv_date = date_input.date().toString("yyyy-MM-dd")
+            notes = notes_input.toPlainText().strip()
+
+            try:
+                with self.db.get_cursor() as cursor:
+                    if note_id is None:
+                        cursor.execute(
+                            """INSERT INTO receiving_notes
+                               (receiving_number, receiving_date, supplier_id, status, notes, created_at)
+                               VALUES (?, ?, ?, 'pending', ?, CURRENT_TIMESTAMP)""",
+                            (rn_number, recv_date, supplier_id, notes),
+                        )
+                    else:
+                        cursor.execute(
+                            """UPDATE receiving_notes
+                               SET receiving_number = ?, receiving_date = ?, supplier_id = ?, notes = ?
+                               WHERE id = ?""",
+                            (rn_number, recv_date, supplier_id, notes, note_id),
+                        )
+                    cursor.connection.commit()
+                result[0] = True
+                dialog.accept()
+                self.load_receiving_notes()
+            except Exception as e:
+                self.logger.error(f"خطأ في حفظ الملاحظة: {e}")
+                QMessageBox.critical(dialog, "خطأ", f"خطأ في الحفظ: {str(e)}")
+
+        save_btn.clicked.connect(on_save)
+        cancel_btn.clicked.connect(dialog.reject)
+        dialog.exec()
+
     def create_new_note(self):
         """إنشاء ملاحظة استلام جديدة"""
-        QMessageBox.information(self, "معلومة", "ميزة إنشاء ملاحظة جديدة قيد التطوير")
+        self._show_note_dialog(note_id=None)
 
     def edit_note(self):
         """تعديل ملاحظة الاستلام"""
@@ -191,8 +337,12 @@ class ReceivingNotesWindow(QMainWindow):
         if current_row < 0:
             QMessageBox.warning(self, "تحذير", "يرجى اختيار ملاحظة للتعديل")
             return
-
-        QMessageBox.information(self, "معلومة", "ميزة التعديل قيد التطوير")
+        try:
+            note_id = self.notes_table.item(current_row, 0).text()
+            self._show_note_dialog(note_id=int(note_id))
+        except Exception as e:
+            self.logger.error(f"خطأ في فتح التعديل: {e}")
+            QMessageBox.critical(self, "خطأ", f"خطأ: {str(e)}")
 
     def delete_note(self):
         """حذف ملاحظة الاستلام"""

@@ -179,19 +179,6 @@ class CustomerManager:
         """الاستعلام عن بنية جدول العملاء وديناميكية الأعمدة المتاحة"""
         if self._available_columns_cache is None:
             try:
-                from unittest.mock import Mock, DEFAULT
-                
-                # Check if fetch_all is an unconfigured Mock
-                is_unconfigured_mock = False
-                if hasattr(self.db_manager, "fetch_all") and isinstance(self.db_manager.fetch_all, Mock):
-                    fa_mock = self.db_manager.fetch_all
-                    has_explicit = (
-                        (getattr(fa_mock, "_mock_return_value", DEFAULT) is not DEFAULT)
-                        or (getattr(fa_mock, "_mock_side_effect", None) is not None)
-                    )
-                    if not has_explicit:
-                        is_unconfigured_mock = True
-
                 all_possible_columns = ["id"] + self.BASE_COLUMNS + [
                     "name_en", "phone2", "city", "country", "tax_number", "notes",
                     "customer_type", "customer_group_id", "customer_segment",
@@ -201,19 +188,14 @@ class CustomerManager:
                     "credit_rating"
                 ]
 
-                if is_unconfigured_mock:
-                    self._available_columns_cache = all_possible_columns
-                    return self._available_columns_cache
-
                 rows = self.db_manager.fetch_all("PRAGMA table_info(customers)")
-                
-                # Check if rows is a Mock (for cases where fetch_all was configured to return a Mock)
-                if rows is not None and not isinstance(rows, Mock) and hasattr(rows, "__iter__"):
+
+                if rows and hasattr(rows, "__iter__"):
                     cols = []
                     for row in rows:
                         if isinstance(row, dict):
                             cols.append(row.get("name"))
-                        elif hasattr(row, "__getitem__") and not isinstance(row, Mock):
+                        elif hasattr(row, "__getitem__"):
                             try:
                                 cols.append(row[1])
                             except Exception:
@@ -221,7 +203,7 @@ class CustomerManager:
                     if cols:
                         self._available_columns_cache = cols
                         return self._available_columns_cache
-                
+
                 self._available_columns_cache = all_possible_columns
             except Exception as e:
                 if self.logger:
@@ -655,25 +637,17 @@ class CustomerManager:
             """
             
             result = None
-            is_mock_execute_query = False
-            
-            if hasattr(self.db_manager, "execute_query"):
-                from unittest.mock import Mock, DEFAULT
-                if isinstance(self.db_manager.execute_query, Mock):
-                    eq_mock = self.db_manager.execute_query
-                    has_explicit_eq = (
-                        (getattr(eq_mock, "_mock_return_value", DEFAULT) is not DEFAULT)
-                        or (getattr(eq_mock, "_mock_side_effect", None) is not None)
-                    )
-                    if has_explicit_eq:
-                        is_mock_execute_query = True
-                    
-            if is_mock_execute_query:
-                result = self.db_manager.execute_query(query)
-            else:
+
+            # محاولة الجلب عبر fetch_one أولاً، ثم execute_query كبديل
+            try:
                 result = self.db_manager.fetch_one(query)
-                if not result and hasattr(self.db_manager, "execute_query"):
+            except Exception:
+                pass
+            if not result and hasattr(self.db_manager, "execute_query"):
+                try:
                     result = self.db_manager.execute_query(query)
+                except Exception:
+                    pass
 
             if result:
                 is_list_of_customers = False

@@ -270,6 +270,204 @@ class AccountingService:
             self.logger.warning(f"خطأ في إنشاء قيد المبيعات: {e}")
             return None
 
+    def create_purchase_journal_entry(self, purchase_data: dict) -> int:
+        """إنشاء قيد محاسبي لأمر شراء (غير معطل)"""
+        try:
+            from ..models.journal_entry import JournalEntry, JournalLine
+            entry = JournalEntry()
+            entry.description = f"قيد شراء - {purchase_data.get('supplier_name', '')}"
+            entry.reference_type = "purchase_order"
+            entry.reference_id = str(purchase_data.get('po_id', ''))
+            entry.entry_date = datetime.now()
+            
+            total = Decimal(str(purchase_data.get('total', 0)))
+            tax = Decimal(str(purchase_data.get('tax', 0)))
+            
+            # مدين: المخزون / المشتريات
+            inventory_line = JournalLine()
+            inventory_line.account_code = purchase_data.get('inventory_account', '4100')
+            inventory_line.account_name = purchase_data.get('inventory_account_name', 'المخزون')
+            inventory_line.debit_amount = total
+            entry.lines.append(inventory_line)
+            
+            # دائن: الدائنون
+            payable_line = JournalLine()
+            payable_line.account_code = purchase_data.get('payable_account', '2100')
+            payable_line.account_name = purchase_data.get('payable_account_name', 'الدائنون')
+            payable_line.credit_amount = total + tax
+            entry.lines.append(payable_line)
+            
+            # دائن: الضريبة
+            if tax > 0:
+                tax_line = JournalLine()
+                tax_line.account_code = '2300'
+                tax_line.account_name = 'الضريبة المستحقة'
+                tax_line.credit_amount = tax
+                entry.lines.append(tax_line)
+            
+            return self.create_journal_entry(entry)
+        except Exception as e:
+            self.logger.warning(f"خطأ في إنشاء قيد الشراء: {e}")
+            return 0
+
+    def create_payment_journal_entry(self, payment_data: dict) -> int:
+        """إنشاء قيد محاسبي لدفعة (غير معطل)"""
+        try:
+            from ..models.journal_entry import JournalEntry, JournalLine
+            entry = JournalEntry()
+            entry.description = f"دفعة - {payment_data.get('reference', '')}"
+            entry.reference_type = "payment"
+            entry.reference_id = str(payment_data.get('payment_id', ''))
+            entry.entry_date = datetime.now()
+            
+            amount = Decimal(str(payment_data.get('amount', 0)))
+            method = payment_data.get('method', 'cash')
+            
+            if payment_data.get('payment_type') == 'received':
+                # تحصيل من عميل: مدين الصندوق، دائن الذمم
+                cash_line = JournalLine()
+                cash_line.account_code = '1100'
+                cash_line.account_name = 'الصندوق'
+                cash_line.debit_amount = amount
+                entry.lines.append(cash_line)
+                
+                receivable_line = JournalLine()
+                receivable_line.account_code = payment_data.get('receivable_account', '1300')
+                receivable_line.account_name = payment_data.get('receivable_account_name', 'العملاء')
+                receivable_line.credit_amount = amount
+                entry.lines.append(receivable_line)
+            else:
+                # دفع لمورد: مدين الذمم، دائن الصندوق/البنك
+                payable_line = JournalLine()
+                payable_line.account_code = payment_data.get('payable_account', '2100')
+                payable_line.account_name = payment_data.get('payable_account_name', 'الموردون')
+                payable_line.debit_amount = amount
+                entry.lines.append(payable_line)
+                
+                if method == 'bank':
+                    bank_code = '1200'
+                    bank_name = 'البنك'
+                else:
+                    bank_code = '1100'
+                    bank_name = 'الصندوق'
+                
+                cash_line = JournalLine()
+                cash_line.account_code = bank_code
+                cash_line.account_name = bank_name
+                cash_line.credit_amount = amount
+                entry.lines.append(cash_line)
+            
+            return self.create_journal_entry(entry)
+        except Exception as e:
+            self.logger.warning(f"خطأ في إنشاء قيد الدفعة: {e}")
+            return 0
+
+    def update_account(self, account: Account) -> bool:
+        """تحديث حساب موجود في قاعدة البيانات ودليل الحسابات"""
+        try:
+            query = """
+                UPDATE chart_of_accounts SET
+                    account_code = ?,
+                    account_name = ?,
+                    account_type = ?,
+                    sub_type = ?,
+                    description = ?,
+                    normal_side = ?,
+                    is_header = ?,
+                    parent_account_id = ?,
+                    is_active = ?,
+                    is_locked = ?,
+                    opening_balance = ?,
+                    current_balance = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """
+            params = (
+                account.account_code,
+                account.account_name,
+                account.account_type,
+                account.sub_type,
+                account.description,
+                account.normal_side,
+                account.is_header,
+                account.parent_account_id,
+                account.is_active,
+                account.is_locked,
+                float(account.opening_balance),
+                float(account.current_balance),
+                account.id,
+            )
+            self.db.execute_query(query, params)
+            # تحديث دليل الحسابات في الذاكرة
+            self.coa.accounts[account.id] = account
+            self.coa.code_index[account.account_code] = account
+            return True
+        except Exception as e:
+            self.logger.warning(f"خطأ في تحديث الحساب: {e}")
+            return False
+
+    def delete_account(self, account_id: int) -> bool:
+        """حذف حساب (تعطيله) من قاعدة البيانات ودليل الحسابات"""
+        try:
+            # التحقق من عدم وجود قيود مرتبطة
+            lines = self.db.fetch_one(
+                "SELECT COUNT(*) as cnt FROM journal_lines WHERE account_id = ?",
+                (account_id,),
+            )
+            count = lines.get("cnt") if isinstance(lines, dict) else (lines[0] if lines else 0)
+            if count > 0:
+                raise ValueError(f"لا يمكن حذف حساب مرتبط بـ {count} سطر قيد. قم بتعطيله بدلاً من ذلك.")
+
+            # حذف من قاعدة البيانات
+            self.db.execute_query(
+                "DELETE FROM chart_of_accounts WHERE id = ?",
+                (account_id,),
+            )
+            # إزالة من دليل الحسابات في الذاكرة
+            account = self.coa.get_account_by_id(account_id)
+            if account:
+                self.coa.accounts.pop(account_id, None)
+                self.coa.code_index.pop(account.account_code, None)
+            return True
+        except Exception as e:
+            self.logger.warning(f"خطأ في حذف الحساب: {e}")
+            raise
+
+    def post_journal_entry(self, journal_id: int) -> bool:
+        """ترحيل قيد يومي (تحديث حالة is_posted)"""
+        try:
+            # التحقق من أن القيد غير مرحل مسبقاً
+            entry = self.db.fetch_one(
+                "SELECT is_posted FROM general_journal WHERE id = ?",
+                (journal_id,),
+            )
+            if not entry:
+                raise ValueError("القيد غير موجود")
+            is_posted = entry.get("is_posted") if isinstance(entry, dict) else entry[0]
+            if is_posted:
+                raise ValueError("هذا القيد مرحل مسبقاً")
+
+            self.db.execute_query(
+                "UPDATE general_journal SET is_posted = 1 WHERE id = ?",
+                (journal_id,),
+            )
+            return True
+        except Exception as e:
+            self.logger.warning(f"خطأ في ترحيل القيد: {e}")
+            raise
+
+    def get_journal_lines(self, journal_id: int) -> list:
+        """جلب أسطر قيد يومي محدد"""
+        try:
+            lines = self.db.fetch_all(
+                "SELECT * FROM journal_lines WHERE journal_id = ? ORDER BY id",
+                (journal_id,),
+            )
+            return lines if lines else []
+        except Exception as e:
+            self.logger.warning(f"خطأ في جلب أسطر القيد: {e}")
+            return []
+
     def get_journal_entry(self, journal_id: int) -> Optional[JournalEntry]:
         """جلب قيد يومي بنمط مرن"""
         try:

@@ -36,7 +36,7 @@ class SmartDashboardWindow(QMainWindow):
     Solid Unified Version (Standard El-Joumla)
     """
 
-    window_key = "dashboard"
+    window_key = "smart_dashboard"
     window_singleton = True
     window_title = "Smart Dashboard"
 
@@ -180,24 +180,28 @@ class SmartDashboardWindow(QMainWindow):
             self.top_selling_table.setItem(row, 1, QTableWidgetItem(str(item.get("total_sold", "N/A"))))
 
     def add_widget(self, *args, **kwargs):
-        """إضافة ويدجت (Public API)"""
-        return True
+        """إضافة ويدجت (Public API) — placeholder for future drag-and-drop support"""
+        # Not yet implemented; dashboards use a fixed layout
+        pass
 
     def remove_widget(self, *args, **kwargs):
-        """إزالة ويدجت (Public API)"""
-        return True
+        """إزالة ويدجت (Public API) — placeholder for future drag-and-drop support"""
+        pass
 
     def arrange_widgets(self, *args, **kwargs):
-        """ترتيب الويدجت (Public API)"""
-        return True
+        """ترتيب الويدجت (Public API) — placeholder for future layout management"""
+        pass
 
     def save_dashboard_layout(self, *args, **kwargs):
-        """حفظ تخطيط اللوحة (Public API)"""
-        return True
+        """حفظ تخطيط اللوحة (Public API) — placeholder for future persistence"""
+        pass
 
     def load_smart_widgets(self):
         """تحميل الأدوات الذكية (Public API)"""
-        return self.refresh_all_data()
+        try:
+            return self.refresh_all_data()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

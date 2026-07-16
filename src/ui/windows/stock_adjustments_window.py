@@ -4,6 +4,7 @@ Stock Adjustments Window
 """
 
 from datetime import date
+from decimal import Decimal
 from typing import List, Optional
 
 from PySide6.QtCore import QDate, Qt, Signal
@@ -11,6 +12,9 @@ from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
     QComboBox,
     QDateEdit,
+    QDialog,
+    QDoubleSpinBox,
+    QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -21,6 +25,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -220,6 +225,24 @@ class StockAdjustmentsWindow(QMainWindow):
     def create_buttons_section(self) -> QHBoxLayout:
         """إنشاء قسم الأزرار"""
         layout = QHBoxLayout()
+
+        # زر إنشاء تسوية
+        create_btn = QPushButton("➕ إنشاء تسوية")
+        create_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3498db;
+                color: white;
+                padding: 10px 20px;
+                font-size: 14px;
+                font-weight: bold;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+        """)
+        create_btn.clicked.connect(self.show_create_adjustment_dialog)
+        layout.addWidget(create_btn)
 
         # زر اعتماد
         approve_btn = QPushButton("✅ اعتماد")
@@ -455,6 +478,135 @@ class StockAdjustmentsWindow(QMainWindow):
                     QMessageBox.warning(self, "تنبيه", "لا يمكن تطبيق التسوية")
             except Exception as e:
                 QMessageBox.critical(self, "خطأ", f"فشل تطبيق التسوية:\n{str(e)}")
+
+    def show_create_adjustment_dialog(self):
+        """عرض حوار إنشاء تسوية جديدة"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("إنشاء تسوية جديدة")
+        dialog.setMinimumWidth(450)
+        dialog.setStyleSheet("QDialog { background-color: #0f172a; color: #f8fafc; }")
+
+        form = QFormLayout(dialog)
+        form.setSpacing(12)
+
+        # المنتج
+        product_combo = QComboBox()
+        product_combo.setMinimumWidth(300)
+        products = []
+        try:
+            rows = self.db.fetch_all(
+                "SELECT id, sku, name, current_stock, cost_price FROM products WHERE is_active = 1 ORDER BY name"
+            )
+            products = list(rows) if rows else []
+            for r in products:
+                product_combo.addItem(f"{r['sku']} - {r['name']}", r['id'])
+        except Exception as e:
+            QMessageBox.critical(self, "خطأ", f"فشل تحميل المنتجات:\n{e}")
+            return
+        form.addRow("المنتج:", product_combo)
+
+        # المخزون الحالي (تلقائي)
+        current_stock_label = QLabel("0.00")
+        current_stock_label.setStyleSheet("font-weight: bold; color: #3498db;")
+        form.addRow("المخزون الحالي:", current_stock_label)
+
+        def _on_product_changed(index):
+            if index < 0 or not products:
+                current_stock_label.setText("0.00")
+                return
+            pid = product_combo.currentData()
+            for r in products:
+                if r["id"] == pid:
+                    current_stock_label.setText(f"{r['current_stock']:,.2f}")
+                    break
+        product_combo.currentIndexChanged.connect(_on_product_changed)
+        if products:
+            _on_product_changed(0)
+
+        # الكمية المعدودة (الجديدة)
+        new_qty_spin = QDoubleSpinBox()
+        new_qty_spin.setRange(0, 999999)
+        new_qty_spin.setDecimals(2)
+        new_qty_spin.setValue(0)
+        form.addRow("الكمية المعدودة:", new_qty_spin)
+
+        # نوع التسوية
+        type_combo = QComboBox()
+        type_combo.addItem("📝 تصحيح", AdjustmentType.CORRECTION.value)
+        type_combo.addItem("📋 تسوية جرد", AdjustmentType.COUNT_ADJUSTMENT.value)
+        type_combo.addItem("💔 تالف", AdjustmentType.DAMAGE.value)
+        type_combo.addItem("📅 منتهي الصلاحية", AdjustmentType.EXPIRY.value)
+        type_combo.addItem("🔍 وجدت", AdjustmentType.FOUND.value)
+        type_combo.addItem("📝 أخرى", AdjustmentType.OTHER.value)
+        form.addRow("نوع التسوية:", type_combo)
+
+        # السبب / ملاحظات
+        notes_edit = QTextEdit()
+        notes_edit.setMaximumHeight(80)
+        notes_edit.setPlaceholderText("أدخل السبب أو ملاحظات...")
+        form.addRow("السبب / الملاحظات:", notes_edit)
+
+        # الأزرار
+        btn_layout = QHBoxLayout()
+        ok_btn = QPushButton("✅ إنشاء")
+        ok_btn.setStyleSheet("background-color: #27ae60; color: white; padding: 8px 16px; font-weight: bold; border-radius: 5px;")
+        cancel_btn = QPushButton("❌ إلغاء")
+        cancel_btn.setStyleSheet("background-color: #e74c3c; color: white; padding: 8px 16px; font-weight: bold; border-radius: 5px;")
+        btn_layout.addStretch()
+        btn_layout.addWidget(ok_btn)
+        btn_layout.addWidget(cancel_btn)
+        form.addRow(btn_layout)
+
+        def _on_accept():
+            pid = product_combo.currentData()
+            if pid is None:
+                QMessageBox.warning(dialog, "تنبيه", "يرجى اختيار منتج")
+                return
+            # إيجاد بيانات المنتج المحدد
+            selected_product = None
+            for r in products:
+                if r["id"] == pid:
+                    selected_product = r
+                    break
+            if not selected_product:
+                return
+
+            qty_before = Decimal(str(selected_product["current_stock"]))
+            qty_counted = Decimal(str(new_qty_spin.value()))
+            adjustment_qty = qty_counted - qty_before
+            unit_cost = Decimal(str(selected_product["cost_price"] or 0))
+
+            if adjustment_qty == Decimal("0"):
+                QMessageBox.warning(dialog, "تنبيه", "الكمية المعدولة تساوي صفر — لا حاجة لتسوية.")
+                return
+
+            try:
+                adjustment = StockAdjustment(
+                    adjustment_number=self.service.generate_adjustment_number(),
+                    adjustment_type=AdjustmentType(type_combo.currentData()),
+                    reason=notes_edit.toPlainText().strip(),
+                    product_id=selected_product["id"],
+                    product_code=selected_product["sku"],
+                    product_name=selected_product["name"],
+                    quantity_before=qty_before,
+                    adjustment_quantity=adjustment_qty,
+                    unit_cost=unit_cost,
+                    status=AdjustmentStatus.PENDING,
+                    created_by=self.current_user_id,
+                    notes=notes_edit.toPlainText().strip(),
+                )
+                self.service.create_adjustment(adjustment)
+                self.load_data()
+                self.adjustment_updated.emit()
+                dialog.accept()
+                QMessageBox.information(self, "نجاح", "تم إنشاء التسوية بنجاح")
+            except Exception as e:
+                QMessageBox.critical(dialog, "خطأ", f"فشل إنشاء التسوية:\n{e}")
+
+        ok_btn.clicked.connect(_on_accept)
+        cancel_btn.clicked.connect(dialog.reject)
+
+        dialog.exec()
 
     # --- Stubs for Testing ---
     def export_adjustment_report(self, *args, **kwargs):

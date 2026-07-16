@@ -1734,7 +1734,7 @@ class SalesDialog(BaseDialog):
                     sale_id=None,
                     product_id=item["id"],
                     product_name=item["name"],
-                    quantity=int(item["qty"]),
+                    quantity=Decimal(str(item["qty"])),
                     unit_price=item["price"],
                     discount=item["discount"],
                     total_price=item["total"],
@@ -1764,10 +1764,17 @@ class SalesDialog(BaseDialog):
             payment_method = payment_mapping.get(selected_key, PaymentMethod.CASH)
 
             subtotal = calculate_subtotal([item["total"] for item in self.cart_items])
-            discount_amount = to_decimal(0)
+
+            # حساب الخصم العام (مطابق لطريقة العرض)
+            discount_percentage = getattr(self, "discount_percentage", to_decimal(0))
+            if discount_percentage > 0:
+                global_discount = subtotal * (discount_percentage / Decimal("100.00"))
+            else:
+                global_discount = to_decimal(0)
+
             tax_rate = self.tax_rate
-            tax_amount = calculate_tax_amount(subtotal, discount_amount, tax_rate)
-            total_amount = calculate_grand_total(subtotal, discount_amount, tax_amount)
+            tax_amount = calculate_tax_amount(subtotal - global_discount, global_discount, tax_rate)
+            total_amount = calculate_grand_total(subtotal, global_discount, tax_amount)
 
             if not self.sale:
                 self.create_new_sale()
@@ -1793,7 +1800,9 @@ class SalesDialog(BaseDialog):
             pm_val = payment_method.value if isinstance(payment_method, PaymentMethod) else payment_method
             self.sale.payment_method = pm_val
             self.sale.total_amount = subtotal
-            self.sale.discount_amount = discount_amount
+            self.sale.discount_amount = global_discount
+            self.sale.tax_amount = tax_amount
+            self.sale.tax_percentage = tax_rate
             self.sale.final_amount = total_amount
             self.sale.paid_amount = self.paid_amount
             self.sale.remaining_amount = total_amount - self.paid_amount

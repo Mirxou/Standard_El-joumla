@@ -306,7 +306,23 @@ class SafetyStockWindow(QMainWindow):
 
         if reply == QMessageBox.Yes:
             try:
-                count = self.service.auto_configure_safety_stock()
+                # ضبط تلقائي لكل منتج له بيانات مبيعات في آخر 90 يوم
+                query = """
+                    SELECT DISTINCT si.product_id
+                    FROM sale_items si
+                    JOIN sales s ON si.sale_id = s.id
+                    WHERE s.sale_date >= date('now', '-90 days')
+                    AND si.product_id IS NOT NULL
+                """
+                product_rows = self.service.db.execute_query(query)
+                count = 0
+                for row in product_rows:
+                    product_id = row[0] if isinstance(row, (list, tuple)) else row["product_id"]
+                    try:
+                        self.service.auto_configure_safety_stock(int(product_id))
+                        count += 1
+                    except Exception:
+                        continue  # تخطي المنتجات التي لا تملك بيانات كافية
                 QMessageBox.information(self, "نجح", f"تم ضبط الأرصدة الآمنة لـ {count} منتج بنجاح")
                 self.load_data()
             except Exception as e:

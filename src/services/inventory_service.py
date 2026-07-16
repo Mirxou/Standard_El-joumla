@@ -16,8 +16,28 @@ from src.models.supplier import SupplierManager
 from src.utils.logger import setup_logger
 
 
-def gv(k, i, d=None):
-    return k[i] if isinstance(k, (list, tuple)) and len(k) > i else (k.get(i, d) if isinstance(k, dict) else d)
+def get_value(row: Any, key: Any, default: Any = None) -> Any:
+    """استخراج قيمة من صف نتيجة قاعدة بيانات (tuple أو dict) بأمان.
+
+    يعالج الحالة التي قد يكون فيها الصف tuple أو dict
+    بدون الحاجة لفحص النوع في كل مكان.
+
+    Args:
+        row: صف نتيجة من قاعدة البيانات (tuple أو dict)
+        key: مفتاح (فهرس رقمي لـ tuple، أو مفتاح نصي لـ dict)
+        default: القيمة الافتراضية إذا لم يُعثر على القيمة
+
+    Returns:
+        القيمة المطلوبة أو القيمة الافتراضية
+    """
+    if isinstance(row, (list, tuple)):
+        try:
+            return row[key] if 0 <= key < len(row) else default
+        except (IndexError, TypeError):
+            return default
+    if isinstance(row, dict):
+        return row.get(key, default)
+    return default
 
 
 @dataclass
@@ -371,19 +391,18 @@ class InventoryService:
             rows = self.db_manager.fetch_all(query, params)
             movements = []
             for row in rows:
-                isinstance(row, dict)
                 movements.append(
                     StockMovement(
-                        id=gv("id", 0),
-                        product_id=gv("product_id", 1, 0),
-                        movement_type=gv("movement_type", 2, ""),
-                        quantity=float(gv("quantity", 3, 0)),
-                        reference_id=gv("reference_id", 4),
-                        reference_type=gv("reference_type", 5),
-                        notes=gv("notes", 6),
-                        created_by=gv("user_id", 7),  # التوافق مع اسم العمود في DB
-                        created_at=self._parse_datetime(gv("created_at", 8)),
-                        product_name=gv("product_name", 9),
+                        id=get_value(row, "id" if isinstance(row, dict) else 0),
+                        product_id=get_value(row, "product_id" if isinstance(row, dict) else 1, 0),
+                        movement_type=get_value(row, "movement_type" if isinstance(row, dict) else 2, ""),
+                        quantity=float(get_value(row, "quantity" if isinstance(row, dict) else 3, 0)),
+                        reference_id=get_value(row, "reference_id" if isinstance(row, dict) else 4),
+                        reference_type=get_value(row, "reference_type" if isinstance(row, dict) else 5),
+                        notes=get_value(row, "notes" if isinstance(row, dict) else 6),
+                        created_by=get_value(row, "user_id" if isinstance(row, dict) else 7),
+                        created_at=self._parse_datetime(get_value(row, "created_at" if isinstance(row, dict) else 8)),
+                        product_name=get_value(row, "product_name" if isinstance(row, dict) else 9),
                     )
                 )
             return movements
@@ -403,16 +422,10 @@ class InventoryService:
             rows = self.db_manager.fetch_all(query)
             alerts = []
             for row in rows:
-                pid = (
-                    gv(row, 0) if isinstance(row, (list, tuple)) else (row.get("id") if isinstance(row, dict) else None)
-                )
-                name_val = (
-                    gv(row, 1)
-                    if isinstance(row, (list, tuple))
-                    else (row.get("name") if isinstance(row, dict) else None)
-                )
-                curr = float(gv(row, 2, 0) if isinstance(row, (list, tuple)) else row.get("current_stock", 0))
-                mins = float(gv(row, 3, 0) if isinstance(row, (list, tuple)) else row.get("min_stock", 0))
+                pid = get_value(row, "id" if isinstance(row, dict) else 0)
+                name_val = get_value(row, "name" if isinstance(row, dict) else 1)
+                curr = float(get_value(row, "current_stock" if isinstance(row, dict) else 2, 0))
+                mins = float(get_value(row, "min_stock" if isinstance(row, dict) else 3, 0))
 
                 alerts.append(
                     StockAlert(
@@ -496,21 +509,22 @@ class InventoryService:
         """أفضل المنتجات حسب القيمة مع Mapping مرن"""
         try:
             query = """
-            SELECT id, name, current_stock, selling_price, (current_stock * selling_price) as stock_value
+            SELECT id, name, current_stock, cost_price, selling_price,
+                   COALESCE(current_stock * cost_price, current_stock * selling_price * 0.7, 0) as stock_value
             FROM products WHERE is_active = 1 AND current_stock > 0
             ORDER BY stock_value DESC LIMIT ?
             """
             rows = self.db_manager.fetch_all(query, (limit,))
             results = []
             for row in rows:
-                isinstance(row, dict)
                 results.append(
                     {
-                        "id": gv("id", 0),
-                        "name": gv("name", 1),
-                        "current_stock": gv("current_stock", 2),
-                        "selling_price": gv("selling_price", 3),
-                        "stock_value": gv("stock_value", 4),
+                        "id": get_value(row, "id" if isinstance(row, dict) else 0),
+                        "name": get_value(row, "name" if isinstance(row, dict) else 1),
+                        "current_stock": get_value(row, "current_stock" if isinstance(row, dict) else 2),
+                        "cost_price": get_value(row, "cost_price" if isinstance(row, dict) else 3),
+                        "selling_price": get_value(row, "selling_price" if isinstance(row, dict) else 4),
+                        "stock_value": get_value(row, "stock_value" if isinstance(row, dict) else 5),
                     }
                 )
             return results

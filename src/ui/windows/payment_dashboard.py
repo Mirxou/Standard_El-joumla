@@ -52,18 +52,19 @@ class KPIWidget(QFrame):
         layout.addWidget(title_label)
 
         # القيمة
-        value_label = QLabel(value)
-        value_label.setStyleSheet(f"font-size: 24px; color: {color}; font-weight: bold;")
-        value_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(value_label)
+        self.value_label = QLabel(value)
+        self.value_label.setStyleSheet(f"font-size: 24px; color: {color}; font-weight: bold;")
+        self.value_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.value_label)
 
         # التغيير
+        self.change_label = None
         if change:
-            change_label = QLabel(change)
+            self.change_label = QLabel(change)
             change_color = "#27ae60" if change.startswith("+") else "#e74c3c"
-            change_label.setStyleSheet(f"font-size: 10px; color: {change_color};")
-            change_label.setAlignment(Qt.AlignCenter)
-            layout.addWidget(change_label)
+            self.change_label.setStyleSheet(f"font-size: 10px; color: {change_color};")
+            self.change_label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(self.change_label)
 
         self.setMinimumHeight(100)
         self.setMaximumHeight(120)
@@ -309,12 +310,12 @@ class PaymentDashboard(QMainWindow):
         self.kpi_widgets = {}
 
         kpi_configs = [
-            ("إجمالي المدفوعات", "0 ر.س", "", "#3498db"),
+            ("إجمالي المدفوعات", "0 د.ج", "", "#3498db"),
             ("عدد المعاملات", "0", "", "#27ae60"),
-            ("متوسط قيمة المعاملة", "0 ر.س", "", "#f39c12"),
+            ("متوسط قيمة المعاملة", "0 د.ج", "", "#f39c12"),
             ("معدل التحصيل", "0%", "", "#9b59b6"),
-            ("المبالغ المستحقة", "0 ر.س", "", "#e74c3c"),
-            ("التدفق النقدي", "0 ر.س", "", "#1abc9c"),
+            ("المبالغ المستحقة", "0 د.ج", "", "#e74c3c"),
+            ("التدفق النقدي", "0 د.ج", "", "#1abc9c"),
         ]
 
         for i, (title, value, change, color) in enumerate(kpi_configs):
@@ -545,21 +546,111 @@ class PaymentDashboard(QMainWindow):
         # تحديث الجداول
         self.update_tables(data)
 
+    def _set_kpi_value(self, title: str, value_text: str, change_text: str = None):
+        """Set value (and optional change) on a KPI widget by title."""
+        widget = self.kpi_widgets.get(title)
+        if widget is None:
+            return
+        widget.value_label.setText(value_text)
+        if change_text is not None and widget.change_label is not None:
+            change_color = "#27ae60" if change_text.startswith("+") else "#e74c3c"
+            widget.change_label.setText(change_text)
+            widget.change_label.setStyleSheet(f"font-size: 10px; color: {change_color};")
+
     def update_kpis(self, kpis: Dict[str, Any]):
         """تحديث مؤشرات الأداء الرئيسية"""
         try:
+            # If service returned no data, fall back to direct DB queries
+            if not kpis and self.db_manager:
+                kpis = self._load_kpis_from_db()
+
             # تحديث القيم في مؤشرات الأداء
-            if "إجمالي المدفوعات" in self.kpi_widgets and "total_amount" in kpis:
-                total_amount = f"{kpis['total_amount']:,.0f} ر.س"  # noqa: F841
-                # تحديث النص في المؤشر
+            if "total_amount" in kpis:
+                self._set_kpi_value("إجمالي المدفوعات", f"{kpis['total_amount']:,.0f} د.ج")
 
-            if "عدد المعاملات" in self.kpi_widgets and "total_transactions" in kpis:
-                total_transactions = f"{kpis['total_transactions']:,}"  # noqa: F841
+            if "total_transactions" in kpis:
+                self._set_kpi_value("عدد المعاملات", f"{kpis['total_transactions']:,}")
 
-            # يمكن إضافة المزيد من التحديثات هنا
+            if "average_transaction" in kpis:
+                self._set_kpi_value("متوسط قيمة المعاملة", f"{kpis['average_transaction']:,.0f} د.ج")
+
+            if "collection_rate" in kpis:
+                self._set_kpi_value("معدل التحصيل", f"{kpis['collection_rate']:.1f}%")
+
+            if "pending_amount" in kpis:
+                self._set_kpi_value("المبالغ المستحقة", f"{kpis['pending_amount']:,.0f} د.ج")
+
+            if "net_cash_flow" in kpis:
+                val = kpis['net_cash_flow']
+                sign = "+" if val >= 0 else ""
+                self._set_kpi_value("التدفق النقدي", f"{sign}{val:,.0f} د.ج")
 
         except Exception as e:
             self.logger.error(f"خطأ في تحديث مؤشرات الأداء: {e}", exc_info=True)
+
+    def _load_kpis_from_db(self) -> Dict[str, Any]:
+        """تحميل مؤشرات الأداء مباشرة من قاعدة البيانات عند عدم توفر بيانات الخدمة"""
+        kpis = {}
+        try:
+            # إجمالي المدفوعات المكتملة
+            result = self.db_manager.fetch_one(
+                "SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE status = 'completed'"
+            )
+            if result:
+                total = result.get("total", 0) if isinstance(result, dict) else (result[0] if result else 0)
+                kpis["total_amount"] = float(total or 0)
+
+            # عدد المعاملات
+            result = self.db_manager.fetch_one(
+                "SELECT COUNT(*) as cnt FROM payments WHERE status = 'completed'"
+            )
+            if result:
+                cnt = result.get("cnt", 0) if isinstance(result, dict) else (result[0] if result else 0)
+                kpis["total_transactions"] = int(cnt or 0)
+
+            # متوسط قيمة المعاملة
+            result = self.db_manager.fetch_one(
+                "SELECT COALESCE(AVG(amount), 0) as avg_amt FROM payments WHERE status = 'completed'"
+            )
+            if result:
+                avg = result.get("avg_amt", 0) if isinstance(result, dict) else (result[0] if result else 0)
+                kpis["average_transaction"] = float(avg or 0)
+
+            # المبالغ المستحقة (pending)
+            result = self.db_manager.fetch_one(
+                "SELECT COALESCE(SUM(amount), 0) as pending FROM payments WHERE status = 'pending'"
+            )
+            if result:
+                pending = result.get("pending", 0) if isinstance(result, dict) else (result[0] if result else 0)
+                kpis["pending_amount"] = float(pending or 0)
+
+            # معدل التحصيل
+            total_all = kpis.get("total_amount", 0)
+            pending = kpis.get("pending_amount", 0)
+            grand = total_all + pending
+            if grand > 0:
+                kpis["collection_rate"] = (total_all / grand) * 100
+            else:
+                kpis["collection_rate"] = 0.0
+
+            # التدفق النقدي الصافي (المدفوعات الواردة - المدفوعات الصادرة)
+            result_in = self.db_manager.fetch_one(
+                "SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE status = 'completed' AND payment_type = 'customer_payment'"
+            )
+            result_out = self.db_manager.fetch_one(
+                "SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE status = 'completed' AND payment_type = 'supplier_payment'"
+            )
+            inflow = 0.0
+            outflow = 0.0
+            if result_in:
+                inflow = float(result_in.get("total", 0) if isinstance(result_in, dict) else (result_in[0] if result_in else 0) or 0)
+            if result_out:
+                outflow = float(result_out.get("total", 0) if isinstance(result_out, dict) else (result_out[0] if result_out else 0) or 0)
+            kpis["net_cash_flow"] = inflow - outflow
+
+        except Exception as e:
+            self.logger.warning(f"خطأ في تحميل KPIs من قاعدة البيانات: {e}")
+        return kpis
 
     def update_charts(self, data: Dict[str, Any]):
         """تحديث الرسوم البيانية"""
@@ -661,12 +752,115 @@ class PaymentDashboard(QMainWindow):
     def update_tables(self, data: Dict[str, Any]):
         """تحديث الجداول"""
         try:
-            # تحديث جدول المعاملات الأخيرة
-            # يمكن إضافة المنطق هنا لتحديث الجداول
-            pass
-
+            self._update_recent_transactions_table(data)
+            self._update_top_customers_table(data)
+            self._update_payment_methods_table(data)
         except Exception as e:
             self.logger.error(f"خطأ في تحديث الجداول: {e}", exc_info=True)
+
+    def _update_recent_transactions_table(self, data: Dict[str, Any]):
+        """تحديث جدول أحدث المعاملات"""
+        try:
+            if not self.payment_service:
+                return
+            from datetime import date as date_cls
+            start = date_cls.today() - timedelta(days=30)
+            end = date_cls.today()
+            payments = self.payment_service.get_payments_by_date_range(start, end)
+
+            self.recent_transactions_table.setRowCount(len(payments[:50]))
+            for row, p in enumerate(payments[:50]):
+                self.recent_transactions_table.setItem(row, 0, QTableWidgetItem(
+                    str(getattr(p, 'payment_date', '')) or ''))
+                self.recent_transactions_table.setItem(row, 1, QTableWidgetItem(
+                    str(getattr(p, 'payment_type', ''))))
+                self.recent_transactions_table.setItem(row, 2, QTableWidgetItem(
+                    f"{getattr(p, 'amount', 0):,.2f}"))
+                # customer / entity name
+                entity_name = getattr(p, 'customer_id', '') or getattr(p, 'supplier_id', '') or ''
+                self.recent_transactions_table.setItem(row, 3, QTableWidgetItem(str(entity_name)))
+                self.recent_transactions_table.setItem(row, 4, QTableWidgetItem(
+                    str(getattr(p, 'payment_method', ''))))
+                self.recent_transactions_table.setItem(row, 5, QTableWidgetItem(
+                    str(getattr(p, 'status', ''))))
+        except Exception as e:
+            self.logger.error(f"خطأ في تحديث جدول المعاملات: {e}", exc_info=True)
+
+    def _update_top_customers_table(self, data: Dict[str, Any]):
+        """تحديث جدول العملاء الأكثر نشاطاً"""
+        try:
+            receivables = data.get("receivables", [])
+            if not receivables and self.db_manager:
+                query = """
+                    SELECT c.name, COUNT(p.id) as txn_count,
+                           COALESCE(SUM(p.amount), 0) as total,
+                           COALESCE(AVG(p.amount), 0) as avg_amt,
+                           MAX(p.payment_date) as last_date
+                    FROM customers c
+                    LEFT JOIN payments p ON p.entity_id = c.id AND p.payment_type = 'customer_payment'
+                    WHERE c.is_active = 1
+                    GROUP BY c.id
+                    ORDER BY total DESC
+                    LIMIT 20
+                """
+                receivables = self.db_manager.fetch_all(query) or []
+
+            self.top_customers_table.setRowCount(len(receivables))
+            for row, r in enumerate(receivables):
+                if isinstance(r, dict):
+                    self.top_customers_table.setItem(row, 0, QTableWidgetItem(str(r.get('customer_name', r.get('name', '')))))
+                    self.top_customers_table.setItem(row, 1, QTableWidgetItem(str(r.get('payments_count', r.get('txn_count', 0)))))
+                    self.top_customers_table.setItem(row, 2, QTableWidgetItem(f"{r.get('total', r.get('balance', 0)):,.2f}"))
+                    self.top_customers_table.setItem(row, 3, QTableWidgetItem(f"{r.get('average', r.get('avg_amt', 0)):,.2f}"))
+                    self.top_customers_table.setItem(row, 4, QTableWidgetItem(str(r.get('last_payment_date', r.get('last_date', '')) or '')))
+                else:
+                    # tuple row from raw query
+                    for col in range(min(len(r), 5)):
+                        val = r[col]
+                        if hasattr(val, '__float__'):
+                            val = f"{float(val):,.2f}"
+                        else:
+                            val = str(val or '')
+                        self.top_customers_table.setItem(row, col, QTableWidgetItem(val))
+        except Exception as e:
+            self.logger.error(f"خطأ في تحديث جدول العملاء: {e}", exc_info=True)
+
+    def _update_payment_methods_table(self, data: Dict[str, Any]):
+        """تحديث جدول طرق الدفع"""
+        try:
+            if not self.db_manager:
+                return
+            query = """
+                SELECT payment_method, COUNT(*) as cnt,
+                       ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM payments), 1) as pct,
+                       SUM(amount) as total,
+                       AVG(amount) as avg_amt
+                FROM payments
+                GROUP BY payment_method
+                ORDER BY cnt DESC
+            """
+            rows = self.db_manager.fetch_all(query) or []
+
+            self.payment_methods_table.setRowCount(len(rows))
+            for row, r in enumerate(rows):
+                if isinstance(r, dict):
+                    self.payment_methods_table.setItem(row, 0, QTableWidgetItem(str(r.get('payment_method', ''))))
+                    self.payment_methods_table.setItem(row, 1, QTableWidgetItem(str(r.get('cnt', 0))))
+                    self.payment_methods_table.setItem(row, 2, QTableWidgetItem(f"{r.get('pct', 0)}%"))
+                    self.payment_methods_table.setItem(row, 3, QTableWidgetItem(f"{r.get('total', 0):,.2f}"))
+                    self.payment_methods_table.setItem(row, 4, QTableWidgetItem(f"{r.get('avg_amt', 0):,.2f}"))
+                else:
+                    for col in range(min(len(r), 5)):
+                        val = r[col]
+                        if hasattr(val, '__float__'):
+                            val = f"{float(val):,.2f}"
+                        else:
+                            val = str(val or '')
+                        if col == 2 and val and val[-1] != '%':
+                            val += '%'
+                        self.payment_methods_table.setItem(row, col, QTableWidgetItem(val))
+        except Exception as e:
+            self.logger.error(f"خطأ في تحديث جدول طرق الدفع: {e}", exc_info=True)
 
     def export_dashboard(self):
         """تصدير بيانات اللوحة"""

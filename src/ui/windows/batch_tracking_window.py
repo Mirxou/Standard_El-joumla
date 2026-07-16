@@ -568,9 +568,20 @@ class BatchTrackingWindow(QMainWindow):
         )
 
         if reply == QMessageBox.Yes:
-            # سيتم تنفيذ المعالجة
-            QMessageBox.information(self, "نجح", "تم وضع علامة تالف على الدفعة")
-            self.load_data()
+            try:
+                update_query = """
+                    UPDATE product_batches
+                    SET status = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                """
+                self.db_manager.execute_query(
+                    update_query,
+                    (BatchStatus.DAMAGED.value, batch.id),
+                )
+                QMessageBox.information(self, "نجح", "تم وضع علامة تالف على الدفعة")
+                self.load_data()
+            except Exception as e:
+                QMessageBox.critical(self, "خطأ", f"فشل تحديث حالة الدفعة:\n{str(e)}")
 
     def get_status_label(self, status: str) -> str:
         """الحصول على تسمية الحالة"""

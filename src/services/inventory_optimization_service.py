@@ -5,6 +5,7 @@ Inventory Optimization Service - خدمة تحسين المخزون
 
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+import math
 from typing import Any, Dict, List, Optional
 
 from ..core.database_manager import DatabaseManager
@@ -326,10 +327,26 @@ class InventoryOptimizationService:
                 days_with_sales = row[0]["days_with_sales"] or 1
 
                 # متوسط الطلب اليومي
-                avg_daily = total_qty / days
+                avg_daily = total_qty / days_with_sales
 
-                # الانحراف المعياري (تقدير بسيط)
-                std_dev = avg_daily * Decimal("0.3")  # تقدير 30% من المتوسط
+                # الانحراف المعياري الحقيقي من البيانات اليومية
+                try:
+                    daily_query = """
+                        SELECT COALESCE(SUM(si.quantity), 0) as daily_qty
+                        FROM sale_items si
+                        JOIN sales s ON si.sale_id = s.id
+                        WHERE si.product_id = ? AND s.sale_date >= ?
+                        GROUP BY DATE(s.sale_date)
+                        ORDER BY DATE(s.sale_date)
+                    """
+                    daily_rows = self.db.execute_query(daily_query, (product_id, start_date))
+                    if daily_rows and len(daily_rows) > 1:
+                        daily_quantities = [float(r["daily_qty"]) for r in daily_rows]
+                        std_dev = Decimal(str(self._calculate_standard_deviation(daily_quantities)))
+                    else:
+                        std_dev = Decimal("0")
+                except Exception:
+                    std_dev = Decimal("0")
 
                 return {
                     "total_demand": total_qty,
@@ -367,8 +384,8 @@ class InventoryOptimizationService:
             # إنشاء إعدادات
             config = SafetyStockConfig(
                 product_id=product_id,
-                product_code=product["code"],
-                product_name=product["name"],
+                product_code=product.get("product_code") or product.get("code") or product.get("barcode") or "",
+                product_name=product.get("name", ""),
                 current_stock=Decimal(str(product["stock_quantity"] or 0)),
                 average_daily_demand=stats.get("average_daily_demand", Decimal("1")),
                 lead_time_days=lead_time_days,
@@ -589,6 +606,14 @@ class InventoryOptimizationService:
     # ============================================================================
     # Utilities
     # ============================================================================
+
+    def _calculate_standard_deviation(self, values: list) -> float:
+        """حساب الانحراف المعياري الحقيقي"""
+        if len(values) < 2:
+            return 0.0
+        avg = sum(values) / len(values)
+        variance = sum((x - avg) ** 2 for x in values) / (len(values) - 1)  # Sample std dev
+        return math.sqrt(variance)
 
     def _row_to_dict(self, row) -> Dict[str, Any]:
         """تحويل صف من قاعدة البيانات إلى قاموس"""

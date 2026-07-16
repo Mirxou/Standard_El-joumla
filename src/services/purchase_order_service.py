@@ -31,9 +31,10 @@ from src.models.receiving_note import (
 class PurchaseOrderService:
     """خدمة إدارة أوامر الشراء"""
 
-    def __init__(self, db_manager: DatabaseManager, logger=None):
+    def __init__(self, db_manager: DatabaseManager, logger=None, accounting_service=None):
         self.db = db_manager
         self.logger = logger
+        self.accounting_service = accounting_service
         # Lazy loading لـ WorkflowService
         self._workflow_service = None
 
@@ -238,6 +239,7 @@ class PurchaseOrderService:
             subtotal = ?, discount_amount = ?, tax_amount = ?, shipping_cost = ?, total_amount = ?,
             notes = ?, terms_conditions = ?, shipping_address = ?, billing_address = ?,
             approved_by = ?, approval_date = ?, sent_date = ?, confirmed_date = ?,
+            related_invoice_id = ?, invoice_matched = ?,
             updated_at = ?
         WHERE id = ?
         """
@@ -268,6 +270,8 @@ class PurchaseOrderService:
             po.approved_date.isoformat() if po.approved_date else None,
             po.sent_date.isoformat() if po.sent_date else None,
             None,  # confirmed_date not in model
+            po.related_invoice_id,
+            1 if po.invoice_matched else 0,
             po.updated_at.isoformat(),
             po.id,
         )
@@ -560,7 +564,7 @@ class PurchaseOrderService:
         return f"{prefix}-{sequence:04d}"
 
     def receive_shipment(self, po_id: int, receiving_note: ReceivingNote) -> bool:
-        """استلام شحنة"""
+        """استلام شحنة مع تحديث المخزون"""
         # إنشاء إشعار الاستلام
         self.create_receiving_note(receiving_note)
 
@@ -569,15 +573,40 @@ class PurchaseOrderService:
         if not po:
             return False
 
+        # تحويل بنود الاستلام إلى الصيغة المطلوبة: Dict[int, Decimal]
+        items_received = {}
         for rn_item in receiving_note.items:
-            for po_item in po.items:
-                if po_item.id == rn_item.po_item_id:
-                    po_item.receive_quantity(rn_item.quantity_accepted)
-                    break
+            if rn_item.po_item_id and rn_item.quantity_accepted > 0:
+                items_received[rn_item.po_item_id] = rn_item.quantity_accepted
+                # تحديث المخزون مباشرة
+                try:
+                    self.db.execute_update(
+                        "UPDATE products SET current_stock = current_stock + ? WHERE id = ?",
+                        [float(rn_item.quantity_accepted), rn_item.product_id],
+                    )
+                except Exception:
+                    pass  # المخزون يُحدَّث كـ fallback
 
-        # تحديث حالة أمر الشراء
-        po.receive_shipment(receiving_note.items)
-        self.update_purchase_order(po)
+        if items_received:
+            po.receive_shipment(items_received)
+            self.update_purchase_order(po)
+
+        # قيد محاسبي لأمر الشراء (غير معطل)
+        try:
+            if self.accounting_service:
+                from decimal import Decimal
+                po_data = {
+                    'po_id': po_id,
+                    'supplier_name': getattr(po, 'supplier_name', '') if hasattr(po, 'supplier_name') else str(getattr(po, 'supplier_id', '')),
+                    'total': Decimal(str(getattr(po, 'total_amount', 0) or 0)),
+                    'tax': Decimal(str(getattr(po, 'tax_amount', 0) or 0)),
+                    'inventory_account': '4100',
+                    'payable_account': '2100',
+                }
+                self.accounting_service.create_purchase_journal_entry(po_data)
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"خطأ في إنشاء قيد محاسبي للشراء: {e}")
 
         return True
 
@@ -701,3 +730,119 @@ class PurchaseOrderService:
         # لكن execute_query يعيد dict، لذا هذا fallback فقط
         # في حالة استخدام fetch_all أو fetch_one مباشرة
         return row if isinstance(row, dict) else {}
+
+    def three_way_match(self, po_id: int, purchase_id: int, tolerance: float = 0.02) -> Dict[str, Any]:
+        """
+        مطابقة ثلاثية الأطراف: أمر الشراء ↔ الاستلام ↔ فاتورة المورد
+
+        Args:
+            po_id: معرف أمر الشراء
+            purchase_id: معرف فاتورة المشتريات (purchases.id)
+            tolerance: نسبة التسامح (2% افتراضياً)
+
+        Returns:
+            dict مع: matched (bool), po_amount, received_amount, invoice_amount, differences
+        """
+        try:
+            po = self.get_purchase_order_by_id(po_id)
+            if not po:
+                return {"matched": False, "error": "أمر الشراء غير موجود"}
+
+            # 1. مبلغ أمر الشراء
+            po_amount = float(po.total_amount)
+
+            # 2. مبلغ الاستلام الفعلي (من receiving_notes)
+            received_rows = self.db.fetch_all(
+                "SELECT COALESCE(SUM(total_amount), 0) as total FROM receiving_notes "
+                "WHERE purchase_order_id = ? AND status != 'cancelled'",
+                (po_id,)
+            )
+            received_amount = 0.0
+            if received_rows and received_rows[0]:
+                row = received_rows[0]
+                received_amount = float(row.get("total", 0) if isinstance(row, dict) else row[0])
+
+            # 3. مبلغ فاتورة المورد
+            inv_row = self.db.fetch_one(
+                "SELECT id, invoice_number, total_amount, supplier_id FROM purchases WHERE id = ?",
+                (purchase_id,)
+            )
+            if not inv_row:
+                return {"matched": False, "error": "فاتورة المشتريات غير موجودة"}
+
+            invoice_amount = float(inv_row.get("total_amount", 0) if isinstance(inv_row, dict) else inv_row[2])
+
+            # 4. حساب الفروقات
+            diff_po_received = abs(po_amount - received_amount)
+            diff_po_invoice = abs(po_amount - invoice_amount)
+            diff_received_invoice = abs(received_amount - invoice_amount)
+
+            max_amount = max(po_amount, received_amount, invoice_amount, 1.0)
+            tolerance_amount = max_amount * tolerance
+
+            is_matched = (
+                diff_po_received <= tolerance_amount and
+                diff_po_invoice <= tolerance_amount and
+                diff_received_invoice <= tolerance_amount
+            )
+
+            # 5. إذا تمت المطابقة، حدّث أمر الشراء
+            if is_matched:
+                po.match_with_invoice(purchase_id)
+                po.status = POStatus.CLOSED
+                self.update_purchase_order(po)
+
+            return {
+                "matched": is_matched,
+                "po_amount": po_amount,
+                "received_amount": received_amount,
+                "invoice_amount": invoice_amount,
+                "diff_po_received": diff_po_received,
+                "diff_po_invoice": diff_po_invoice,
+                "diff_received_invoice": diff_received_invoice,
+                "tolerance_amount": tolerance_amount,
+            }
+        except Exception as e:
+            return {"matched": False, "error": str(e)}
+
+    def get_unmatched_invoices_for_supplier(self, supplier_id: int) -> list:
+        """جلب فواتير المشتريات غير المطابقة لمورد معين"""
+        try:
+            # فواتير المورد التي ليست مرتبطة بأمر شراء بعد
+            rows = self.db.fetch_all(
+                "SELECT id, invoice_number, purchase_date, total_amount, payment_status "
+                "FROM purchases "
+                "WHERE supplier_id = ? AND status NOT IN ('cancelled', 'draft') "
+                "ORDER BY purchase_date DESC",
+                (supplier_id,)
+            )
+            results = []
+            for row in rows:
+                if isinstance(row, dict):
+                    results.append(row)
+                else:
+                    results.append({
+                        "id": row[0], "invoice_number": row[1],
+                        "purchase_date": row[2], "total_amount": row[3],
+                        "payment_status": row[4],
+                    })
+            return results
+        except Exception:
+            return []
+
+    def ensure_match_columns(self):
+        """التأكد من وجود أعمدة المطابقة في جدول purchase_orders"""
+        try:
+            cols = self.db.fetch_all("PRAGMA table_info(purchase_orders)")
+            col_names = {c["name"] if isinstance(c, dict) else c[1] for c in cols}
+            if "related_invoice_id" not in col_names:
+                self.db.execute_query(
+                    "ALTER TABLE purchase_orders ADD COLUMN related_invoice_id INTEGER"
+                )
+            if "invoice_matched" not in col_names:
+                self.db.execute_query(
+                    "ALTER TABLE purchase_orders ADD COLUMN invoice_matched INTEGER DEFAULT 0"
+                )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Could not add match columns: {e}")

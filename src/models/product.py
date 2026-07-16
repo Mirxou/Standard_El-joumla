@@ -138,21 +138,25 @@ class ProductManager:
         return query, params
 
     def _execute_non_query(self, query: str, params: tuple = ()) -> int:
-        """تنفيذ استعلام غير استعلامي (INSERT/UPDATE/DELETE) مع دعم للـ Mock في الاختبارات"""
+        """تنفيذ استعلام غير استعلامي (INSERT/UPDATE/DELETE)"""
         try:
-            import unittest.mock
-            if isinstance(self.db_manager, unittest.mock.Mock):
-                res = self.db_manager.execute_query(query, params)
-                if hasattr(res, "rowcount"):
-                    val = res.rowcount
-                    if not isinstance(val, unittest.mock.Mock):
-                        return val
-                if isinstance(res, int):
-                    return res
-                return 1
+            if hasattr(self.db_manager, "execute_non_query"):
+                return self.db_manager.execute_non_query(query, params)
         except Exception:
             pass
-        return self.db_manager.execute_non_query(query, params)
+        # fallback: execute_query + rowcount
+        try:
+            res = self.db_manager.execute_query(query, params)
+            if hasattr(res, "rowcount"):
+                val = res.rowcount
+                if isinstance(val, int):
+                    return val
+            if isinstance(res, int):
+                return res
+            return 1
+        except Exception:
+            pass
+        return 0
 
     def create_product(self, product: Product) -> Optional[int]:
         """إنشاء منتج جديد"""
@@ -406,7 +410,7 @@ class ProductManager:
             SELECT COUNT(*) as total,
                    COUNT(CASE WHEN is_active = 1 THEN 1 END) as active,
                    COUNT(CASE WHEN current_stock <= min_stock AND is_active = 1 THEN 1 END) as low,
-                   SUM(CASE WHEN is_active = 1 THEN current_stock * cost_price ELSE 0 END) as value
+                   SUM(CASE WHEN is_active = 1 THEN current_stock * COALESCE(cost_price, selling_price * 0.7) ELSE 0 END) as value
             FROM products
             """
             row = self.db_manager.fetch_one(query)
@@ -434,7 +438,7 @@ class ProductManager:
 
     def _row_to_product(self, row) -> Optional[Product]:
         """تحويل صف قاعدة البيانات إلى كائن منتج"""
-        if not row or "Mock" in type(row).__name__:
+        if not row:
             return None
         try:
             is_dict = isinstance(row, dict)

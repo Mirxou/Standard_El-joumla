@@ -67,7 +67,7 @@ class DashboardService:
             title="إجمالي المبيعات",
             value=total,
             change=change,
-            unit="ر.س",
+            unit="د.ج",
             color="#4CAF50",
         )
 
@@ -87,7 +87,7 @@ class DashboardService:
             title="مبيعات اليوم",
             value=total,
             change=change,
-            unit="ر.س",
+            unit="د.ج",
             color="#2196F3",
         )
 
@@ -109,7 +109,7 @@ class DashboardService:
             title="مبيعات هذا الشهر",
             value=total,
             change=change,
-            unit="ر.س",
+            unit="د.ج",
             color="#1976D2",
         )
 
@@ -130,7 +130,7 @@ class DashboardService:
             title="إجمالي الربح",
             value=profit,
             change=change,
-            unit="ر.س",
+            unit="د.ج",
             color="#FF9800",
         )
 
@@ -144,7 +144,7 @@ class DashboardService:
             key="inventory_value",
             title="قيمة المخزون",
             value=value,
-            unit="ر.س",
+            unit="د.ج",
             color="#9C27B0",
         )
 
@@ -174,7 +174,7 @@ class DashboardService:
             key="receivables",
             title="الذمم المدينة",
             value=v,
-            unit="ر.س",
+            unit="د.ج",
             color="#26A69A",
         )
 
@@ -183,7 +183,7 @@ class DashboardService:
             SELECT COALESCE(SUM(balance), 0) FROM account_balances WHERE account_type = 'payable'
         """
         v = self._scalar(q1)
-        return KPI(key="payables", title="الذمم الدائنة", value=v, unit="ر.س", color="#00ACC1")
+        return KPI(key="payables", title="الذمم الدائنة", value=v, unit="د.ج", color="#00ACC1")
 
     def _kpi_profit_margin(self, start: date, end: date) -> KPI:
         """هامش الربح (Profit Margin %) = (الربح / المبيعات) × 100"""
@@ -239,7 +239,7 @@ class DashboardService:
                 key="aov",
                 title="متوسط قيمة الطلب",
                 value=0,
-                unit="ر.س",
+                unit="د.ج",
                 color="#3F51B5",
             )
 
@@ -263,7 +263,7 @@ class DashboardService:
             title="متوسط قيمة الطلب",
             value=aov,
             change=change,
-            unit="ر.س",
+            unit="د.ج",
             color="#3F51B5",
         )
 
@@ -326,7 +326,7 @@ class DashboardService:
             title="التدفق النقدي الصافي",
             value=net_flow,
             change=change,
-            unit="ر.س",
+            unit="د.ج",
             color=color,
         )
 

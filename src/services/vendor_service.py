@@ -130,7 +130,7 @@ class VendorService:
 
                 # تسجيل حركة مخزون
                 try:
-                    from src.services.inventory_service_enhanced import (
+                    from src.services.inventory_service import (
                         InventoryService,
                         StockMovement,
                     )

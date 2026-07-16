@@ -154,7 +154,7 @@ products_deleted_total = Counter("products_deleted_total", "Total number of prod
 
 sales_created_total = Counter("sales_created_total", "Total number of sales created")
 
-sales_total_amount = Counter("sales_total_amount", "Total amount of sales", ["currency"])  # SAR, USD, etc.
+sales_total_amount = Counter("sales_total_amount", "Total amount of sales", ["currency"])  # DZD, USD, etc.
 
 # System Metrics
 api_info = Info("api_info", "API information")
@@ -255,7 +255,7 @@ def record_product_deleted():
     products_deleted_total.inc()
 
 
-def record_sale_created(amount: float, currency: str = "SAR"):
+def record_sale_created(amount: float, currency: str = "DZD"):
     """تسجيل إنشاء مبيعة"""
     if not PROMETHEUS_AVAILABLE:
         return

@@ -177,10 +177,14 @@ class PaymentInstallment:
         elif fee_type == LateFeeType.PERCENTAGE:
             return self.remaining_amount * (fee_value / 100)
         elif fee_type == LateFeeType.COMPOUNDING:
-            # نسبة تراكمية يومية
+            # فائدة تراكمية يومية
             days = self.days_overdue
-            daily_rate = fee_value / Decimal("365")
-            return self.remaining_amount * (daily_rate / 100) * days
+            if days > 0:
+                daily_rate = (fee_value / Decimal("100")) / Decimal("365")
+                # صيغة الفائدة المركبة: P * ((1 + r)^n - 1)
+                compound_factor = (Decimal("1") + daily_rate) ** days
+                return self.remaining_amount * (compound_factor - Decimal("1"))
+            return Decimal("0.00")
         return Decimal("0.00")
 
     def make_payment(
@@ -439,6 +443,30 @@ class PaymentPlan:
         if self.installments:
             self.end_date = self.installments[-1].due_date
 
+    @staticmethod
+    def _add_months_to_date(start: date, months: int) -> date:
+        """إضافة عدد من الأشهر إلى تاريخ مع الحفاظ على آخر يوم صالح في الشهر"""
+        year = start.year + (start.month + months - 1) // 12
+        month = (start.month + months - 1) % 12 + 1
+        day = min(
+            start.day,
+            [
+                31,
+                29 if year % 4 == 0 else 28,
+                31,
+                30,
+                31,
+                30,
+                31,
+                31,
+                30,
+                31,
+                30,
+                31,
+            ][month - 1],
+        )
+        return date(year, month, day)
+
     def _calculate_next_due_date(self, start: date, installment_index: int) -> date:
         """حساب تاريخ الاستحقاق التالي"""
         if self.frequency == PaymentFrequency.DAILY:
@@ -448,34 +476,13 @@ class PaymentPlan:
         elif self.frequency == PaymentFrequency.BIWEEKLY:
             return start + timedelta(weeks=(installment_index + 1) * 2)
         elif self.frequency == PaymentFrequency.MONTHLY:
-            # إضافة شهور
-            months = installment_index + 1
-            year = start.year + (start.month + months - 1) // 12
-            month = (start.month + months - 1) % 12 + 1
-            day = min(
-                start.day,
-                [
-                    31,
-                    29 if year % 4 == 0 else 28,
-                    31,
-                    30,
-                    31,
-                    30,
-                    31,
-                    31,
-                    30,
-                    31,
-                    30,
-                    31,
-                ][month - 1],
-            )
-            return date(year, month, day)
+            return self._add_months_to_date(start, installment_index + 1)
         elif self.frequency == PaymentFrequency.QUARTERLY:
-            return self._calculate_next_due_date(start, installment_index * 3)
+            return self._add_months_to_date(start, (installment_index + 1) * 3)
         elif self.frequency == PaymentFrequency.SEMIANNUAL:
-            return self._calculate_next_due_date(start, installment_index * 6)
+            return self._add_months_to_date(start, (installment_index + 1) * 6)
         elif self.frequency == PaymentFrequency.ANNUAL:
-            return self._calculate_next_due_date(start, installment_index * 12)
+            return self._add_months_to_date(start, (installment_index + 1) * 12)
         else:
             return start + timedelta(days=30 * (installment_index + 1))
 

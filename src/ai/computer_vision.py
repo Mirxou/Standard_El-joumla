@@ -1166,7 +1166,7 @@ Customer Satisfaction: 4.8/5.0
                 break
 
         # Amount patterns
-        amount_patterns = [r"\$\d+(?:\.\d{2})?", r"\d+(?:\.\d{2})?\s*(?:USD|SAR|EGP)"]
+        amount_patterns = [r"\$\d+(?:\.\d{2})?", r"\d+(?:\.\d{2})?\s*(?:USD|DZD|SAR|EGP)"]
         for pattern in amount_patterns:
             amounts = re.findall(pattern, text)
             if amounts:

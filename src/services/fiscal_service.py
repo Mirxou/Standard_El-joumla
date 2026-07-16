@@ -9,8 +9,49 @@ class FiscalService:
     Generates tax declarations automatically.
     """
 
+    # Configurable tax rates (can be overridden per-instance or via settings)
+    DEFAULT_TAP_RATE = 0.02       # Taxe sur l'Activité Professionnelle (2%)
+    DEFAULT_TIMBRE_RATE = 0.01    # Timbre Fiscal (1%)
+
     def __init__(self, db_manager):
         self.db = db_manager
+        self.tap_rate = self.DEFAULT_TAP_RATE
+        self.timbre_rate = self.DEFAULT_TIMBRE_RATE
+        self._load_rates_from_settings()
+
+    def _load_rates_from_settings(self):
+        """Load TAP and Timbre rates from the settings table if available."""
+        try:
+            rows = self.db.execute_query(
+                "SELECT key, value FROM app_settings WHERE key IN (?, ?)",
+                ("fiscal_tap_rate", "fiscal_timbre_rate"),
+            )
+            rate_map = {row[0]: float(row[1]) for row in rows}
+            if "fiscal_tap_rate" in rate_map:
+                self.tap_rate = rate_map["fiscal_tap_rate"]
+            if "fiscal_timbre_rate" in rate_map:
+                self.timbre_rate = rate_map["fiscal_timbre_rate"]
+        except Exception:
+            pass  # Fall back to defaults
+
+    def save_rates_to_settings(self, tap_rate: float = None, timbre_rate: float = None) -> bool:
+        """Persist TAP and Timbre rates to the settings table."""
+        try:
+            if tap_rate is not None:
+                self.tap_rate = tap_rate
+                self.db.execute_query(
+                    "INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)",
+                    ("fiscal_tap_rate", str(tap_rate)),
+                )
+            if timbre_rate is not None:
+                self.timbre_rate = timbre_rate
+                self.db.execute_query(
+                    "INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)",
+                    ("fiscal_timbre_rate", str(timbre_rate)),
+                )
+            return True
+        except Exception:
+            return False
 
     def generate_g50(self, month: int, year: int) -> dict:
         """
@@ -33,20 +74,18 @@ class FiscalService:
         total_vat_collected = sum(row[1] for row in sales)
 
         # Algerian Tax Rules (2025)
-        # TAP (Taxe sur l'Activité Professionnelle) = 1.5% or 2% usually. Let's assume 2%.
-        tap_rate = 0.02
-        tap_amount = total_turnover * tap_rate
-
-        # Timbre Fiscal (Stamp Duty) - Simplified Logic
-        # > 100 DA = 1%
-        timbre_amount = total_turnover * 0.01
+        # TAP & Timbre rates are configurable via settings or constructor
+        tap_amount = total_turnover * self.tap_rate
+        timbre_amount = total_turnover * self.timbre_rate
 
         return {
             "period": f"{month}/{year}",
             "turnover_ht": total_turnover - total_vat_collected,
             "turnover_ttc": total_turnover,
             "vat_collected": total_vat_collected,
+            "tap_rate": self.tap_rate,
             "tap_amount": tap_amount,
+            "timbre_rate": self.timbre_rate,
             "timbre_amount": timbre_amount,
             "total_to_pay": total_vat_collected + tap_amount + timbre_amount,
         }

@@ -173,8 +173,8 @@ class WebSocketManager:
                 asyncio.create_task(self.send_to_user(user_id, notification))
             else:
                 loop.run_until_complete(self.send_to_user(user_id, notification))
-        except Exception:
-            logging.getLogger(__name__).warning("Ignored exception in websocket_manager.py")
+        except Exception as e:
+            self.logger.debug(f"send_notification failed (non-critical): {e}")
 
     def send_data_update(
         self,
@@ -213,8 +213,8 @@ class WebSocketManager:
                 asyncio.create_task(self.broadcast_to_room(room, update_message))
             else:
                 loop.run_until_complete(self.broadcast_to_room(room, update_message))
-        except Exception:
-            logging.getLogger(__name__).warning("Ignored exception in websocket_manager.py")
+        except Exception as e:
+            self.logger.debug(f"send_data_update failed (non-critical): {e}")
 
 
 # Singleton instance

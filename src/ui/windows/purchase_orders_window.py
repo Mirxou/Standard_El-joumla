@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 
 from ...models.purchase_order import POPriority, POStatus, PurchaseOrder
 from ...services.purchase_order_service import PurchaseOrderService
+from ...services.accounting_service import AccountingService
 from ...ui.dialogs.purchase_order_dialog import PurchaseOrderDialog
 from ...ui.dialogs.receiving_dialog import ReceivingDialog
 
@@ -48,7 +49,11 @@ class PurchaseOrdersWindow(QMainWindow):
     def __init__(self, db_manager, parent=None):
         super().__init__(parent)
         self.db = db_manager
-        self.po_service = PurchaseOrderService(db_manager)
+        try:
+            accounting_service = AccountingService(db_manager)
+        except Exception:
+            accounting_service = None
+        self.po_service = PurchaseOrderService(db_manager, accounting_service=accounting_service)
         self.parent_window = parent
         self.current_po = None
 
@@ -158,6 +163,14 @@ class PurchaseOrdersWindow(QMainWindow):
         self.receive_btn.setEnabled(False)
         self.receive_btn.clicked.connect(self._receive_shipment)
         workflow_layout.addWidget(self.receive_btn)
+
+        # زر المطابقة ثلاثية الأطراف
+        self.match_btn = QPushButton("🔗 مطابقة ثلاثية")
+        self.match_btn.setEnabled(False)
+        self.match_btn.setStyleSheet(self._get_button_style("#9C27B0"))
+        self.match_btn.setToolTip("مطابقة أمر الشراء مع فاتورة المورد (3-Way Match)")
+        self.match_btn.clicked.connect(self._three_way_match)
+        workflow_layout.addWidget(self.match_btn)
 
         toolbar.addWidget(workflow_group)
 
@@ -719,8 +732,8 @@ class PurchaseOrdersWindow(QMainWindow):
             self.items_table.setItem(row, 3, QTableWidgetItem(f"{item.quantity_received:,.3f}"))
             self.items_table.setItem(row, 4, QTableWidgetItem(f"{item.quantity_pending:,.3f}"))
             self.items_table.setItem(row, 5, QTableWidgetItem(f"{item.unit_price:,.2f}"))
-            self.items_table.setItem(row, 6, QTableWidgetItem(f"{item.discount_percent:.2f}%"))
-            self.items_table.setItem(row, 7, QTableWidgetItem(f"{item.tax_percent:.2f}%"))
+            self.items_table.setItem(row, 6, QTableWidgetItem(f"{item.discount_percentage:.2f}%"))
+            self.items_table.setItem(row, 7, QTableWidgetItem(f"{item.tax_percentage:.2f}%"))
             self.items_table.setItem(row, 8, QTableWidgetItem(f"{item.net_amount:,.2f}"))
 
             total_qty_ordered += item.quantity_ordered
@@ -739,24 +752,30 @@ class PurchaseOrdersWindow(QMainWindow):
         else:
             self.approved_by_label.setText("-")
 
-        if po.approval_date:
-            self.approval_date_label.setText(po.approval_date.strftime("%Y-%m-%d"))
+        if po.approved_date:
+            self.approval_date_label.setText(po.approved_date.strftime("%Y-%m-%d"))
         else:
             self.approval_date_label.setText("-")
 
-        self.approval_notes_text.setPlainText(po.approval_notes or "")
+        # ملاحظات الموافقة — تُعرض من notes إذا لم يوجد حقل مخصص
+        approval_notes = getattr(po, "approval_notes", None) or po.notes or ""
+        self.approval_notes_text.setPlainText(str(approval_notes))
 
         if po.sent_date:
             self.sent_date_label.setText(po.sent_date.strftime("%Y-%m-%d"))
         else:
             self.sent_date_label.setText("-")
 
-        if po.confirmed_date:
-            self.confirmed_date_label.setText(po.confirmed_date.strftime("%Y-%m-%d"))
+        # تاريخ تأكيد المورد — غير متوفر في النموذج الحالي
+        confirmed_date = getattr(po, "confirmed_date", None)
+        if confirmed_date:
+            self.confirmed_date_label.setText(confirmed_date.strftime("%Y-%m-%d"))
         else:
             self.confirmed_date_label.setText("-")
 
-        self.confirmed_by_supplier_label.setText("نعم" if po.confirmed_by_supplier else "لا")
+        # تأكيد المورد — غير متوفر في النموذج الحالي
+        confirmed = getattr(po, "confirmed_by_supplier", None)
+        self.confirmed_by_supplier_label.setText("نعم" if confirmed else "لا")
 
     def _display_receiving_info(self, po: PurchaseOrder):
         """عرض معلومات الاستلام"""
@@ -786,11 +805,16 @@ class PurchaseOrdersWindow(QMainWindow):
             self.receive_btn.setEnabled(
                 self.current_po.can_receive if hasattr(self.current_po, "can_receive") else False
             )
+            # زر المطابقة: يُفعَّل فقط إذا كان مستلم بالكامل وغير مطابق بعد
+            self.match_btn.setEnabled(
+                self.current_po.is_fully_received and not getattr(self.current_po, 'invoice_matched', False)
+            )
         else:
             self.submit_btn.setEnabled(False)
             self.approve_btn.setEnabled(False)
             self.send_btn.setEnabled(False)
             self.receive_btn.setEnabled(False)
+            self.match_btn.setEnabled(False)
 
     def _new_purchase_order(self):
         """أمر شراء جديد"""
@@ -914,6 +938,115 @@ class PurchaseOrdersWindow(QMainWindow):
                     self._load_purchase_orders()
                 except Exception as e:
                     QMessageBox.critical(self, "خطأ", f"فشل الاستلام: {str(e)}")
+
+    def _three_way_match(self):
+        """مطابقة ثلاثية الأطراف: أمر الشراء ↔ الاستلام ↔ فاتورة المورد"""
+        if not self.current_po:
+            return
+
+        po = self.current_po
+
+        if not po.is_fully_received:
+            QMessageBox.warning(self, "تنبيه", "يجب استلام أمر الشراء بالكامل قبل المطابقة.")
+            return
+
+        if getattr(po, 'invoice_matched', False):
+            QMessageBox.information(self, "معلومة", "هذا الأمر مُطابَق بالفعل مع فاتورة.")
+            return
+
+        # التأكد من وجود الأعمدة
+        self.po_service.ensure_match_columns()
+
+        # جلب فواتير المورد المتاحة
+        invoices = self.po_service.get_unmatched_invoices_for_supplier(po.supplier_id)
+
+        if not invoices:
+            QMessageBox.warning(
+                self, "لا توجد فواتير",
+                f"لا توجد فواتير مشتريات للمورد '{po.supplier_name}'.\n"
+                "يرجى إنشاء فاتورة المورد أولاً من تبويب المشتريات."
+            )
+            return
+
+        # حوار اختيار الفاتورة
+        match_dialog = QDialog(self)
+        match_dialog.setWindowTitle(f"مطابقة ثلاثية — {po.po_number}")
+        match_dialog.setMinimumWidth(500)
+        layout = QVBoxLayout(match_dialog)
+
+        # معلومات أمر الشراء
+        info_group = QGroupBox("معلومات أمر الشراء")
+        info_layout = QFormLayout(info_group)
+        info_layout.addRow("رقم الأمر:", QLabel(po.po_number))
+        info_layout.addRow("المورد:", QLabel(po.supplier_name or "-"))
+        info_layout.addRow("إجمالي الأمر:", QLabel(f"{po.total_amount:,.2f} دج"))
+        layout.addWidget(info_group)
+
+        # اختيار الفاتورة
+        inv_group = QGroupBox("اختر فاتورة المورد")
+        inv_layout = QVBoxLayout(inv_group)
+        self.inv_combo = QComboBox()
+        for inv in invoices:
+            inv_num = inv.get("invoice_number", "?")
+            inv_amt = inv.get("total_amount", 0)
+            inv_date = inv.get("purchase_date", "")
+            self.inv_combo.addItem(
+                f"{inv_num} — {inv_amt:,.2f} دج ({inv_date})",
+                inv.get("id")
+            )
+        inv_layout.addWidget(self.inv_combo)
+        layout.addWidget(inv_group)
+
+        # أزرار
+        btn_layout = QHBoxLayout()
+        ok_btn = QPushButton("✅ تنفيذ المطابقة")
+        ok_btn.setStyleSheet("background-color: #4CAF50; color: white; padding: 8px 20px; font-weight: bold; border-radius: 4px;")
+        cancel_btn = QPushButton("إلغاء")
+        cancel_btn.clicked.connect(match_dialog.reject)
+        btn_layout.addStretch()
+        btn_layout.addWidget(cancel_btn)
+        btn_layout.addWidget(ok_btn)
+        layout.addLayout(btn_layout)
+
+        def do_match():
+            purchase_id = self.inv_combo.currentData()
+            if not purchase_id:
+                QMessageBox.warning(match_dialog, "تنبيه", "اختر فاتورة أولاً.")
+                return
+
+            result = self.po_service.three_way_match(po.id, purchase_id)
+
+            if "error" in result and not result.get("matched"):
+                QMessageBox.critical(match_dialog, "خطأ", f"فشلت المطابقة: {result['error']}")
+                return
+
+            if result["matched"]:
+                QMessageBox.information(
+                    match_dialog,
+                    "✅ مطابقة ناجحة",
+                    f"تمت المطابقة بنجاح!\n\n"
+                    f"مبلغ الأمر:   {result['po_amount']:,.2f} دج\n"
+                    f"مبلغ الاستلام: {result['received_amount']:,.2f} دج\n"
+                    f"مبلغ الفاتورة: {result['invoice_amount']:,.2f} دج\n\n"
+                    f"تم إغلاق أمر الشراء تلقائياً."
+                )
+                match_dialog.accept()
+                self._load_purchase_orders()
+            else:
+                QMessageBox.warning(
+                    match_dialog,
+                    "⚠️ فروقات في المطابقة",
+                    f"الفروقات تتجاوز نسبة التسامح (2%):\n\n"
+                    f"مبلغ الأمر:   {result['po_amount']:,.2f} دج\n"
+                    f"مبلغ الاستلام: {result['received_amount']:,.2f} دج\n"
+                    f"  الفرق: {result['diff_po_received']:,.2f} دج\n\n"
+                    f"مبلغ الفاتورة: {result['invoice_amount']:,.2f} دج\n"
+                    f"  الفرق عن الأمر: {result['diff_po_invoice']:,.2f} دج\n"
+                    f"  الفرق عن الاستلام: {result['diff_received_invoice']:,.2f} دج\n"
+                )
+
+        ok_btn.clicked.connect(do_match)
+        match_dialog.exec()
 
     def _get_button_style(self, color):
         """أسلوب الزر"""

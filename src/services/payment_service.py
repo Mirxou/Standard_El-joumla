@@ -18,6 +18,7 @@ from ..models.payment import (
 )
 from ..models.supplier import SupplierManager
 from ..services.exchange_rate_service import ExchangeRateService
+from ..services.accounting_service import AccountingService
 
 
 class PaymentService:
@@ -33,6 +34,8 @@ class PaymentService:
         self.supplier_manager = SupplierManager(db_manager, logger)
         # خدمة أسعار الصرف
         self.exchange_rate_service = ExchangeRateService(db_manager, logger)
+        # خدمة المحاسبة
+        self.accounting_service = AccountingService(db_manager, logger)
 
         # إنشاء الجداول إذا لم تكن موجودة
         self._create_tables()
@@ -331,6 +334,19 @@ class PaymentService:
                     if self.logger:
                         self.logger.warning(f"⚠️ فشل إطلاق Webhook: {e}")
 
+                # قيد محاسبي للدفعة (غير معطل)
+                try:
+                    payment_data = {
+                        'payment_id': payment_id,
+                        'reference': reference_number or '',
+                        'amount': amount,
+                        'method': payment_method,
+                        'payment_type': 'received',
+                    }
+                    self.accounting_service.create_payment_journal_entry(payment_data)
+                except Exception as e:
+                    self.logger.warning(f"خطأ في إنشاء قيد محاسبي للدفعة: {e}")
+
                 return payment_obj
 
             return None
@@ -469,6 +485,19 @@ class PaymentService:
                 except Exception as e:
                     if self.logger:
                         self.logger.warning(f"⚠️ فشل إطلاق Webhook: {e}")
+
+                # قيد محاسبي للدفعة (غير معطل)
+                try:
+                    payment_data = {
+                        'payment_id': payment_id,
+                        'reference': reference_number or '',
+                        'amount': amount,
+                        'method': payment_method,
+                        'payment_type': 'paid',
+                    }
+                    self.accounting_service.create_payment_journal_entry(payment_data)
+                except Exception as e:
+                    self.logger.warning(f"خطأ في إنشاء قيد محاسبي للدفعة: {e}")
 
                 return payment_obj
 
@@ -784,106 +813,126 @@ class PaymentService:
                 self.logger.error(f"خطأ في ملخص المدفوعات: {str(e)}")
             return {}
 
-    def get_aging_report(self, account_type: str) -> List[Dict[str, Any]]:
-        """تقرير أعمار الذمم"""
+    def get_aging_report(self, account_type: str = None) -> List[Dict[str, Any]]:
+        """تقرير أعمار الذمم - يعتمد على الفواتير غير المدفوعة وليس المدفوعات"""
         try:
+            if account_type is None:
+                account_type = AccountType.RECEIVABLE.value
+
+            today = date.today()
+
             if account_type == AccountType.RECEIVABLE.value:
-                # تقرير أعمار الذمم المدينة
+                # تقرير أعمار الذمم المدينة - بناءً على فواتير المبيعات غير المدفوعة
                 query = """
                 SELECT
-                    c.id,
-                    c.name,
-                    c.current_balance,
-                    SUM(CASE WHEN p.due_date >= ? THEN p.amount_in_base_currency ELSE 0 END) as current_amount,
-                    SUM(CASE WHEN p.due_date BETWEEN ? AND ? THEN p.amount_in_base_currency ELSE 0 END) as days_1_30,
-                    SUM(CASE WHEN p.due_date BETWEEN ? AND ? THEN p.amount_in_base_currency ELSE 0 END) as days_31_60,
-                    SUM(CASE WHEN p.due_date BETWEEN ? AND ? THEN p.amount_in_base_currency ELSE 0 END) as days_61_90,
-                    SUM(CASE WHEN p.due_date < ? THEN p.amount_in_base_currency ELSE 0 END) as over_90_days
-                FROM customers c
-                LEFT JOIN payments p ON c.id = p.customer_id
-                    AND p.payment_type = ? AND p.status != ?
-                WHERE c.current_balance > 0 AND c.is_active = 1
-                GROUP BY c.id, c.name, c.current_balance
-                ORDER BY c.current_balance DESC
+                    s.customer_id,
+                    COALESCE(c.name, 'غير محدد') as account_name,
+                    s.id as invoice_id,
+                    s.invoice_number,
+                    s.sale_date,
+                    s.due_date,
+                    s.final_amount,
+                    COALESCE(s.paid_amount, 0) as paid_amount,
+                    (s.final_amount - COALESCE(s.paid_amount, 0)) as remaining
+                FROM sales s
+                LEFT JOIN customers c ON s.customer_id = c.id
+                WHERE s.status NOT IN ('مدفوعة', 'paid', 'ملغية', 'cancelled',
+                                        'مسودة', 'draft', 'مرتجعة', 'returned')
+                  AND (s.final_amount - COALESCE(s.paid_amount, 0)) > 0
+                  AND s.is_active = 1
                 """
-
-                today = date.today()
-                days_30_ago = today - timedelta(days=30)
-                days_60_ago = today - timedelta(days=60)
-                days_90_ago = today - timedelta(days=90)
-
-                results = self.db_manager.fetch_all(
-                    query,
-                    (
-                        today.isoformat(),
-                        days_30_ago.isoformat(),
-                        today.isoformat(),
-                        days_60_ago.isoformat(),
-                        days_30_ago.isoformat(),
-                        days_90_ago.isoformat(),
-                        days_60_ago.isoformat(),
-                        days_90_ago.isoformat(),
-                        PaymentType.CUSTOMER_PAYMENT.value,
-                        PaymentStatus.COMPLETED.value,
-                    ),
-                )
+                rows = self.db_manager.fetch_all(query)
 
             elif account_type == AccountType.PAYABLE.value:
-                # تقرير أعمار الذمم الدائنة
+                # تقرير أعمار الذمم الدائنة - بناءً على فواتير المشتريات غير المدفوعة
                 query = """
                 SELECT
-                    s.id,
-                    s.name,
-                    s.current_balance,
-                    SUM(CASE WHEN p.due_date >= ? THEN p.amount_in_base_currency ELSE 0 END) as current_amount,
-                    SUM(CASE WHEN p.due_date BETWEEN ? AND ? THEN p.amount_in_base_currency ELSE 0 END) as days_1_30,
-                    SUM(CASE WHEN p.due_date BETWEEN ? AND ? THEN p.amount_in_base_currency ELSE 0 END) as days_31_60,
-                    SUM(CASE WHEN p.due_date BETWEEN ? AND ? THEN p.amount_in_base_currency ELSE 0 END) as days_61_90,
-                    SUM(CASE WHEN p.due_date < ? THEN p.amount_in_base_currency ELSE 0 END) as over_90_days
-                FROM suppliers s
-                LEFT JOIN payments p ON s.id = p.supplier_id
-                    AND p.payment_type = ? AND p.status != ?
-                WHERE s.current_balance > 0 AND s.is_active = 1
-                GROUP BY s.id, s.name, s.current_balance
-                ORDER BY s.current_balance DESC
+                    p.supplier_id,
+                    COALESCE(sup.name, 'غير محدد') as account_name,
+                    p.id as invoice_id,
+                    p.invoice_number,
+                    p.purchase_date as sale_date,
+                    p.due_date,
+                    p.final_amount,
+                    COALESCE(p.paid_amount, 0) as paid_amount,
+                    (p.final_amount - COALESCE(p.paid_amount, 0)) as remaining
+                FROM purchases p
+                LEFT JOIN suppliers sup ON p.supplier_id = sup.id
+                WHERE p.status NOT IN ('مدفوعة', 'paid', 'ملغية', 'cancelled',
+                                        'مرتجعة', 'returned')
+                  AND (p.final_amount - COALESCE(p.paid_amount, 0)) > 0
+                  AND p.is_active = 1
                 """
-
-                today = date.today()
-                days_30_ago = today - timedelta(days=30)
-                days_60_ago = today - timedelta(days=60)
-                days_90_ago = today - timedelta(days=90)
-
-                results = self.db_manager.fetch_all(
-                    query,
-                    (
-                        today.isoformat(),
-                        days_30_ago.isoformat(),
-                        today.isoformat(),
-                        days_60_ago.isoformat(),
-                        days_30_ago.isoformat(),
-                        days_90_ago.isoformat(),
-                        days_60_ago.isoformat(),
-                        days_90_ago.isoformat(),
-                        PaymentType.SUPPLIER_PAYMENT.value,
-                        PaymentStatus.COMPLETED.value,
-                    ),
-                )
+                rows = self.db_manager.fetch_all(query)
 
             else:
                 return []
 
+            # تجميع المبالغ حسب الحساب وحسب فترة التأخير
+            buckets: Dict[int, Dict[str, Any]] = {}
+
+            for row in rows:
+                account_id = row[0]
+                account_name = row[1]
+                due = row[5]          # due_date
+                sale_date = row[4]    # sale_date or purchase_date
+                remaining = Decimal(str(row[8] or 0))
+
+                if remaining <= 0:
+                    continue
+
+                # تحديد تاريخ الاستحقاق (due_date أو تاريخ الفاتورة كبديل)
+                ref_date = due or sale_date
+                if ref_date is None:
+                    # بدون تاريخ → يُعتبر مستحقاً حالياً
+                    bucket_key = 'current'
+                else:
+                    if isinstance(ref_date, str):
+                        ref_date = date.fromisoformat(ref_date)
+                    days_overdue = (today - ref_date).days
+
+                    if days_overdue <= 0:
+                        bucket_key = 'current'
+                    elif days_overdue <= 30:
+                        bucket_key = 'days_1_30'
+                    elif days_overdue <= 60:
+                        bucket_key = 'days_31_60'
+                    elif days_overdue <= 90:
+                        bucket_key = 'days_61_90'
+                    else:
+                        bucket_key = 'over_90_days'
+
+                if account_id not in buckets:
+                    buckets[account_id] = {
+                        'account_name': account_name,
+                        'total_balance': Decimal('0'),
+                        'current': Decimal('0'),
+                        'days_1_30': Decimal('0'),
+                        'days_31_60': Decimal('0'),
+                        'days_61_90': Decimal('0'),
+                        'over_90_days': Decimal('0'),
+                    }
+
+                buckets[account_id][bucket_key] += remaining
+                buckets[account_id]['total_balance'] += remaining
+
+            # تحويل إلى قائمة مرتبة تنازلياً حسب إجمالي الرصيد
             aging_data = []
-            for row in results:
+            for acct_id, data in sorted(
+                buckets.items(),
+                key=lambda x: x[1]['total_balance'],
+                reverse=True,
+            ):
                 aging_data.append(
                     {
-                        "account_id": row[0],
-                        "account_name": row[1],
-                        "total_balance": Decimal(str(row[2])),
-                        "current": Decimal(str(row[3] or 0)),
-                        "days_1_30": Decimal(str(row[4] or 0)),
-                        "days_31_60": Decimal(str(row[5] or 0)),
-                        "days_61_90": Decimal(str(row[6] or 0)),
-                        "over_90_days": Decimal(str(row[7] or 0)),
+                        "account_id": acct_id,
+                        "account_name": data['account_name'],
+                        "total_balance": data['total_balance'],
+                        "current": data['current'],
+                        "days_1_30": data['days_1_30'],
+                        "days_31_60": data['days_31_60'],
+                        "days_61_90": data['days_61_90'],
+                        "over_90_days": data['over_90_days'],
                     }
                 )
 

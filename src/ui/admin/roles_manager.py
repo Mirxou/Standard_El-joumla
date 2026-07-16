@@ -24,30 +24,21 @@ from ...services.rbac_service import RBACService
 
 class RolesManagerWidget(QWidget):
     def __init__(self, db, parent=None):
-        import os
-        # Detect if we are initialized under test mode with auth_service in pytest
-        is_test_mode = os.environ.get("PYTEST_CURRENT_TEST") is not None
-        if is_test_mode:
-            self.auth_service = db
-            from unittest.mock import Mock
-            self.db = Mock()
-            self.rbac = Mock()
-        else:
-            self.db = db
-            self.rbac = RBACService(db)
+        if db is None:
+            raise TypeError("RolesManagerWidget requires a valid db instance, got None")
+
+        self.db = db
+        self.rbac = RBACService(db)
 
         super().__init__(parent)
         self.setWindowTitle("إدارة الأدوار والصلاحيات")
 
-        if is_test_mode:
-            pass
-        else:
-            self._build_ui()
-            self.refresh()
+        self._build_ui()
+        self.refresh()
 
     def load_roles(self):
         try:
-            return self.auth_service.get_roles()
+            return self.rbac.list_roles()
         except Exception:
             return []
 
@@ -68,7 +59,7 @@ class RolesManagerWidget(QWidget):
 
     def get_role_permissions(self, role_id):
         try:
-            return self.auth_service.get_role_permissions(role_id)
+            return self.rbac.get_role_permissions(role_id)
         except Exception:
             return []
 

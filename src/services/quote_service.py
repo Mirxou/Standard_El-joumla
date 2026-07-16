@@ -443,9 +443,9 @@ class QuoteService:
 
             # تحديث الحالة
             if expired_ids:
-                ",".join("?" * len(expired_ids))
+                placeholders = ",".join("?" * len(expired_ids))
                 cursor.execute(
-                    """
+                    f"""
                     UPDATE quotes
                     SET status = 'EXPIRED', updated_at = ?
                     WHERE id IN ({placeholders})

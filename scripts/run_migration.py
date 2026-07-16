@@ -27,10 +27,10 @@ def main():
                 
             # Verify tables
             try:
-                db.execute_query("SELECT count(*) FROM returns")
-                print("✅ 'returns' table exists.")
+                db.execute_query("SELECT count(*) FROM return_invoices")
+                print("✅ 'return_invoices' table exists.")
             except Exception as e:
-                print(f"❌ 'returns' table check failed: {e}")
+                print(f"❌ 'return_invoices' table check failed: {e}")
                 
         else:
             print("❌ Database initialization failed.")

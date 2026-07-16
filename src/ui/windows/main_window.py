@@ -90,7 +90,7 @@ from src.ui.effects.visual_effects import VisualEffects
 from src.ui.models.inventory_table_model import InventoryTableModel
 from src.ui.models.sales_table_model import SalesTableModel
 from src.ui.views.app_launcher import AppLauncher  # System 4.0 Launcher
-from src.ui.views.sales_order_view import SalesOrderView  # System 4.0 Demo View
+# SalesOrderView removed — was overriding real sales tab with a static demo
 from src.ui.widgets.animated_table import AnimatedTableWidget
 from src.ui.widgets.custom_title_bar import CustomTitleBar
 from src.ui.widgets.quantum_notification import NotificationManager  # Quantum Toasts
@@ -593,10 +593,9 @@ class MainWindow(QMainWindow):
         # مؤقت لتحديث مؤشرات الحالة
         try:
             self._status_timer = QTimer(self)
-            self._status_timer.setInterval(3000)
+            self._status_timer.setInterval(5000)  # كل 5 ثوانٍ (خفيف: تحديث تسمية + إشعارات فقط)
             self._status_timer.timeout.connect(self.update_statusbar_metrics)
-            # 🔥 تعطيل مؤقت الحالة لتفادي التجميد
-            # self._status_timer.start()  # ← معطّل الآن
+            self._status_timer.start()
         except (AttributeError, RuntimeError) as e:
             self.logger.debug(f"Status timer initialization skipped: {e}")
 
@@ -974,10 +973,8 @@ class MainWindow(QMainWindow):
         self.content_area.addWidget(self.dashboard_tab)
         self.pages["dashboard"] = self.dashboard_tab
 
-        # Sales V2 (System 4.0 Demo) - Globally Replace 'sales'
-        self.sales_v2 = SalesOrderView()
-        self.content_area.addWidget(self.sales_v2)
-        self.pages["sales"] = self.sales_v2  # 🔥 Override legacy 'sales' page
+        # Sales Tab (lazy-loaded via _build_page)
+        # SalesOrderView demo removed — real sales tab restored
 
         # Start at Launcher
         # Start at Launcher - handled by QTimer below
@@ -1295,6 +1292,16 @@ class MainWindow(QMainWindow):
             finally:
                 self.sidebar.blockSignals(False)
 
+            # 🔥 ذكي: تشغيل/إيقاف dashboard_refresh_timer حسب الصفحة المعروضة
+            if hasattr(self, "dashboard_refresh_timer"):
+                try:
+                    if page_name == "dashboard" and not self.dashboard_refresh_timer.isActive():
+                        self.dashboard_refresh_timer.start()
+                    elif page_name != "dashboard" and self.dashboard_refresh_timer.isActive():
+                        self.dashboard_refresh_timer.stop()
+                except (AttributeError, RuntimeError):
+                    pass
+
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في تبديل الصفحة '{page_name}': {e}")
@@ -1607,17 +1614,17 @@ class MainWindow(QMainWindow):
 
         # Add Cards to Grid
         kpi_layout.addWidget(
-            self._create_glass_kpi("total_sales", "المبيعات", "0 ر.س", "#38bdf8", "💰"),
+            self._create_glass_kpi("total_sales", "المبيعات", "0 د.ج", "#38bdf8", "💰"),
             0,
             0,
         )
         kpi_layout.addWidget(
-            self._create_glass_kpi("total_revenue", "الإيرادات", "0 ر.س", "#22d3ee", "📈"),
+            self._create_glass_kpi("total_revenue", "الإيرادات", "0 د.ج", "#22d3ee", "📈"),
             0,
             1,
         )
         kpi_layout.addWidget(
-            self._create_glass_kpi("total_profit", "الأرباح", "0 ر.س", "#4ade80", "💵"),
+            self._create_glass_kpi("total_profit", "الأرباح", "0 د.ج", "#4ade80", "💵"),
             0,
             2,
         )
@@ -2003,9 +2010,8 @@ class MainWindow(QMainWindow):
         # مؤقت التحديث التلقائي
         self.dashboard_refresh_timer = QTimer(self)
         self.dashboard_refresh_timer.timeout.connect(self.refresh_dashboard_data)
-        self.dashboard_refresh_timer.setInterval(30000)  # 30 ثانية
-        # 🔥 تعطيل التحديث التلقائي لتفادي التجميد
-        # self.dashboard_refresh_timer.start()  # ← معطّل الآن
+        self.dashboard_refresh_timer.setInterval(60000)  # 60 ثانية (لا يُفعَّل تلقائياً — يُفعَّل عند فتح الداشبورد فقط)
+        # يتم تفعيله عند التبديل لصفحة الداشبورد لتجنب استهلاك الموارد في الخلفية
 
         return scroll_area
 
@@ -2121,6 +2127,18 @@ class MainWindow(QMainWindow):
             else:
                 self.dashboard_refresh_timer.stop()
 
+    def _db_fetch_one(self, query, params=()):
+        """Helper: run a SELECT and return a single row tuple, or None."""
+        try:
+            if hasattr(self.db_manager, "connection") and self.db_manager.connection:
+                cursor = self.db_manager.connection.execute(query, params)
+                return cursor.fetchone()
+            if hasattr(self.db_manager, "fetch_one"):
+                return self.db_manager.fetch_one(query, params)
+        except Exception:
+            pass
+        return None
+
     def refresh_dashboard_stats(self):
         """
         🛠️ محرك إحصائيات الداشبورد - استعلامات SQL سريعة جداً
@@ -2188,9 +2206,128 @@ class MainWindow(QMainWindow):
             # حساب متوسط الطلب
             avg_order = total_sales_amount / total_sales_count if total_sales_count > 0 else 0.0
 
-            # حساب صافي الربح (تقريبي - إجمالي المبيعات - تكلفة المشتريات)
-            # يمكن تحسينه لاحقاً باستخدام cost_price من products
-            total_profit = total_sales_amount * 0.3  # تقدير 30% ربح (يمكن تحسينه)
+            # حساب صافي الربح من قاعدة البيانات (مبيعات - تكلفة المشتريات)
+            try:
+                profit_query = """
+                    SELECT COALESCE(SUM(
+                        si.quantity * (si.unit_price - COALESCE(p.cost_price, si.unit_price * 0.7))
+                    ), 0)
+                    FROM sale_items si
+                    JOIN sales s ON si.sale_id = s.id
+                    JOIN products p ON si.product_id = p.id
+                    WHERE s.status NOT IN ('ملغية', 'cancelled', 'draft')
+                """
+                profit_result = None
+                if hasattr(self.db_manager, "execute_query"):
+                    profit_result = self.db_manager.execute_query(profit_query)
+                elif hasattr(self.db_manager, "fetch_all"):
+                    profit_result = self.db_manager.fetch_all(profit_query)
+                if profit_result and profit_result[0]:
+                    total_profit = float(profit_result[0][0])
+                else:
+                    total_profit = 0.0
+            except Exception:
+                total_profit = 0.0
+
+            # ------------------------------------------------
+            # استعلامات إضافية للـ KPIs المالية المتقدمة
+            # ------------------------------------------------
+            daily_expenses = 0.0
+            avg_basket = 0.0
+            daily_revenue = 0.0
+            net_profit = 0.0
+            avg_daily_sales = 0.0
+            customer_retention = 0.0
+            inventory_turnover = 0.0
+
+            try:
+                # مصروفات اليوم
+                expenses_query = """
+                    SELECT COALESCE(SUM(total_amount), 0)
+                    FROM purchases WHERE DATE(purchase_date) = DATE('now')
+                """
+                expenses_result = self._db_fetch_one(expenses_query)
+                daily_expenses = float(expenses_result[0]) if expenses_result else 0.0
+
+                # إيراد اليوم
+                daily_revenue_query = """
+                    SELECT COALESCE(SUM(total_amount), 0)
+                    FROM sales WHERE DATE(sale_date) = DATE('now')
+                      AND status NOT IN ('ملغية', 'cancelled', 'draft')
+                """
+                daily_rev_result = self._db_fetch_one(daily_revenue_query)
+                daily_revenue = float(daily_rev_result[0]) if daily_rev_result else 0.0
+
+                # صافي الربح اليومي
+                net_profit = daily_revenue - daily_expenses
+
+                # متوسط السلة
+                basket_query = """
+                    SELECT AVG(final_amount) FROM sales
+                    WHERE status NOT IN ('cancelled', 'draft', 'ملغية')
+                      AND final_amount > 0
+                """
+                basket_result = self._db_fetch_one(basket_query)
+                avg_basket = float(basket_result[0]) if basket_result and basket_result[0] else 0.0
+
+                # متوسط المبيعات اليومية (آخر 30 يوم)
+                avg_daily_query = """
+                    SELECT COALESCE(SUM(total_amount), 0) /
+                           (julianday('now') - julianday(MIN(sale_date)) + 1)
+                    FROM sales
+                    WHERE sale_date >= date('now', '-30 days')
+                      AND status NOT IN ('ملغية', 'cancelled', 'draft')
+                """
+                avg_daily_result = self._db_fetch_one(avg_daily_query)
+                avg_daily_sales = float(avg_daily_result[0]) if avg_daily_result and avg_daily_result[0] else 0.0
+
+                # معدل الاحتفاظ بالعملاء
+                # (عملاء اشتروا هذا الشهر AND الشهر الماضي) / عملاء اشتروا الشهر الماضي
+                retention_query = """
+                    WITH last_month AS (
+                        SELECT DISTINCT customer_id FROM sales
+                        WHERE sale_date >= date('now', 'start of month', '-1 month')
+                          AND sale_date <  date('now', 'start of month')
+                          AND customer_id IS NOT NULL AND customer_id != ''
+                          AND status NOT IN ('ملغية', 'cancelled', 'draft')
+                    ),
+                    this_month AS (
+                        SELECT DISTINCT customer_id FROM sales
+                        WHERE sale_date >= date('now', 'start of month')
+                          AND customer_id IS NOT NULL AND customer_id != ''
+                          AND status NOT IN ('ملغية', 'cancelled', 'draft')
+                    )
+                    SELECT
+                        (SELECT COUNT(*) FROM last_month) as last_m,
+                        (SELECT COUNT(*) FROM this_month) as this_m,
+                        (SELECT COUNT(*) FROM last_month lm
+                         WHERE EXISTS (SELECT 1 FROM this_month tm WHERE tm.customer_id = lm.customer_id)) as retained
+                """
+                retention_result = self._db_fetch_one(retention_query)
+                if retention_result:
+                    last_m = float(retention_result[0]) if retention_result[0] else 0
+                    retained = float(retention_result[2]) if retention_result[2] else 0
+                    customer_retention = (retained / last_m * 100) if last_m > 0 else 0.0
+
+                # معدل دوران المخزون
+                turnover_query = """
+                    SELECT
+                        COALESCE(SUM(si.quantity * COALESCE(p.cost_price, si.unit_price * 0.7)), 0) as cogs,
+                        COALESCE(AVG(selling_price * current_stock), 1) as avg_inventory
+                    FROM sale_items si
+                    JOIN products p ON si.product_id = p.id
+                    JOIN sales s ON si.sale_id = s.id
+                    WHERE s.status NOT IN ('ملغية', 'cancelled', 'draft')
+                """
+                turnover_result = self._db_fetch_one(turnover_query)
+                if turnover_result and turnover_result[0] and turnover_result[1]:
+                    cogs = float(turnover_result[0])
+                    avg_inv = float(turnover_result[1])
+                    inventory_turnover = cogs / avg_inv if avg_inv > 0 else 0.0
+
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"فشل جلب KPIs إضافية: {e}")
 
             # ------------------------------------------------
             # جلب بيانات الرسم البياني (آخر 7 أيام)
@@ -2287,6 +2424,27 @@ class MainWindow(QMainWindow):
 
                     if "avg_order" in self.dashboard_summary_labels:
                         self.dashboard_summary_labels["avg_order"].setText(f"{avg_order:,.0f} دج")
+
+                    # 3. تحديث KPIs المالية اليومية
+                    if "daily_revenue" in self.dashboard_summary_labels:
+                        self.dashboard_summary_labels["daily_revenue"].setText(f"{daily_revenue:,.0f} دج")
+                    if "daily_expenses" in self.dashboard_summary_labels:
+                        self.dashboard_summary_labels["daily_expenses"].setText(f"{daily_expenses:,.0f} دج")
+                    if "net_profit" in self.dashboard_summary_labels:
+                        self.dashboard_summary_labels["net_profit"].setText(f"{net_profit:,.0f} دج")
+                    if "avg_basket" in self.dashboard_summary_labels:
+                        self.dashboard_summary_labels["avg_basket"].setText(f"{avg_basket:,.0f} دج")
+
+                    # 4. تحديث الإحصائيات المتقدمة
+                    if "avg_daily_sales" in self.dashboard_summary_labels:
+                        self.dashboard_summary_labels["avg_daily_sales"].setText(f"{avg_daily_sales:,.0f} دج")
+                    if "customer_retention" in self.dashboard_summary_labels:
+                        self.dashboard_summary_labels["customer_retention"].setText(f"{customer_retention:.1f}%")
+                    if "inventory_turnover" in self.dashboard_summary_labels:
+                        self.dashboard_summary_labels["inventory_turnover"].setText(f"{inventory_turnover:.2f}")
+                    # conversion_rate — يحتاج بيانات إضافية؛ يُعرض 0 مؤقتاً
+                    if "conversion_rate" in self.dashboard_summary_labels:
+                        self.dashboard_summary_labels["conversion_rate"].setText("—")
                 except RuntimeError:
                     # Qt C++ objects already deleted (e.g. after tab switch/reload) - reset refs
                     self.dashboard_summary_labels = {}
@@ -3241,14 +3399,22 @@ class MainWindow(QMainWindow):
         try:
             cmd = command.strip().lower()
 
-            if any(k in cmd for k in ["مبيعات", "فاتورة", "sale"]):
-                self.switch_to_tab("sales") if hasattr(self, "switch_to_tab") else None
-            elif any(k in cmd for k in ["مخزون", "منتج", "inventory"]):
-                (self.switch_to_tab("inventory") if hasattr(self, "switch_to_tab") else None)
-            elif any(k in cmd for k in ["عميل", "customer"]):
-                (self.switch_to_tab("customers") if hasattr(self, "switch_to_tab") else None)
+            if any(k in cmd for k in ["مبيعات", "فاتورة", "بيع", "sale", "invoice"]):
+                self.switch_page("sales") if hasattr(self, "switch_page") else None
+            elif any(k in cmd for k in ["مخزون", "منتج", "inventory", "product", "stock"]):
+                self.switch_page("inventory") if hasattr(self, "switch_page") else None
+            elif any(k in cmd for k in ["عميل", "customer", "client"]):
+                self.switch_page("contacts") if hasattr(self, "switch_page") else None
             elif any(k in cmd for k in ["تقرير", "report"]):
-                self.open_reports() if hasattr(self, "open_reports") else None
+                self.switch_page("reports") if hasattr(self, "switch_page") else None
+            elif any(k in cmd for k in ["مشتريات", "مورد", "purchase", "supplier"]):
+                self.switch_page("purchases") if hasattr(self, "switch_page") else None
+            elif any(k in cmd for k in ["محاسبة", "حساب", "accounting", "finance"]):
+                self.switch_page("accounting") if hasattr(self, "switch_page") else None
+            elif any(k in cmd for k in ["إعدادات", "settings", "config"]):
+                self.switch_page("settings") if hasattr(self, "switch_page") else None
+            elif any(k in cmd for k in ["لوحة", "dashboard", "رئيسي"]):
+                self.switch_page("dashboard") if hasattr(self, "switch_page") else None
             elif any(k in cmd for k in ["مساعد", "help", "مساعدة"]):
                 if hasattr(self, "smart_assistant_widget") and self.smart_assistant_widget:
                     self.smart_assistant_widget.show()
@@ -3423,9 +3589,27 @@ class MainWindow(QMainWindow):
                     chart = QChart()
                     chart.setTitle("الإيرادات والمصروفات")
 
-                    # بيانات تجريبية (يمكن استبدالها ببيانات حقيقية)
+                    # بيانات الإيرادات والمصروفات من قاعدة البيانات
                     revenue = data.get("financial_kpis", {}).get("total_revenue", 0)
-                    expense = revenue * 0.6  # تقدير (يمكن جلبها من قاعدة البيانات)
+
+                    # حساب المصروفات الفعلية من المشتريات
+                    try:
+                        expense_query = """
+                            SELECT COALESCE(SUM(total_amount), 0)
+                            FROM purchases
+                            WHERE status NOT IN ('ملغية', 'cancelled')
+                        """
+                        expense_result = None
+                        if hasattr(self.db_manager, "execute_query"):
+                            expense_result = self.db_manager.execute_query(expense_query)
+                        elif hasattr(self.db_manager, "fetch_all"):
+                            expense_result = self.db_manager.fetch_all(expense_query)
+                        if expense_result and expense_result[0]:
+                            expense = float(expense_result[0][0])
+                        else:
+                            expense = 0.0
+                    except Exception:
+                        expense = 0.0
 
                     series = QBarSeries()
 
@@ -3642,10 +3826,9 @@ class MainWindow(QMainWindow):
 
         # مؤقت التحديث
         self.perf_timer = QTimer(self)
-        self.perf_timer.setInterval(2000)
+        self.perf_timer.setInterval(5000)  # كل 5 ثوانٍ (خفيف: وقت تشغيل + عداد إشعارات)
         self.perf_timer.timeout.connect(self.update_performance_tab)
-        # 🔥 تعطيل مؤقت الأداء لتفادي التجميد
-        # self.perf_timer.start()  # ← معطّل الآن
+        self.perf_timer.start()
 
         # تحديث أولي
         self.update_performance_tab()
@@ -4596,10 +4779,14 @@ class MainWindow(QMainWindow):
                     QMessageBox.Yes | QMessageBox.No,
                 )
                 if reply == QMessageBox.Yes:
-                    # Implement deletion logic here
                     if self.logger:
-                        self.logger.info(f"طلب حذف الفاتورة {sale_id}")
-                    # self.sales_service.delete_sale(sale_id)
+                        self.logger.info(f"طلب حذف/إلغاء الفاتورة {sale_id}")
+                    if hasattr(self, "sales_service") and self.sales_service:
+                        success = self.sales_service.cancel_sale(sale_id)
+                        if success:
+                            QMessageBox.information(self, "نجاح", f"تم إلغاء الفاتورة رقم {sale_id} بنجاح")
+                        else:
+                            QMessageBox.warning(self, "فشل", f"لم يتم إلغاء الفاتورة رقم {sale_id}")
                     self.refresh_sales_data()
         except Exception as e:
             if self.logger:
@@ -4617,14 +4804,18 @@ class MainWindow(QMainWindow):
             return
 
         selected_row = selected_rows[0].row()
-        invoice_number_item = self.sales_table.item(selected_row, 0)
-        sale_id = invoice_number_item.data(Qt.UserRole) if invoice_number_item else None
+        index = self.sales_model.index(selected_row, 0)
+        sale_id = self.sales_model.data(index, Qt.UserRole) if index.isValid() else None
         if not sale_id:
             QMessageBox.warning(self, "خطأ", "لا يمكن العثور على معرّف الفاتورة.")
             return
 
         try:
-            sale_details = self.db_manager.get_sale(sale_id)
+            # Use sales_service for fetching sale details (db_manager.get_sale doesn't exist)
+            if hasattr(self, "sales_service") and self.sales_service:
+                sale_details = self.sales_service.get_sale_details(sale_id)
+            else:
+                sale_details = None
             if not sale_details:
                 QMessageBox.warning(self, "خطأ", "لم يتم العثور على تفاصيل الفاتورة.")
                 return
@@ -4971,7 +5162,7 @@ class MainWindow(QMainWindow):
                     "total_remaining",
                     "avg_invoice_value",
                 ):
-                    label.setText(f"{value:,.2f} ريال")
+                    label.setText(f"{value:,.2f} د.ج")
                 else:
                     label.setText(f"{value:,}")
             else:
@@ -5251,7 +5442,7 @@ class MainWindow(QMainWindow):
                     "total_remaining",
                     "avg_purchase_value",
                 ):
-                    label.setText(f"{value:,.2f} ريال")
+                    label.setText(f"{value:,.2f} د.ج")
                 else:
                     label.setText(f"{value:,}")
             else:
@@ -5289,9 +5480,9 @@ class MainWindow(QMainWindow):
                 f"<h3>فاتورة شراء {purchase.invoice_number}</h3>"
                 f"<p>المورد: <b>{getattr(purchase, 'supplier_name', '') or 'غير محدد'}</b></p>"
                 f"<p>التاريخ: {purchase.purchase_date}</p>"
-                f"<p>القيمة الإجمالية: {float(purchase.total_amount):,.2f} ريال</p>"
-                f"<p>المدفوع: {float(purchase.paid_amount):,.2f} ريال</p>"
-                f"<p>المتبقي: {float(purchase.remaining_amount):,.2f} ريال</p>"
+                f"<p>القيمة الإجمالية: {float(purchase.total_amount):,.2f} د.ج</p>"
+                f"<p>المدفوع: {float(purchase.paid_amount):,.2f} د.ج</p>"
+                f"<p>المتبقي: {float(purchase.remaining_amount):,.2f} د.ج</p>"
                 f"<p>حالة الاستلام: {purchase.status}</p>"
                 f"<p>حالة الدفع: {purchase.payment_status}</p>"
             )
@@ -5437,7 +5628,7 @@ class MainWindow(QMainWindow):
                     "receivables",
                     "payables",
                 ):
-                    label.setText(f"{value:,.2f} ريال")
+                    label.setText(f"{value:,.2f} د.ج")
                 else:
                     label.setText(f"{value:,.2f}")
 
@@ -5559,7 +5750,7 @@ class MainWindow(QMainWindow):
             self.revenue_chart.addSeries(expense_series)
 
             axis_y = QValueAxis()
-            axis_y.setTitleText("القيمة (ريال)")
+            axis_y.setTitleText("القيمة (د.ج)")
             axis_y.setLabelFormat("%.0f")
             axis_y.setRange(0, max_value * 1.2 if max_value else 1)
 
@@ -8686,6 +8877,7 @@ class MainWindow(QMainWindow):
         manage_menu.addAction(self._ma("📦 تتبع الدفعات", self.show_batch_tracking_window))
         manage_menu.addAction(self._ma("🔔 توصيات إعادة الطلب", self.show_reorder_recommendations_window))
         manage_menu.addAction(self._ma("📋 الجرد الدوري", self.show_physical_counts_window))
+        manage_menu.addAction(self._ma("🔄 إدارة خطط الجرد الدوري", self.show_cycle_count_window))
         manage_menu.addAction(self._ma("⚖️ تسويات المخزون", self.show_stock_adjustments_window))
         manage_menu.addSeparator()
 
@@ -8707,6 +8899,7 @@ class MainWindow(QMainWindow):
         manage_menu.addAction(self._ma("📊 التقارير المتقدمة", self.show_advanced_reports_window))
         manage_menu.addAction(self._ma("🔮 تنبؤات الذكاء الاصطناعي", self.show_ai_predictions_window))
         manage_menu.addAction(self._ma("📅 التقارير المجدولة", self.show_scheduled_reports_window))
+        manage_menu.addAction(self._ma("📑 التصاريح الجبائية (G50)", self.show_fiscal_report))
         manage_menu.addSeparator()
 
         # — الأمان والامتثال والتكامل
@@ -8742,6 +8935,143 @@ class MainWindow(QMainWindow):
         window = self.window_manager.open_window("accounting", parent=self)
         if not window:
             QMessageBox.critical(self, "خطأ", "فشل في فتح نافذة إدارة المحاسبة")
+
+    def show_fiscal_report(self):
+        """عرض التصاريح الجبائية G50 — يفتح نافذة لاختيار الفترة ثم يعرض النتائج في جدول مع تصدير CSV"""
+        try:
+            dialog = QDialog(self)
+            dialog.setWindowTitle("📑 التصاريح الجبائية (G50)")
+            dialog.setMinimumSize(620, 420)
+
+            layout = QVBoxLayout(dialog)
+
+            # ── Date range row ──
+            form_row = QHBoxLayout()
+            form_row.addWidget(QLabel("من الشهر:"))
+            start_spin = QSpinBox()
+            start_spin.setRange(1, 12)
+            start_spin.setValue(date.today().month)
+            form_row.addWidget(start_spin)
+
+            form_row.addWidget(QLabel("السنة:"))
+            start_year = QSpinBox()
+            start_year.setRange(2020, 2035)
+            start_year.setValue(date.today().year)
+            form_row.addWidget(start_year)
+
+            form_row.addWidget(QLabel("إلى الشهر:"))
+            end_spin = QSpinBox()
+            end_spin.setRange(1, 12)
+            end_spin.setValue(date.today().month)
+            form_row.addWidget(end_spin)
+
+            form_row.addWidget(QLabel("السنة:"))
+            end_year = QSpinBox()
+            end_year.setRange(2020, 2035)
+            end_year.setValue(date.today().year)
+            form_row.addWidget(end_year)
+
+            layout.addLayout(form_row)
+
+            # ── Results table ──
+            table = QTableWidget(0, 7)
+            table.setHorizontalHeaderLabels([
+                "الفترة", "رقم الأعمال (HT)", "رقم الأعمال (TTC)",
+                "TVA المحصّلة", "TAP", "Timbre", "المجموع المستحق",
+            ])
+            table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+            table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+            table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+            layout.addWidget(table)
+
+            # ── Buttons ──
+            btn_row = QHBoxLayout()
+
+            generate_btn = QPushButton("🔄 إنشاء التقرير")
+            btn_row.addWidget(generate_btn)
+
+            export_btn = QPushButton("💾 تصدير CSV")
+            export_btn.setEnabled(False)
+            btn_row.addWidget(export_btn)
+
+            btn_row.addStretch()
+            close_btn = QPushButton("إغلاق")
+            close_btn.clicked.connect(dialog.reject)
+            btn_row.addWidget(close_btn)
+
+            layout.addLayout(btn_row)
+
+            # Store generated data for CSV export
+            generated_data = []
+
+            def _generate():
+                nonlocal generated_data
+                try:
+                    s_month, s_year = start_spin.value(), start_year.value()
+                    e_month, e_year = end_spin.value(), end_year.value()
+
+                    # Iterate month by month
+                    generated_data.clear()
+                    table.setRowCount(0)
+                    row = 0
+                    cur_year, cur_month = s_year, s_month
+                    while (cur_year, cur_month) <= (e_year, e_month):
+                        result = self.fiscal_service.generate_g50(cur_month, cur_year)
+                        generated_data.append(result)
+                        table.setRowCount(row + 1)
+                        values = [
+                            result["period"],
+                            f"{result['turnover_ht']:,.2f}",
+                            f"{result['turnover_ttc']:,.2f}",
+                            f"{result['vat_collected']:,.2f}",
+                            f"{result['tap_amount']:,.2f}",
+                            f"{result['timbre_amount']:,.2f}",
+                            f"{result['total_to_pay']:,.2f}",
+                        ]
+                        for col, val in enumerate(values):
+                            table.setItem(row, col, QTableWidgetItem(str(val)))
+                        row += 1
+                        # Advance month
+                        cur_month += 1
+                        if cur_month > 12:
+                            cur_month = 1
+                            cur_year += 1
+
+                    export_btn.setEnabled(len(generated_data) > 0)
+                except Exception as exc:
+                    QMessageBox.critical(dialog, "خطأ", f"فشل في إنشاء التقرير:\n{exc}")
+
+            generate_btn.clicked.connect(_generate)
+
+            def _export_csv():
+                try:
+                    path, _ = QFileDialog.getSaveFileName(
+                        dialog, "حفظ التقرير", f"G50_{start_year.value()}.csv", "CSV Files (*.csv)"
+                    )
+                    if not path:
+                        return
+                    import csv
+                    with open(path, "w", newline="", encoding="utf-8-sig") as f:
+                        writer = csv.writer(f)
+                        writer.writerow([
+                            "الفترة", "رقم الأعمال (HT)", "رقم الأعمال (TTC)",
+                            "TVA المحصّلة", "TAP", "Timbre", "المجموع المستحق",
+                        ])
+                        for r in generated_data:
+                            writer.writerow([
+                                r["period"], r["turnover_ht"], r["turnover_ttc"],
+                                r["vat_collected"], r["tap_amount"], r["timbre_amount"],
+                                r["total_to_pay"],
+                            ])
+                    QMessageBox.information(dialog, "تم", f"تم الحفظ بنجاح:\n{path}")
+                except Exception as exc:
+                    QMessageBox.critical(dialog, "خطأ", f"فشل في التصدير:\n{exc}")
+
+            export_btn.clicked.connect(_export_csv)
+
+            dialog.exec()
+        except Exception as exc:
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح نافذة التصاريح الجبائية:\n{exc}")
 
     def show_smart_dashboard(self):
         """عرض نافذة لوحة المعلومات الذكية"""
@@ -9308,8 +9638,8 @@ class MainWindow(QMainWindow):
         if hasattr(self, "inventory_model") and self.inventory_model:
             try:
                 # إعادة تحميل البيانات
-                if hasattr(self, "load_inventory_data"):
-                    self.load_inventory_data()
+                if hasattr(self, "refresh_inventory_data"):
+                    self.refresh_inventory_data()
             except Exception:
                 logging.getLogger(__name__).warning("Ignored exception in main_window.py")
 
@@ -9317,22 +9647,37 @@ class MainWindow(QMainWindow):
         """تحديث المبيعات إذا كانت الصفحة مفتوحة"""
         if hasattr(self, "sales_model") and self.sales_model:
             try:
-                if hasattr(self, "load_sales_data"):
-                    self.load_sales_data()
+                if hasattr(self, "refresh_sales_data"):
+                    self.refresh_sales_data()
             except Exception:
                 logging.getLogger(__name__).warning("Ignored exception in main_window.py")
 
     def _refresh_purchases_if_open(self):
         """تحديث المشتريات إذا كانت الصفحة مفتوحة"""
-        pass  # يمكن إضافته لاحقاً
+        if hasattr(self, "purchases_table") and self.purchases_table:
+            try:
+                if hasattr(self, "refresh_purchases_data"):
+                    self.refresh_purchases_data()
+            except Exception:
+                logging.getLogger(__name__).warning("Ignored exception in main_window.py")
 
     def _refresh_customers_if_open(self):
         """تحديث العملاء إذا كانت الصفحة مفتوحة"""
-        pass  # يمكن إضافته لاحقاً
+        if hasattr(self, "customers_table") and self.customers_table:
+            try:
+                if hasattr(self, "refresh_contacts_data"):
+                    self.refresh_contacts_data()
+            except Exception:
+                logging.getLogger(__name__).warning("Ignored exception in main_window.py")
 
     def _refresh_suppliers_if_open(self):
         """تحديث الموردين إذا كانت الصفحة مفتوحة"""
-        pass  # يمكن إضافته لاحقاً
+        if hasattr(self, "suppliers_table") and self.suppliers_table:
+            try:
+                if hasattr(self, "refresh_contacts_data"):
+                    self.refresh_contacts_data()
+            except Exception:
+                logging.getLogger(__name__).warning("Ignored exception in main_window.py")
 
     def showEvent(self, event):
         """عند عرض النافذة - تطبيق حركة fade in"""
@@ -9630,8 +9975,20 @@ class MainWindow(QMainWindow):
             logging.getLogger(__name__).warning("Ignored exception in main_window.py")
 
     def open_pos(self):
-        """فتح نقطة البيع"""
-        QMessageBox.information(self, "نقطة البيع", "سيتم فتح واجهة نقطة البيع")
+        """فتح نقطة البيع (تم تعطيله مؤقتاً)"""
+        QMessageBox.information(self, "تنبيه", "نقطة البيع غير متوفرة في هذا الإصدار.\nيمكنك إضافة المبيعات من تبويب المبيعات المباشر.")
+        if self.logger:
+            self.logger.info("محاولة فتح POS معطّلة - تم التوجيه لتبويب المبيعات")
+        if hasattr(self, "switch_page"):
+            self.switch_page("sales")
+
+    def _on_pos_sale_completed(self, sale_id):
+        """معالجة إتمام بيع من نقطة البيع"""
+        if self.logger:
+            self.logger.info(f"✅ تم بيع POS بنجاح: sale_id={sale_id}")
+        # تحديث المبيعات والداشبورد
+        self._refresh_sales_if_open()
+        QTimer.singleShot(200, self.refresh_dashboard_stats)
 
     def sales_report(self):
         """تقرير المبيعات"""
@@ -9688,10 +10045,10 @@ class MainWindow(QMainWindow):
                     report_text = (
                         "<h3>ملخص المبيعات (آخر 30 يوم)</h3>"
                         f"<p>إجمالي الفواتير: <b>{summary.get('total_invoices', 0):,}</b></p>"
-                        f"<p>إجمالي الإيرادات: <b>{summary.get('total_revenue', 0):,.2f} ريال</b></p>"
-                        f"<p>المبلغ المدفوع: <b>{summary.get('total_paid', 0):,.2f} ريال</b></p>"
-                        f"<p>المبلغ المتبقي: <b>{summary.get('total_remaining', 0):,.2f} ريال</b></p>"
-                        f"<p>متوسط قيمة الفاتورة: <b>{summary.get('avg_invoice_value', 0):,.2f} ريال</b></p>"
+                        f"<p>إجمالي الإيرادات: <b>{summary.get('total_revenue', 0):,.2f} د.ج</b></p>"
+                        f"<p>المبلغ المدفوع: <b>{summary.get('total_paid', 0):,.2f} د.ج</b></p>"
+                        f"<p>المبلغ المتبقي: <b>{summary.get('total_remaining', 0):,.2f} د.ج</b></p>"
+                        f"<p>متوسط قيمة الفاتورة: <b>{summary.get('avg_invoice_value', 0):,.2f} د.ج</b></p>"
                     )
                     QMessageBox.information(self, "تقرير المبيعات", report_text)
                 else:
@@ -9736,10 +10093,10 @@ class MainWindow(QMainWindow):
                 report_text = (
                     "<h3>ملخص المشتريات (آخر 30 يوم)</h3>"
                     f"<p>إجمالي الفواتير: <b>{summary.get('total_purchases', 0):,}</b></p>"
-                    f"<p>إجمالي القيمة: <b>{summary.get('total_amount', 0):,.2f} ريال</b></p>"
-                    f"<p>المبالغ المدفوعة: <b>{summary.get('total_paid', 0):,.2f} ريال</b></p>"
-                    f"<p>المبالغ المتبقية: <b>{summary.get('total_remaining', 0):,.2f} ريال</b></p>"
-                    f"<p>متوسط قيمة الفاتورة: <b>{summary.get('avg_purchase_value', 0):,.2f} ريال</b></p>"
+                    f"<p>إجمالي القيمة: <b>{summary.get('total_amount', 0):,.2f} د.ج</b></p>"
+                    f"<p>المبالغ المدفوعة: <b>{summary.get('total_paid', 0):,.2f} د.ج</b></p>"
+                    f"<p>المبالغ المتبقية: <b>{summary.get('total_remaining', 0):,.2f} د.ج</b></p>"
+                    f"<p>متوسط قيمة الفاتورة: <b>{summary.get('avg_purchase_value', 0):,.2f} د.ج</b></p>"
                 )
                 QMessageBox.information(self, "تقرير المشتريات", report_text)
             else:
@@ -10148,13 +10505,14 @@ class MainWindow(QMainWindow):
 
     def show_user_management(self):
         """عرض نافذة إدارة المستخدمين"""
-        QMessageBox.information(
-            self,
-            "قيد التطوير",
-            "عذراً، نافذة إدارة المستخدمين قيد التطوير حالياً وسيتم إضافتها في التحديث القادم.",
-        )
-        if self.logger:
-            self.logger.info("محاولة فتح نافذة إدارة المستخدمين (قيد التطوير)")
+        try:
+            from src.ui.dialogs.user_management_dialog import UserManagementDialog
+            dialog = UserManagementDialog(self.db_manager, parent=self)
+            dialog.exec()
+        except Exception as e:
+            QMessageBox.critical(self, "خطأ", f"فشل في فتح إدارة المستخدمين: {str(e)}")
+            if self.logger:
+                self.logger.error(f"خطأ في فتح إدارة المستخدمين: {e}")
 
     def show_permission_management(self):
         """عرض نافذة إدارة الصلاحيات"""

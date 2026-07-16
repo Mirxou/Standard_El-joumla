@@ -706,7 +706,7 @@ class CognitiveAIService:
         estimated_savings = total_items * 1000  # تقدير بسيط
 
         return {
-            "currency": "SAR",
+            "currency": "DZD",
             "monthly_savings": estimated_savings,
             "annual_savings": estimated_savings * 12,
             "confidence": 0.7,

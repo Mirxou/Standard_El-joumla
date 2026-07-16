@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -6,10 +5,12 @@ FastAPI Application - REST API Server
 تطبيق FastAPI للـ REST API
 """
 
+import logging
+import os
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import FastAPI, Request
 from fastapi.openapi.utils import get_openapi
@@ -62,13 +63,26 @@ rate_limiter = APIRateLimiter(
 
 _routes_registered = False
 
-# إعداد CORS افتراضي
-_cors_origins_default = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:8080",
-    "http://127.0.0.1:8080",
-]
+# إعداد CORS من متغيرات البيئة (بدون قيم ثابتة)
+def _load_cors_origins() -> List[str]:
+    """تحميل قوائم CORS المسموحة من متغير البيئة."""
+    env_origins = os.getenv("CORS_ORIGINS", "")
+    if env_origins:
+        return [origin.strip() for origin in env_origins.split(",") if origin.strip()]
+
+    # قيم التطوير الافتراضية (آمنة فقط للبيئة المحلية)
+    env_mode = os.getenv("ENVIRONMENT", "").lower()
+    if env_mode in ("production", "prod"):
+        raise RuntimeError(
+            "CORS_ORIGINS غير مضبوط في بيئة الإنتاج. "
+            "اضبطه في .env: CORS_ORIGINS=https://yourdomain.com"
+        )
+    return [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+    ]
 
 
 @asynccontextmanager
@@ -98,8 +112,8 @@ async def lifespan(app: FastAPI):
 
             cat_manager = CategoryManager(db_manager, logger)
             cat_manager.create_default_categories()
-        except Exception:
-            logging.getLogger(__name__).warning("Ignored exception in app.py")
+        except Exception as e:
+            logger.warning(f"فشل إنشاء الفئات الافتراضية (غير حرج): {e}")
 
         logger.info("✅ REST API Server جاهز!")
 
@@ -128,11 +142,7 @@ app = FastAPI(
 )
 
 # إعداد Middlewares (يجب إضافتها هنا، وليس في lifespan)
-cors_origins = _cors_origins_default
-try:
-    cors_origins = config_manager.get_cors_origins()
-except Exception:
-    logging.getLogger(__name__).warning("Ignored exception in app.py")
+cors_origins = _load_cors_origins()
 
 setup_middleware(
     app=app,
@@ -150,8 +160,8 @@ if PROMETHEUS_AVAILABLE and PrometheusMiddleware:
             PrometheusMiddleware,
             exclude_paths=["/metrics", "/health", "/docs", "/openapi.json", "/redoc"],
         )
-    except Exception:
-        logging.getLogger(__name__).warning("Ignored exception in app.py")
+    except Exception as e:
+        logger.warning(f"⚠️ فشل إضافة Prometheus Middleware: {e}")
 
 
 @app.get("/health")

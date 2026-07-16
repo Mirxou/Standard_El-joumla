@@ -1,8 +1,3 @@
-import logging
-import json
-
-from src.services.inventory_service import InventoryService
-
 #!/usr/bin/env python3  # noqa: E265
 # -*- coding: utf-8 -*-
 """
@@ -10,7 +5,10 @@ API Routes - REST API Endpoints
 مسارات API للـ REST API
 """
 
+import json
+import logging
 from datetime import date, datetime, timezone
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 from fastapi import (
@@ -52,8 +50,6 @@ router = APIRouter()
 async def health():
     return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
 
-
-from decimal import Decimal
 
 # Security
 security = HTTPBearer()
@@ -3361,8 +3357,8 @@ async def trigger_sync(
                     try:
                         await ws_manager.send_personal_message(message, websocket)
                         sent_count += 1
-                    except Exception:
-                        logging.getLogger(__name__).warning("Ignored exception in routes.py")
+                    except Exception as e:
+                        logger.debug(f"send_personal_message failed (non-critical): {e}")
 
             if sent_count > 0:
                 return {
@@ -3499,8 +3495,8 @@ async def websocket_endpoint(
                 logger.log(logging.ERROR, f"Error in WebSocket message handling: {e}")
                 await websocket.send_json({"type": "error", "message": str(e)})
 
-    except WebSocketDisconnect:
-        logging.getLogger(__name__).warning("Ignored exception in routes.py")
+    except WebSocketDisconnect as e:
+        logger.debug(f"WebSocket disconnect (non-critical): {e}")
     except Exception as e:
         logger.log(logging.ERROR, f"WebSocket error: {e}")
     finally:
@@ -3542,8 +3538,8 @@ async def websocket_data_updates(websocket: WebSocket):
                 logger.log(logging.ERROR, f"Error in data-updates WebSocket: {e}")
                 break
 
-    except WebSocketDisconnect:
-        logging.getLogger(__name__).warning("Ignored exception in routes.py")
+    except WebSocketDisconnect as e:
+        logger.debug(f"WebSocket disconnect (non-critical): {e}")
     except Exception as e:
         logger.log(logging.ERROR, f"Data-updates WebSocket error: {e}")
     finally:

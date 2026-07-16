@@ -441,22 +441,22 @@ class AdvancedReportsWindow(QMainWindow):
 
         if self.current_report.sales_summary:
             s = self.current_report.sales_summary
-            self._add_summary_card("إجمالي المبيعات", f"{s.total_sales:,.2f} ر.س", "#4CAF50")
+            self._add_summary_card("إجمالي المبيعات", f"{s.total_sales:,.2f} د.ج", "#4CAF50")
             self._add_summary_card("عدد الفواتير", str(s.total_invoices), "#2196F3")
-            self._add_summary_card("الأرباح", f"{s.total_profit:,.2f} ر.س", "#FF9800")
+            self._add_summary_card("الأرباح", f"{s.total_profit:,.2f} د.ج", "#FF9800")
             self._add_summary_card("هامش الربح", f"{s.average_profit_margin:.1f}%", "#9C27B0")
 
         elif self.current_report.inventory_summary:
             s = self.current_report.inventory_summary
             self._add_summary_card("المنتجات", str(s.total_products), "#4CAF50")
             self._add_summary_card("الكمية", f"{s.total_quantity:,.0f}", "#2196F3")
-            self._add_summary_card("القيمة", f"{s.total_value:,.2f} ر.س", "#FF9800")
+            self._add_summary_card("القيمة", f"{s.total_value:,.2f} د.ج", "#FF9800")
 
         elif self.current_report.financial_summary:
             s = self.current_report.financial_summary
-            self._add_summary_card("الإيرادات", f"{s.total_revenue:,.2f} ر.س", "#4CAF50")
-            self._add_summary_card("المصروفات", f"{s.total_expenses:,.2f} ر.س", "#F44336")
-            self._add_summary_card("صافي الدخل", f"{s.net_income:,.2f} ر.س", "#2196F3")
+            self._add_summary_card("الإيرادات", f"{s.total_revenue:,.2f} د.ج", "#4CAF50")
+            self._add_summary_card("المصروفات", f"{s.total_expenses:,.2f} د.ج", "#F44336")
+            self._add_summary_card("صافي الدخل", f"{s.net_income:,.2f} د.ج", "#2196F3")
 
     def _add_summary_card(self, title: str, value: str, color: str):
         """إضافة بطاقة ملخص"""

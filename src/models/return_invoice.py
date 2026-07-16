@@ -465,7 +465,7 @@ class ReturnManager:
                 return_invoice.return_number = f"RET-{int(datetime.now().timestamp())}"
 
             query = """
-            INSERT INTO returns (
+            INSERT INTO return_invoices (
                 return_number, return_type, original_sale_id, original_purchase_id,
                 customer_id, supplier_id, return_date, status, return_reason,
                 total_amount, refund_method, notes, created_by, created_at, updated_at
@@ -549,7 +549,7 @@ class ReturnManager:
             SELECT r.*,
                    COALESCE(c.name, 'عميل عام') as customer_name,
                    COALESCE(s.name, 'مورد عام') as supplier_name
-            FROM returns r
+            FROM return_invoices r
             LEFT JOIN customers c ON r.customer_id = c.id
             LEFT JOIN suppliers s ON r.supplier_id = s.id
             ORDER BY r.return_date DESC

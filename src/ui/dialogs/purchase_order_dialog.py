@@ -162,7 +162,7 @@ class PurchaseOrderDialog(BaseDialog):
         priority_layout.addSpacing(20)
 
         self.currency_combo = QComboBox()
-        self.currency_combo.addItems(["DZD", "USD", "EUR", "SAR"])
+        self.currency_combo.addItems(["DZD", "USD", "EUR"])
         priority_layout.addWidget(QLabel(self.i18n.get_message("currency") + ":"))
         priority_layout.addWidget(self.currency_combo)
 
@@ -341,15 +341,7 @@ class PurchaseOrderDialog(BaseDialog):
             # تحميل معلومات المورد
             try:
                 query = "SELECT contact_person FROM suppliers WHERE id = ?"
-                from unittest.mock import MagicMock
-                if isinstance(self.db.execute_query, MagicMock) and self.db.execute_query.side_effect:
-                    try:
-                        result = self.db.execute_query(query, (supplier_id,))
-                    except StopIteration:
-                        self.db.execute_query.side_effect = None
-                        result = self.db.execute_query(query, (supplier_id,))
-                else:
-                    result = self.db.execute_query(query, (supplier_id,))
+                result = self.db.execute_query(query, (supplier_id,))
                 
                 if result:
                     self.contact_edit.setText(result[0][0] or "")
@@ -400,14 +392,13 @@ class PurchaseOrderDialog(BaseDialog):
         discount_spin.valueChanged.connect(lambda: self._update_item_row(row))
         self.items_table.setCellWidget(row, 4, discount_spin)
 
-        # الضريبة%
+        # الضريبة% (للعرض فقط - الضريبة تُطبق على مستوى الأمر)
         tax_spin = QDoubleSpinBox()
         tax_spin.setMinimum(0.00)
         tax_spin.setMaximum(100.00)
         tax_spin.setDecimals(2)
-        tax_spin.setValue(15.00)  # القيمة الافتراضية
+        tax_spin.setValue(0.00)
         tax_spin.setSuffix("%")
-        tax_spin.valueChanged.connect(lambda: self._update_item_row(row))
         self.items_table.setCellWidget(row, 5, tax_spin)
 
         # المجموع الفرعي
@@ -443,22 +434,14 @@ class PurchaseOrderDialog(BaseDialog):
             qty = Decimal(str(qty_spin.value()))
             price = Decimal(str(price_spin.value()))
             discount_pct = Decimal(str(discount_spin.value()))
-            tax_pct = Decimal(str(tax_spin.value()))
-
             # المجموع الفرعي
             subtotal = qty * price
 
             # الخصم
             discount_amount = subtotal * (discount_pct / 100)
 
-            # بعد الخصم
-            after_discount = subtotal - discount_amount
-
-            # الضريبة
-            tax_amount = after_discount * (tax_pct / 100)
-
-            # الصافي
-            net_amount = after_discount + tax_amount
+            # بعد الخصم (بدون ضريبة على مستوى البند - الضريبة تُطبق على مستوى الأمر فقط)
+            net_amount = subtotal - discount_amount
 
             # تحديث الجدول
             self.items_table.item(row, 6).setText(f"{subtotal:,.2f}")
@@ -670,7 +653,7 @@ class PurchaseOrderDialog(BaseDialog):
                     quantity_ordered=Decimal(str(self.items_table.cellWidget(row, 2).value())),
                     unit_price=Decimal(str(self.items_table.cellWidget(row, 3).value())),
                     discount_percent=Decimal(str(self.items_table.cellWidget(row, 4).value())),
-                    tax_percent=Decimal(str(self.items_table.cellWidget(row, 5).value())),
+                    tax_percent=Decimal("0.00"),  # الضريبة على مستوى الأمر فقط، ليس على مستوى البند
                 )
                 item.calculate_totals()
                 items.append(item)
@@ -735,9 +718,8 @@ class PurchaseOrderDialog(BaseDialog):
                     tax_spin.setMinimum(0.00)
                     tax_spin.setMaximum(100.00)
                     tax_spin.setDecimals(2)
-                    tax_spin.setValue(15.00)
+                    tax_spin.setValue(0.00)  # الضريبة على مستوى الأمر فقط
                     tax_spin.setSuffix("%")
-                    tax_spin.valueChanged.connect(lambda: self._update_item_row(row))
                     self.items_table.setCellWidget(row, 5, tax_spin)
 
                     self.items_table.setItem(row, 6, QTableWidgetItem("0.00"))

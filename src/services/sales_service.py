@@ -80,14 +80,12 @@ class SalesService:
         try:
             # 0. توليد رقم الفاتورة إذا لم يكن موجوداً
             invoice_num = getattr(sale, "invoice_number", None)
-            if "Mock" in type(invoice_num).__name__:
-                invoice_num = None
             if not invoice_num:
                 sale.invoice_number = self._generate_invoice_number()
 
-            # دمج منطق معالجة أسعار الصرف المتعددة في الاختبارات
+            # معالجة أسعار الصرف المتعددة
             currency_id = getattr(sale, "currency_id", None)
-            if currency_id is not None and "Mock" not in type(currency_id).__name__:
+            if currency_id is not None:
                 try:
                     base_curr = self.exchange_rate_service.currency_manager.get_base_currency()
                     if base_curr and currency_id != base_curr.id:
@@ -114,12 +112,8 @@ class SalesService:
                     return None
                 # تعبئة cost_price من المنتج إذا لم يكن محدداً
                 cost_price = getattr(item, "cost_price", Decimal("0.00"))
-                if "Mock" in type(cost_price).__name__:
-                    cost_price = Decimal("0.00")
                 if cost_price == Decimal("0.00"):
                     prod_cost = getattr(product, "cost_price", Decimal("0.00"))
-                    if "Mock" in type(prod_cost).__name__:
-                        prod_cost = Decimal("0.00")
                     item.cost_price = prod_cost
 
             # 2. إنشاء الفاتورة عبر SaleManager
@@ -131,11 +125,8 @@ class SalesService:
 
                 # 3. تحديث المخزون بشكل ذري (Atomic Update)
                 for item in sale.items:
-                    # نستخدم adjust_stock لدعم assert_called_with في الاختبارات
                     product = self.product_manager.get_product_by_id(item.product_id)
                     current_stock = getattr(product, "current_stock", 0) if product else 0
-                    if "Mock" in type(current_stock).__name__:
-                        current_stock = 0
                     self.inventory_service.adjust_stock(
                         product_id=item.product_id,
                         new_quantity=current_stock - item.quantity,
@@ -151,18 +142,12 @@ class SalesService:
 
                 # 5. تحديث رصيد العميل إذا كان الدفع آجلاً
                 customer_id = getattr(sale, "customer_id", None)
-                if "Mock" in type(customer_id).__name__:
-                    customer_id = None
                 if customer_id:
                     total_amount = getattr(sale, "total_amount", Decimal("0.00"))
-                    if "Mock" in type(total_amount).__name__:
-                        total_amount = Decimal("0.00")
                     paid_amount = getattr(sale, "paid_amount", Decimal("0.00"))
-                    if "Mock" in type(paid_amount).__name__:
-                        paid_amount = Decimal("0.00")
                     
                     remaining_amount = getattr(sale, "remaining_amount", None)
-                    if remaining_amount is None or "Mock" in type(remaining_amount).__name__:
+                    if remaining_amount is None:
                         remaining_amount = Decimal(str(total_amount)) - Decimal(str(paid_amount))
                     
                     if remaining_amount > 0:
@@ -211,18 +196,12 @@ class SalesService:
 
                 # 3. عكس رصيد العميل
                 customer_id = getattr(sale, "customer_id", None)
-                if "Mock" in type(customer_id).__name__:
-                    customer_id = None
                 if customer_id:
                     total_amount = getattr(sale, "total_amount", Decimal("0.00"))
-                    if "Mock" in type(total_amount).__name__:
-                        total_amount = Decimal("0.00")
                     paid_amount = getattr(sale, "paid_amount", Decimal("0.00"))
-                    if "Mock" in type(paid_amount).__name__:
-                        paid_amount = Decimal("0.00")
                     
                     remaining_amount = getattr(sale, "remaining_amount", None)
-                    if remaining_amount is None or "Mock" in type(remaining_amount).__name__:
+                    if remaining_amount is None:
                         remaining_amount = Decimal(str(total_amount)) - Decimal(str(paid_amount))
                     
                     if remaining_amount > 0:
@@ -342,6 +321,32 @@ class SalesService:
         return True
 
     def _get_sales_statistics(self, start_date, end_date):
+        try:
+            query = """
+                SELECT
+                    COUNT(*) AS total_sales,
+                    COALESCE(SUM(s.final_amount), 0) AS total_revenue,
+                    COALESCE(SUM(si.profit), 0) AS total_profit
+                FROM sales s
+                LEFT JOIN sale_items si ON s.id = si.sale_id AND si.is_deleted = 0
+                WHERE s.sale_date >= ? AND s.sale_date <= ?
+                  AND s.status NOT IN ('cancelled', 'draft')
+                  AND s.is_deleted = 0
+            """
+            row = self.db_manager.fetch_one(query, (start_date.isoformat(), end_date.isoformat()))
+            if row:
+                total_sales = int(row["total_sales"])
+                total_revenue = Decimal(str(row["total_revenue"]))
+                total_profit = Decimal(str(row["total_profit"]))
+                average_sale_value = float(total_revenue / total_sales) if total_sales > 0 else 0.0
+                return {
+                    "total_sales": total_sales,
+                    "total_revenue": float(total_revenue),
+                    "total_profit": float(total_profit),
+                    "average_sale_value": average_sale_value,
+                }
+        except Exception as e:
+            self.logger.warning(f"Error getting sales statistics: {e}")
         return {
             "total_sales": 0,
             "total_revenue": 0.0,
@@ -350,16 +355,258 @@ class SalesService:
         }
 
     def _get_top_selling_products(self, start_date, end_date):
+        try:
+            query = """
+                SELECT
+                    p.name AS product_name,
+                    SUM(si.quantity) AS quantity,
+                    SUM(si.total_price) AS revenue
+                FROM sale_items si
+                JOIN sales s ON s.id = si.sale_id
+                JOIN products p ON p.id = si.product_id
+                WHERE s.sale_date >= ? AND s.sale_date <= ?
+                  AND s.status NOT IN ('cancelled', 'draft')
+                  AND s.is_deleted = 0
+                  AND si.is_deleted = 0
+                GROUP BY si.product_id
+                ORDER BY quantity DESC
+                LIMIT 10
+            """
+            rows = self.db_manager.fetch_all(query, (start_date.isoformat(), end_date.isoformat()))
+            return [
+                {
+                    "product_name": row["product_name"],
+                    "quantity": Decimal(str(row["quantity"])),
+                    "revenue": Decimal(str(row["revenue"])),
+                }
+                for row in rows
+            ]
+        except Exception as e:
+            self.logger.warning(f"Error getting top selling products: {e}")
         return []
 
     def _get_top_customers(self, start_date, end_date):
+        try:
+            query = """
+                SELECT
+                    COALESCE(c.name, 'عميل نقدي') AS customer_name,
+                    COUNT(*) AS invoice_count,
+                    SUM(s.final_amount) AS total_purchases
+                FROM sales s
+                LEFT JOIN customers c ON c.id = s.customer_id AND c.is_deleted = 0
+                WHERE s.sale_date >= ? AND s.sale_date <= ?
+                  AND s.status NOT IN ('cancelled', 'draft')
+                  AND s.is_deleted = 0
+                GROUP BY s.customer_id
+                ORDER BY total_purchases DESC
+                LIMIT 10
+            """
+            rows = self.db_manager.fetch_all(query, (start_date.isoformat(), end_date.isoformat()))
+            return [
+                {
+                    "customer_name": row["customer_name"],
+                    "total_purchases": Decimal(str(row["total_purchases"])),
+                    "invoice_count": int(row["invoice_count"]),
+                }
+                for row in rows
+            ]
+        except Exception as e:
+            self.logger.warning(f"Error getting top customers: {e}")
         return []
 
     def _get_sales_by_day(self, start_date, end_date):
+        try:
+            query = """
+                SELECT
+                    DATE(s.sale_date) AS date,
+                    COUNT(*) AS count,
+                    COALESCE(SUM(s.final_amount), 0) AS total
+                FROM sales s
+                WHERE s.sale_date >= ? AND s.sale_date <= ?
+                  AND s.status NOT IN ('cancelled', 'draft')
+                  AND s.is_deleted = 0
+                GROUP BY DATE(s.sale_date)
+                ORDER BY date
+            """
+            rows = self.db_manager.fetch_all(query, (start_date.isoformat(), end_date.isoformat()))
+            return [
+                {
+                    "date": str(row["date"]),
+                    "total": Decimal(str(row["total"])),
+                    "count": int(row["count"]),
+                }
+                for row in rows
+            ]
+        except Exception as e:
+            self.logger.warning(f"Error getting sales by day: {e}")
         return []
 
     def _get_sales_by_payment_method(self, start_date, end_date):
+        try:
+            query = """
+                SELECT
+                    s.payment_method,
+                    COUNT(*) AS count,
+                    COALESCE(SUM(s.final_amount), 0) AS total
+                FROM sales s
+                WHERE s.sale_date >= ? AND s.sale_date <= ?
+                  AND s.status NOT IN ('cancelled', 'draft')
+                  AND s.is_deleted = 0
+                GROUP BY s.payment_method
+                ORDER BY total DESC
+            """
+            rows = self.db_manager.fetch_all(query, (start_date.isoformat(), end_date.isoformat()))
+            return [
+                {
+                    "payment_method": row["payment_method"] if isinstance(row, dict) else row[0],
+                    "count": int(row["count"] if isinstance(row, dict) else row[1]),
+                    "total": float(row["total"] if isinstance(row, dict) else row[2]),
+                }
+                for row in rows
+            ]
+        except Exception as e:
+            self.logger.warning(f"Error getting sales by payment method: {e}")
         return []
+
+    # ===== Public period-based methods for dashboard/UI =====
+
+    def get_sales_statistics(self, period='month'):
+        """إحصائيات المبيعات الحقيقية"""
+        try:
+            if period == 'today':
+                date_filter = "DATE(sale_date) = DATE('now')"
+            elif period == 'week':
+                date_filter = "sale_date >= DATE('now', '-7 days')"
+            elif period == 'month':
+                date_filter = "sale_date >= DATE('now', '-30 days')"
+            elif period == 'year':
+                date_filter = "sale_date >= DATE('now', '-365 days')"
+            else:
+                date_filter = "1=1"
+
+            query = f"""
+                SELECT
+                    COUNT(*) as total_sales,
+                    COALESCE(SUM(total_amount), 0) as total_revenue,
+                    COALESCE(SUM(CASE WHEN payment_status = 'paid' THEN total_amount ELSE 0 END), 0) as paid_amount,
+                    COALESCE(SUM(CASE WHEN payment_status IN ('partial', 'unpaid') THEN total_amount - COALESCE(paid_amount, 0) ELSE 0 END), 0) as outstanding,
+                    AVG(total_amount) as avg_sale
+                FROM sales WHERE {date_filter}
+            """
+            result = self.db_manager.fetch_one(query)
+            if result:
+                return dict(result) if isinstance(result, dict) else {
+                    'total_sales': result[0], 'total_revenue': result[1],
+                    'paid_amount': result[2], 'outstanding': result[3], 'avg_sale': result[4]
+                }
+            return {'total_sales': 0, 'total_revenue': 0, 'paid_amount': 0, 'outstanding': 0, 'avg_sale': 0}
+        except Exception as e:
+            self.logger.warning(f"خطأ في إحصائيات المبيعات: {e}")
+            return {'total_sales': 0, 'total_revenue': 0, 'paid_amount': 0, 'outstanding': 0, 'avg_sale': 0}
+
+    def get_top_products(self, limit=10, period='month'):
+        """أفضل المنتجات مبيعاً"""
+        try:
+            date_filter = "1=1"
+            if period == 'today':
+                date_filter = "DATE(s.sale_date) = DATE('now')"
+            elif period == 'week':
+                date_filter = "s.sale_date >= DATE('now', '-7 days')"
+            elif period == 'month':
+                date_filter = "s.sale_date >= DATE('now', '-30 days')"
+
+            query = f"""
+                SELECT p.id, p.name, p.sku,
+                       SUM(si.quantity) as total_qty,
+                       SUM(si.total) as total_revenue
+                FROM sale_items si
+                JOIN sales s ON s.id = si.sale_id
+                JOIN products p ON p.id = si.product_id
+                WHERE {date_filter}
+                GROUP BY p.id, p.name, p.sku
+                ORDER BY total_qty DESC
+                LIMIT ?
+            """
+            results = self.db_manager.fetch_all(query, (limit,))
+            return [dict(r) if isinstance(r, dict) else {
+                'id': r[0], 'name': r[1], 'sku': r[2],
+                'total_qty': r[3], 'total_revenue': r[4]
+            } for r in results]
+        except Exception as e:
+            self.logger.warning(f"خطأ في أفضل المنتجات: {e}")
+            return []
+
+    def get_top_customers(self, limit=10, period='month'):
+        """أفضل العملاء"""
+        try:
+            date_filter = "1=1"
+            if period == 'month':
+                date_filter = "s.sale_date >= DATE('now', '-30 days')"
+            elif period == 'year':
+                date_filter = "s.sale_date >= DATE('now', '-365 days')"
+
+            query = f"""
+                SELECT c.id, c.name, c.phone,
+                       COUNT(s.id) as order_count,
+                       COALESCE(SUM(s.total_amount), 0) as total_spent
+                FROM sales s
+                JOIN customers c ON c.id = s.customer_id
+                WHERE {date_filter}
+                GROUP BY c.id, c.name, c.phone
+                ORDER BY total_spent DESC
+                LIMIT ?
+            """
+            results = self.db_manager.fetch_all(query, (limit,))
+            return [dict(r) if isinstance(r, dict) else {
+                'id': r[0], 'name': r[1], 'phone': r[2],
+                'order_count': r[3], 'total_spent': r[4]
+            } for r in results]
+        except Exception as e:
+            self.logger.warning(f"خطأ في أفضل العملاء: {e}")
+            return []
+
+    def get_daily_sales(self, days=30):
+        """المبيعات اليومية"""
+        try:
+            query = """
+                SELECT DATE(sale_date) as date,
+                       COUNT(*) as sales_count,
+                       COALESCE(SUM(total_amount), 0) as daily_total
+                FROM sales
+                WHERE sale_date >= DATE('now', ? || ' days')
+                GROUP BY DATE(sale_date)
+                ORDER BY date
+            """
+            results = self.db_manager.fetch_all(query, (str(-days),))
+            return [dict(r) if isinstance(r, dict) else {
+                'date': r[0], 'sales_count': r[1], 'daily_total': r[2]
+            } for r in results]
+        except Exception as e:
+            self.logger.warning(f"خطأ في المبيعات اليومية: {e}")
+            return []
+
+    def get_daily_profit(self, days=30):
+        """الربح اليومي"""
+        try:
+            query = """
+                SELECT DATE(s.sale_date) as date,
+                       COALESCE(SUM(s.total_amount), 0) as revenue,
+                       COALESCE(SUM(si.quantity * COALESCE(p.cost_price, p.selling_price * 0.7)), 0) as cost,
+                       COALESCE(SUM(s.total_amount) - SUM(si.quantity * COALESCE(p.cost_price, p.selling_price * 0.7)), 0) as profit
+                FROM sales s
+                JOIN sale_items si ON si.sale_id = s.id
+                JOIN products p ON p.id = si.product_id
+                WHERE s.sale_date >= DATE('now', ? || ' days')
+                GROUP BY DATE(s.sale_date)
+                ORDER BY date
+            """
+            results = self.db_manager.fetch_all(query, (str(-days),))
+            return [dict(r) if isinstance(r, dict) else {
+                'date': r[0], 'revenue': r[1], 'cost': r[2], 'profit': r[3]
+            } for r in results]
+        except Exception as e:
+            self.logger.warning(f"خطأ في الربح اليومي: {e}")
+            return []
 
     class SalesReport:
         def __init__(self, **kwargs):
@@ -386,6 +633,21 @@ class SalesService:
         )
 
     def _calculate_daily_profit(self, target_date):
+        try:
+            query = """
+                SELECT COALESCE(SUM(si.profit), 0) AS daily_profit
+                FROM sale_items si
+                JOIN sales s ON s.id = si.sale_id
+                WHERE DATE(s.sale_date) = ?
+                  AND s.status NOT IN ('cancelled', 'draft')
+                  AND s.is_deleted = 0
+                  AND si.is_deleted = 0
+            """
+            row = self.db_manager.fetch_one(query, (target_date.isoformat(),))
+            if row:
+                return float(Decimal(str(row["daily_profit"])))
+        except Exception as e:
+            self.logger.warning(f"Error calculating daily profit: {e}")
         return 0.0
 
     def get_daily_summary(self, target_date=None):

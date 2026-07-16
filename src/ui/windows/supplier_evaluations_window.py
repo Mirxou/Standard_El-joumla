@@ -11,14 +11,18 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QComboBox,
     QDateEdit,
+    QDialog,
+    QFormLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QDoubleSpinBox,
     QTableWidget,
     QTableWidgetItem,
+    QTextEdit,
     QVBoxLayout,
 )
 
@@ -139,7 +143,7 @@ class SupplierEvaluationsWindow(QMainWindow):
             with self.db.get_cursor() as cursor:
                 cursor.execute("""
                     SELECT id, supplier_id, evaluation_date, quality_score,
-                           delivery_score, service_score, overall_score, notes
+                           delivery_score, communication_score, reliability_score, overall_score, notes
                     FROM supplier_evaluations
                     ORDER BY evaluation_date DESC
                     LIMIT 100
@@ -201,9 +205,178 @@ class SupplierEvaluationsWindow(QMainWindow):
     def on_evaluation_selected(self):
         """عند اختيار تقييم"""
 
+    def _create_score_spin(self, minimum=1.0, maximum=5.0, default=3.0):
+        """إنشاء SpinBox للتقييم 1-5"""
+        spin = QDoubleSpinBox()
+        spin.setRange(minimum, maximum)
+        spin.setSingleStep(0.5)
+        spin.setDecimals(1)
+        spin.setValue(default)
+        return spin
+
+    def _show_evaluation_dialog(self, eval_id=None):
+        """فتح حوار إنشاء/تعديل تقييم مورّد"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("تقييم جديد" if eval_id is None else "تعديل التقييم")
+        dialog.setMinimumWidth(500)
+        dialog.setStyleSheet("background-color: #0f172a; color: #f8fafc;")
+
+        layout = QFormLayout(dialog)
+
+        # المورد
+        supplier_combo = QComboBox()
+        self._load_suppliers_combo_for_eval(supplier_combo)
+        layout.addRow("المورّد:", supplier_combo)
+
+        # التاريخ
+        date_input = QDateEdit()
+        date_input.setDate(QDate.currentDate())
+        date_input.setCalendarPopup(True)
+        layout.addRow("التاريخ:", date_input)
+
+        # تقييمات (1-5)
+        quality_spin = self._create_score_spin()
+        layout.addRow("الجودة (1-5):", quality_spin)
+
+        delivery_spin = self._create_score_spin()
+        layout.addRow("التسليم (1-5):", delivery_spin)
+
+        communication_spin = self._create_score_spin()
+        layout.addRow("التواصل (1-5):", communication_spin)
+
+        reliability_spin = self._create_score_spin()
+        layout.addRow("الموثوقية (1-5):", reliability_spin)
+
+        # التقييم العام (تلقائي)
+        overall_label = QLabel("0.0")
+        overall_label.setStyleSheet("font-weight: bold; font-size: 16px; color: #38bdf8;")
+        layout.addRow("التقييم العام:", overall_label)
+
+        # الملاحظات
+        notes_input = QTextEdit()
+        notes_input.setMaximumHeight(80)
+        notes_input.setPlaceholderText("ملاحظات...")
+        layout.addRow("الملاحظات:", notes_input)
+
+        # تحديث التقييم العام تلقائياً
+        def update_overall():
+            avg = (quality_spin.value() + delivery_spin.value() + communication_spin.value() + reliability_spin.value()) / 4
+            overall_label.setText(f"{avg:.1f}")
+
+        quality_spin.valueChanged.connect(update_overall)
+        delivery_spin.valueChanged.connect(update_overall)
+        communication_spin.valueChanged.connect(update_overall)
+        reliability_spin.valueChanged.connect(update_overall)
+        update_overall()
+
+        # أزرار
+        btn_layout = QHBoxLayout()
+        save_btn = QPushButton("حفظ")
+        save_btn.setStyleSheet("background-color: #2196F3; color: white; padding: 8px 24px;")
+        cancel_btn = QPushButton("إلغاء")
+        cancel_btn.setStyleSheet("background-color: #757575; color: white; padding: 8px 24px;")
+        btn_layout.addStretch()
+        btn_layout.addWidget(save_btn)
+        btn_layout.addWidget(cancel_btn)
+        layout.addRow(btn_layout)
+
+        # تعبئة البيانات للتعديل
+        if eval_id is not None:
+            try:
+                with self.db.get_cursor() as cursor:
+                    cursor.execute(
+                        """SELECT supplier_id, evaluation_date, quality_score, delivery_score,
+                                   communication_score, reliability_score, overall_score, notes
+                           FROM supplier_evaluations WHERE id = ?""",
+                        (eval_id,),
+                    )
+                    row = cursor.fetchone()
+                if row:
+                    supplier_id = row[0]
+                    for i in range(supplier_combo.count()):
+                        if supplier_combo.itemData(i) == supplier_id:
+                            supplier_combo.setCurrentIndex(i)
+                            break
+                    if row[1]:
+                        try:
+                            d = QDate.fromString(str(row[1]), "yyyy-MM-dd")
+                            if d.isValid():
+                                date_input.setDate(d)
+                        except Exception:
+                            pass
+                    quality_spin.setValue(float(row[2] or 3.0))
+                    delivery_spin.setValue(float(row[3] or 3.0))
+                    communication_spin.setValue(float(row[4] or 3.0))
+                    reliability_spin.setValue(float(row[5] or 3.0))
+                    notes_input.setText(str(row[7] or ""))
+            except Exception as e:
+                self.logger.error(f"خطأ في تحميل بيانات التقييم: {e}")
+                QMessageBox.critical(self, "خطأ", f"خطأ في تحميل البيانات: {str(e)}")
+                return
+
+        def on_save():
+            supplier_id = supplier_combo.currentData()
+            if not supplier_id:
+                QMessageBox.warning(dialog, "تحذير", "يرجى اختيار المورّد")
+                return
+            eval_date = date_input.date().toString("yyyy-MM-dd")
+            quality = quality_spin.value()
+            delivery = delivery_spin.value()
+            communication = communication_spin.value()
+            reliability = reliability_spin.value()
+            overall = (quality + delivery + communication + reliability) / 4
+            notes = notes_input.toPlainText().strip()
+
+            try:
+                with self.db.get_cursor() as cursor:
+                    if eval_id is None:
+                        cursor.execute(
+                            """INSERT INTO supplier_evaluations
+                               (supplier_id, evaluation_date, quality_score, delivery_score,
+                                communication_score, reliability_score, overall_score, notes,
+                                created_at, updated_at)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""",
+                            (supplier_id, eval_date, quality, delivery, communication, reliability, overall, notes),
+                        )
+                    else:
+                        cursor.execute(
+                            """UPDATE supplier_evaluations
+                               SET supplier_id = ?, evaluation_date = ?, quality_score = ?,
+                                   delivery_score = ?, communication_score = ?, reliability_score = ?,
+                                   overall_score = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+                               WHERE id = ?""",
+                            (supplier_id, eval_date, quality, delivery, communication, reliability, overall, notes, eval_id),
+                        )
+                    cursor.connection.commit()
+                dialog.accept()
+                self.load_evaluations()
+                QMessageBox.information(self, "نجح", "تم حفظ التقييم بنجاح")
+            except Exception as e:
+                self.logger.error(f"خطأ في حفظ التقييم: {e}")
+                QMessageBox.critical(dialog, "خطأ", f"خطأ في الحفظ: {str(e)}")
+
+        save_btn.clicked.connect(on_save)
+        cancel_btn.clicked.connect(dialog.reject)
+        dialog.exec()
+
+    def _load_suppliers_combo_for_eval(self, combo, current_supplier_id=None):
+        """تحميل المورّدين في كومبو التقييم"""
+        try:
+            with self.db.get_cursor() as cursor:
+                cursor.execute("SELECT id, name FROM suppliers ORDER BY name")
+                suppliers = cursor.fetchall()
+            combo.clear()
+            combo.addItem("-- اختر المورّد --", None)
+            for sid, name in suppliers:
+                combo.addItem(name, sid)
+                if current_supplier_id and sid == current_supplier_id:
+                    combo.setCurrentIndex(combo.count() - 1)
+        except Exception as e:
+            self.logger.error(f"خطأ في تحميل المورّدين: {e}")
+
     def create_new_evaluation(self):
         """إنشاء تقييم جديد"""
-        QMessageBox.information(self, "معلومة", "ميزة إنشاء تقييم جديد قيد التطوير")
+        self._show_evaluation_dialog(eval_id=None)
 
     def edit_evaluation(self):
         """تعديل التقييم"""
@@ -211,8 +384,12 @@ class SupplierEvaluationsWindow(QMainWindow):
         if current_row < 0:
             QMessageBox.warning(self, "تحذير", "يرجى اختيار تقييم للتعديل")
             return
-
-        QMessageBox.information(self, "معلومة", "ميزة التعديل قيد التطوير")
+        try:
+            eval_id = self.evaluations_table.item(current_row, 0).text()
+            self._show_evaluation_dialog(eval_id=int(eval_id))
+        except Exception as e:
+            self.logger.error(f"خطأ في فتح التعديل: {e}")
+            QMessageBox.critical(self, "خطأ", f"خطأ: {str(e)}")
 
     def delete_evaluation(self):
         """حذف التقييم"""

@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -6,6 +5,7 @@ JWT Authentication للـ REST API
 JWT Authentication for REST API
 """
 
+import logging
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -50,48 +50,49 @@ class JWTAuthManager:
         # خوارزمية التوقيع
         self.algorithm = "HS256"
 
-        # مدة صلاحية Token (بالساعات)
-        self.access_token_expire_hours = 24
-        self.refresh_token_expire_days = 30
+        # مدة صلاحية Token (بالساعات) - قيمة معتدلة للإنتاج
+        self.access_token_expire_hours = int(os.getenv("JWT_EXPIRY_HOURS", "2"))
+        self.refresh_token_expire_days = int(os.getenv("JWT_REFRESH_EXPIRY_DAYS", "7"))
 
     def _get_or_create_secret_key(self) -> str:
-        """الحصول على أو إنشاء مفتاح التوقيع"""
-        # أولاً، محاولة الحصول من متغيرات البيئة
-        env_secret_key = os.getenv("JWT_SECRET_KEY")
+        """الحصول على مفتاح التوقيع من متغيرات البيئة فقط.
+
+        ⚠️ الأمان: لا نُخزّن المفتاح في قاعدة البيانات أبداً.
+        إذا تم اختراق DB، لا يمكن تزوير التوكنات.
+        """
+        env_secret_key = os.getenv("JWT_SECRET_KEY", "")
+
         if env_secret_key and len(env_secret_key) >= 32:
-            self.logger.info("✅ تم استخدام مفتاح JWT من متغيرات البيئة")
-            return env_secret_key
+            # التحقق من أن المفتاح ليس القيمة الافتراضية
+            placeholder_values = {
+                "change-this-to-a-random-secret-key-in-production",
+                "your-secret-key-change-in-production",
+                "CHANGE_ME_generate_with:python-c-secretstoken_hex(64)",
+            }
+            if env_secret_key not in placeholder_values:
+                self.logger.info("✅ تم استخدام مفتاح JWT من متغيرات البيئة")
+                return env_secret_key
+            else:
+                self.logger.warning(
+                    "⚠️ JWT_SECRET_KEY لا يزال قيمة افتراضية! "
+                    "استخدم: python -c 'import secrets; print(secrets.token_hex(64))'"
+                )
 
-        try:
-            # محاولة الحصول من قاعدة البيانات
-            if hasattr(self.db_manager, "connection") and self.db_manager.connection:
-                result = self.db_manager.fetch_one("SELECT value FROM settings WHERE key = ?", ("jwt_secret_key",))
+        # في بيئة التطوير فقط: إنشاء مفتاح مؤقت
+        env_mode = os.getenv("ENVIRONMENT", os.getenv("API_RELOAD", "")).lower()
+        if env_mode in ("development", "true", "1"):
+            temp_key = secrets.token_urlsafe(48)
+            self.logger.warning(
+                "⚠️ تم إنشاء مفتاح JWT مؤقت للبيئة التطويرية فقط. "
+                "لا تستخدم هذا في الإنتاج!"
+            )
+            return temp_key
 
-                if result and result[0]:
-                    self.logger.info("✅ تم استخدام مفتاح JWT من قاعدة البيانات")
-                    return result[0]
-
-            # إنشاء مفتاح جديد
-            secret_key = secrets.token_urlsafe(32)
-
-            # حفظ في قاعدة البيانات
-            try:
-                if hasattr(self.db_manager, "connection") and self.db_manager.connection:
-                    self.db_manager.execute_query(
-                        "INSERT INTO settings (key, value) VALUES (?, ?)",
-                        ("jwt_secret_key", secret_key),
-                    )
-                    self.logger.info("✅ تم إنشاء وحفظ مفتاح JWT جديد")
-            except Exception:
-                # إذا فشل، قد يكون الجدول غير موجود - لا مشكلة
-                self.logger.info("ℹ️ لم يتم حفظ مفتاح JWT في قاعدة البيانات (جدول settings غير موجود)")
-
-            return secret_key
-
-        except Exception as e:
-            # في حالة الخطأ، استخدم مفتاح افتراضي (غير آمن للإنتاج!)
-            self.logger.warning(f"فشل الحصول على مفتاح JWT: {e} - استخدام مفتاح افتراضي")
-            return "default-secret-key-change-in-production"
+        # في الإنتاج: لا يُسمح بالتشغيل بدون مفتاح حقيقي
+        raise RuntimeError(
+            "JWT_SECRET_KEY غير مضبوط أو قصير جداً (أقل من 32 حرف). "
+            "اضبطه في ملف .env باستخدام: python -c 'import secrets; print(secrets.token_hex(64))'"
+        )
 
     def create_access_token(
         self,

@@ -666,9 +666,11 @@ class AdvancedAnalyticsService:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
-                    SELECT product_id, warehouse_id, current_stock, min_stock, max_stock
-                    FROM inventory
-                    WHERE updated_at BETWEEN ? AND ?
+                    SELECT i.product_id, i.warehouse_id, i.current_stock, i.min_stock, i.max_stock,
+                           COALESCE(p.cost_price, p.selling_price * 0.7, 0) as cost_price
+                    FROM inventory i
+                    LEFT JOIN products p ON i.product_id = p.id
+                    WHERE i.updated_at BETWEEN ? AND ?
                 """,
                     (start_date, end_date),
                 )
@@ -738,7 +740,7 @@ class AdvancedAnalyticsService:
         df = pd.DataFrame(inventory_data)
 
         return {
-            "total_stock_value": (df["current_stock"] * 100).sum(),  # تقدير بسيط
+            "total_stock_value": (df["current_stock"] * df["cost_price"]).sum(),
             "stockout_items": len(df[df["current_stock"] <= df["min_stock"]]),
             "overstock_items": len(df[df["current_stock"] >= df["max_stock"]]),
             "average_stock_level": df["current_stock"].mean(),
@@ -927,7 +929,7 @@ class AdvancedAnalyticsService:
     def _generate_sales_summary(self, metrics: Dict[str, Any]) -> str:
         """توليد ملخص المبيعات"""
         revenue = metrics.get("total_revenue", 0)
-        return f"إجمالي المبيعات: {revenue:,.2f} ريال، مع {metrics.get('unique_products', 0)} منتج مختلف"
+        return f"إجمالي المبيعات: {revenue:,.2f} د.ج، مع {metrics.get('unique_products', 0)} منتج مختلف"
 
     def _generate_inventory_summary(self, metrics: Dict[str, Any]) -> str:
         """توليد ملخص المخزون"""
@@ -943,7 +945,7 @@ class AdvancedAnalyticsService:
         """توليد الملخص المالي"""
         profit = metrics.get("total_profit", 0)
         margin = metrics.get("profit_margin", 0)
-        return f"إجمالي الربح: {profit:,.2f} ريال، هامش ربح: {margin:.1%}"
+        return f"إجمالي الربح: {profit:,.2f} د.ج، هامش ربح: {margin:.1%}"
 
     # طرق مساعدة أخرى
     def _assess_data_quality(self, data: List[Dict[str, Any]]) -> float:

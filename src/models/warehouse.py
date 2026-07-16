@@ -18,31 +18,9 @@ from src.core.database_manager import DatabaseManager
 from src.utils.logger import setup_logger
 
 
-# Helper database execution functions to support both standard SQLite and mock/testing databases
+# Helper database execution functions
 def _fetch_one_helper(db_manager, query, params=()) -> Any:
-    """Safely fetch a single row from database or mock results"""
-    if "Mock" in type(db_manager).__name__ or "Dummy" in type(db_manager).__name__:
-        if hasattr(db_manager, "execute_query"):
-            try:
-                res = db_manager.execute_query(query, params)
-                if res:
-                    if isinstance(res, list):
-                        return res[0]
-                    # If it's a MagicMock, we don't want a truthy mock returned when no result is expected
-                    if "Mock" in type(res).__name__:
-                        return None
-                    return res
-            except Exception:
-                return None
-        if hasattr(db_manager, "fetch_one"):
-            try:
-                res = db_manager.fetch_one(query, params)
-                if res is not None and "Mock" not in type(res).__name__:
-                    return res
-            except Exception:
-                return None
-        return None
-
+    """Safely fetch a single row from database"""
     try:
         row = db_manager.fetch_one(query, params)
         if row is not None:
@@ -61,26 +39,7 @@ def _fetch_one_helper(db_manager, query, params=()) -> Any:
 
 
 def _fetch_all_helper(db_manager, query, params=()) -> List[Any]:
-    """Safely fetch all rows from database or mock results"""
-    if "Mock" in type(db_manager).__name__ or "Dummy" in type(db_manager).__name__:
-        if hasattr(db_manager, "execute_query"):
-            try:
-                res = db_manager.execute_query(query, params)
-                if isinstance(res, list):
-                    return res
-                if res is not None and "Mock" not in type(res).__name__:
-                    return [res]
-            except Exception:
-                return []
-        if hasattr(db_manager, "fetch_all"):
-            try:
-                res = db_manager.fetch_all(query, params)
-                if isinstance(res, list):
-                    return res
-            except Exception:
-                return []
-        return []
-
+    """Safely fetch all rows from database"""
     try:
         return db_manager.fetch_all(query, params)
     except Exception:
@@ -101,8 +60,7 @@ def _execute_insert(db_manager, query, params=()) -> Optional[int]:
     if hasattr(db_manager, "execute_insert"):
         try:
             res = db_manager.execute_insert(query, params)
-            if "Mock" not in type(res).__name__:
-                return res
+            return res
         except Exception as e:
             raise e
 
@@ -114,34 +72,26 @@ def _execute_insert(db_manager, query, params=()) -> Optional[int]:
                 db_manager.execute_non_query(query, params)
             
             res_id = db_manager.get_last_insert_id()
-            if "Mock" not in type(res_id).__name__:
-                return res_id
+            return res_id
         except Exception as e:
-            if "Mock" not in type(db_manager).__name__:
-                raise e
+            raise e
 
     if hasattr(db_manager, "execute_query"):
         try:
             res = db_manager.execute_query(query, params)
             if hasattr(res, "lastrowid"):
                 lri = res.lastrowid
-                if "Mock" not in type(lri).__name__:
-                    return lri
-            if "Mock" not in type(res).__name__:
-                return res
+                return lri
+            return res
         except Exception as e:
             raise e
 
     if hasattr(db_manager, "execute_non_query"):
         try:
             res = db_manager.execute_non_query(query, params)
-            if "Mock" not in type(res).__name__:
-                return res
+            return res
         except Exception as e:
             raise e
-
-    if "Mock" in type(db_manager).__name__ or "Dummy" in type(db_manager).__name__:
-        return 1
 
     return 1
 
@@ -151,8 +101,7 @@ def _execute_non_query(db_manager, query, params=()) -> int:
     if hasattr(db_manager, "execute_non_query"):
         try:
             res = db_manager.execute_non_query(query, params)
-            if "Mock" not in type(res).__name__:
-                return res
+            return res
         except Exception as e:
             raise e
 
@@ -161,15 +110,10 @@ def _execute_non_query(db_manager, query, params=()) -> int:
             res = db_manager.execute_query(query, params)
             if hasattr(res, "rowcount"):
                 rc = res.rowcount
-                if "Mock" not in type(rc).__name__:
-                    return rc
-            if "Mock" not in type(res).__name__:
-                return res if isinstance(res, int) else 1
+                return rc
+            return res if isinstance(res, int) else 1
         except Exception as e:
             raise e
-
-    if "Mock" in type(db_manager).__name__ or "Dummy" in type(db_manager).__name__:
-        return 1
 
     return 1
 

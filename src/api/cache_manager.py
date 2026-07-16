@@ -273,8 +273,8 @@ def cached(prefix: str = "api", ttl: int = 300, key_func: Optional[Callable] = N
                     from src.api.metrics import record_cache_operation
 
                     record_cache_operation("get", prefix, "hit")
-                except Exception:
-                    logging.getLogger(__name__).warning("Ignored exception in cache_manager.py")
+                except Exception as e:
+                    logger.debug(f"record_cache_operation hit metric failed (non-critical): {e}")
                 return cached_value
 
             # تنفيذ الدالة
@@ -286,8 +286,8 @@ def cached(prefix: str = "api", ttl: int = 300, key_func: Optional[Callable] = N
                 from src.api.metrics import record_cache_operation
 
                 record_cache_operation("get", prefix, "miss")
-            except Exception:
-                logging.getLogger(__name__).warning("Ignored exception in cache_manager.py")
+            except Exception as e:
+                logger.debug(f"record_cache_operation miss metric failed (non-critical): {e}")
 
             # حفظ في Cache
             if result is not None:

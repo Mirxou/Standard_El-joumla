@@ -386,12 +386,15 @@ class ReturnService:
             return False
 
     def delete_return(self, return_id: int) -> bool:
-        """حذف مرتجع"""
+        """حذف مرتجع مع بنوده"""
         try:
             cursor = self.db.connection.cursor()
+            # حذف البنود أولاً
+            cursor.execute("DELETE FROM return_items WHERE return_id = ?", (return_id,))
+            # ثم حذف المرتجع
             cursor.execute("DELETE FROM return_invoices WHERE id = ?", (return_id,))
             self.db.connection.commit()
-            logger.info(f"تم حذف المرتجع {return_id}")
+            logger.info(f"تم حذف المرتجع {return_id} مع بنوده")
             return True
         except Exception as e:
             self.db.connection.rollback()
@@ -537,7 +540,7 @@ class ReturnService:
             cursor.execute(
                 """
                 UPDATE products
-                SET stock_quantity = stock_quantity + ?
+                SET current_stock = current_stock + ?
                 WHERE id = ?
             """,
                 (float(quantity), product_id),

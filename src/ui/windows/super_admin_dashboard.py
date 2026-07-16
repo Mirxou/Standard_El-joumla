@@ -9,6 +9,12 @@ Super Admin Dashboard - لوحة تحكم المدير الخارق
 from datetime import datetime
 from pathlib import Path
 
+try:
+    import psutil
+    _HAS_PSUTIL = True
+except ImportError:
+    _HAS_PSUTIL = False
+
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QAction, QBrush, QColor
 from PySide6.QtWidgets import (
@@ -113,32 +119,32 @@ class SuperAdminDashboard(QMainWindow):
         group = QGroupBox("💚 صحة النظام")
         layout = QVBoxLayout()
 
-        # CPU Usage (simulated)
+        # CPU Usage
         cpu_label = QLabel("استخدام المعالج:")
-        cpu_progress = QProgressBar()
-        cpu_progress.setRange(0, 100)
-        cpu_progress.setValue(45)
-        cpu_progress.setFormat("%p%")
+        self.cpu_progress = QProgressBar()
+        self.cpu_progress.setRange(0, 100)
+        self.cpu_progress.setFormat("%p%")
         layout.addWidget(cpu_label)
-        layout.addWidget(cpu_progress)
+        layout.addWidget(self.cpu_progress)
 
-        # Memory Usage (simulated)
+        # Memory Usage
         memory_label = QLabel("استخدام الذاكرة:")
-        memory_progress = QProgressBar()
-        memory_progress.setRange(0, 100)
-        memory_progress.setValue(62)
-        memory_progress.setFormat("%p%")
+        self.memory_progress = QProgressBar()
+        self.memory_progress.setRange(0, 100)
+        self.memory_progress.setFormat("%p%")
         layout.addWidget(memory_label)
-        layout.addWidget(memory_progress)
+        layout.addWidget(self.memory_progress)
 
-        # Disk Usage (simulated)
+        # Disk Usage
         disk_label = QLabel("استخدام القرص:")
-        disk_progress = QProgressBar()
-        disk_progress.setRange(0, 100)
-        disk_progress.setValue(38)
-        disk_progress.setFormat("%p%")
+        self.disk_progress = QProgressBar()
+        self.disk_progress.setRange(0, 100)
+        self.disk_progress.setFormat("%p%")
         layout.addWidget(disk_label)
-        layout.addWidget(disk_progress)
+        layout.addWidget(self.disk_progress)
+
+        # Set initial values
+        self.refresh_health_metrics()
 
         group.setLayout(layout)
         return group
@@ -242,8 +248,32 @@ class SuperAdminDashboard(QMainWindow):
         group.setLayout(layout)
         return group
 
+    def refresh_health_metrics(self):
+        """تحديث مقاييس صحة النظام ببيانات حقيقية"""
+        if _HAS_PSUTIL:
+            try:
+                cpu = psutil.cpu_percent(interval=0.5)
+                ram = psutil.virtual_memory().percent
+                disk = psutil.disk_usage('/').percent
+
+                self.cpu_progress.setValue(int(cpu))
+                self.memory_progress.setValue(int(ram))
+                self.disk_progress.setValue(int(disk))
+            except Exception as e:
+                self.logger.error(f"خطأ في قراءة مقاييس النظام: {e}")
+                self._set_health_unavailable()
+        else:
+            self._set_health_unavailable()
+
+    def _set_health_unavailable(self):
+        """عرض 'غير متوفر' عندما لا يتوفر psutil"""
+        for bar in (self.cpu_progress, self.memory_progress, self.disk_progress):
+            bar.setValue(0)
+            bar.setFormat("غير متوفر")
+
     def refresh_all(self):
         """تحديث جميع البيانات"""
+        self.refresh_health_metrics()
         self.refresh_threats()
         self.statusBar().showMessage(f"تم التحديث: {datetime.now().strftime('%H:%M:%S')}")
 

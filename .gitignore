@@ -121,20 +121,24 @@ node_modules/
 *.crt
 config/secrets.json
 
+# Binary / non-source files that should never be in source control
+skiLL
+
 # ============================================================
 # SQLite Database files (contain real/sensitive data)
 # ============================================================
 *.db
-erp_system.db
-data/*.db
-data/database.db
-data/erp_system.db
-data/logical_release.db
-data/unified_erp.db
+!prisma/**/*.db
+data/backups/*.db
 
-# AI model pickle files (large binary)
+# AI model files (large binary)
 data/models/*.pkl
 *.pkl
+*.pt
+*.pth
+*.h5
+*.onnx
+*.tflite
 
 # ============================================================
 # Large auto-generated analysis/report files (not source code)

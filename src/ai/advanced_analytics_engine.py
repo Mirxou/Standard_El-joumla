@@ -315,8 +315,8 @@ class AdvancedAnalyticsEngine:
         total_sales = sum(s["amount"] for s in sales_data)
         avg_transaction = total_sales / len(sales_data)
 
-        insights.append(f"إجمالي المبيعات: {total_sales:.2f} ريال")
-        insights.append(f"متوسط قيمة المعاملة: {avg_transaction:.2f} ريال")
+        insights.append(f"إجمالي المبيعات: {total_sales:.2f} د.ج")
+        insights.append(f"متوسط قيمة المعاملة: {avg_transaction:.2f} د.ج")
 
         # تحليل الفئات
         category_sales = defaultdict(float)
@@ -324,7 +324,7 @@ class AdvancedAnalyticsEngine:
             category_sales[sale.get("category", "other")] += sale["amount"]
 
         top_category = max(category_sales.items(), key=lambda x: x[1])
-        insights.append(f"الفئة الأكثر مبيعاً: {top_category[0]} بقيمة {top_category[1]:.2f} ريال")
+        insights.append(f"الفئة الأكثر مبيعاً: {top_category[0]} بقيمة {top_category[1]:.2f} د.ج")
 
         # تحليل الاتجاهات
         daily_totals = defaultdict(float)
