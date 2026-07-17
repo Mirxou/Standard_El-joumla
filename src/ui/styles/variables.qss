@@ -1,34 +1,52 @@
-/* ============================================
-   CSS Variables - Theme Colors
-   متغيرات الألوان للسمات
-   ============================================ */
+/* ═══════════════════════════════════════════════════════════
+   OBSIDIAN LUXE v3.0 — Theme Variables Reference
+   ═══════════════════════════════════════════════════════════
 
-/* Light Theme Colors (Default) */
-@define-color bg-primary #ffffff;
-@define-color bg-secondary #f8fafc;
-@define-color bg-tertiary #f1f5f9;
-@define-color text-primary #1e293b;
-@define-color text-secondary #64748b;
-@define-color text-tertiary #94a3b8;
-@define-color border-color #e2e8f0;
-@define-color border-light #f1f3f5;
-@define-color primary #3b82f6;
-@define-color primary-hover #2563eb;
-@define-color primary-pressed #1d4ed8;
-@define-color danger #ef4444;
-@define-color danger-hover #dc2626;
-@define-color danger-pressed #b91c1c;
-@define-color success #10b981;
-@define-color warning #f59e0b;
-@define-color radius-small 4px;
-@define-color radius-medium 6px;
-@define-color radius-large 8px;
-@define-color spacing-xs 4px;
-@define-color spacing-sm 8px;
-@define-color spacing-md 12px;
-@define-color spacing-lg 16px;
-@define-color spacing-xl 24px;
+   Note: QSS doesn't support CSS variables natively.
+   These are kept as reference documentation only.
+   Actual values are in design_tokens.py and the QSS files.
 
-/* Note: QSS doesn't support CSS variables natively,
-   so we'll use these as reference and replace in code */
+   ── Background Depth Layers ──
+   @void:      #050507
+   @abyss:     #0a0b10
+   @primary:   #0e1018
+   @secondary: #141724
+   @tertiary:  #1c2033
+   @elevated:  #232841
+   @hover:     #2a3052
+   @active:    #313866
 
+   ── Accent Colors ──
+   @rose:      #c9956b  (Primary accent — Rose Gold)
+   @amber:     #d4a853  (Financial accent — Amber Gold)
+   @teal:      #3db89c  (Success — Teal)
+   @blue:      #6b8cd4  (Info — Blue)
+
+   ── Semantic ──
+   @success:   #3db89c
+   @warning:   #e0a040
+   @danger:    #e05555
+   @info:      #6b8cd4
+
+   ── Text ──
+   @text-bright:    #ffffff
+   @text-primary:   #e8eaf0
+   @text-secondary: #9498b8
+   @text-muted:     #5d6184
+   @text-ghost:     #363a56
+
+   ── Borders ──
+   @border-subtle:  #1c2033
+   @border-default: #282d48
+   @border-medium:  #363d5e
+   @border-hover:   #4a5280
+   @border-focus:   #c9956b
+
+   ── Spacing (8px grid) ──
+   @xs: 4px   @sm: 8px   @md: 12px  @lg: 16px
+   @xl: 24px  @xxl: 32px @xxxl: 48px
+
+   ── Radius ──
+   @r-xs: 4px  @r-sm: 6px  @r-md: 8px
+   @r-lg: 12px @r-xl: 16px @r-xxl: 20px
+   ═══════════════════════════════════════════════════════════ */

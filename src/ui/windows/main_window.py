@@ -873,7 +873,7 @@ class MainWindow(QMainWindow):
             QFrame#mainFrame {
                 background-color: #08090d;
                 border-radius: 12px;
-                border: 2px solid #d4a853;
+                border: 2px solid #c9956b;
             }
         """)
         # إضافة ظل للإطار الرئيسي (Subtle Gold Glow)
@@ -1021,7 +1021,7 @@ class MainWindow(QMainWindow):
                 color: #ffffff;
                 gridline-color: #333333;
                 border: 1px solid #333333;
-                selection-background-color: #d4a853;
+                selection-background-color: #c9956b;
                 selection-color: #000000;
             }
             QTableWidget::item, QTableView::item {
@@ -1029,7 +1029,7 @@ class MainWindow(QMainWindow):
             }
             QHeaderView::section {
                 background-color: #0f172a;
-                color: #d4a853;
+                color: #c9956b;
                 font-weight: bold;
                 border: 1px solid #333333;
                 padding: 4px;
@@ -1047,7 +1047,7 @@ class MainWindow(QMainWindow):
                 border-radius: 5px;
             }
             QScrollBar::handle:vertical:hover {
-                background: #d4a853;
+                background: #c9956b;
             }
             QScrollBar:horizontal {
                 border: none;
@@ -1061,7 +1061,7 @@ class MainWindow(QMainWindow):
                 border-radius: 5px;
             }
             QScrollBar::handle:horizontal:hover {
-                background: #d4a853;
+                background: #c9956b;
             }
         """
         self.setStyleSheet(self.styleSheet() + table_style)
@@ -1534,13 +1534,13 @@ class MainWindow(QMainWindow):
         header_layout.setContentsMargins(15, 10, 15, 10)
 
         title = QLabel(self.i18n.get_message("main_dashboard"))
-        title.setStyleSheet("font-size: 28px; font-weight: bold; color: white;")
+        title.setStyleSheet("font-size: 26px; font-weight: 900; color: #ffffff; font-family: 'Cairo'; letter-spacing: 0.3px;")
         header_layout.addWidget(title)
         header_layout.addStretch()
 
         # أزرار الفترة الزمنية
         period_label = QLabel(self.i18n.get_message("period") + ":")
-        period_label.setStyleSheet("color: white; font-weight: bold; font-size: 13px;")
+        period_label.setStyleSheet("color: #9498b8; font-weight: 600; font-size: 13px; font-family: 'Cairo';")
         header_layout.addWidget(period_label)
 
         self.dashboard_period_combo = QComboBox()
@@ -1554,7 +1554,7 @@ class MainWindow(QMainWindow):
         # زر التحديث التلقائي
         auto_refresh_check = QCheckBox("تحديث تلقائي")
         auto_refresh_check.setChecked(True)
-        auto_refresh_check.setStyleSheet("color: white; font-weight: bold;")
+        auto_refresh_check.setStyleSheet("color: #9498b8; font-weight: 600; font-family: 'Cairo';")
         auto_refresh_check.stateChanged.connect(self.toggle_auto_refresh)
         header_layout.addWidget(auto_refresh_check)
 
@@ -7530,7 +7530,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(12, 12, 12, 12)
 
         title = QLabel("إدارة المشتريات وأوامر التوريد")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #d4a853; margin-bottom: 4px;")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #c9956b; margin-bottom: 4px;")
         layout.addWidget(title)
 
         # أزرار الإجراءات
@@ -8784,7 +8784,7 @@ class MainWindow(QMainWindow):
             }
             QMenuBar::item:selected {
                 background-color: rgba(212,168,83,0.1);
-                color: #d4a853;
+                color: #c9956b;
             }
             QMenuBar::item:pressed {
                 background-color: rgba(212,168,83,0.2);
@@ -8802,7 +8802,7 @@ class MainWindow(QMainWindow):
             }
             QMenu::item:selected {
                 background-color: rgba(212,168,83,0.15);
-                color: #d4a853;
+                color: #c9956b;
             }
             QMenu::separator {
                 height: 1px;
@@ -9465,10 +9465,11 @@ class MainWindow(QMainWindow):
         statusbar = self.statusBar()
         statusbar.setStyleSheet("""
             QStatusBar {
-                background-color: #08090d;
-                color: #5d5f7a;
-                border-top: 1px solid #1e2035;
+                background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #0a0b10,stop:1 #050507);
+                color: #5d6184;
+                border-top: 1px solid #1c2033;
                 font-size: 11px;
+                padding: 2px 8px;
             }
         """)
 
@@ -9476,7 +9477,7 @@ class MainWindow(QMainWindow):
         from PySide6.QtWidgets import QLabel
 
         self._status_unread = QLabel("")
-        self._status_unread.setStyleSheet("color:#5d5f7a; padding:0 8px;")
+        self._status_unread.setStyleSheet("color:#5d6184; padding:0 8px;")
         statusbar.addPermanentWidget(self._status_unread)
 
         # مؤشر حالة المزامنة (إذا كان hybrid_service متاحاً)
@@ -9498,7 +9499,7 @@ class MainWindow(QMainWindow):
         from PySide6.QtWidgets import QLabel
 
         self._status_websocket = QLabel("⚪ WebSocket: غير متصل")
-        self._status_websocket.setStyleSheet("color:#5d5f7a; padding:0 8px; font-size:10px;")
+        self._status_websocket.setStyleSheet("color:#5d6184; padding:0 8px; font-size:10px;")
         statusbar.addPermanentWidget(self._status_websocket)
 
         # رسالة قاعدة البيانات الأولى
@@ -9545,10 +9546,10 @@ class MainWindow(QMainWindow):
             if hasattr(self, "_status_websocket") and hasattr(self, "ws_client") and self.ws_client:
                 if self.ws_client.is_connected:
                     self._status_websocket.setText("🟢 WebSocket: متصل")
-                    self._status_websocket.setStyleSheet("color:#28a745; padding:0 8px; font-size:10px;")
+                    self._status_websocket.setStyleSheet("color:#3db89c; padding:0 8px; font-size:10px;")
                 else:
                     self._status_websocket.setText("🔴 WebSocket: غير متصل")
-                    self._status_websocket.setStyleSheet("color:#dc3545; padding:0 8px; font-size:10px;")
+                    self._status_websocket.setStyleSheet("color:#e05555; padding:0 8px; font-size:10px;")
         except Exception:
             logging.getLogger(__name__).warning("Ignored exception in main_window.py")
 
@@ -9633,10 +9634,10 @@ class MainWindow(QMainWindow):
             if hasattr(self, "_status_websocket"):
                 if connected:
                     self._status_websocket.setText("🟢 WebSocket: متصل")
-                    self._status_websocket.setStyleSheet("color:#28a745; padding:0 8px; font-size:10px;")
+                    self._status_websocket.setStyleSheet("color:#3db89c; padding:0 8px; font-size:10px;")
                 else:
                     self._status_websocket.setText(f"🔴 WebSocket: {message}")
-                    self._status_websocket.setStyleSheet("color:#dc3545; padding:0 8px; font-size:10px;")
+                    self._status_websocket.setStyleSheet("color:#e05555; padding:0 8px; font-size:10px;")
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في تحديث حالة WebSocket: {e}")

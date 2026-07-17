@@ -1,33 +1,39 @@
-/* ============================================
-   Progress Bar Styles - QProgressBar
-   أنماط شريط التقدم
-   ============================================ */
+/* ═══════════════════════════════════════════════════════════
+   OBSIDIAN LUXE v3.0 — Progress Bar Styles
+   ═══════════════════════════════════════════════════════════ */
 
 QProgressBar {
-    background-color: #f1f5f9;
-    border: 2px solid #e2e8f0;
-    border-radius: 6px;
+    background-color: #1c2033;
+    border: none;
+    border-radius: 8px;
     text-align: center;
-    font-weight: 500;
-    font-size: 12px;
-    height: 24px;
-    color: #1e293b;
+    font-weight: 600;
+    font-size: 11px;
+    min-height: 8px;
+    color: #e8eaf0;
 }
 
 QProgressBar::chunk {
-    background-color: #3b82f6;
-    border-radius: 4px;
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #c9956b,stop:1 #e0b896);
+    border-radius: 8px;
 }
 
 QProgressBar[class="success"]::chunk {
-    background-color: #10b981;
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #2a9a7e,stop:1 #5dd4b6);
 }
 
 QProgressBar[class="warning"]::chunk {
-    background-color: #f59e0b;
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #d4a853,stop:1 #e8c878);
 }
 
 QProgressBar[class="danger"]::chunk {
-    background-color: #ef4444;
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #c94040,stop:1 #e07070);
 }
 
+QProgressBar[class="info"]::chunk {
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #5578c0,stop:1 #8da8e8);
+}
+
+QProgressBar[class="amber"]::chunk {
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #d4a853,stop:1 #e8c878);
+}

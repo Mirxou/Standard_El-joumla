@@ -41,21 +41,21 @@ class StatusBarStage(QWidget):
             btn.setStyleSheet("""
                 QPushButton {
                     padding: 5px 15px;
-                    border: 1px solid #2a2d45;
-                    color: #9496b0;
-                    background-color: #1e2030;
+                    border: 1px solid #282d48;
+                    color: #9498b8;
+                    background-color: #1c2033;
                     font-weight: 600;
                     border-radius: 0px;
                     margin-left: -1px; /* collapse borders */
                 }
                 QPushButton:checked {
-                    background-color: #d4a853;
-                    color: #0f1117;
-                    border-color: #d4a853;
+                    background-color: #c9956b;
+                    color: #0e1018;
+                    border-color: #c9956b;
                 }
                 QPushButton:hover:!checked {
-                    background-color: #252840;
-                    color: #f0f0f5;
+                    background-color: #2a3052;
+                    color: #e8eaf0;
                 }
                 /* First Item Radius */
                 QPushButton:first-child {

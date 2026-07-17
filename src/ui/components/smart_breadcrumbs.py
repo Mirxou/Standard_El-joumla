@@ -21,26 +21,26 @@ class SmartBreadcrumbs(QWidget):
             QPushButton {
                 background: transparent;
                 border: none;
-                color: #5d5f7a;
+                color: #5d6184;
                 font-size: 14px;
                 font-weight: 500;
             }
             QPushButton:hover {
-                color: #e8c878;
+                color: #e0b896;
                 text-decoration: underline;
             }
             QLabel {
-                color: #2a2d45;
+                color: #282d48;
                 font-weight: bold;
             }
             QPushButton#Active {
-                color: #d4a853;
+                color: #c9956b;
                 font-weight: bold;
                 cursor: default;
             }
             QPushButton#Active:hover {
                 text-decoration: none;
-                color: #d4a853;
+                color: #c9956b;
             }
         """)
 

@@ -1,43 +1,42 @@
-/* ============================================
-   Tab Widget Styles - QTabWidget, QTabBar
-   أنماط التبويبات
-   ============================================ */
+/* ═══════════════════════════════════════════════════════════
+   OBSIDIAN LUXE v3.0 — Tab Widget Styles
+   ═══════════════════════════════════════════════════════════ */
 
 QTabWidget::pane {
-    border: 1px solid #e5e7eb;
-    background: #ffffff;
-    border-radius: 8px;
+    border: 1px solid #282d48;
+    border-radius: 12px;
+    background: transparent;
     top: -1px;
 }
 
 QTabBar::tab {
-    background: #f3f4f6;
-    color: #4b5563;
-    padding: 10px 25px;
-    margin-right: 4px;
-    border-top-left-radius: 6px;
-    border-top-right-radius: 6px;
+    background: transparent;
+    color: #5d6184;
+    padding: 10px 22px;
+    margin-left: 2px;
+    border-top-right-radius: 12px;
+    border-top-left-radius: 12px;
     border: 1px solid transparent;
-    font-weight: bold;
-    font-size: 14px;
-    min-width: 100px;
+    font-weight: 600;
+    font-size: 13px;
+    min-width: 90px;
+    letter-spacing: 0.01em;
 }
 
 QTabBar::tab:selected {
-    background: #3b82f6;
-    color: #ffffff;
-    border-bottom: 2px solid #1d4ed8;
-    border-top: 1px solid transparent;
-    border-left: 1px solid transparent;
-    border-right: 1px solid transparent;
+    background: #141724;
+    color: #c9956b;
+    border-bottom: 2px solid #c9956b;
+    border-top: 1px solid #282d48;
+    border-left: 1px solid #282d48;
+    border-right: 1px solid #282d48;
 }
 
 QTabBar::tab:hover:!selected {
-    background: #e5e7eb;
-    color: #1f2937;
+    background: rgba(201,149,107,0.05);
+    color: #e8eaf0;
 }
 
 QTabBar::tab:pressed {
-    background: #d1d5db;
+    background: rgba(201,149,107,0.08);
 }
-

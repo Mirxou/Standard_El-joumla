@@ -1,10 +1,9 @@
-/* ============================================
-   General Styles - Base Styles
-   الأنماط العامة الأساسية
-   ============================================ */
+/* ═══════════════════════════════════════════════════════════
+   OBSIDIAN LUXE v3.0 — General Base Styles
+   ═══════════════════════════════════════════════════════════ */
 
 * {
-    font-family: "Segoe UI", "Arial", sans-serif;
+    font-family: 'Cairo', 'Noto Sans Arabic', 'Segoe UI', system-ui, sans-serif;
 }
 
 *:focus {
@@ -12,80 +11,79 @@
 }
 
 QMainWindow, QWidget {
-    background-color: #ffffff;
-    color: #1e293b;
+    background-color: #0a0b10;
+    color: #e8eaf0;
 }
 
 QStatusBar {
-    background-color: #f8fafc;
-    color: #64748b;
-    border-top: 1px solid #e2e8f0;
+    background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #0a0b10,stop:1 #050507);
+    color: #5d6184;
+    border-top: 1px solid #1c2033;
     padding: 4px;
+    font-size: 11px;
 }
 
 QToolTip {
-    background-color: #1e293b;
-    color: #ffffff;
-    border: 1px solid #334155;
-    border-radius: 4px;
-    padding: 8px;
+    background-color: #232841;
+    color: #e8eaf0;
+    border: 1px solid #363d5e;
+    border-radius: 8px;
+    padding: 8px 14px;
     font-size: 12px;
 }
 
 QCheckBox {
-    spacing: 8px;
-    color: #1e293b;
+    spacing: 10px;
+    color: #9498b8;
     font-size: 13px;
 }
 
 QCheckBox::indicator {
     width: 18px;
     height: 18px;
-    border: 2px solid #e2e8f0;
-    border-radius: 4px;
-    background-color: #ffffff;
+    border: 2px solid #363d5e;
+    border-radius: 5px;
+    background-color: #1c2033;
 }
 
 QCheckBox::indicator:hover {
-    border-color: #3b82f6;
+    border-color: #c9956b;
 }
 
 QCheckBox::indicator:checked {
-    background-color: #3b82f6;
-    border-color: #3b82f6;
-    image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEzLjMzMzMgNEw2IDEyTDIuNjY2NjcgOC42NjY2NyIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KPC9zdmc+);
+    background-color: #c9956b;
+    border-color: #c9956b;
 }
 
 QCheckBox::indicator:disabled {
-    background-color: #f8fafc;
-    border-color: #e2e8f0;
+    background-color: #0e1018;
+    border-color: #1c2033;
 }
 
 QRadioButton {
-    spacing: 8px;
-    color: #1e293b;
+    spacing: 10px;
+    color: #9498b8;
     font-size: 13px;
 }
 
 QRadioButton::indicator {
     width: 18px;
     height: 18px;
-    border: 2px solid #e2e8f0;
+    border: 2px solid #363d5e;
     border-radius: 9px;
-    background-color: #ffffff;
+    background-color: #1c2033;
 }
 
 QRadioButton::indicator:hover {
-    border-color: #3b82f6;
+    border-color: #c9956b;
 }
 
 QRadioButton::indicator:checked {
-    border-color: #3b82f6;
-    background-color: #3b82f6;
+    border-color: #c9956b;
+    background-color: #c9956b;
 }
 
 QRadioButton::indicator:disabled {
-    background-color: #f8fafc;
-    border-color: #e2e8f0;
+    background-color: #0e1018;
+    border-color: #1c2033;
 }
-

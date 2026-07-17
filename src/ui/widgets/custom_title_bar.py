@@ -6,56 +6,58 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QWidget
 
 class CustomTitleBar(QWidget):
     """
-    شريط عنوان مخصص للنافذة (Quantum Edition)
-    Reusable Quantum Title Bar for all windows
+    شريط عنوان مخصص — Obsidian Luxe v3.0
+    Rose Gold accents on Deep Obsidian background
     """
 
     def __init__(self, parent=None, title="", is_dialog=False):
         super().__init__(parent)
         self.parent = parent
-        self.setFixedHeight(40)
+        self.setFixedHeight(42)
 
-        # Quantum Gradient & Border - System 2.0 Integrated
+        # Obsidian Luxe styling
         self.setStyleSheet("""
             CustomTitleBar {
-                background-color: #0f1117; /* Match Main Window Background */
-                border-bottom: 1px solid #2a2d45;
-                border-top-left-radius: 10px;
-                border-top-right-radius: 10px;
+                background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
+                    stop:0 #0e1018, stop:1 #0a0b10);
+                border-bottom: 1px solid #1c2033;
+                border-top-left-radius: 16px;
+                border-top-right-radius: 16px;
             }
             QLabel {
-                color: #f0f0f5;
-                font-family: 'Segoe UI', 'Cairo';
+                color: #e8eaf0;
+                font-family: 'Cairo', 'Segoe UI';
                 font-weight: 700;
-                font-size: 14px;
+                font-size: 13px;
+                background: transparent;
             }
             QPushButton {
                 background: transparent;
                 border: none;
-                color: #5d5f7a;
-                font-size: 16px;
-                width: 45px;
-                height: 40px;
+                color: #5d6184;
+                font-size: 15px;
+                width: 46px;
+                height: 42px;
                 border-radius: 0px;
             }
             QPushButton:hover {
-                background-color: rgba(212,168,83,0.12);
-                color: #f0f0f5;
+                background-color: rgba(201,149,107,0.08);
+                color: #e8eaf0;
             }
             QPushButton#btnClose:hover {
-                background-color: #e85454;
-                color: white;
-                border-top-right-radius: 10px;
+                background-color: rgba(224,85,85,0.85);
+                color: #ffffff;
+                border-top-right-radius: 16px;
             }
         """)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(15, 0, 0, 0)
-        layout.setSpacing(10)
+        layout.setContentsMargins(16, 0, 0, 0)
+        layout.setSpacing(8)
 
         # Icon
         self.icon_label = QLabel()
-        self.icon_label.setStyleSheet("background: transparent; margin-right: 5px;")
+        self.icon_label.setStyleSheet("background: transparent; margin-right: 4px;")
         logo_path = Path(__file__).parent.parent.parent.parent / "assets" / "images" / "standard_eljoumla_logo.png"
         if logo_path.exists():
             from PySide6.QtGui import QPixmap
@@ -64,12 +66,14 @@ class CustomTitleBar(QWidget):
             self.icon_label.setPixmap(pixmap.scaled(20, 20, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         else:
             self.icon_label.setText("🛒")
-            self.icon_label.setStyleSheet("font-size: 18px; margin-right: 5px; background: transparent;")
+            self.icon_label.setStyleSheet("font-size: 16px; margin-right: 4px; background: transparent;")
         layout.addWidget(self.icon_label)
 
         # Title
         self.title_label = QLabel(title or "ستاندرد الجملة")
-        self.title_label.setStyleSheet("background: transparent;")
+        self.title_label.setStyleSheet(
+            "background: transparent; color: #9498b8; font-weight: 600; font-size: 12px;"
+        )
         layout.addWidget(self.title_label)
 
         if parent:
@@ -78,18 +82,20 @@ class CustomTitleBar(QWidget):
         layout.addStretch()
 
         # Window Controls
-        # Only show Min/Max if it's NOT a refined dialog (or if requested)
         if not is_dialog:
             self.btn_min = QPushButton("─")
+            self.btn_min.setToolTip("تصغير")
             self.btn_min.clicked.connect(self.minimize_window)
             layout.addWidget(self.btn_min)
 
             self.btn_max = QPushButton("☐")
+            self.btn_max.setToolTip("تكبير/استعادة")
             self.btn_max.clicked.connect(self.maximize_restore_window)
             layout.addWidget(self.btn_max)
 
         self.btn_close = QPushButton("✕")
         self.btn_close.setObjectName("btnClose")
+        self.btn_close.setToolTip("إغلاق")
         self.btn_close.clicked.connect(self.close_window)
         layout.addWidget(self.btn_close)
 

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 UI Styles Module — Standard El-Joumla ERP
-أنماط الواجهة الحديثة - Royal Dark v2.0
+أنماط الواجهة — Obsidian Luxe v3.0
 """
 
 from .icon_loader import IconLoader, get_icon_loader
@@ -13,7 +13,8 @@ from .design_tokens import (
     Typography,
     Shadows,
     Transitions,
-    C, S, R, T, SH, TR,
+    ZIndex,
+    C, S, R, T, SH, TR, Z,
     qss,
 )
 
@@ -28,6 +29,7 @@ __all__ = [
     "Typography",
     "Shadows",
     "Transitions",
+    "ZIndex",
     # Design token singletons
     "C",
     "S",
@@ -35,6 +37,7 @@ __all__ = [
     "T",
     "SH",
     "TR",
+    "Z",
     # QSS helper
     "qss",
 ]

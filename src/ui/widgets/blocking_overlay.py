@@ -45,7 +45,7 @@ class BlockingOverlay(QWidget):
         self.message_label.setAlignment(Qt.AlignCenter)
         self.message_label.setStyleSheet("""
             QLabel {
-                color: #f0f0f5;
+                color: #e8eaf0;
                 font-size: 16pt;
                 font-weight: bold;
                 background-color: transparent;
@@ -59,15 +59,15 @@ class BlockingOverlay(QWidget):
         self.progress_bar.setRange(0, 0)  # Indeterminate
         self.progress_bar.setStyleSheet("""
             QProgressBar {
-                border: 1px solid #2a2d45;
+                border: 1px solid #282d48;
                 border-radius: 5px;
                 text-align: center;
-                color: #f0f0f5;
-                background-color: #1e2030;
+                color: #e8eaf0;
+                background-color: #1c2033;
                 height: 30px;
             }
             QProgressBar::chunk {
-                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #d4a853, stop:1 #e8c878);
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #c9956b, stop:1 #e0b896);
                 border-radius: 3px;
             }
         """)
@@ -81,15 +81,15 @@ class BlockingOverlay(QWidget):
             skip_btn.clicked.connect(self.skip_requested.emit)
             skip_btn.setStyleSheet("""
                 QPushButton {
-                    background-color: #1e2030;
-                    color: #f0f0f5;
-                    border: 1px solid #2a2d45;
+                    background-color: #1c2033;
+                    color: #e8eaf0;
+                    border: 1px solid #282d48;
                     border-radius: 8px;
                     padding: 10px;
                     min-width: 120px;
                 }
                 QPushButton:hover {
-                    background-color: #252840;
+                    background-color: #2a3052;
                 }
             """)
             button_layout.addWidget(skip_btn)

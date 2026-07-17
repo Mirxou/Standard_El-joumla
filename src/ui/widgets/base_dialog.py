@@ -37,20 +37,20 @@ class BaseDialog(QDialog):
         self.main_frame.setObjectName("MainFrame")
         self.main_frame.setStyleSheet("""
             QFrame#MainFrame {
-                background-color: #0f1117; /* لون اللوح الصلب الداكن */
-                border: 1px solid #2a2d45;
-                border-radius: 8px;
-                color: #f0f0f5;
+                background-color: #141724;
+                border: 1px solid #282d48;
+                border-radius: 16px;
+                color: #e8eaf0;
             }
             QLabel {
-                color: #f0f0f5;
+                color: #e8eaf0;
             }
         """)
 
         # إضافة ظل للإطار لتمييز النافذة
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(20)
-        shadow.setColor(QColor("#d4a853"))  # لون الهوية (ذهبي)
+        shadow.setColor(QColor("#c9956b"))  # لون الهوية (rose gold)
         shadow.setOffset(0, 0)
         self.main_frame.setGraphicsEffect(shadow)
 

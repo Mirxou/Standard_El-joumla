@@ -27,11 +27,11 @@ class AnimatedTableWidget(QTableWidget):
         header.setStretchLastSection(True)
         header.setStyleSheet("""
             QHeaderView::section {
-                background-color: #0f1117;
-                color: #d4a853;
+                background-color: #0e1018;
+                color: #c9956b;
                 padding: 12px;
                 border: none;
-                border-bottom: 2px solid #1e2035;
+                border-bottom: 2px solid #1c2033;
                 font-weight: bold;
                 text-transform: uppercase;
                 font-size: 13px;
@@ -45,20 +45,20 @@ class AnimatedTableWidget(QTableWidget):
                 border: none;
                 gridline-color: transparent;
                 selection-background-color: rgba(212, 168, 83, 0.15);
-                selection-color: #f0f0f5;
-                color: #f0f0f5;
+                selection-color: #e8eaf0;
+                color: #e8eaf0;
                 font-size: 14px;
             }
             QTableWidget::item {
                 padding: 8px;
-                border-bottom: 1px solid #1e2035;
+                border-bottom: 1px solid #1c2033;
             }
             QTableWidget::item:hover {
                 background-color: rgba(212, 168, 83, 0.06);
             }
             QTableWidget::item:selected {
                 background-color: rgba(212, 168, 83, 0.15);
-                border-left: 3px solid #d4a853;
+                border-left: 3px solid #c9956b;
             }
         """)
 
