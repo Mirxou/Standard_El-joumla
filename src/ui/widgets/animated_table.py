@@ -13,7 +13,7 @@ class AnimatedTableWidget(QTableWidget):
 
         # Basic Setup
         self.setShowGrid(False)
-        self.setAlternatingRowColors(True)
+        self.setAlternatingRowColors(False)
         self.verticalHeader().setVisible(False)
         self.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -27,11 +27,11 @@ class AnimatedTableWidget(QTableWidget):
         header.setStretchLastSection(True)
         header.setStyleSheet("""
             QHeaderView::section {
-                background-color: #0f172a;
-                color: #00f3ff;
+                background-color: #0f1117;
+                color: #d4a853;
                 padding: 12px;
                 border: none;
-                border-bottom: 2px solid #1e293b;
+                border-bottom: 2px solid #1e2035;
                 font-weight: bold;
                 text-transform: uppercase;
                 font-size: 13px;
@@ -44,21 +44,21 @@ class AnimatedTableWidget(QTableWidget):
                 background-color: transparent;
                 border: none;
                 gridline-color: transparent;
-                selection-background-color: rgba(0, 243, 255, 0.15);
-                selection-color: #ffffff;
-                color: #e2e8f0;
+                selection-background-color: rgba(212, 168, 83, 0.15);
+                selection-color: #f0f0f5;
+                color: #f0f0f5;
                 font-size: 14px;
             }
             QTableWidget::item {
                 padding: 8px;
-                border-bottom: 1px solid rgba(30, 41, 59, 0.5);
+                border-bottom: 1px solid #1e2035;
             }
             QTableWidget::item:hover {
-                background-color: rgba(0, 243, 255, 0.05); /* Subtle hover glow */
+                background-color: rgba(212, 168, 83, 0.06);
             }
             QTableWidget::item:selected {
-                background-color: rgba(0, 243, 255, 0.15);
-                border-left: 3px solid #00f3ff;
+                background-color: rgba(212, 168, 83, 0.15);
+                border-left: 3px solid #d4a853;
             }
         """)
 

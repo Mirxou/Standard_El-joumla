@@ -857,7 +857,7 @@ class MainWindow(QMainWindow):
         """إعداد واجهة المستخدم - Modern Architecture"""
         # الويدجت المركزي مع خلفية صلبة
         central_container = QWidget()
-        central_container.setStyleSheet("background-color: #020617;")
+        central_container.setStyleSheet("background-color: #08090d;")
         self.setCentralWidget(central_container)
 
         # التخطيط الجذري
@@ -871,17 +871,17 @@ class MainWindow(QMainWindow):
         # خلفية صلبة داكنة احترافية
         self.main_frame.setStyleSheet("""
             QFrame#mainFrame {
-                background-color: #020617;
+                background-color: #08090d;
                 border-radius: 12px;
-                border: 2px solid #06b6d4;
+                border: 2px solid #d4a853;
             }
         """)
-        # إضافة ظل للإطار الرئيسي (Neon Glow)
+        # إضافة ظل للإطار الرئيسي (Subtle Gold Glow)
         from PySide6.QtWidgets import QGraphicsDropShadowEffect
 
         shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(20)
-        shadow.setColor(QColor("#00f3ff"))
+        shadow.setBlurRadius(15)
+        shadow.setColor(QColor(212, 168, 83, 60))
         shadow.setOffset(0, 0)
         self.main_frame.setGraphicsEffect(shadow)
 
@@ -1021,7 +1021,7 @@ class MainWindow(QMainWindow):
                 color: #ffffff;
                 gridline-color: #333333;
                 border: 1px solid #333333;
-                selection-background-color: #00f3ff;
+                selection-background-color: #d4a853;
                 selection-color: #000000;
             }
             QTableWidget::item, QTableView::item {
@@ -1029,7 +1029,7 @@ class MainWindow(QMainWindow):
             }
             QHeaderView::section {
                 background-color: #0f172a;
-                color: #00f3ff;
+                color: #d4a853;
                 font-weight: bold;
                 border: 1px solid #333333;
                 padding: 4px;
@@ -1047,7 +1047,7 @@ class MainWindow(QMainWindow):
                 border-radius: 5px;
             }
             QScrollBar::handle:vertical:hover {
-                background: #00f3ff;
+                background: #d4a853;
             }
             QScrollBar:horizontal {
                 border: none;
@@ -1061,7 +1061,7 @@ class MainWindow(QMainWindow):
                 border-radius: 5px;
             }
             QScrollBar::handle:horizontal:hover {
-                background: #00f3ff;
+                background: #d4a853;
             }
         """
         self.setStyleSheet(self.styleSheet() + table_style)
@@ -1614,7 +1614,7 @@ class MainWindow(QMainWindow):
 
         # Add Cards to Grid
         kpi_layout.addWidget(
-            self._create_glass_kpi("total_sales", "المبيعات", "0 د.ج", "#38bdf8", "💰"),
+            self._create_glass_kpi("total_sales", "المبيعات", "0 د.ج", "#6c9cef", "💰"),
             0,
             0,
         )
@@ -7530,7 +7530,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(12, 12, 12, 12)
 
         title = QLabel("إدارة المشتريات وأوامر التوريد")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #00f3ff; margin-bottom: 4px;")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #d4a853; margin-bottom: 4px;")
         layout.addWidget(title)
 
         # أزرار الإجراءات
@@ -8783,11 +8783,11 @@ class MainWindow(QMainWindow):
                 border-radius: 6px;
             }
             QMenuBar::item:selected {
-                background-color: rgba(0, 243, 255, 0.1);
-                color: #00f3ff;
+                background-color: rgba(212,168,83,0.1);
+                color: #d4a853;
             }
             QMenuBar::item:pressed {
-                background-color: rgba(0, 243, 255, 0.2);
+                background-color: rgba(212,168,83,0.2);
             }
             QMenu {
                 background-color: #1e293b;
@@ -8801,8 +8801,8 @@ class MainWindow(QMainWindow):
                 border-radius: 4px;
             }
             QMenu::item:selected {
-                background-color: rgba(0, 243, 255, 0.15);
-                color: #00f3ff;
+                background-color: rgba(212,168,83,0.15);
+                color: #d4a853;
             }
             QMenu::separator {
                 height: 1px;
@@ -9463,12 +9463,20 @@ class MainWindow(QMainWindow):
     def setup_statusbar(self):
         """إعداد شريط الحالة"""
         statusbar = self.statusBar()
+        statusbar.setStyleSheet("""
+            QStatusBar {
+                background-color: #08090d;
+                color: #5d5f7a;
+                border-top: 1px solid #1e2035;
+                font-size: 11px;
+            }
+        """)
 
         # عناصر مخصصة: السمة + الإشعارات
         from PySide6.QtWidgets import QLabel
 
         self._status_unread = QLabel("")
-        self._status_unread.setStyleSheet("color:#555; padding:0 8px;")
+        self._status_unread.setStyleSheet("color:#5d5f7a; padding:0 8px;")
         statusbar.addPermanentWidget(self._status_unread)
 
         # مؤشر حالة المزامنة (إذا كان hybrid_service متاحاً)
@@ -9490,7 +9498,7 @@ class MainWindow(QMainWindow):
         from PySide6.QtWidgets import QLabel
 
         self._status_websocket = QLabel("⚪ WebSocket: غير متصل")
-        self._status_websocket.setStyleSheet("color:#888; padding:0 8px; font-size:10px;")
+        self._status_websocket.setStyleSheet("color:#5d5f7a; padding:0 8px; font-size:10px;")
         statusbar.addPermanentWidget(self._status_websocket)
 
         # رسالة قاعدة البيانات الأولى

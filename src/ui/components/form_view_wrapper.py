@@ -26,8 +26,8 @@ class FormViewWrapper(QWidget):
         self.header = QFrame()
         self.header.setStyleSheet("""
             QFrame {
-                background-color: #1e293b; /* Dark Surface */
-                border-bottom: 1px solid #334155;
+                background-color: #161822; /* Dark Surface */
+                border-bottom: 1px solid #2a2d45;
             }
         """)
         self.header_layout = QVBoxLayout(self.header)
@@ -73,7 +73,7 @@ class FormViewWrapper(QWidget):
         self.content_layout.setContentsMargins(20, 20, 20, 20)
 
         # Background for content area
-        self.content_area.setStyleSheet("background-color: #0f172a;")
+        self.content_area.setStyleSheet("background-color: #0f1117;")
         self.content_layout.addLayout(self.form_layout)
 
         self.main_layout.addWidget(self.content_area)
@@ -90,19 +90,19 @@ class FormViewWrapper(QWidget):
     def create_action_btn(self, text, variant="secondary"):
         btn = QPushButton(text)
         if variant == "primary":
-            bg = "#7c3aed"  # Violet
-            fg = "white"
-            hover = "#6d28d9"
+            bg = "#d4a853"
+            fg = "#0f1117"
+            hover = "#e8c878"
         else:  # secondary
-            bg = "#1e293b"
-            fg = "#cbd5e1"
-            hover = "#334155"
+            bg = "#1e2030"
+            fg = "#9496b0"
+            hover = "#252840"
 
         btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {bg};
                 color: {fg};
-                border: 1px solid {('#5b21b6' if variant=='primary' else '#334155')};
+                border: 1px solid {('#b8923f' if variant=='primary' else '#2a2d45')};
                 padding: 6px 12px;
                 border-radius: 4px;
                 font-weight: 600;

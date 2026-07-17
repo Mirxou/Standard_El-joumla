@@ -43,13 +43,13 @@ class GlassCard(QFrame):
         """تطبيق نمط الزجاج"""
         self.setStyleSheet("""
             GlassCard {
-                background: #1e293b;
-                border: 1px solid #334155;
-                border-radius: 16px;
+                background: #161822;
+                border: 1px solid #2a2d45;
+                border-radius: 14px;
             }
             GlassCard:hover {
-                background: #334155;
-                border: 1px solid #475569;
+                background: #1e2030;
+                border: 1px solid #d4a853;
             }
         """)
 
@@ -120,7 +120,7 @@ class KPICard(GlassCard):
         self.value_label.setStyleSheet("""
             font-size: 28px;
             font-weight: bold;
-            color: #f8fafc;
+            color: #f0f0f5;
         """)
         value_layout.addWidget(self.value_label)
         value_layout.addStretch()
@@ -129,7 +129,7 @@ class KPICard(GlassCard):
 
         # Trend
         if self.trend_text:
-            trend_color = "#10b981" if self.trend_positive else "#ef4444"  # noqa: F841
+            trend_color = "#2d8c6f" if self.trend_positive else "#e85454"  # noqa: F841
             trend_icon = "↑" if self.trend_positive else "↓"
 
             trend_label = QLabel(f"{trend_icon} {self.trend_text}")

@@ -10,10 +10,10 @@ class QuantumNotification(QWidget):
     """
 
     # Types
-    SUCCESS = "#00f3ff"  # Neon Cyan
-    ERROR = "#ef4444"  # Red
-    WARNING = "#f59e0b"  # Amber
-    INFO = "#3b82f6"  # Blue
+    SUCCESS = "#2d8c6f"
+    ERROR = "#e85454"
+    WARNING = "#e8a838"
+    INFO = "#6c9cef"
 
     def __init__(self, parent, title, message, color_hex=SUCCESS, duration=3000):
         super().__init__(parent)
@@ -29,8 +29,8 @@ class QuantumNotification(QWidget):
         # Styling
         self.setStyleSheet("""
             QWidget {{
-                background-color: #0f172a;
-                border: 1px solid {color_hex};
+                background-color: #161822;
+                border: 1px solid #2a2d45;
                 border-left: 4px solid {color_hex};
                 border-radius: 8px;
             }}
@@ -39,12 +39,12 @@ class QuantumNotification(QWidget):
                 background: transparent;
             }}
             QLabel#Title {{
-                color: {color_hex};
+                color: #f0f0f5;
                 font-weight: bold;
                 font-size: 14px;
             }}
             QLabel#Message {{
-                color: #e2e8f0;
+                color: #9496b0;
                 font-size: 12px;
             }}
         """)
@@ -65,8 +65,8 @@ class QuantumNotification(QWidget):
 
         # Shadow Effect
         shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(20)
-        shadow.setColor(self.color)
+        shadow.setBlurRadius(12)
+        shadow.setColor(QColor(0, 0, 0, 120))
         shadow.setOffset(0, 4)
         self.setGraphicsEffect(shadow)
 

@@ -18,13 +18,13 @@ class CustomTitleBar(QWidget):
         # Quantum Gradient & Border - System 2.0 Integrated
         self.setStyleSheet("""
             CustomTitleBar {
-                background-color: #0f172a; /* Match Main Window Background */
-                border-bottom: 1px solid #1e293b;
+                background-color: #0f1117; /* Match Main Window Background */
+                border-bottom: 1px solid #2a2d45;
                 border-top-left-radius: 10px;
                 border-top-right-radius: 10px;
             }
             QLabel {
-                color: #e2e8f0;
+                color: #f0f0f5;
                 font-family: 'Segoe UI', 'Cairo';
                 font-weight: 700;
                 font-size: 14px;
@@ -32,18 +32,18 @@ class CustomTitleBar(QWidget):
             QPushButton {
                 background: transparent;
                 border: none;
-                color: #64748b;
+                color: #5d5f7a;
                 font-size: 16px;
                 width: 45px;
                 height: 40px;
                 border-radius: 0px;
             }
             QPushButton:hover {
-                background-color: rgba(255, 255, 255, 0.05);
-                color: #f8fafc;
+                background-color: rgba(212,168,83,0.12);
+                color: #f0f0f5;
             }
             QPushButton#btnClose:hover {
-                background-color: #ef4444;
+                background-color: #e85454;
                 color: white;
                 border-top-right-radius: 10px;
             }

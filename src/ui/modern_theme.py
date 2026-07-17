@@ -1,6 +1,7 @@
 """
-Style Manager - نظام إدارة المظهر الموحد
-Provides a single, high-professional dark theme (Quantum Dark) for the entire system.
+Style Manager — نظام إدارة المظهر الموحد
+Provides a single, world-class dark theme (Royal Dark v2.0) with gold accents
+for the entire Standard El-Joumla ERP system.
 """
 
 from pathlib import Path
@@ -9,10 +10,13 @@ from typing import Optional
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication
 
+from src.ui.styles.design_tokens import C  # Design tokens (Colors, etc.)
+
 
 class StyleManager:
     """
-    مدير المظهر الموحد - يطبق سمة Quantum Dark بشكل دائم.
+    مدير المظهر الموحد — يطبق سمة Royal Dark v2.0 بشكل دائم.
+    Uses design tokens from design_tokens.py for palette consistency.
     """
 
     def __init__(self):
@@ -30,34 +34,34 @@ class StyleManager:
         except Exception:
             return ""
 
+    def _build_palette(self) -> QPalette:
+        """Build QPalette from design tokens for native widget consistency."""
+        palette = QPalette()
+
+        palette.setColor(QPalette.Window,          QColor(C.BG_VOID))
+        palette.setColor(QPalette.WindowText,      QColor(C.TEXT_PRIMARY))
+        palette.setColor(QPalette.Base,            QColor(C.BG_TERTIARY))
+        palette.setColor(QPalette.AlternateBase,   QColor(C.BG_PRIMARY))
+        palette.setColor(QPalette.ToolTipBase,     QColor(C.BG_SECONDARY))
+        palette.setColor(QPalette.ToolTipText,     QColor(C.TEXT_PRIMARY))
+        palette.setColor(QPalette.Text,            QColor(C.TEXT_PRIMARY))
+        palette.setColor(QPalette.Button,          QColor(C.BG_TERTIARY))
+        palette.setColor(QPalette.ButtonText,      QColor(C.TEXT_PRIMARY))
+        palette.setColor(QPalette.Highlight,       QColor(C.ACCENT_GOLD))
+        palette.setColor(QPalette.HighlightedText, QColor(C.TEXT_INVERSE))
+
+        return palette
+
     def apply_theme(self):
         """تطبيق السمة الداكنة على التطبيق بالكامل"""
         app = QApplication.instance()
         if not app:
             return
 
-        # 1. تطبيق لوحة الألوان الداكنة (Dark Palette) لتحسين مظهر النوافذ الأصلية
-        palette = QPalette()
-        dark_bg = QColor("#020617")
-        surface = QColor("#1e293b")
-        cyan = QColor("#00f3ff")
-        white = QColor("#ffffff")
+        # 1. Set dark palette from design tokens (covers native dialogs, etc.)
+        app.setPalette(self._build_palette())
 
-        palette.setColor(QPalette.Window, dark_bg)
-        palette.setColor(QPalette.WindowText, white)
-        palette.setColor(QPalette.Base, surface)
-        palette.setColor(QPalette.AlternateBase, dark_bg)
-        palette.setColor(QPalette.ToolTipBase, dark_bg)
-        palette.setColor(QPalette.ToolTipText, white)
-        palette.setColor(QPalette.Text, white)
-        palette.setColor(QPalette.Button, surface)
-        palette.setColor(QPalette.ButtonText, white)
-        palette.setColor(QPalette.Highlight, cyan)
-        palette.setColor(QPalette.HighlightedText, dark_bg)
-
-        app.setPalette(palette)
-
-        # 2. تطبيق ملف QSS
+        # 2. Apply QSS stylesheet
         stylesheet = self.get_stylesheet()
         if stylesheet:
             app.setStyleSheet(stylesheet)

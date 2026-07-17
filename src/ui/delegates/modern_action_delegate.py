@@ -141,10 +141,10 @@ class ModernActionDelegate(QStyledItemDelegate):
                 delete_hovered = False
 
             # رسم أيقونة التعديل (أزرق)
-            self._draw_icon(painter, edit_rect, self.edit_icon, "#3b82f6", edit_hovered)
+            self._draw_icon(painter, edit_rect, self.edit_icon, "#6c9cef", edit_hovered)
 
             # رسم أيقونة الحذف (أحمر)
-            self._draw_icon(painter, delete_rect, self.delete_icon, "#ef4444", delete_hovered)
+            self._draw_icon(painter, delete_rect, self.delete_icon, "#e85454", delete_hovered)
 
         except Exception:
             # في حالة أي خطأ، لا نريد أن يتوقف الرسم

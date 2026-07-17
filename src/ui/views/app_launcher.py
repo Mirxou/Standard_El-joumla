@@ -21,13 +21,13 @@ class AppCard(QFrame):
         # Styles
         self.setStyleSheet("""
             QFrame {{
-                background-color: #1e293b;
+                background-color: #161822;
                 border-radius: 16px;
-                border: 1px solid #334155;
+                border: 1px solid #2a2d45;
             }}
             QFrame:hover {{
-                background-color: #334155;
-                border: 1px solid {color};
+                background-color: #1e2030;
+                border: 1px solid rgba(212,168,83,0.5);
                 margin-top: -5px; /* Lift effect */
             }}
         """)
@@ -52,7 +52,7 @@ class AppCard(QFrame):
         self.title_lbl.setAlignment(Qt.AlignCenter)
         self.title_lbl.setWordWrap(True)
         self.title_lbl.setStyleSheet("""
-            color: #f1f5f9;
+            color: #f0f0f5;
             font-size: 15px;
             font-weight: 700;
             background: transparent;
@@ -83,7 +83,7 @@ class AppLauncher(QWidget):
         # Header / Greeting
         self.header = QLabel("تطبيقات الأعمال")
         self.header.setStyleSheet("""
-            color: #f8fafc;
+            color: #f0f0f5;
             font-size: 32px;
             font-weight: 800;
             margin-bottom: 20px;
@@ -99,7 +99,7 @@ class AppLauncher(QWidget):
 
         # Define Apps
         self.apps = [
-            ("dashboard", "لوحة القيادة", "📊", "#38bdf8"),
+            ("dashboard", "لوحة القيادة", "📊", "#6c9cef"),
             ("sales", "المبيعات", "💰", "#34d399"),
             ("inventory", "المخزون", "📦", "#f472b6"),
             ("purchases", "المشتريات", "🛒", "#a78bfa"),

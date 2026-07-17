@@ -75,31 +75,31 @@ class ModernSidebar(QFrame):
         """Apply Dark Pro styles matching the app's dark theme"""
         self.setStyleSheet("""
             QFrame#modernSidebar {
-                background-color: #0f172a;
-                border-right: 1px solid #1e293b;
+                background-color: #0f1117;
+                border-right: 1px solid #2a2d45;
                 border-radius: 0px;
             }
             QLabel#sidebarTitle {
                 font-size: 15px;
                 font-weight: 800;
-                color: #00f3ff;
+                color: #d4a853;
                 letter-spacing: 1px;
             }
             QLabel#sidebarSubtitle {
                 font-size: 11px;
-                color: #64748b;
+                color: #5d5f7a;
             }
             QPushButton#sidebarToggleBtn {
                 background: transparent;
                 border: none;
                 border-radius: 8px;
                 font-size: 18px;
-                color: #64748b;
+                color: #5d5f7a;
                 padding: 4px;
             }
             QPushButton#sidebarToggleBtn:hover {
-                background-color: rgba(0, 243, 255, 0.08);
-                color: #00f3ff;
+                background-color: rgba(212,168,83,0.12);
+                color: #d4a853;
             }
             QPushButton#modernSidebarBtn {
                 background: transparent;
@@ -107,19 +107,19 @@ class ModernSidebar(QFrame):
                 border-radius: 10px;
                 text-align: right;
                 padding: 10px 14px;
-                color: #94a3b8;
+                color: #9496b0;
                 font-weight: 600;
                 font-size: 14px;
             }
             QPushButton#modernSidebarBtn:hover {
-                background-color: rgba(0, 243, 255, 0.07);
-                color: #e2e8f0;
+                background-color: #252840;
+                color: #f0f0f5;
             }
             QPushButton#modernSidebarBtn:checked {
                 background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
-                    stop:0 rgba(0,243,255,0.18), stop:1 rgba(37,99,235,0.18));
-                color: #00f3ff;
-                border-left: 3px solid #00f3ff;
+                    stop:0 rgba(212,168,83,0.18), stop:1 rgba(232,200,120,0.08));
+                color: #d4a853;
+                border-left: 3px solid #d4a853;
             }
             QPushButton#sidebarLogoutBtn {
                 color: #f87171;
@@ -134,7 +134,7 @@ class ModernSidebar(QFrame):
         """Header with App Title - Standard El Joumla Branding"""
         self.header_container = QFrame()
         self.header_container.setStyleSheet(
-            "background: transparent; border-bottom: 1px solid #1e293b; padding-bottom: 8px;"
+            "background: transparent; border-bottom: 1px solid #2a2d45; padding-bottom: 8px;"
         )
         self.header_layout = QVBoxLayout(self.header_container)
         self.header_layout.setContentsMargins(0, 0, 0, 8)
@@ -319,7 +319,7 @@ class ModernSidebar(QFrame):
         line = QFrame()
         line.setFrameShape(QFrame.HLine)
         line.setFrameShadow(QFrame.Sunken)
-        line.setStyleSheet("background-color: #334155; margin: 10px 0;")
+        line.setStyleSheet("background-color: #2a2d45; margin: 10px 0;")
         self.layout.insertWidget(self.layout.count() - 1, line)
         return line
 
