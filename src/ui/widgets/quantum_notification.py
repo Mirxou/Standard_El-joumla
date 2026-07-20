@@ -10,10 +10,10 @@ class QuantumNotification(QWidget):
     """
 
     # Types
-    SUCCESS = "#3db89c"
-    ERROR = "#e05555"
-    WARNING = "#e0a040"
-    INFO = "#6b8cd4"
+    SUCCESS = "#2DD4BF"
+    ERROR = "#EF6B6B"
+    WARNING = "#F59E0B"
+    INFO = "#38BDF8"
 
     def __init__(self, parent, title, message, color_hex=SUCCESS, duration=3000):
         super().__init__(parent)
@@ -29,8 +29,8 @@ class QuantumNotification(QWidget):
         # Styling
         self.setStyleSheet("""
             QWidget {{
-                background-color: #141724;
-                border: 1px solid #282d48;
+                background-color: #181D2E;
+                border: 1px solid #2A3150;
                 border-left: 4px solid {color_hex};
                 border-radius: 12px;
             }}
@@ -39,13 +39,13 @@ class QuantumNotification(QWidget):
                 background: transparent;
             }}
             QLabel#Title {{
-                color: #ffffff;
+                color: #FFFFFF;
                 font-weight: bold;
                 font-size: 14px;
                 font-family: 'Cairo';
             }}
             QLabel#Message {{
-                color: #9498b8;
+                color: #8B92A8;
                 font-size: 12px;
                 font-family: 'Cairo';
             }}

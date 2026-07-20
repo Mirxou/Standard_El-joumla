@@ -45,7 +45,7 @@ class BlockingOverlay(QWidget):
         self.message_label.setAlignment(Qt.AlignCenter)
         self.message_label.setStyleSheet("""
             QLabel {
-                color: #e8eaf0;
+                color: #F0F2F5;
                 font-size: 16pt;
                 font-weight: bold;
                 background-color: transparent;
@@ -59,15 +59,15 @@ class BlockingOverlay(QWidget):
         self.progress_bar.setRange(0, 0)  # Indeterminate
         self.progress_bar.setStyleSheet("""
             QProgressBar {
-                border: 1px solid #282d48;
+                border: 1px solid #2A3150;
                 border-radius: 5px;
                 text-align: center;
-                color: #e8eaf0;
-                background-color: #1c2033;
+                color: #F0F2F5;
+                background-color: #202640;
                 height: 30px;
             }
             QProgressBar::chunk {
-                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #c9956b, stop:1 #e0b896);
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #A88A3E, stop:1 #E8C96A);
                 border-radius: 3px;
             }
         """)
@@ -81,15 +81,15 @@ class BlockingOverlay(QWidget):
             skip_btn.clicked.connect(self.skip_requested.emit)
             skip_btn.setStyleSheet("""
                 QPushButton {
-                    background-color: #1c2033;
-                    color: #e8eaf0;
-                    border: 1px solid #282d48;
+                    background-color: #202640;
+                    color: #F0F2F5;
+                    border: 1px solid #2A3150;
                     border-radius: 8px;
                     padding: 10px;
                     min-width: 120px;
                 }
                 QPushButton:hover {
-                    background-color: #2a3052;
+                    background-color: #323C62;
                 }
             """)
             button_layout.addWidget(skip_btn)
@@ -121,7 +121,7 @@ class BlockingOverlay(QWidget):
         painter.setRenderHint(QPainter.Antialiasing)
 
         # خلفية صلبة
-        brush = QBrush(QColor(8, 9, 13, 217))  # Deep Void rgba(8,9,13,0.85)
+        brush = QBrush(QColor(6, 7, 11, 217))  # BG_VOID rgba(6,7,11,0.85)
         painter.fillRect(self.rect(), brush)
 
     def update_message(self, message: str):

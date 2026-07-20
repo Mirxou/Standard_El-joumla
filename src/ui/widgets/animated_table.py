@@ -5,7 +5,7 @@ class AnimatedTableWidget(QTableWidget):
     """
     جدول بيانات تفاعلي (Quantum Table)
     Animations: Hover Glow, Smooth Selection
-    Styling: Transparent, Neon Accents
+    Styling: Transparent, Gold Accents
     """
 
     def __init__(self, *args, **kwargs):
@@ -27,11 +27,11 @@ class AnimatedTableWidget(QTableWidget):
         header.setStretchLastSection(True)
         header.setStyleSheet("""
             QHeaderView::section {
-                background-color: #0e1018;
-                color: #c9956b;
+                background-color: #111520;
+                color: #C8A54E;
                 padding: 12px;
                 border: none;
-                border-bottom: 2px solid #1c2033;
+                border-bottom: 2px solid #1E2440;
                 font-weight: bold;
                 text-transform: uppercase;
                 font-size: 13px;
@@ -44,21 +44,21 @@ class AnimatedTableWidget(QTableWidget):
                 background-color: transparent;
                 border: none;
                 gridline-color: transparent;
-                selection-background-color: rgba(212, 168, 83, 0.15);
-                selection-color: #e8eaf0;
-                color: #e8eaf0;
+                selection-background-color: rgba(200, 165, 78, 0.15);
+                selection-color: #F0F2F5;
+                color: #F0F2F5;
                 font-size: 14px;
             }
             QTableWidget::item {
                 padding: 8px;
-                border-bottom: 1px solid #1c2033;
+                border-bottom: 1px solid #1E2440;
             }
             QTableWidget::item:hover {
-                background-color: rgba(212, 168, 83, 0.06);
+                background-color: rgba(200, 165, 78, 0.06);
             }
             QTableWidget::item:selected {
-                background-color: rgba(212, 168, 83, 0.15);
-                border-left: 3px solid #c9956b;
+                background-color: rgba(200, 165, 78, 0.15);
+                border-left: 3px solid #C8A54E;
             }
         """)
 

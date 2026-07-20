@@ -44,13 +44,13 @@ class GlassCard(QFrame):
         self.setStyleSheet("""
             GlassCard {
                 background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
-                    stop:0 #1c2033,stop:1 #141724);
-                border: 1px solid #282d48;
+                    stop:0 #202640,stop:1 #181D2E);
+                border: 1px solid #2A3150;
                 border-radius: 16px;
             }
             GlassCard:hover {
-                background: #1c2033;
-                border: 1px solid #c9956b;
+                background: #202640;
+                border: 1px solid #C8A54E;
             }
         """)
 
@@ -121,7 +121,7 @@ class KPICard(GlassCard):
         self.value_label.setStyleSheet("""
             font-size: 28px;
             font-weight: 800;
-            color: #ffffff;
+            color: #FFFFFF;
             font-family: 'Cairo';
         """)
         value_layout.addWidget(self.value_label)
@@ -131,7 +131,7 @@ class KPICard(GlassCard):
 
         # Trend
         if self.trend_text:
-            trend_color = "#3db89c" if self.trend_positive else "#e05555"  # noqa: F841
+            trend_color = "#2DD4BF" if self.trend_positive else "#EF6B6B"  # noqa: F841
             trend_icon = "↑" if self.trend_positive else "↓"
 
             trend_label = QLabel(f"{trend_icon} {self.trend_text}")

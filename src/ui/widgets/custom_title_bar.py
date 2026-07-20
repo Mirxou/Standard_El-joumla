@@ -6,8 +6,8 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QWidget
 
 class CustomTitleBar(QWidget):
     """
-    شريط عنوان مخصص — Obsidian Luxe v3.0
-    Rose Gold accents on Deep Obsidian background
+    شريط عنوان مخصص — Aurora Noir v4.0
+    Gold accents on Deep Void background
     """
 
     def __init__(self, parent=None, title="", is_dialog=False):
@@ -15,17 +15,17 @@ class CustomTitleBar(QWidget):
         self.parent = parent
         self.setFixedHeight(42)
 
-        # Obsidian Luxe styling
+        # Aurora Noir styling
         self.setStyleSheet("""
             CustomTitleBar {
                 background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
-                    stop:0 #0e1018, stop:1 #0a0b10);
-                border-bottom: 1px solid #1c2033;
+                    stop:0 #111520, stop:1 #0C0E16);
+                border-bottom: 1px solid #1E2440;
                 border-top-left-radius: 16px;
                 border-top-right-radius: 16px;
             }
             QLabel {
-                color: #e8eaf0;
+                color: #F0F2F5;
                 font-family: 'Cairo', 'Segoe UI';
                 font-weight: 700;
                 font-size: 13px;
@@ -34,18 +34,18 @@ class CustomTitleBar(QWidget):
             QPushButton {
                 background: transparent;
                 border: none;
-                color: #5d6184;
+                color: #515874;
                 font-size: 15px;
                 width: 46px;
                 height: 42px;
                 border-radius: 0px;
             }
             QPushButton:hover {
-                background-color: rgba(201,149,107,0.08);
-                color: #e8eaf0;
+                background-color: rgba(200,165,78,0.08);
+                color: #F0F2F5;
             }
             QPushButton#btnClose:hover {
-                background-color: rgba(224,85,85,0.85);
+                background-color: rgba(239,107,107,0.85);
                 color: #ffffff;
                 border-top-right-radius: 16px;
             }
@@ -72,7 +72,7 @@ class CustomTitleBar(QWidget):
         # Title
         self.title_label = QLabel(title or "ستاندرد الجملة")
         self.title_label.setStyleSheet(
-            "background: transparent; color: #9498b8; font-weight: 600; font-size: 12px;"
+            "background: transparent; color: #8B92A8; font-weight: 600; font-size: 12px;"
         )
         layout.addWidget(self.title_label)
 

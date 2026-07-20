@@ -1,39 +1,39 @@
 /* ═══════════════════════════════════════════════════════════
-   OBSIDIAN LUXE v3.0 — Progress Bar Styles
+   AURORA NOIR v4.0 — Progress Bar Styles
    ═══════════════════════════════════════════════════════════ */
 
 QProgressBar {
-    background-color: #1c2033;
+    background-color: #202640;
     border: none;
     border-radius: 8px;
     text-align: center;
     font-weight: 600;
     font-size: 11px;
     min-height: 8px;
-    color: #e8eaf0;
+    color: #F0F2F5;
 }
 
 QProgressBar::chunk {
-    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #c9956b,stop:1 #e0b896);
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #A88A3E,stop:1 #C8A54E,stop:0.95 #E8C96A);
     border-radius: 8px;
 }
 
 QProgressBar[class="success"]::chunk {
-    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #2a9a7e,stop:1 #5dd4b6);
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #14B8A6,stop:1 #2DD4BF,stop:0.95 #5EEADB);
 }
 
 QProgressBar[class="warning"]::chunk {
-    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #d4a853,stop:1 #e8c878);
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #D97706,stop:1 #F59E0B,stop:0.95 #FBBF24);
 }
 
 QProgressBar[class="danger"]::chunk {
-    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #c94040,stop:1 #e07070);
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #DC4444,stop:1 #EF6B6B,stop:0.95 #F59B9B);
 }
 
 QProgressBar[class="info"]::chunk {
-    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #5578c0,stop:1 #8da8e8);
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #38BDF8,stop:1 #7DD3FC);
 }
 
 QProgressBar[class="amber"]::chunk {
-    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #d4a853,stop:1 #e8c878);
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #A88A3E,stop:1 #C8A54E,stop:0.95 #E8C96A);
 }

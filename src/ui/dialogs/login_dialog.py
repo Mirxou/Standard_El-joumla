@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-نافذة تسجيل الدخول - Login Dialog — "Obsidian Gate" Design
-واجهة تسجيل دخول استثنائية بتصميم Obsidian Luxe — Rose Gold + Deep Obsidian
+نافذة تسجيل الدخول - Login Dialog — "Aurora Gate" Design
+واجهة تسجيل دخول استثنائية بتصميم Aurora Noir — Gold + Deep Void
 """
 
 import logging
@@ -57,41 +57,42 @@ from ...ui.dialogs.forgot_password_dialog import ForgotPasswordDialog
 from ...ui.widgets.quantum_notification import NotificationManager
 from ...utils.i18n_api import I18n
 
-# ── Obsidian Luxe Design Tokens ────────────────────────────────────────
-BG_VOID       = "#050507"
-BG_ABYSS      = "#0a0b10"
-BG_PRIMARY    = "#0e1018"
-BG_SECONDARY  = "#141724"
-BG_TERTIARY   = "#1c2033"
-BG_ELEVATED   = "#232841"
-BORDER_DEFAULT = "#282d48"
-BORDER_SUBTLE  = "#1c2033"
-BORDER_MEDIUM  = "#363d5e"
-BORDER_FOCUS   = "#c9956b"
+# ── Aurora Noir v4.0 Design Tokens ─────────────────────────────────────
+BG_VOID         = "#06070B"
+BG_DEEP         = "#0C0E16"
+BG_PRIMARY      = "#111520"
+BG_SURFACE      = "#181D2E"
+BG_RAISED       = "#202640"
+BG_ELEVATED     = "#2A3150"
 
-TEXT_BRIGHT    = "#ffffff"
-TEXT_PRIMARY   = "#e8eaf0"
-TEXT_SECONDARY = "#9498b8"
-TEXT_MUTED     = "#5d6184"
-TEXT_GHOST     = "#363a56"
+BORDER_SUBTLE   = "#1E2440"
+BORDER_DEFAULT  = "#2A3150"
+BORDER_MEDIUM   = "#3A4468"
+BORDER_FOCUS    = "#C8A54E"
 
-ROSE          = "#c9956b"
-ROSE_LIGHT    = "#e0b896"
-ROSE_DARK     = "#a67a52"
-AMBER         = "#d4a853"
-AMBER_LIGHT   = "#e8c878"
-TEAL          = "#3db89c"
+TEXT_BRIGHT     = "#FFFFFF"
+TEXT_PRIMARY    = "#F0F2F5"
+TEXT_SECONDARY  = "#8B92A8"
+TEXT_MUTED      = "#515874"
+TEXT_GHOST      = "#2E3550"
 
-ROSE_SUBTLE   = "rgba(201,149,107,0.10)"
-ROSE_GLOW     = "rgba(201,149,107,0.25)"
-AMBER_SUBTLE  = "rgba(212,168,83,0.10)"
+GOLD            = "#C8A54E"
+GOLD_LIGHT      = "#E8C96A"
+GOLD_DARK       = "#A88A3E"
+GOLD_SUBTLE     = "rgba(200,165,78,0.10)"
+GOLD_GLOW       = "rgba(200,165,78,0.25)"
+
+TEAL            = "#2DD4BF"
+TEAL_LIGHT      = "#5EEADB"
+
+CORAL           = "#EF6B6B"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  Rose Particle Canvas — animated geometric network background
 # ═══════════════════════════════════════════════════════════════════════════
 class _RoseParticleCanvas(QWidget):
-    """Animated rose gold geometric particles with network connections."""
+    """Animated gold geometric particles with network connections and shimmer."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -115,7 +116,7 @@ class _RoseParticleCanvas(QWidget):
         self._particles = []
         w = max(self.width(), 200)
         h = max(self.height(), 400)
-        for _ in range(45):
+        for _ in range(60):
             self._particles.append(
                 {
                     "x": random.uniform(0, w),
@@ -125,6 +126,7 @@ class _RoseParticleCanvas(QWidget):
                     "vy": random.uniform(-0.4, -0.05),
                     "alpha": random.uniform(0.12, 0.5),
                     "phase": random.uniform(0, math.pi * 2),
+                    "shimmer_phase": random.uniform(0, math.pi * 2),
                 }
             )
 
@@ -138,6 +140,8 @@ class _RoseParticleCanvas(QWidget):
             # Gentle oscillation
             p["x"] += p["vx"] + math.sin(self._time + p["phase"]) * 0.15
             p["y"] += p["vy"]
+            # Shimmer pulse
+            p["shimmer_phase"] += 0.03
             # Wrap around
             if p["y"] < -10:
                 p["y"] = h + 10
@@ -154,16 +158,16 @@ class _RoseParticleCanvas(QWidget):
         painter.setOpacity(self._opacity)
 
         # Draw network connections first
-        pen = QPen(QColor(ROSE))
-        pen.setWidthF(0.4)
+        pen = QPen(QColor(GOLD))
+        pen.setWidthF(0.5)
         for i in range(len(self._particles)):
             for j in range(i + 1, len(self._particles)):
                 dx = self._particles[i]["x"] - self._particles[j]["x"]
                 dy = self._particles[i]["y"] - self._particles[j]["y"]
                 dist = math.hypot(dx, dy)
                 if dist < 100:
-                    alpha = 0.06 * (1 - dist / 100)
-                    c = QColor(ROSE)
+                    alpha = 0.10 * (1 - dist / 100)
+                    c = QColor(GOLD)
                     c.setAlphaF(alpha)
                     pen.setColor(c)
                     painter.setPen(pen)
@@ -176,17 +180,24 @@ class _RoseParticleCanvas(QWidget):
 
         # Draw particles
         for p in self._particles:
+            # Shimmer brightness modulation
+            shimmer = 0.5 + 0.5 * math.sin(p["shimmer_phase"])
+            effective_alpha = p["alpha"] * (0.7 + 0.3 * shimmer)
+
             # Outer glow
-            glow_color = QColor(ROSE)
-            glow_color.setAlphaF(p["alpha"] * 0.3)
+            glow_color = QColor(GOLD)
+            glow_color.setAlphaF(effective_alpha * 0.35)
             painter.setPen(Qt.NoPen)
             painter.setBrush(QBrush(glow_color))
             painter.drawEllipse(
-                QRectF(p["x"] - p["r"] * 2, p["y"] - p["r"] * 2, p["r"] * 4, p["r"] * 4)
+                QRectF(p["x"] - p["r"] * 2.5, p["y"] - p["r"] * 2.5, p["r"] * 5, p["r"] * 5)
             )
-            # Core
-            c = QColor(ROSE_LIGHT if p["alpha"] > 0.35 else ROSE)
-            c.setAlphaF(p["alpha"])
+            # Core — brighter with shimmer
+            if shimmer > 0.7:
+                c = QColor(GOLD_LIGHT)
+            else:
+                c = QColor(GOLD)
+            c.setAlphaF(effective_alpha)
             painter.setBrush(QBrush(c))
             painter.drawEllipse(
                 QRectF(p["x"] - p["r"], p["y"] - p["r"], p["r"] * 2, p["r"] * 2)
@@ -224,10 +235,10 @@ class LoginWorker(QThread):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  LoginDialog — "Obsidian Gate" premium login experience
+#  LoginDialog — "Aurora Gate" premium login experience
 # ═══════════════════════════════════════════════════════════════════════════
 class LoginDialog(BaseDialog):
-    """نافذة تسجيل الدخول — تصميم Obsidian Gate الفاخر"""
+    """نافذة تسجيل الدخول — تصميم Aurora Gate الفاخر"""
 
     login_successful = Signal(object)  # UserSession
 
@@ -249,7 +260,7 @@ class LoginDialog(BaseDialog):
         # Animation manager
         self.animation_manager = AnimationManager(self)
 
-        # ── Override BaseDialog chrome for the Obsidian Gate ─────────────
+        # ── Override BaseDialog chrome for the Aurora Gate ───────────────
         self._apply_obsidian_chrome()
 
         # Warning label
@@ -277,14 +288,14 @@ class LoginDialog(BaseDialog):
 
     # ── Chrome overrides ────────────────────────────────────────────────
     def _apply_obsidian_chrome(self):
-        """Override BaseDialog frame & title bar for the Obsidian Gate look."""
+        """Override BaseDialog frame & title bar for the Aurora Gate look."""
         self.title_bar.setVisible(False)
         self.title_bar.setFixedHeight(0)
         self.title_bar.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self._internal_layout.setContentsMargins(0, 0, 0, 0)
         self._internal_layout.setSpacing(0)
 
-        # Restyle main_frame — Obsidian with rose gold glow
+        # Restyle main_frame — Deep void with gold glow
         self.main_frame.setStyleSheet(
             f"""
             QFrame#MainFrame {{
@@ -296,10 +307,10 @@ class LoginDialog(BaseDialog):
             """
         )
 
-        # Rose gold shadow
+        # Gold shadow
         shadow = self.main_frame.graphicsEffect()
         if isinstance(shadow, QGraphicsDropShadowEffect):
-            shadow.setColor(QColor(ROSE))
+            shadow.setColor(QColor(GOLD))
             shadow.setOffset(0, 8)
             shadow.setBlurRadius(60)
 
@@ -350,24 +361,24 @@ class LoginDialog(BaseDialog):
             self.logo_label.setPixmap(pm.scaled(130, 130, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         else:
             self.logo_label.setText("🛒")
-            self.logo_label.setStyleSheet(f"font-size:68px; color:{ROSE};")
+            self.logo_label.setStyleSheet(f"font-size:68px; color:{GOLD};")
         self.logo_label.setAlignment(Qt.AlignCenter)
         olay.addWidget(self.logo_label)
 
-        # Decorative rose gold line (top)
+        # Decorative gold line (top)
         line_top = QFrame()
         line_top.setFixedHeight(1)
         line_top.setStyleSheet(
             f"background: qlineargradient(x1:0,y1:0,x2:1,y2:0,"
-            f"stop:0 transparent, stop:0.15 {ROSE}, stop:0.85 {ROSE}, stop:1 transparent);"
+            f"stop:0 transparent, stop:0.15 {GOLD}, stop:0.85 {GOLD}, stop:1 transparent);"
         )
         olay.addWidget(line_top)
 
-        # App name — Rose Gold
+        # App name — Gold
         name_lbl = QLabel(self.i18n.get_message("app_name_short"))
         name_lbl.setAlignment(Qt.AlignCenter)
         name_lbl.setStyleSheet(
-            f"color: {ROSE}; font-family: 'Cairo'; font-size: 28px; font-weight: 900; "
+            f"color: {GOLD}; font-family: 'Cairo'; font-size: 28px; font-weight: 900; "
             f"background: transparent; letter-spacing: 0.5px;"
         )
         olay.addWidget(name_lbl)
@@ -381,17 +392,17 @@ class LoginDialog(BaseDialog):
         )
         olay.addWidget(tagline)
 
-        # Decorative rose gold line (bottom)
+        # Decorative gold line (bottom)
         line_bot = QFrame()
         line_bot.setFixedHeight(1)
         line_bot.setStyleSheet(
             f"background: qlineargradient(x1:0,y1:0,x2:1,y2:0,"
-            f"stop:0 transparent, stop:0.25 {ROSE_LIGHT}, stop:0.75 {ROSE_LIGHT}, stop:1 transparent);"
+            f"stop:0 transparent, stop:0.25 {GOLD_LIGHT}, stop:0.75 {GOLD_LIGHT}, stop:1 transparent);"
         )
         olay.addWidget(line_bot)
 
         # Version badge
-        version_badge = QLabel("v3.0 — Obsidian Luxe")
+        version_badge = QLabel("v4.0 — Aurora Noir")
         version_badge.setAlignment(Qt.AlignCenter)
         version_badge.setStyleSheet(
             f"color: {TEXT_GHOST}; font-family: 'Cairo'; font-size: 10px; "
@@ -404,12 +415,12 @@ class LoginDialog(BaseDialog):
             overlay.setGeometry(left.rect())
         left.resizeEvent = _resize_overlay
 
-        # Left panel stylesheet — deep obsidian gradient
+        # Left panel stylesheet — deep void gradient
         left.setStyleSheet(
             f"""
             QFrame#ObsidianLeftPanel {{
                 background: qlineargradient(x1:0, y1:0, x2:0.3, y2:1,
-                    stop:0 {BG_PRIMARY}, stop:0.5 {BG_SECONDARY}, stop:1 {BG_TERTIARY});
+                    stop:0 {BG_PRIMARY}, stop:0.5 {BG_SURFACE}, stop:1 {BG_RAISED});
                 border-top-right-radius: 20px;
                 border-bottom-right-radius: 20px;
             }}
@@ -467,9 +478,9 @@ class LoginDialog(BaseDialog):
         self.warning_label.setStyleSheet(
             f"""
             QLabel {{
-                color: #e05555;
-                background-color: rgba(224,85,85,0.08);
-                border: 1px solid rgba(224,85,85,0.20);
+                color: {CORAL};
+                background-color: rgba(239,107,107,0.08);
+                border: 1px solid rgba(239,107,107,0.20);
                 border-radius: 10px;
                 padding: 10px 16px;
                 font-family: 'Cairo';
@@ -492,7 +503,7 @@ class LoginDialog(BaseDialog):
             f"""
             QPushButton {{
                 border: none;
-                color: {ROSE};
+                color: {GOLD};
                 font-family: 'Cairo';
                 font-size: 13px;
                 background: transparent;
@@ -500,7 +511,7 @@ class LoginDialog(BaseDialog):
                 font-weight: 600;
             }}
             QPushButton:hover {{
-                color: {ROSE_LIGHT};
+                color: {GOLD_LIGHT};
                 text-decoration: underline;
             }}
             """
@@ -533,7 +544,7 @@ class LoginDialog(BaseDialog):
             }}
             QProgressBar::chunk {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 {ROSE}, stop:1 {ROSE_LIGHT});
+                    stop:0 {GOLD}, stop:1 {GOLD_LIGHT});
                 border-radius: 10px;
             }}
             """
@@ -545,7 +556,7 @@ class LoginDialog(BaseDialog):
             f"""
             QFrame#ObsidianRightPanel {{
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {BG_SECONDARY}, stop:1 {BG_PRIMARY});
+                    stop:0 {BG_SURFACE}, stop:1 {BG_PRIMARY});
                 border-top-left-radius: 20px;
                 border-bottom-left-radius: 20px;
             }}
@@ -556,10 +567,10 @@ class LoginDialog(BaseDialog):
 
     # ── Field builders ──────────────────────────────────────────────────
     def _build_username_field(self, parent_layout: QVBoxLayout):
-        """Username field with rose gold focus ring and icon."""
+        """Username field with gold focus ring and icon."""
         self.username_edit = QLineEdit()
         self.username_edit.setPlaceholderText("اسم المستخدم")
-        self.username_edit.setMinimumHeight(52)
+        self.username_edit.setMinimumHeight(54)
         self.username_edit.setTextMargins(46, 0, 16, 0)
         self.username_edit.setStyleSheet(
             f"""
@@ -569,17 +580,17 @@ class LoginDialog(BaseDialog):
                 padding: 0 16px 0 46px;
                 font-family: 'Cairo';
                 font-size: 14px;
-                background-color: {BG_TERTIARY};
+                background-color: {BG_RAISED};
                 color: {TEXT_PRIMARY};
-                selection-background-color: {ROSE_SUBTLE};
-                selection-color: {ROSE_LIGHT};
+                selection-background-color: {GOLD_SUBTLE};
+                selection-color: {GOLD_LIGHT};
             }}
             QLineEdit:hover {{
                 border-color: {BORDER_MEDIUM};
             }}
             QLineEdit:focus {{
-                border-color: {ROSE};
-                background-color: {BG_SECONDARY};
+                border-color: {GOLD};
+                background-color: {BG_SURFACE};
             }}
             """
         )
@@ -607,11 +618,11 @@ class LoginDialog(BaseDialog):
         parent_layout.addLayout(row)
 
     def _build_password_field(self, parent_layout: QVBoxLayout):
-        """Password field with rose gold focus ring, lock icon, show/hide toggle."""
+        """Password field with gold focus ring, lock icon, show/hide toggle."""
         self.password_edit = QLineEdit()
         self.password_edit.setPlaceholderText("كلمة المرور")
         self.password_edit.setEchoMode(QLineEdit.Password)
-        self.password_edit.setMinimumHeight(52)
+        self.password_edit.setMinimumHeight(54)
         self.password_edit.setStyleSheet(
             f"""
             QLineEdit {{
@@ -620,17 +631,17 @@ class LoginDialog(BaseDialog):
                 padding: 0 50px 0 46px;
                 font-family: 'Cairo';
                 font-size: 14px;
-                background-color: {BG_TERTIARY};
+                background-color: {BG_RAISED};
                 color: {TEXT_PRIMARY};
-                selection-background-color: {ROSE_SUBTLE};
-                selection-color: {ROSE_LIGHT};
+                selection-background-color: {GOLD_SUBTLE};
+                selection-color: {GOLD_LIGHT};
             }}
             QLineEdit:hover {{
                 border-color: {BORDER_MEDIUM};
             }}
             QLineEdit:focus {{
-                border-color: {ROSE};
-                background-color: {BG_SECONDARY};
+                border-color: {GOLD};
+                background-color: {BG_SURFACE};
             }}
             """
         )
@@ -651,8 +662,8 @@ class LoginDialog(BaseDialog):
                 border-radius: 10px;
             }}
             QPushButton:hover {{
-                color: {ROSE};
-                background: {ROSE_SUBTLE};
+                color: {GOLD};
+                background: {GOLD_SUBTLE};
             }}
             """
         )
@@ -689,7 +700,7 @@ class LoginDialog(BaseDialog):
         parent_layout.addWidget(wrapper)
 
     def _build_remember_me(self, parent_layout: QVBoxLayout):
-        """Remember-me checkbox with rose gold accent."""
+        """Remember-me checkbox with gold accent."""
         self.remember_checkbox = QCheckBox("تذكرني")
         self.remember_checkbox.setStyleSheet(
             f"""
@@ -705,21 +716,21 @@ class LoginDialog(BaseDialog):
                 height: 20px;
                 border: 2px solid {BORDER_DEFAULT};
                 border-radius: 6px;
-                background-color: {BG_TERTIARY};
+                background-color: {BG_RAISED};
             }}
             QCheckBox::indicator:hover {{
-                border-color: {ROSE};
+                border-color: {GOLD};
             }}
             QCheckBox::indicator:checked {{
-                background-color: {ROSE};
-                border-color: {ROSE};
+                background-color: {GOLD};
+                border-color: {GOLD};
             }}
             """
         )
         parent_layout.addWidget(self.remember_checkbox, alignment=Qt.AlignLeft | Qt.AlignVCenter)
 
     def _build_login_button(self, parent_layout: QVBoxLayout):
-        """Large rose gold gradient login button with glow effect."""
+        """Large gold gradient login button with glow effect."""
         self.login_button = QPushButton(self.i18n.get_message("login_button", default="تسجيل الدخول"))
         self.login_button.setMinimumHeight(54)
         self.login_button.setDefault(True)
@@ -728,7 +739,7 @@ class LoginDialog(BaseDialog):
             f"""
             QPushButton {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 {ROSE}, stop:1 {ROSE_LIGHT});
+                    stop:0 {GOLD}, stop:1 {GOLD_LIGHT});
                 color: {BG_VOID};
                 border: none;
                 border-radius: 14px;
@@ -740,13 +751,13 @@ class LoginDialog(BaseDialog):
             }}
             QPushButton:hover {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 {ROSE_LIGHT}, stop:1 #eaccac);
+                    stop:0 {GOLD_LIGHT}, stop:1 {TEAL_LIGHT});
             }}
             QPushButton:pressed {{
-                background: {ROSE_DARK};
+                background: {GOLD_DARK};
             }}
             QPushButton:disabled {{
-                background-color: {BG_TERTIARY};
+                background-color: {BG_RAISED};
                 color: {TEXT_GHOST};
             }}
             """

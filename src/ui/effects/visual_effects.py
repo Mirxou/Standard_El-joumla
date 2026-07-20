@@ -2,15 +2,45 @@
 # -*- coding: utf-8 -*-
 """
 Visual Effects
-التأثيرات البصرية - gradients, glows, shadows
+التأثيرات البصرية - gradients, glows, shadows, aurora, shimmer, elevation, particles
+
+Color Palette:
+    GOLD=#C8A54E, GOLD_LIGHT=#E8C96A, TEAL=#2DD4BF, CORAL=#EF6B6B,
+    AMBER=#F59E0B, SKY=#38BDF8
+    BG_VOID=#06070B, BG_DEEP=#0C0E16, BG_PRIMARY=#111520,
+    BG_SURFACE=#181D2E, BG_RAISED=#202640
 """
 
 from PySide6.QtCore import QPoint, QRect, Qt
-from PySide6.QtGui import QBrush, QColor, QLinearGradient, QPainter, QPen
+from PySide6.QtGui import (
+    QBrush,
+    QColor,
+    QLinearGradient,
+    QPainter,
+    QPen,
+    QRadialGradient,
+)
+
+
+# ── Color Palette Constants ──────────────────────────────────────────────────
+GOLD = QColor("#C8A54E")
+GOLD_LIGHT = QColor("#E8C96A")
+TEAL = QColor("#2DD4BF")
+CORAL = QColor("#EF6B6B")
+AMBER = QColor("#F59E0B")
+SKY = QColor("#38BDF8")
+
+BG_VOID = QColor("#06070B")
+BG_DEEP = QColor("#0C0E16")
+BG_PRIMARY = QColor("#111520")
+BG_SURFACE = QColor("#181D2E")
+BG_RAISED = QColor("#202640")
 
 
 class VisualEffects:
     """التأثيرات البصرية"""
+
+    # ── Existing Methods (preserved) ──────────────────────────────────────
 
     @staticmethod
     def draw_gradient_background(
@@ -47,38 +77,47 @@ class VisualEffects:
         painter: QPainter,
         rect: QRect,
         color: QColor,
-        intensity: int = 10,
-        blur_radius: int = 20,
+        intensity: int = 15,
+        blur_radius: int = 30,
     ):
         """
-        رسم تأثير glow
+        رسم تأثير glow — 15-layer soft falloff for smoother result.
 
         Args:
             painter: QPainter
             rect: المنطقة
             color: اللون
-            intensity: شدة التأثير
-            blur_radius: نصف قطر التمويه
+            intensity: شدة التأثير (عدد الطبقات، الافتراضي 15)
+            blur_radius: نصف قطر التمويه (الافتراضي 30)
         """
-        # رسم طبقات متعددة للـ glow
-        for i in range(intensity):
-            alpha = int(255 * (1.0 - i / intensity) * 0.3)
-            glow_color = QColor(color)
-            glow_color.setAlpha(alpha)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
-            pen = QPen(glow_color, blur_radius - i * 2)
-            pen.setJoinStyle(Qt.RoundJoin)
+        # 15-layer soft glow with exponential falloff
+        for i in range(intensity):
+            # Softer exponential falloff curve
+            progress = i / max(intensity - 1, 1)
+            alpha = int(255 * ((1.0 - progress) ** 2.0) * 0.25)
+            if alpha <= 0:
+                continue
+            glow_color = QColor(color)
+            glow_color.setAlpha(min(alpha, 255))
+
+            pen = QPen(glow_color, max(blur_radius - i * 2, 1))
+            pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             painter.setPen(pen)
-            painter.setBrush(Qt.NoBrush)
-            painter.drawRoundedRect(rect.adjusted(i, i, -i, -i), 10, 10)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(
+                rect.adjusted(i, i, -i, -i), 12, 12
+            )
 
     @staticmethod
     def draw_shadow_effect(
         painter: QPainter,
         rect: QRect,
-        offset: QPoint = QPoint(5, 5),
-        blur: int = 10,
-        color: QColor = QColor(0, 0, 0, 100),
+        offset: QPoint = QPoint(4, 6),
+        blur: int = 12,
+        color: QColor = QColor(6, 7, 11, 120),
     ):
         """
         رسم تأثير shadow
@@ -88,22 +127,26 @@ class VisualEffects:
             rect: المنطقة
             offset: الإزاحة
             blur: التمويه
-            color: لون الظل
+            color: لون الظل (default uses BG_VOID tinted)
         """
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         shadow_rect = rect.translated(offset)
 
-        # رسم طبقات متعددة للظل
         for i in range(blur):
-            alpha = int(color.alpha() * (1.0 - i / blur))
+            alpha = int(color.alpha() * (1.0 - i / blur) ** 1.5)
             shadow_color = QColor(color)
-            shadow_color.setAlpha(alpha)
-
+            shadow_color.setAlpha(max(alpha, 0))
             painter.fillRect(shadow_rect.adjusted(i, i, -i, -i), shadow_color)
 
     @staticmethod
-    def draw_glass_effect(painter: QPainter, rect: QRect, opacity: float = 0.1, blur: bool = True):
+    def draw_glass_effect(
+        painter: QPainter,
+        rect: QRect,
+        opacity: float = 0.08,
+        blur: bool = True,
+    ):
         """
-        رسم تأثير glass (زجاجي)
+        رسم تأثير glass (زجاجي) — tinted for dark theme.
 
         Args:
             painter: QPainter
@@ -111,39 +154,53 @@ class VisualEffects:
             opacity: الشفافية
             blur: تفعيل التمويه
         """
-        # خلفية شفافة
-        glass_color = QColor(255, 255, 255, int(255 * opacity))
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        # خلفية شفافة مع تلميح من BG_SURFACE
+        glass_color = QColor(24, 29, 46, int(255 * opacity))
         painter.fillRect(rect, glass_color)
 
-        # حد فاتح
-        pen = QPen(QColor(255, 255, 255, int(255 * opacity * 2)))
+        # حد فاتح خفيف مع تلميح ذهبي
+        pen = QPen(QColor(200, 165, 78, int(255 * opacity * 1.5)))
         pen.setWidth(1)
         painter.setPen(pen)
-        painter.setBrush(Qt.NoBrush)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawRoundedRect(rect, 10, 10)
 
     @staticmethod
-    def draw_neon_effect(painter: QPainter, rect: QRect, color: QColor, intensity: int = 5):
+    def draw_neon_effect(
+        painter: QPainter,
+        rect: QRect,
+        color: QColor,
+        intensity: int = 8,
+    ):
         """
-        رسم تأثير neon
+        رسم تأثير neon — 8-layer smoother gradient neon glow.
 
         Args:
             painter: QPainter
             rect: المنطقة
             color: اللون
-            intensity: شدة التأثير
+            intensity: شدة التأثير (عدد الطبقات، الافتراضي 8)
         """
-        # رسم طبقات متعددة للـ neon
-        for i in range(intensity):
-            alpha = int(255 * (1.0 - i / intensity))
-            neon_color = QColor(color)
-            neon_color.setAlpha(alpha)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
-            pen = QPen(neon_color, 3 - i * 0.5)
-            pen.setJoinStyle(Qt.RoundJoin)
+        for i in range(intensity):
+            progress = i / max(intensity - 1, 1)
+            # Smoother falloff: quadratic curve
+            alpha = int(255 * ((1.0 - progress) ** 1.8) * 0.9)
+            neon_color = QColor(color)
+            neon_color.setAlpha(min(max(alpha, 0), 255))
+
+            pen_width = max(3.5 - i * 0.4, 0.5)
+            pen = QPen(neon_color, pen_width)
+            pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             painter.setPen(pen)
-            painter.setBrush(Qt.NoBrush)
-            painter.drawRoundedRect(rect.adjusted(i, i, -i, -i), 10, 10)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(
+                rect.adjusted(i, i, -i, -i), 12, 12
+            )
 
     @staticmethod
     def draw_gradient_border(
@@ -163,11 +220,247 @@ class VisualEffects:
             end_color: لون النهاية
             width: عرض الحد
         """
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
         gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
         gradient.setColorAt(0.0, start_color)
         gradient.setColorAt(1.0, end_color)
 
         pen = QPen(QBrush(gradient), width)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         painter.setPen(pen)
-        painter.setBrush(Qt.NoBrush)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawRoundedRect(rect, 10, 10)
+
+    # ── NEW Methods ──────────────────────────────────────────────────────
+
+    @staticmethod
+    def draw_aurora_glow(
+        painter: QPainter,
+        rect: QRect,
+        color: QColor = GOLD,
+    ):
+        """
+        Multi-layered soft aurora glow with 3 concentric layers fading out.
+        Uses alpha 0.08, 0.05, 0.02 for a subtle atmospheric effect.
+
+        Args:
+            painter: QPainter
+            rect: المنطقة المراد تطبيق التوهج عليها
+            color: اللون الأساسي (الافتراضي ذهبي)
+        """
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        alphas = [0.08, 0.05, 0.02]
+        expansions = [0, 12, 28]  # pixels to expand outward per layer
+
+        for layer_idx, (alpha_val, expand) in enumerate(zip(alphas, expansions)):
+            layer_rect = rect.adjusted(-expand, -expand, expand, expand)
+
+            # Use radial gradient centered on rect for soft natural falloff
+            center_x = layer_rect.center().x()
+            center_y = layer_rect.center().y()
+            outer_radius = max(layer_rect.width(), layer_rect.height()) / 2.0
+
+            radial = QRadialGradient(center_x, center_y, outer_radius)
+            alpha_int = int(255 * alpha_val)
+            core_color = QColor(color)
+            core_color.setAlpha(alpha_int)
+            edge_color = QColor(color)
+            edge_color.setAlpha(0)
+
+            radial.setColorAt(0.0, core_color)
+            radial.setColorAt(
+                0.6,
+                QColor(color.red(), color.green(), color.blue(), alpha_int // 2),
+            )
+            radial.setColorAt(1.0, edge_color)
+
+            painter.fillRect(layer_rect, QBrush(radial))
+
+    @staticmethod
+    def draw_shimmer_line(
+        painter: QPainter,
+        start_point: QPoint,
+        end_point: QPoint,
+        color: QColor = GOLD,
+        width: int = 1,
+    ):
+        """
+        A thin gradient line that fades from transparent to color to transparent.
+        Creates an elegant shimmer accent line.
+
+        Args:
+            painter: QPainter
+            start_point: نقطة البداية
+            end_point: نقطة النهاية
+            color: اللون (الافتراضي ذهبي)
+            width: عرض الخط
+        """
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        gradient = QLinearGradient(start_point, end_point)
+
+        # transparent -> color -> transparent
+        transparent = QColor(color)
+        transparent.setAlpha(0)
+        solid = QColor(color)
+        solid.setAlpha(220)
+
+        gradient.setColorAt(0.0, transparent)
+        gradient.setColorAt(0.2, QColor(color.red(), color.green(), color.blue(), 60))
+        gradient.setColorAt(0.5, solid)
+        gradient.setColorAt(0.8, QColor(color.red(), color.green(), color.blue(), 60))
+        gradient.setColorAt(1.0, transparent)
+
+        pen = QPen(QBrush(gradient), width)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        painter.drawLine(start_point, end_point)
+
+    @staticmethod
+    def draw_card_elevation(
+        painter: QPainter,
+        rect: QRect,
+        elevation: int = 1,
+        accent_color: QColor = GOLD,
+    ):
+        """
+        Card shadow system with 4 elevation levels (sm/md/lg/xl),
+        each adding more shadow layers plus subtle gold-tinted edge.
+
+        Elevation levels:
+            0 = sm: 2 shadow layers, subtle
+            1 = md: 4 shadow layers, standard (default)
+            2 = lg: 7 shadow layers, prominent
+            3 = xl: 10 shadow layers, dramatic
+
+        Args:
+            painter: QPainter
+            rect: المنطقة
+            elevation: مستوى الارتفاع (0-3)
+            accent_color: لون الحافة التمييزية
+        """
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        elevation_config = {
+            0: {  # sm
+                "shadow_layers": 2,
+                "offset": QPoint(1, 2),
+                "blur": 4,
+                "edge_alpha": 15,
+            },
+            1: {  # md
+                "shadow_layers": 4,
+                "offset": QPoint(2, 4),
+                "blur": 8,
+                "edge_alpha": 25,
+            },
+            2: {  # lg
+                "shadow_layers": 7,
+                "offset": QPoint(4, 8),
+                "blur": 14,
+                "edge_alpha": 35,
+            },
+            3: {  # xl
+                "shadow_layers": 10,
+                "offset": QPoint(6, 12),
+                "blur": 20,
+                "edge_alpha": 45,
+            },
+        }
+
+        # Clamp elevation to valid range
+        elevation = max(0, min(elevation, 3))
+        config = elevation_config[elevation]
+
+        # Draw shadow layers
+        shadow_base = QColor(6, 7, 11)  # BG_VOID based
+        for i in range(config["shadow_layers"]):
+            progress = i / max(config["shadow_layers"] - 1, 1)
+            alpha = int(80 * (1.0 - progress) ** 1.5)
+            shadow_color = QColor(shadow_base)
+            shadow_color.setAlpha(alpha)
+
+            layer_offset = config["offset"] + QPoint(i, i)
+            shadow_rect = rect.translated(layer_offset)
+            painter.fillRect(
+                shadow_rect.adjusted(i, i, -i, -i), shadow_color
+            )
+
+        # Subtle accent-tinted top edge (gold highlight)
+        edge_color = QColor(accent_color)
+        edge_color.setAlpha(config["edge_alpha"])
+        edge_pen = QPen(edge_color, 1)
+        edge_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(edge_pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+
+        # Draw only the top edge line for subtle highlight
+        top_left = rect.topLeft()
+        top_right = rect.topRight()
+        painter.drawLine(top_left, top_right)
+
+        # Optional: very subtle left edge at half alpha for depth
+        edge_color.setAlpha(config["edge_alpha"] // 2)
+        edge_pen.setColor(edge_color)
+        painter.setPen(edge_pen)
+        painter.drawLine(rect.topLeft(), rect.bottomLeft())
+
+    @staticmethod
+    def draw_particle_dot(
+        painter: QPainter,
+        center: QPoint,
+        radius: float,
+        color: QColor,
+        alpha: int = 180,
+    ):
+        """
+        A single glowing dot with outer glow ring.
+        Creates a luminous particle effect.
+
+        Args:
+            painter: QPainter
+            center: مركز النقطة
+            radius: نصف القطر الأساسي
+            color: اللون
+            alpha: شفافية النقطة الأساسية (0-255)
+        """
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        # Outer glow ring
+        glow_radius = radius * 3.0
+        radial_glow = QRadialGradient(center.x(), center.y(), glow_radius)
+        glow_color_outer = QColor(color)
+        glow_color_outer.setAlpha(0)
+        glow_color_mid = QColor(color)
+        glow_color_mid.setAlpha(max(alpha // 6, 0))
+        glow_color_inner = QColor(color)
+        glow_color_inner.setAlpha(max(alpha // 3, 0))
+
+        radial_glow.setColorAt(0.0, glow_color_inner)
+        radial_glow.setColorAt(0.4, glow_color_mid)
+        radial_glow.setColorAt(1.0, glow_color_outer)
+
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(radial_glow))
+        painter.drawEllipse(
+            center,
+            int(glow_radius),
+            int(glow_radius),
+        )
+
+        # Core dot
+        core_gradient = QRadialGradient(center.x(), center.y(), radius)
+        core_bright = QColor(255, 255, 255, min(alpha + 40, 255))
+        core_main = QColor(color)
+        core_main.setAlpha(alpha)
+
+        core_gradient.setColorAt(0.0, core_bright)
+        core_gradient.setColorAt(0.5, core_main)
+        core_edge = QColor(color)
+        core_edge.setAlpha(max(alpha // 2, 0))
+        core_gradient.setColorAt(1.0, core_edge)
+
+        painter.setBrush(QBrush(core_gradient))
+        painter.drawEllipse(center, int(radius), int(radius))

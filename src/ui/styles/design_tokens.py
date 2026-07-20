@@ -1,10 +1,11 @@
 """
 Design Tokens — Standard El-Joumla ERP
-╔══════════════════════════════════════════════════════╗
-║  OBSIDIAN LUXE v3.0 — World-Class Arabic ERP Theme ║
-║  Deep obsidian + Rose Gold + Amber accents          ║
-║  Designed for financial excellence & visual luxury   ║
-╚══════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════════════╗
+║  AURORA NOIR v4.0 — World-Class Arabic ERP Theme              ║
+║  Deep Noir + Emerald Gold + Teal Cyan accents                  ║
+║  Designed for financial excellence & visual luxury              ║
+║  RTL-first · DZD currency context · Premium dark mode          ║
+╚══════════════════════════════════════════════════════════════════╝
 """
 from dataclasses import dataclass
 
@@ -12,83 +13,93 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class Colors:
     """
-    Obsidian Luxe — 4-layer depth system with warm metallic accents.
-    Each layer has subtle blue undertones for professional depth.
+    Aurora Noir v4.0 — 6-layer depth system with warm metallic gold accents.
+    Sophisticated dark palette with emerald gold for financial prestige.
     """
-    # ── Backgrounds (5-layer depth architecture) ──────────────────────
-    BG_VOID: str = "#050507"            # Deepest void — window frame, outer space
-    BG_ABYSS: str = "#0a0b10"           # Abyss — outermost app surface
-    BG_PRIMARY: str = "#0e1018"         # Primary — sidebar, titlebar, main surfaces
-    BG_SECONDARY: str = "#141724"       # Secondary — cards, panels, dialogs, content areas
-    BG_TERTIARY: str = "#1c2033"        # Tertiary — inputs, raised elements, embedded areas
-    BG_ELEVATED: str = "#232841"        # Elevated — popovers, dropdowns, tooltips
-    BG_HOVER: str = "#2a3052"           # Hover — interactive hover states
-    BG_ACTIVE: str = "#313866"          # Active — pressed/selected states
-    BG_OVERLAY: str = "rgba(5,5,7,0.75)"  # Overlay — modal/dialog backdrop
-    BG_GLASS: str = "rgba(20,23,36,0.85)"  # Glass — frosted glass effect base
+    # ── Backgrounds (6-layer depth architecture) ──────────────────────
+    BG_VOID: str = "#06070B"            # Deepest void — window frame, outer space
+    BG_DEEP: str = "#0C0E16"            # Deep — outermost app surface
+    BG_PRIMARY: str = "#111520"         # Primary — sidebar, titlebar, main surfaces
+    BG_SURFACE: str = "#181D2E"         # Surface — cards, panels, dialogs, content areas
+    BG_RAISED: str = "#202640"          # Raised — inputs, raised elements, embedded areas
+    BG_ELEVATED: str = "#2A3150"        # Elevated — popovers, dropdowns, tooltips
+    BG_HOVER: str = "#323C62"           # Hover — interactive hover states
+    BG_ACTIVE: str = "#3C4875"          # Active — pressed/selected states
+    BG_OVERLAY: str = "rgba(6,7,11,0.80)"  # Overlay — modal/dialog backdrop
+    BG_GLASS: str = "rgba(24,29,46,0.88)"   # Glass — frosted glass effect base
 
-    # ── Borders (3-level hierarchy) ───────────────────────────────────
-    BORDER_VOID: str = "#0e1018"        # Invisible border — structural separation
-    BORDER_SUBTLE: str = "#1c2033"      # Subtle — between siblings
-    BORDER_DEFAULT: str = "#282d48"     # Default — standard element borders
-    BORDER_MEDIUM: str = "#363d5e"      # Medium — emphasized sections
-    BORDER_HOVER: str = "#4a5280"       # Hover — interactive border response
-    BORDER_FOCUS: str = "#c9956b"       # Focus — rose gold focus ring
-    BORDER_GOLD_GLOW: str = "#d4a853"   # Gold glow — premium focus
+    # ── Borders (4-level hierarchy) ───────────────────────────────────
+    BORDER_VOID: str = "#111520"         # Invisible border — structural separation
+    BORDER_SUBTLE: str = "#1E2440"       # Subtle — between siblings
+    BORDER_DEFAULT: str = "#2A3150"      # Default — standard element borders
+    BORDER_MEDIUM: str = "#3A4468"       # Medium — emphasized sections
+    BORDER_HOVER: str = "#4E5A88"        # Hover — interactive border response
+    BORDER_FOCUS: str = "#C8A54E"        # Focus — emerald gold focus ring
+    BORDER_GOLD_GLOW: str = "#E8C96A"   # Gold glow — premium focus
 
     # ── Text (5-level hierarchy for perfect readability) ──────────────
-    TEXT_BRIGHT: str = "#ffffff"         # Bright — headlines, key data, CTAs
-    TEXT_PRIMARY: str = "#e8eaf0"        # Primary — body text, paragraphs
-    TEXT_SECONDARY: str = "#9498b8"      # Secondary — descriptions, meta text
-    TEXT_MUTED: str = "#5d6184"          # Muted — placeholders, hints, timestamps
-    TEXT_GHOST: str = "#363a56"          # Ghost — disabled text, watermarks
-    TEXT_INVERSE: str = "#0e1018"        # Inverse — text on gold/accent backgrounds
+    TEXT_BRIGHT: str = "#FFFFFF"         # Bright — headlines, key data, CTAs
+    TEXT_PRIMARY: str = "#F0F2F5"        # Primary — body text, paragraphs
+    TEXT_SECONDARY: str = "#8B92A8"      # Secondary — descriptions, meta text
+    TEXT_MUTED: str = "#515874"          # Muted — placeholders, hints, timestamps
+    TEXT_GHOST: str = "#2E3550"          # Ghost — disabled text, watermarks
+    TEXT_INVERSE: str = "#111520"        # Inverse — text on gold/accent backgrounds
 
-    # ── Brand Accents (Rose Gold + Amber + Teal) ─────────────────────
-    ACCENT_ROSE: str = "#c9956b"         # Rose Gold — primary accent (unique, luxurious)
-    ACCENT_ROSE_LIGHT: str = "#e0b896"   # Rose Gold Light — hover states
-    ACCENT_ROSE_DARK: str = "#a67a52"    # Rose Gold Dark — pressed states
-    ACCENT_ROSE_SUBTLE: str = "rgba(201,149,107,0.10)"  # Rose Gold subtle bg
-    ACCENT_ROSE_GLOW: str = "rgba(201,149,107,0.25)"    # Rose Gold glow effect
+    # ── Brand Accents (Emerald Gold + Teal + Coral + Sky) ─────────────
+    ACCENT_GOLD: str = "#C8A54E"         # Emerald Gold — primary accent (financial prestige)
+    ACCENT_GOLD_LIGHT: str = "#E8C96A"   # Gold Light — hover states, highlights
+    ACCENT_GOLD_DARK: str = "#A88A3E"    # Gold Dark — pressed states
+    ACCENT_GOLD_SUBTLE: str = "rgba(200,165,78,0.10)"  # Gold subtle bg
+    ACCENT_GOLD_GLOW: str = "rgba(200,165,78,0.25)"    # Gold glow effect
+    ACCENT_GOLD_SHIMMER: str = "rgba(200,165,78,0.04)" # Gold shimmer hint
 
-    ACCENT_AMBER: str = "#d4a853"        # Amber Gold — secondary accent, financial
-    ACCENT_AMBER_LIGHT: str = "#e8c878"  # Amber Gold Light
-    ACCENT_AMBER_DARK: str = "#b8923f"   # Amber Gold Dark
-    ACCENT_AMBER_SUBTLE: str = "rgba(212,168,83,0.10)"  # Amber subtle bg
+    ACCENT_TEAL: str = "#2DD4BF"         # Teal — success, positive, growth
+    ACCENT_TEAL_LIGHT: str = "#5EEADB"   # Teal Light
+    ACCENT_TEAL_DARK: str = "#14B8A6"    # Teal Dark
+    ACCENT_TEAL_SUBTLE: str = "rgba(45,212,191,0.10)"
 
-    ACCENT_TEAL: str = "#3db89c"         # Teal — success, positive, growth
-    ACCENT_TEAL_LIGHT: str = "#5dd4b6"   # Teal Light
-    ACCENT_TEAL_DARK: str = "#2a9a7e"    # Teal Dark
-    ACCENT_TEAL_SUBTLE: str = "rgba(61,184,156,0.10)"
+    ACCENT_CORAL: str = "#EF6B6B"        # Coral — error, danger, alerts
+    ACCENT_CORAL_LIGHT: str = "#F59B9B"  # Coral Light
+    ACCENT_CORAL_DARK: str = "#DC4444"   # Coral Dark
+    ACCENT_CORAL_SUBTLE: str = "rgba(239,107,107,0.10)"
 
-    ACCENT_BLUE: str = "#6b8cd4"         # Blue — info, links, secondary actions
-    ACCENT_BLUE_LIGHT: str = "#8da8e8"   # Blue Light
-    ACCENT_BLUE_SUBTLE: str = "rgba(107,140,212,0.10)"
+    ACCENT_AMBER: str = "#F59E0B"        # Amber — warning, caution, attention
+    ACCENT_AMBER_LIGHT: str = "#FBBF24"  # Amber Light
+    ACCENT_AMBER_DARK: str = "#D97706"   # Amber Dark
+    ACCENT_AMBER_SUBTLE: str = "rgba(245,158,11,0.10)"
+
+    ACCENT_SKY: str = "#38BDF8"          # Sky Blue — info, links, secondary actions
+    ACCENT_SKY_LIGHT: str = "#7DD3FC"    # Sky Light
+    ACCENT_SKY_SUBTLE: str = "rgba(56,189,248,0.10)"
 
     # ── Semantic Colors ──────────────────────────────────────────────
-    SUCCESS: str = "#3db89c"
-    SUCCESS_BG: str = "rgba(61,184,156,0.10)"
-    SUCCESS_BORDER: str = "rgba(61,184,156,0.30)"
+    SUCCESS: str = "#2DD4BF"
+    SUCCESS_BG: str = "rgba(45,212,191,0.10)"
+    SUCCESS_BORDER: str = "rgba(45,212,191,0.30)"
 
-    WARNING: str = "#e0a040"
-    WARNING_BG: str = "rgba(224,160,64,0.10)"
-    WARNING_BORDER: str = "rgba(224,160,64,0.30)"
+    WARNING: str = "#F59E0B"
+    WARNING_BG: str = "rgba(245,158,11,0.10)"
+    WARNING_BORDER: str = "rgba(245,158,11,0.30)"
 
-    ERROR: str = "#e05555"
-    ERROR_BG: str = "rgba(224,85,85,0.10)"
-    ERROR_BORDER: str = "rgba(224,85,85,0.30)"
+    ERROR: str = "#EF6B6B"
+    ERROR_BG: str = "rgba(239,107,107,0.10)"
+    ERROR_BORDER: str = "rgba(239,107,107,0.30)"
 
-    INFO: str = "#6b8cd4"
-    INFO_BG: str = "rgba(107,140,212,0.10)"
-    INFO_BORDER: str = "rgba(107,140,212,0.30)"
+    INFO: str = "#38BDF8"
+    INFO_BG: str = "rgba(56,189,248,0.10)"
+    INFO_BORDER: str = "rgba(56,189,248,0.30)"
 
     # ── Gradient Presets ─────────────────────────────────────────────
-    GRADIENT_ROSE: str = "qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #c9956b,stop:1 #e0b896)"
-    GRADIENT_AMBER: str = "qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #d4a853,stop:1 #e8c878)"
-    GRADIENT_TEAL: str = "qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #2a9a7e,stop:1 #5dd4b6)"
-    GRADIENT_DARK: str = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #141724,stop:1 #0e1018)"
-    GRADIENT_SURFACE: str = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #1c2033,stop:0.5 #141724,stop:1 #0e1018)"
-    GRADIENT_HERO: str = "qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #c9956b,stop:0.3 #d4a853,stop:0.7 #e0b896,stop:1 #e8c878)"
+    GRADIENT_GOLD: str = "qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #C8A54E,stop:1 #E8C96A)"
+    GRADIENT_GOLD_H: str = "qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #C8A54E,stop:1 #E8C96A)"
+    GRADIENT_TEAL: str = "qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #14B8A6,stop:1 #5EEADB)"
+    GRADIENT_CORAL: str = "qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #DC4444,stop:1 #F59B9B)"
+    GRADIENT_DARK: str = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #181D2E,stop:1 #111520)"
+    GRADIENT_SURFACE: str = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #202640,stop:0.5 #181D2E,stop:1 #111520)"
+    GRADIENT_HERO: str = "qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #C8A54E,stop:0.25 #D4B65A,stop:0.5 #E8C96A,stop:0.75 #F0D87A,stop:1 #FFF1C1)"
+    GRADIENT_SIDEBAR: str = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #111520,stop:0.5 #0C0E16,stop:1 #080A12)"
+    GRADIENT_AMBER: str = "qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #D97706,stop:1 #FBBF24)"
+    GRADIENT_SKY: str = "qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #0EA5E9,stop:1 #7DD3FC)"
 
 
 @dataclass(frozen=True)
@@ -163,31 +174,30 @@ class Typography:
 class Shadows:
     """Layered shadow system with warm glow effects."""
     # Standard shadows (neutral dark)
-    XS: str = "0 1px 2px rgba(0,0,0,0.4)"
-    SM: str = "0 2px 8px rgba(0,0,0,0.45)"
-    MD: str = "0 4px 16px rgba(0,0,0,0.5)"
-    LG: str = "0 8px 32px rgba(0,0,0,0.55)"
-    XL: str = "0 16px 48px rgba(0,0,0,0.6)"
-    XXL: str = "0 24px 64px rgba(0,0,0,0.7)"
+    XS: str = "0 1px 2px rgba(0,0,0,0.5)"
+    SM: str = "0 2px 8px rgba(0,0,0,0.55)"
+    MD: str = "0 4px 16px rgba(0,0,0,0.6)"
+    LG: str = "0 8px 32px rgba(0,0,0,0.65)"
+    XL: str = "0 16px 48px rgba(0,0,0,0.7)"
+    XXL: str = "0 24px 64px rgba(0,0,0,0.8)"
 
-    # Glow effects (warm, luxurious)
-    ROSE_GLOW: str = "0 0 20px rgba(201,149,107,0.15)"
-    ROSE_GLOW_STRONG: str = "0 0 30px rgba(201,149,107,0.25)"
-    ROSE_GLOW_INTENSE: str = "0 0 40px rgba(201,149,107,0.35)"
+    # Glow effects (warm gold, luxurious)
+    GOLD_GLOW: str = "0 0 20px rgba(200,165,78,0.15)"
+    GOLD_GLOW_STRONG: str = "0 0 30px rgba(200,165,78,0.25)"
+    GOLD_GLOW_INTENSE: str = "0 0 40px rgba(200,165,78,0.35)"
 
-    AMBER_GLOW: str = "0 0 20px rgba(212,168,83,0.15)"
-    AMBER_GLOW_STRONG: str = "0 0 30px rgba(212,168,83,0.25)"
-
-    TEAL_GLOW: str = "0 0 20px rgba(61,184,156,0.15)"
-    ERROR_GLOW: str = "0 0 20px rgba(224,85,85,0.15)"
+    TEAL_GLOW: str = "0 0 20px rgba(45,212,191,0.15)"
+    CORAL_GLOW: str = "0 0 20px rgba(239,107,107,0.15)"
+    AMBER_GLOW: str = "0 0 20px rgba(245,158,11,0.15)"
+    SKY_GLOW: str = "0 0 20px rgba(56,189,248,0.15)"
 
     # Elevated shadow (for cards, dialogs)
-    ELEVATED: str = "0 8px 32px rgba(0,0,0,0.5), 0 0 1px rgba(201,149,107,0.1)"
-    ELEVATED_HOVER: str = "0 12px 40px rgba(0,0,0,0.6), 0 0 1px rgba(201,149,107,0.2)"
+    ELEVATED: str = "0 8px 32px rgba(0,0,0,0.5), 0 0 1px rgba(200,165,78,0.1)"
+    ELEVATED_HOVER: str = "0 12px 40px rgba(0,0,0,0.6), 0 0 1px rgba(200,165,78,0.2)"
 
     # Inset shadow (for inputs, wells)
     INSET: str = "inset 0 2px 4px rgba(0,0,0,0.3)"
-    INSET_FOCUS: str = "inset 0 2px 4px rgba(0,0,0,0.2), 0 0 0 1px rgba(201,149,107,0.5)"
+    INSET_FOCUS: str = "inset 0 2px 4px rgba(0,0,0,0.2), 0 0 0 1px rgba(200,165,78,0.5)"
 
 
 @dataclass(frozen=True)
@@ -230,7 +240,7 @@ Z = ZIndex()
 def qss(selector: str, **props) -> str:
     """
     Generate QSS block with token values.
-    Usage: qss('QPushButton', background=C.BG_TERTIARY, border=f"1px solid {C.BORDER_DEFAULT}")
+    Usage: qss('QPushButton', background=C.BG_RAISED, border=f"1px solid {C.BORDER_DEFAULT}")
     """
     import re
     def to_kebab(s):

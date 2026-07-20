@@ -1,27 +1,27 @@
 /* ═══════════════════════════════════════════════════════════
-   OBSIDIAN LUXE v3.0 — Scrollbar Styles
+   AURORA NOIR v4.0 — Scrollbar Styles (6px thin, GOLD hover)
    ═══════════════════════════════════════════════════════════ */
 
 QScrollBar:vertical {
     background-color: transparent;
-    width: 8px;
+    width: 6px;
     border: none;
     margin: 0;
 }
 
 QScrollBar::handle:vertical {
-    background-color: #282d48;
-    border-radius: 4px;
+    background-color: #2A3150;
+    border-radius: 3px;
     min-height: 30px;
     margin: 0;
 }
 
 QScrollBar::handle:vertical:hover {
-    background-color: #c9956b;
+    background-color: #C8A54E;
 }
 
 QScrollBar::handle:vertical:pressed {
-    background-color: #a67a52;
+    background-color: #A88A3E;
 }
 
 QScrollBar::add-line:vertical,
@@ -37,24 +37,24 @@ QScrollBar::sub-page:vertical {
 
 QScrollBar:horizontal {
     background-color: transparent;
-    height: 8px;
+    height: 6px;
     border: none;
     margin: 0;
 }
 
 QScrollBar::handle:horizontal {
-    background-color: #282d48;
-    border-radius: 4px;
+    background-color: #2A3150;
+    border-radius: 3px;
     min-width: 30px;
     margin: 0;
 }
 
 QScrollBar::handle:horizontal:hover {
-    background-color: #c9956b;
+    background-color: #C8A54E;
 }
 
 QScrollBar::handle:horizontal:pressed {
-    background-color: #a67a52;
+    background-color: #A88A3E;
 }
 
 QScrollBar::add-line:horizontal,

@@ -15,7 +15,7 @@ from src.ui.widgets.custom_title_bar import CustomTitleBar
 class BaseDialog(QDialog):
     """
     متحكم رئيسي لجميع النوافذ الثانوية (صناديق الحوار).
-    يطبق التصميم الموحد (Solid Slate)، يمنع التداخل عند التصغير/التكبير،
+    يطبق التصميم الموحد (Aurora Noir v4.0)، يمنع التداخل عند التصغير/التكبير،
     ويزيل الحاجة لتكرار أكواد الشفافية وتأثيرات الظل.
     """
 
@@ -37,20 +37,20 @@ class BaseDialog(QDialog):
         self.main_frame.setObjectName("MainFrame")
         self.main_frame.setStyleSheet("""
             QFrame#MainFrame {
-                background-color: #141724;
-                border: 1px solid #282d48;
+                background-color: #181D2E;
+                border: 1px solid #2A3150;
                 border-radius: 16px;
-                color: #e8eaf0;
+                color: #F0F2F5;
             }
             QLabel {
-                color: #e8eaf0;
+                color: #F0F2F5;
             }
         """)
 
         # إضافة ظل للإطار لتمييز النافذة
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(20)
-        shadow.setColor(QColor("#c9956b"))  # لون الهوية (rose gold)
+        shadow.setColor(QColor("#C8A54E"))  # لون الهوية (gold)
         shadow.setOffset(0, 0)
         self.main_frame.setGraphicsEffect(shadow)
 

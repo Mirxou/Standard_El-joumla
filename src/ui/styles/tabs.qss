@@ -1,9 +1,9 @@
 /* ═══════════════════════════════════════════════════════════
-   OBSIDIAN LUXE v3.0 — Tab Widget Styles
+   AURORA NOIR v4.0 — Tab Widget Styles
    ═══════════════════════════════════════════════════════════ */
 
 QTabWidget::pane {
-    border: 1px solid #282d48;
+    border: 1px solid #2A3150;
     border-radius: 12px;
     background: transparent;
     top: -1px;
@@ -11,7 +11,7 @@ QTabWidget::pane {
 
 QTabBar::tab {
     background: transparent;
-    color: #5d6184;
+    color: #515874;
     padding: 10px 22px;
     margin-left: 2px;
     border-top-right-radius: 12px;
@@ -24,19 +24,19 @@ QTabBar::tab {
 }
 
 QTabBar::tab:selected {
-    background: #141724;
-    color: #c9956b;
-    border-bottom: 2px solid #c9956b;
-    border-top: 1px solid #282d48;
-    border-left: 1px solid #282d48;
-    border-right: 1px solid #282d48;
+    background: #181D2E;
+    color: #C8A54E;
+    border-bottom: 2px solid #C8A54E;
+    border-top: 1px solid #2A3150;
+    border-left: 1px solid #2A3150;
+    border-right: 1px solid #2A3150;
 }
 
 QTabBar::tab:hover:!selected {
-    background: rgba(201,149,107,0.05);
-    color: #e8eaf0;
+    background: rgba(200,165,78,0.05);
+    color: #F0F2F5;
 }
 
 QTabBar::tab:pressed {
-    background: rgba(201,149,107,0.08);
+    background: rgba(200,165,78,0.08);
 }

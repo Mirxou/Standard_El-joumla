@@ -1,4 +1,4 @@
 # Animation System
-from .animation_manager import AnimationManager
+from .animation_manager import AnimationManager, AnimationType
 
-__all__ = ["AnimationManager"]
+__all__ = ["AnimationManager", "AnimationType"]

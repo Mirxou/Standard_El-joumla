@@ -1,163 +1,163 @@
 /* ═══════════════════════════════════════════════════════════
-   OBSIDIAN LUXE v3.0 — Button Styles
+   AURORA NOIR v4.0 — Button Styles
    ═══════════════════════════════════════════════════════════ */
 
 QPushButton {
-    background-color: #1c2033;
-    color: #e8eaf0;
-    border: 1px solid #282d48;
+    background-color: #202640;
+    color: #F0F2F5;
+    border: 1px solid #2A3150;
     border-radius: 10px;
-    padding: 8px 18px;
+    padding: 10px 22px;
     font-weight: 600;
     font-size: 13px;
-    min-height: 36px;
+    min-height: 40px;
 }
 
 QPushButton:hover {
-    background-color: #2a3052;
-    border-color: #363d5e;
-    color: #ffffff;
+    background-color: #323C62;
+    border-color: #3A4468;
+    color: #FFFFFF;
 }
 
 QPushButton:pressed {
-    background-color: #313866;
-    border-color: #c9956b;
+    background-color: #3C4875;
+    border-color: #C8A54E;
 }
 
 QPushButton:disabled {
-    background-color: #0e1018;
-    color: #363a56;
-    border-color: #1c2033;
+    background-color: #111520;
+    color: #2E3550;
+    border-color: #1E2440;
 }
 
-/* Primary — Rose Gold gradient */
+/* Primary — GOLD gradient */
 QPushButton[class="primary"] {
-    background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #c9956b,stop:1 #e0b896);
-    color: #0e1018;
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #C8A54E,stop:1 #E8C96A);
+    color: #111520;
     border: none;
     font-weight: 700;
 }
 
 QPushButton[class="primary"]:hover {
-    background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #e0b896,stop:1 #eaccac);
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #E8C96A,stop:1 #F0F2F5);
 }
 
 QPushButton[class="primary"]:pressed {
-    background: #a67a52;
-    color: #0e1018;
+    background: #A88A3E;
+    color: #111520;
 }
 
 QPushButton[class="primary"]:disabled {
-    background-color: #1c2033;
-    color: #5d6184;
+    background-color: #202640;
+    color: #515874;
 }
 
-/* Danger */
+/* Danger — CORAL */
 QPushButton[class="danger"] {
-    background-color: rgba(224,85,85,0.10);
-    color: #e05555;
-    border: 1px solid rgba(224,85,85,0.25);
+    background-color: rgba(239,107,107,0.10);
+    color: #EF6B6B;
+    border: 1px solid rgba(239,107,107,0.25);
 }
 
 QPushButton[class="danger"]:hover {
-    background-color: rgba(224,85,85,0.18);
-    border-color: #e05555;
+    background-color: rgba(239,107,107,0.18);
+    border-color: #EF6B6B;
 }
 
 QPushButton[class="danger"]:pressed {
-    background-color: rgba(224,85,85,0.25);
+    background-color: rgba(239,107,107,0.25);
 }
 
-/* Success */
+/* Success — TEAL */
 QPushButton[class="success"] {
-    background-color: rgba(61,184,156,0.10);
-    color: #3db89c;
-    border: 1px solid rgba(61,184,156,0.25);
+    background-color: rgba(45,212,191,0.10);
+    color: #2DD4BF;
+    border: 1px solid rgba(45,212,191,0.25);
 }
 
 QPushButton[class="success"]:hover {
-    background-color: rgba(61,184,156,0.18);
-    border-color: #3db89c;
+    background-color: rgba(45,212,191,0.18);
+    border-color: #2DD4BF;
 }
 
 QPushButton[class="success"]:pressed {
-    background-color: rgba(61,184,156,0.25);
+    background-color: rgba(45,212,191,0.25);
 }
 
-/* Warning */
+/* Warning — AMBER */
 QPushButton[class="warning"] {
-    background-color: rgba(224,160,64,0.10);
-    color: #e0a040;
-    border: 1px solid rgba(224,160,64,0.25);
+    background-color: rgba(245,158,11,0.10);
+    color: #F59E0B;
+    border: 1px solid rgba(245,158,11,0.25);
 }
 
 QPushButton[class="warning"]:hover {
-    background-color: rgba(224,160,64,0.18);
-    border-color: #e0a040;
+    background-color: rgba(245,158,11,0.18);
+    border-color: #F59E0B;
 }
 
 QPushButton[class="warning"]:pressed {
-    background-color: rgba(224,160,64,0.25);
+    background-color: rgba(245,158,11,0.25);
 }
 
-/* Secondary — Rose Gold outline */
+/* Secondary — GOLD outline */
 QPushButton[class="secondary"] {
     background-color: transparent;
-    color: #c9956b;
-    border: 2px solid #c9956b;
+    color: #C8A54E;
+    border: 2px solid #C8A54E;
 }
 
 QPushButton[class="secondary"]:hover {
-    background-color: rgba(201,149,107,0.12);
-    color: #e0b896;
+    background-color: rgba(200,165,78,0.12);
+    color: #E8C96A;
 }
 
 QPushButton[class="secondary"]:pressed {
-    background-color: rgba(201,149,107,0.18);
+    background-color: rgba(200,165,78,0.18);
 }
 
 /* Amber — Gold fill */
 QPushButton[class="amber"] {
-    background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #d4a853,stop:1 #e8c878);
-    color: #0e1018;
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #C8A54E,stop:1 #E8C96A);
+    color: #111520;
     border: none;
     font-weight: 700;
 }
 
 QPushButton[class="amber"]:hover {
-    background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #e8c878,stop:1 #f0d888);
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #E8C96A,stop:1 #FBBF24);
 }
 
 /* Ghost — Most subtle */
 QPushButton[class="ghost"] {
     background-color: transparent;
-    color: #9498b8;
+    color: #8B92A8;
     border: none;
     border-radius: 8px;
 }
 
 QPushButton[class="ghost"]:hover {
-    background-color: rgba(201,149,107,0.06);
-    color: #e8eaf0;
+    background-color: rgba(200,165,78,0.06);
+    color: #F0F2F5;
 }
 
 /* Flat */
 QPushButton[class="flat"] {
     background-color: transparent;
-    color: #9498b8;
+    color: #8B92A8;
     border: 1px solid transparent;
     border-radius: 10px;
 }
 
 QPushButton[class="flat"]:hover {
-    background-color: rgba(201,149,107,0.08);
-    color: #e8eaf0;
+    background-color: rgba(200,165,78,0.08);
+    color: #F0F2F5;
 }
 
 /* Close */
 QPushButton[class="close"] {
     background-color: transparent;
-    color: #5d6184;
+    color: #515874;
     border: none;
     border-radius: 8px;
     padding: 6px;
@@ -167,6 +167,6 @@ QPushButton[class="close"] {
 }
 
 QPushButton[class="close"]:hover {
-    background-color: rgba(224,85,85,0.12);
-    color: #e05555;
+    background-color: rgba(239,107,107,0.12);
+    color: #EF6B6B;
 }

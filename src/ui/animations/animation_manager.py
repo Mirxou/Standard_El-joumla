@@ -3,19 +3,27 @@
 """
 Animation Manager
 مدير الحركات - نظام شامل للحركات والتأثيرات
+
+Color Palette:
+    GOLD=#C8A54E, GOLD_LIGHT=#E8C96A, TEAL=#2DD4BF, CORAL=#EF6B6B,
+    AMBER=#F59E0B, SKY=#38BDF8
 """
 
 from enum import Enum
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from PySide6.QtCore import (
+    QAbstractAnimation,
     QEasingCurve,
     QObject,
+    QPoint,
     QParallelAnimationGroup,
     QPropertyAnimation,
     QSequentialAnimationGroup,
+    QTimer,
     Signal,
 )
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QWidget
 
 from src.utils.logger import setup_logger
@@ -42,6 +50,9 @@ class AnimationManager(QObject):
         self.logger = setup_logger(__name__)
         self.active_animations: Dict[str, QPropertyAnimation] = {}
         self.animation_groups: Dict[str, QParallelAnimationGroup | QSequentialAnimationGroup] = {}
+        self._pulse_timers: Dict[str, QTimer] = {}
+
+    # ── Existing Methods (preserved) ─────────────────────────────────────
 
     def fade_in(
         self,
@@ -201,9 +212,6 @@ class AnimationManager(QObject):
         animation.setEasingCurve(easing)
         animation.setLoopCount(-1)  # تكرار لا نهائي
 
-        # إنشاء حركة ذهاب وإياب
-        from PySide6.QtCore import QAbstractAnimation
-
         animation.setDirection(QAbstractAnimation.Forward)
 
         self.active_animations[animation_id] = animation
@@ -221,51 +229,59 @@ class AnimationManager(QObject):
     ) -> str:
         """
         حركة scale (تكبير/تصغير)
-        ملاحظة: QWidget لا يدعم setTransform مباشرة. سيتم تنفيذ تأثير بديل آمن.
+        Since QWidget doesn't support setTransform directly, this animates:
+        - minimumWidth/minimumHeight for a subtle 1% size pulse (when start >= 1.0)
+        - windowOpacity fade (when start < 1.0, appearance animation)
         """
         animation_id = f"scale_{id(widget)}"
 
-        if animation_id in self.active_animations:
-            self.active_animations[animation_id].stop()
+        if animation_id in self.animation_groups:
+            self.animation_groups[animation_id].stop()
 
-        # NOTE: Cannot use setTransform on standard QWidgets without QGraphicsProxyWidget
-        # For now, we utilize the opacity transition or a slight geometry shift if feasible.
-        # To avoid layout breakage, we will primarily animate opacity or a shadow effect.
-
-        # إنشاء animation group
         group = QParallelAnimationGroup()
 
-        # Animation للعرض (opacity) fallback
-        opacity_anim = QPropertyAnimation(widget, b"windowOpacity")
-        opacity_anim.setDuration(duration)
-        # We assume start/end scale implies visibility transition logic in the original code,
-        # but if it's just hover effect, opacity might be weird.
-        # However, to fix the CRASH, removing setTransform is key.
-        # If this is for HOVER, usually we don't change opacity 0->1.
-        # Let's check typical usage. If start=1.0, end=1.05 (hover), opacity 0->1 is WRONG.
-
-        # Better safe fallback: just ensure widget is visible.
-        # usage in main_window: scale_animation(self, start_scale=1.0, end_scale=1.05, duration=200)
-
-        # If it's a hover effect (scale > 1), maybe we can animate a property like "styleSheet"? Expensive.
-        # Let's just do a dummy animation to keep the signal flow working without crashing.
-        # Or if available, animate "geometry" slightly? (Requires knowing parent layout).
-
-        # SAFEST FIX: Do the Opacity animation ONLY if it looks like an "Appearance" animation (start < 1).
-        # If start >= 1 (Hover), do nothing visual but emit finished, OR animate a shadow.
-
         if start_scale < 1.0:
+            # Appearance animation: fade in with opacity
+            opacity_anim = QPropertyAnimation(widget, b"windowOpacity")
+            opacity_anim.setDuration(duration)
             opacity_anim.setStartValue(0.0)
             opacity_anim.setEndValue(1.0)
             opacity_anim.setEasingCurve(easing)
             group.addAnimation(opacity_anim)
         else:
-            # Dummy animation to maintain timing
-            dummy = QPropertyAnimation(widget, b"geometry")
-            dummy.setDuration(duration)
-            dummy.setStartValue(widget.geometry())
-            dummy.setEndValue(widget.geometry())
-            group.addAnimation(dummy)
+            # Hover / pulse effect: subtle 1% size pulse via geometry
+            # This gives a visible micro-bounce without breaking layouts
+            geo = widget.geometry()
+            w, h = geo.width(), geo.height()
+
+            # Calculate pixel offsets based on 1% of each dimension
+            # We animate from start_scale to end_scale around the base size
+            base_w = int(w / start_scale) if start_scale > 0 else w
+            base_h = int(h / start_scale) if start_scale > 0 else h
+
+            start_w = int(base_w * start_scale)
+            start_h = int(base_h * start_scale)
+            end_w = int(base_w * end_scale)
+            end_h = int(base_h * end_scale)
+
+            # Keep the center anchored
+            delta_w = end_w - start_w
+            delta_h = end_h - start_h
+
+            start_geo = geo
+            end_geo = geo.adjusted(
+                -delta_w // 2,
+                -delta_h // 2,
+                delta_w // 2,
+                delta_h // 2,
+            )
+
+            size_anim = QPropertyAnimation(widget, b"geometry")
+            size_anim.setDuration(duration)
+            size_anim.setStartValue(start_geo)
+            size_anim.setEndValue(end_geo)
+            size_anim.setEasingCurve(easing)
+            group.addAnimation(size_anim)
 
         group.finished.connect(lambda: self._on_animation_finished(animation_id))
 
@@ -282,6 +298,10 @@ class AnimationManager(QObject):
         elif animation_id in self.animation_groups:
             self.animation_groups[animation_id].stop()
             del self.animation_groups[animation_id]
+        # Also check pulse timers
+        if animation_id in self._pulse_timers:
+            self._pulse_timers[animation_id].stop()
+            del self._pulse_timers[animation_id]
 
     def stop_all_animations(self):
         """إيقاف جميع الحركات"""
@@ -289,6 +309,221 @@ class AnimationManager(QObject):
             self.stop_animation(animation_id)
         for animation_id in list(self.animation_groups.keys()):
             self.stop_animation(animation_id)
+        for timer_id in list(self._pulse_timers.keys()):
+            self.stop_animation(timer_id)
+
+    # ── NEW Methods ─────────────────────────────────────────────────────
+
+    def stagger_fade_in(
+        self,
+        widgets: List[QWidget],
+        delay_ms: int = 50,
+        duration: int = 250,
+    ) -> List[str]:
+        """
+        Fade in a list of widgets one after another with staggered delay.
+
+        Args:
+            widgets: قائمة الـ widgets المراد تحريكها
+            delay_ms: التأخير بين كل widget (ملي ثانية)
+            duration: مدة كل حركة fade (ملي ثانية)
+
+        Returns:
+            قائمة معرفات الحركات
+        """
+        animation_ids: List[str] = []
+
+        for idx, widget in enumerate(widgets):
+            # Hide all widgets first
+            widget.setWindowOpacity(0.0)
+
+            # Schedule each fade-in with increasing delay
+            delay_timer = QTimer(self)
+            delay_timer.setSingleShot(True)
+
+            captured_widget = widget
+            captured_idx = idx
+
+            def _do_fade(w=captured_widget, i=captured_idx):
+                aid = self.fade_in(w, duration=duration)
+                animation_ids.append(aid)
+
+            delay_timer.timeout.connect(_do_fade)
+            # Store timer for cleanup
+            timer_id = f"stagger_timer_{i}_{id(widget)}"
+            self._pulse_timers[timer_id] = delay_timer
+            delay_timer.start(i * delay_ms)
+
+            animation_ids.append(f"stagger_{i}_{id(widget)}")
+
+        return animation_ids
+
+    def slide_fade_in(
+        self,
+        widget: QWidget,
+        direction: str = "right",
+        duration: int = 350,
+    ) -> str:
+        """
+        Combined slide + fade animation using QParallelAnimationGroup.
+        Animates both pos and windowOpacity simultaneously.
+
+        Args:
+            widget: الـ widget المراد تحريكه
+            direction: الاتجاه (right, left, up, down)
+            duration: مدة الحركة (ملي ثانية)
+
+        Returns:
+            معرف الحركة
+        """
+        animation_id = f"slide_fade_{direction}_{id(widget)}"
+
+        if animation_id in self.animation_groups:
+            self.animation_groups[animation_id].stop()
+
+        original_pos = widget.pos()
+
+        # Calculate slide offset based on direction
+        offset_x, offset_y = 0, 0
+        slide_distance = 40  # pixels
+
+        if direction == "right":
+            offset_x = slide_distance
+        elif direction == "left":
+            offset_x = -slide_distance
+        elif direction == "up":
+            offset_y = -slide_distance
+        else:  # down
+            offset_y = slide_distance
+
+        start_pos = original_pos - QPoint(offset_x, offset_y)
+
+        # Move widget to start position and set transparent
+        widget.move(start_pos)
+        widget.setWindowOpacity(0.0)
+
+        # Create parallel group
+        group = QParallelAnimationGroup()
+
+        # Slide animation (pos)
+        slide_anim = QPropertyAnimation(widget, b"pos")
+        slide_anim.setDuration(duration)
+        slide_anim.setStartValue(start_pos)
+        slide_anim.setEndValue(original_pos)
+        slide_anim.setEasingCurve(QEasingCurve.OutCubic)
+        group.addAnimation(slide_anim)
+
+        # Fade animation (windowOpacity)
+        fade_anim = QPropertyAnimation(widget, b"windowOpacity")
+        fade_anim.setDuration(duration)
+        fade_anim.setStartValue(0.0)
+        fade_anim.setEndValue(1.0)
+        fade_anim.setEasingCurve(QEasingCurve.OutCubic)
+        group.addAnimation(fade_anim)
+
+        group.finished.connect(lambda: self._on_animation_finished(animation_id))
+
+        self.animation_groups[animation_id] = group
+        group.start()
+
+        return animation_id
+
+    def pulse_glow(
+        self,
+        widget: QWidget,
+        color_hex: str = "#C8A54E",
+        duration: int = 2000,
+    ) -> str:
+        """
+        Continuous pulsing glow effect on a widget.
+        Uses geometry animation + style property changes to create
+        a breathing glow border effect. Loops indefinitely until stopped.
+
+        Args:
+            widget: الـ widget المراد تطبيق التأثير عليه
+            color_hex: لون التوهج (hex string)
+            duration: مدة الدورة الكاملة (ملي ثانية)
+
+        Returns:
+            معرف الحركة
+        """
+        animation_id = f"pulse_glow_{id(widget)}"
+
+        # Stop existing pulse for this widget
+        if animation_id in self._pulse_timers:
+            self._pulse_timers[animation_id].stop()
+            del self._pulse_timers[animation_id]
+        if animation_id in self.animation_groups:
+            self.animation_groups[animation_id].stop()
+            del self.animation_groups[animation_id]
+
+        color = QColor(color_hex)
+
+        # Store original geometry for restoration
+        base_geo = widget.geometry()
+        base_style = widget.styleSheet()
+
+        # Create sequential group: pulse out -> pulse in -> repeat
+        seq = QSequentialAnimationGroup()
+
+        # Half-cycle duration for each direction
+        half = duration // 2
+
+        # Phase 1: expand slightly + glow up
+        expand_group = QParallelAnimationGroup()
+
+        expand_geo_anim = QPropertyAnimation(widget, b"geometry")
+        expand_geo_anim.setDuration(half)
+        expanded = base_geo.adjusted(-2, -2, 2, 2)
+        expand_geo_anim.setStartValue(base_geo)
+        expand_geo_anim.setEndValue(expanded)
+        expand_geo_anim.setEasingCurve(QEasingCurve.OutSine)
+        expand_group.addAnimation(expand_geo_anim)
+
+        seq.addAnimation(expand_group)
+
+        # Style update at midpoint — inject glow border
+        def _apply_glow_on():
+            widget.setStyleSheet(
+                f"{base_style}\n"
+                f"{{ border: 1px solid {color_hex}; "
+                f"background-color: rgba({color.red()}, {color.green()}, {color.blue()}, 15); }}"
+            )
+
+        # Phase 2: contract back + glow down
+        contract_group = QParallelAnimationGroup()
+
+        contract_geo_anim = QPropertyAnimation(widget, b"geometry")
+        contract_geo_anim.setDuration(half)
+        contract_geo_anim.setStartValue(expanded)
+        contract_geo_anim.setEndValue(base_geo)
+        contract_geo_anim.setEasingCurve(QEasingCurve.InSine)
+        contract_group.addAnimation(contract_geo_anim)
+
+        seq.addAnimation(contract_group)
+
+        # Style update at cycle end — restore
+        def _apply_glow_off():
+            widget.setStyleSheet(base_style)
+
+        # Connect style changes to group finished signals
+        expand_group.finished.connect(_apply_glow_on)
+        contract_group.finished.connect(_apply_glow_off)
+
+        # Loop infinitely
+        seq.setLoopCount(-1)
+
+        seq.finished.connect(lambda: self._on_animation_finished(animation_id))
+
+        self.animation_groups[animation_id] = seq
+        seq.start()
+
+        # Also track via a cleanup timer reference
+        self._pulse_timers[animation_id] = QTimer(self)  # placeholder for stop
+
+        return animation_id
+
+    # ── Internal ─────────────────────────────────────────────────────────
 
     def _on_animation_finished(self, animation_id: str):
         """عند انتهاء الحركة"""

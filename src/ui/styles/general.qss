@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════
-   OBSIDIAN LUXE v3.0 — General Base Styles
+   AURORA NOIR v4.0 — General Base Styles
    ═══════════════════════════════════════════════════════════ */
 
 * {
@@ -11,22 +11,22 @@
 }
 
 QMainWindow, QWidget {
-    background-color: #0a0b10;
-    color: #e8eaf0;
+    background-color: #0C0E16;
+    color: #F0F2F5;
 }
 
 QStatusBar {
-    background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #0a0b10,stop:1 #050507);
-    color: #5d6184;
-    border-top: 1px solid #1c2033;
+    background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #0C0E16,stop:1 #06070B);
+    color: #515874;
+    border-top: 1px solid #1E2440;
     padding: 4px;
     font-size: 11px;
 }
 
 QToolTip {
-    background-color: #232841;
-    color: #e8eaf0;
-    border: 1px solid #363d5e;
+    background-color: #2A3150;
+    color: #F0F2F5;
+    border: 1px solid #3A4468;
     border-radius: 8px;
     padding: 8px 14px;
     font-size: 12px;
@@ -34,56 +34,56 @@ QToolTip {
 
 QCheckBox {
     spacing: 10px;
-    color: #9498b8;
+    color: #8B92A8;
     font-size: 13px;
 }
 
 QCheckBox::indicator {
     width: 18px;
     height: 18px;
-    border: 2px solid #363d5e;
+    border: 2px solid #3A4468;
     border-radius: 5px;
-    background-color: #1c2033;
+    background-color: #202640;
 }
 
 QCheckBox::indicator:hover {
-    border-color: #c9956b;
+    border-color: #C8A54E;
 }
 
 QCheckBox::indicator:checked {
-    background-color: #c9956b;
-    border-color: #c9956b;
+    background-color: #C8A54E;
+    border-color: #C8A54E;
 }
 
 QCheckBox::indicator:disabled {
-    background-color: #0e1018;
-    border-color: #1c2033;
+    background-color: #111520;
+    border-color: #1E2440;
 }
 
 QRadioButton {
     spacing: 10px;
-    color: #9498b8;
+    color: #8B92A8;
     font-size: 13px;
 }
 
 QRadioButton::indicator {
     width: 18px;
     height: 18px;
-    border: 2px solid #363d5e;
+    border: 2px solid #3A4468;
     border-radius: 9px;
-    background-color: #1c2033;
+    background-color: #202640;
 }
 
 QRadioButton::indicator:hover {
-    border-color: #c9956b;
+    border-color: #C8A54E;
 }
 
 QRadioButton::indicator:checked {
-    border-color: #c9956b;
-    background-color: #c9956b;
+    border-color: #C8A54E;
+    background-color: #C8A54E;
 }
 
 QRadioButton::indicator:disabled {
-    background-color: #0e1018;
-    border-color: #1c2033;
+    background-color: #111520;
+    border-color: #1E2440;
 }

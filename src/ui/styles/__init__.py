@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 UI Styles Module — Standard El-Joumla ERP
-أنماط الواجهة — Obsidian Luxe v3.0
+أنماط الواجهة — Aurora Noir v4.0
 """
 
 from .icon_loader import IconLoader, get_icon_loader

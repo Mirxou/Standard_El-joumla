@@ -1,7 +1,7 @@
 """
 Style Manager — نظام إدارة المظهر الموحد
-Provides the Obsidian Luxe v3.0 theme for the entire Standard El-Joumla ERP system.
-Deep obsidian + Rose Gold accents — world-class Arabic financial ERP.
+Provides the AURORA NOIR v4.0 theme for the entire Standard El-Joumla ERP system.
+Deep Noir + Emerald Gold accents — world-class Arabic financial ERP.
 """
 
 from pathlib import Path
@@ -10,12 +10,12 @@ from typing import Optional
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication
 
-from src.ui.styles.design_tokens import C  # Design tokens (Obsidian Luxe)
+from src.ui.styles.design_tokens import C  # Design tokens (Aurora Noir)
 
 
 class StyleManager:
     """
-    مدير المظهر الموحد — يطبق سمة Obsidian Luxe v3.0 بشكل دائم.
+    مدير المظهر الموحد — يطبق سمة Aurora Noir v4.0 بشكل دائم.
     Uses design tokens from design_tokens.py for palette consistency.
     """
 
@@ -35,25 +35,25 @@ class StyleManager:
             return ""
 
     def _build_palette(self) -> QPalette:
-        """Build QPalette from Obsidian Luxe design tokens."""
+        """Build QPalette from Aurora Noir v4.0 design tokens."""
         palette = QPalette()
 
-        palette.setColor(QPalette.Window,          QColor(C.BG_ABYSS))
+        palette.setColor(QPalette.Window,          QColor(C.BG_DEEP))
         palette.setColor(QPalette.WindowText,      QColor(C.TEXT_PRIMARY))
-        palette.setColor(QPalette.Base,            QColor(C.BG_TERTIARY))
+        palette.setColor(QPalette.Base,            QColor(C.BG_RAISED))
         palette.setColor(QPalette.AlternateBase,   QColor(C.BG_PRIMARY))
         palette.setColor(QPalette.ToolTipBase,     QColor(C.BG_ELEVATED))
         palette.setColor(QPalette.ToolTipText,     QColor(C.TEXT_PRIMARY))
         palette.setColor(QPalette.Text,            QColor(C.TEXT_PRIMARY))
-        palette.setColor(QPalette.Button,          QColor(C.BG_TERTIARY))
+        palette.setColor(QPalette.Button,          QColor(C.BG_RAISED))
         palette.setColor(QPalette.ButtonText,      QColor(C.TEXT_PRIMARY))
-        palette.setColor(QPalette.Highlight,       QColor(C.ACCENT_ROSE))
+        palette.setColor(QPalette.Highlight,       QColor(C.ACCENT_GOLD))
         palette.setColor(QPalette.HighlightedText, QColor(C.TEXT_INVERSE))
 
         return palette
 
     def apply_theme(self):
-        """تطبيق سمة Obsidian Luxe على التطبيق بالكامل"""
+        """تطبيق سمة Aurora Noir v4.0 على التطبيق بالكامل"""
         app = QApplication.instance()
         if not app:
             return

@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════
-   OBSIDIAN LUXE v3.0 — Theme Variables Reference
+   AURORA NOIR v4.0 — Theme Variables Reference
    ═══════════════════════════════════════════════════════════
 
    Note: QSS doesn't support CSS variables natively.
@@ -7,40 +7,59 @@
    Actual values are in design_tokens.py and the QSS files.
 
    ── Background Depth Layers ──
-   @void:      #050507
-   @abyss:     #0a0b10
-   @primary:   #0e1018
-   @secondary: #141724
-   @tertiary:  #1c2033
-   @elevated:  #232841
-   @hover:     #2a3052
-   @active:    #313866
+   @void:      #06070B  (BG_VOID — deepest)
+   @deep:      #0C0E16  (BG_DEEP)
+   @primary:   #111520  (BG_PRIMARY — sidebar, main)
+   @surface:   #181D2E  (BG_SURFACE — cards, panels, dialogs)
+   @raised:    #202640  (BG_RAISED — inputs)
+   @elevated:  #2A3150  (BG_ELEVATED — popovers, dropdowns, tooltips)
+   @hover:     #323C62  (BG_HOVER)
+   @active:    #3C4875  (BG_ACTIVE)
+
+   ── Border Colors ──
+   @border-void:    #111520  (BORDER_VOID)
+   @border-subtle:  #1E2440  (BORDER_SUBTLE)
+   @border-default: #2A3150  (BORDER_DEFAULT)
+   @border-medium:  #3A4468  (BORDER_MEDIUM)
+   @border-hover:   #4E5A88  (BORDER_HOVER)
+   @border-focus:   #C8A54E  (BORDER_FOCUS — gold)
 
    ── Accent Colors ──
-   @rose:      #c9956b  (Primary accent — Rose Gold)
-   @amber:     #d4a853  (Financial accent — Amber Gold)
-   @teal:      #3db89c  (Success — Teal)
-   @blue:      #6b8cd4  (Info — Blue)
+   @gold:       #C8A54E  (GOLD — primary accent)
+   @gold-light: #E8C96A  (GOLD_LIGHT)
+   @gold-dark:  #A88A3E  (GOLD_DARK)
+   @teal:       #2DD4BF  (TEAL — success)
+   @teal-light: #5EEADB  (TEAL_LIGHT)
+   @teal-dark:  #14B8A6  (TEAL_DARK)
+   @coral:      #EF6B6B  (CORAL — error)
+   @coral-light:#F59B9B  (CORAL_LIGHT)
+   @coral-dark: #DC4444  (CORAL_DARK)
+   @amber:      #F59E0B  (AMBER — warning)
+   @amber-light:#FBBF24  (AMBER_LIGHT)
+   @amber-dark: #D97706  (AMBER_DARK)
+   @sky:        #38BDF8  (SKY — info)
+   @sky-light:  #7DD3FC  (SKY_LIGHT)
 
-   ── Semantic ──
-   @success:   #3db89c
-   @warning:   #e0a040
-   @danger:    #e05555
-   @info:      #6b8cd4
+   ── Semantic Mapping ──
+   @success:   #2DD4BF  (TEAL)
+   @warning:   #F59E0B  (AMBER)
+   @danger:    #EF6B6B  (CORAL)
+   @info:      #38BDF8  (SKY)
 
    ── Text ──
-   @text-bright:    #ffffff
-   @text-primary:   #e8eaf0
-   @text-secondary: #9498b8
-   @text-muted:     #5d6184
-   @text-ghost:     #363a56
+   @text-bright:    #FFFFFF  (TEXT_BRIGHT)
+   @text-primary:   #F0F2F5  (TEXT_PRIMARY)
+   @text-secondary: #8B92A8  (TEXT_SECONDARY)
+   @text-muted:     #515874  (TEXT_MUTED)
+   @text-ghost:     #2E3550  (TEXT_GHOST)
+   @text-inverse:   #111520  (TEXT_INVERSE)
 
-   ── Borders ──
-   @border-subtle:  #1c2033
-   @border-default: #282d48
-   @border-medium:  #363d5e
-   @border-hover:   #4a5280
-   @border-focus:   #c9956b
+   ── Subtle BG Colors (hover/focus) ──
+   @gold-subtle:   rgba(200,165,78,0.10)
+   @teal-subtle:   rgba(45,212,191,0.10)
+   @coral-subtle:  rgba(239,107,107,0.10)
+   @amber-subtle:  rgba(245,158,11,0.10)
+   @sky-subtle:    rgba(56,189,248,0.10)
 
    ── Spacing (8px grid) ──
    @xs: 4px   @sm: 8px   @md: 12px  @lg: 16px
