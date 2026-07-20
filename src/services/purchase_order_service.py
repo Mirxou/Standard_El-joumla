@@ -66,8 +66,8 @@ class PurchaseOrderService:
 
         result = self.db.execute_query(query, (f"{prefix}%",))
 
-        if result and result[0][0]:
-            last_number = result[0][0]
+        if result and result[0].get("po_number"):
+            last_number = result[0].get("po_number")
             sequence = int(last_number.split("-")[-1]) + 1
         else:
             sequence = 1
@@ -555,8 +555,8 @@ class PurchaseOrderService:
 
         result = self.db.execute_query(query, (f"{prefix}%",))
 
-        if result and result[0][0]:
-            last_number = result[0][0]
+        if result and result[0].get("receiving_number"):
+            last_number = result[0].get("receiving_number")
             sequence = int(last_number.split("-")[-1]) + 1
         else:
             sequence = 1
@@ -698,8 +698,8 @@ class PurchaseOrderService:
 
         # إجمالي
         result = self.db.execute_query(query_base, tuple(params))
-        total_count = result[0][0] if result and result[0][0] else 0
-        total_value = result[0][1] if result and result[0][1] else 0
+        total_count = result[0].get("count", 0) if result else 0
+        total_value = result[0].get("total", 0) if result else 0
 
         # حسب الحالة
         status_query = query_base + " AND status = ?"
@@ -707,8 +707,8 @@ class PurchaseOrderService:
         for status in POStatus:
             status_params = params + [status.name]
             result = self.db.execute_query(status_query, tuple(status_params))
-            count = result[0][0] if result and result[0][0] else 0
-            value = result[0][1] if result and result[0][1] else 0
+            count = result[0].get("count", 0) if result else 0
+            value = result[0].get("total", 0) if result else 0
             by_status[status.value] = {"count": count, "value": float(value)}
 
         return {
@@ -744,7 +744,7 @@ class PurchaseOrderService:
             dict مع: matched (bool), po_amount, received_amount, invoice_amount, differences
         """
         try:
-            po = self.get_purchase_order_by_id(po_id)
+            po = self.get_purchase_order(po_id)
             if not po:
                 return {"matched": False, "error": "أمر الشراء غير موجود"}
 

@@ -38,8 +38,16 @@ class ReportManager:
             AND status IN ('CONFIRMED', 'PAID', 'PARTIALLY_PAID', 'مؤكدة', 'مدفوعة', 'مدفوعة جزئياً')
             """
             sales_result = self.db_manager.fetch_one(sales_query, (start_date, end_date))
-            total_sales = float(sales_result["total_sales"] or 0) if sales_result else 0.0
-            collected_cash = float(sales_result["collected_cash"] or 0) if sales_result else 0.0
+            if sales_result:
+                if isinstance(sales_result, dict):
+                    total_sales = float(sales_result.get("total_sales") or 0)
+                    collected_cash = float(sales_result.get("collected_cash") or 0)
+                elif sales_result:
+                    total_sales = float(sales_result[0] or 0)
+                    collected_cash = float(sales_result[1] or 0)
+            else:
+                total_sales = 0.0
+                collected_cash = 0.0
 
             # 2. تكلفة البضاعة المباعة (COGS)
             # نحتاج لحساب تكلفة العناصر في الفواتير المؤكدة
@@ -52,7 +60,13 @@ class ReportManager:
             AND s.status IN ('CONFIRMED', 'PAID', 'PARTIALLY_PAID', 'مؤكدة', 'مدفوعة', 'مدفوعة جزئياً')
             """
             cogs_result = self.db_manager.fetch_one(cogs_query, (start_date, end_date))
-            total_cost = float(cogs_result["total_cogs"] or 0) if cogs_result else 0.0
+            if cogs_result:
+                if isinstance(cogs_result, dict):
+                    total_cost = float(cogs_result.get("total_cogs") or 0)
+                elif cogs_result:
+                    total_cost = float(cogs_result[0] or 0)
+            else:
+                total_cost = 0.0
 
             # 3. صافي الربح
             net_profit = total_sales - total_cost
@@ -96,7 +110,7 @@ class ReportManager:
             """
 
             results = self.db_manager.fetch_all(query, (start_date,))
-            return [dict(row) for row in results]
+            return [dict(row) if isinstance(row, dict) else row for row in results]
         except Exception as e:
             self.logger.error(f"Error getting sales trends: {e}")
             return []
@@ -120,7 +134,7 @@ class ReportManager:
             LIMIT ?
             """
             results = self.db_manager.fetch_all(query, (limit,))
-            return [dict(row) for row in results]
+            return [dict(row) if isinstance(row, dict) else row for row in results]
         except Exception as e:
             self.logger.error(f"Error getting top products: {e}")
             return []
@@ -151,16 +165,26 @@ class ReportManager:
             low_stock_result = self.db_manager.fetch_one(low_stock_query)
 
             return {
-                "total_cost_value": (float(value_result["total_cost_value"] or 0) if value_result else 0.0),
-                "total_sales_value": (float(value_result["total_sales_value"] or 0) if value_result else 0.0),
+    def _safe_float(result, key, idx=0, default=0.0):
+        """Get float from dict or tuple result safely"""
+        if result is None:
+            return default
+        if isinstance(result, dict):
+            return float(result.get(key) or default)
+        elif isinstance(result, (tuple, list)) and len(result) > idx:
+            return float(result[idx]) or default
+        return default
+
+            return {
+                "total_cost_value": _safe_float(value_result, "total_cost_value"),
+                "total_sales_value": _safe_float(value_result, "total_sales_value", 1),
                 "potential_profit": (
-                    float((value_result["total_sales_value"] or 0) - (value_result["total_cost_value"] or 0))
-                    if value_result
-                    else 0.0
+                    _safe_float(value_result, "total_sales_value", 0)
+                    - _safe_float(value_result, "total_cost_value", 0)
                 ),
-                "total_products": (int(value_result["total_products"] or 0) if value_result else 0),
-                "total_items": (int(value_result["total_items"] or 0) if value_result else 0),
-                "low_stock_count": (int(low_stock_result["count"] or 0) if low_stock_result else 0),
+                "total_products": int(_safe_float(value_result, "total_products", 2)),
+                "total_items": int(_safe_float(value_result, "total_items", 3)),
+                "low_stock_count": int(_safe_float(low_stock_result, "count", 0)),
             }
         except Exception as e:
             self.logger.error(f"Error getting inventory analytics: {e}")

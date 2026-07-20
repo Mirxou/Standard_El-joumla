@@ -1527,8 +1527,8 @@ class DatabaseManager:
                         self.logger.warning(f"Invalid table name: {table_name}")
                         continue
 
-                    # التحقق من وجود العمود - استخدام استعلام آمن
-                    cursor = self.connection.execute("PRAGMA table_info(?)", (table_name,))
+                    # التحقق من وجود العمود - PRAGMA does not support parameter binding
+                    cursor = self.connection.execute(f'PRAGMA table_info("{table_name}")')
                     columns = [col[1] for col in cursor.fetchall()]
 
                     if date_column not in columns:
@@ -1590,6 +1590,9 @@ class DatabaseManager:
             info["records"] = {}
 
             for table in main_tables:
+                if not self.table_exists(table):
+                    info["records"][table] = 0
+                    continue
                 count_query = f"SELECT COUNT(*) FROM {table}"
                 info["records"][table] = self.execute_scalar(count_query)
 

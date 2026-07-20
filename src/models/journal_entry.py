@@ -35,8 +35,8 @@ class JournalLine:
     # الطوابع الزمنية
     created_at: Optional[datetime] = None
 
-    def __post_init__(self):
-        """تحقق من صحة البيانات"""
+    def validate(self):
+        """تحقق من صحة البيانات — يُستدعى قبل الحفظ"""
         # يجب أن يكون هناك مبلغ واحد فقط (إما مدين أو دائن)
         if self.debit_amount > 0 and self.credit_amount > 0:
             raise ValueError("لا يمكن تحديد مبلغ مدين ودائن في نفس الوقت")

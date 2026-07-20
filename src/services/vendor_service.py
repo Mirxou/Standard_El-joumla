@@ -33,9 +33,7 @@ class VendorService:
                 now,
                 now,
             )
-            res = self.db.execute_query(q, params)
-            if res and hasattr(res, "lastrowid"):
-                return res.lastrowid
+            return self.db.execute_insert(q, params)
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في إنشاء مورد: {e}")
@@ -161,14 +159,16 @@ class VendorService:
             # 1. نسبة التسليم في الموعد (40%)
             # استخدام purchase_orders
             q_total = 'SELECT COUNT(*) FROM purchase_orders WHERE supplier_id = ? AND status = "received"'
-            total_orders = self.db.fetch_one(q_total, (vendor_id,))[0] or 0
+            row = self.db.fetch_one(q_total, (vendor_id,))
+            total_orders = row[0] if row else 0
 
             if total_orders == 0:
                 return 50.0
 
             # مقارنة delivery_date بـ expected_delivery_date
             q_on_time = 'SELECT COUNT(*) FROM purchase_orders WHERE supplier_id = ? AND status = "received" AND (expected_delivery_date IS NULL OR julianday(delivery_date) <= julianday(expected_delivery_date))'  # noqa: E501
-            on_time_count = self.db.fetch_one(q_on_time, (vendor_id,))[0] or 0
+            row = self.db.fetch_one(q_on_time, (vendor_id,))
+            on_time_count = row[0] if row else 0
             on_time_score = (on_time_count / total_orders) * 100
 
             # 2. دقة الكميات (30%)
@@ -176,7 +176,8 @@ class VendorService:
 
             # 3. سرعة التوريد (30%)
             q_avg_days = 'SELECT AVG(julianday(delivery_date) - julianday(order_date)) FROM purchase_orders WHERE supplier_id = ? AND status = "received"'  # noqa: E501
-            avg_days = self.db.fetch_one(q_avg_days, (vendor_id,))[0] or 7
+            _r = self.db.fetch_one(q_avg_days, (vendor_id,))
+            avg_days = _r[0] if _r else 7
             lead_time_score = max(0, 100 - (avg_days * 5))
 
             final_score = (on_time_score * 0.4) + (fulfillment_score * 0.3) + (lead_time_score * 0.3)
@@ -243,11 +244,14 @@ class VendorService:
         try:
             # استخدام purchase_orders
             q_avg = 'SELECT AVG(julianday(delivery_date) - julianday(order_date)) FROM purchase_orders WHERE supplier_id = ? AND status = "received"'  # noqa: E501
-            avg_days = self.db.fetch_one(q_avg, (vendor_id,))[0] or 0
+            _r = self.db.fetch_one(q_avg, (vendor_id,))
+            avg_days = _r[0] if _r else 0
             q_total = "SELECT COUNT(*) FROM purchase_orders WHERE supplier_id = ?"
-            total = self.db.fetch_one(q_total, (vendor_id,))[0] or 0
+            _r2 = self.db.fetch_one(q_total, (vendor_id,))
+            total = _r2[0] if _r2 else 0
             q_on_time = 'SELECT COUNT(*) FROM purchase_orders WHERE supplier_id = ? AND status = "received" AND (expected_delivery_date IS NULL OR julianday(delivery_date) <= julianday(expected_delivery_date))'  # noqa: E501
-            on_time = self.db.fetch_one(q_on_time, (vendor_id,))[0] or 0
+            _r3 = self.db.fetch_one(q_on_time, (vendor_id,))
+            on_time = _r3[0] if _r3 else 0
 
             quality_score = self.calculate_quality_score(vendor_id)
 

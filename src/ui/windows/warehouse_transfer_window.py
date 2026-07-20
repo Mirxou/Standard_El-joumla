@@ -538,7 +538,7 @@ class WarehouseTransferWindow(QMainWindow):
         if not transfer:
             return
 
-        details = """
+        details = f"""
         <h3>تفاصيل التحويل</h3>
         <p><b>رقم التحويل:</b> {transfer.transfer_number}</p>
         <p><b>من:</b> {transfer.from_warehouse_name}</p>
@@ -546,8 +546,8 @@ class WarehouseTransferWindow(QMainWindow):
         <p><b>المنتج:</b> {transfer.product_name}</p>
         <p><b>الكمية:</b> {transfer.quantity}</p>
         <p><b>الحالة:</b> {self.get_status_text(transfer.status)}</p>
-        <p><b>تاريخ التحويل:</b> {transfer.transfer_date.strftime('%Y-%m-%d %H:%M') if transfer.transfer_date else ''}</p>  # noqa: E501
-        <p><b>تاريخ الاستلام:</b> {transfer.received_date.strftime('%Y-%m-%d %H:%M') if transfer.received_date else 'لم يتم الاستلام'}</p>  # noqa: E501
+        <p><b>تاريخ التحويل:</b> {transfer.transfer_date.strftime('%Y-%m-%d %H:%M') if transfer.transfer_date else ''}</p>
+        <p><b>تاريخ الاستلام:</b> {transfer.received_date.strftime('%Y-%m-%d %H:%M') if transfer.received_date else 'لم يتم الاستلام'}</p>
         <p><b>ملاحظات:</b> {transfer.notes or 'لا توجد ملاحظات'}</p>
         """
 

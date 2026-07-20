@@ -372,7 +372,7 @@ class PurchaseOrderDialog(BaseDialog):
         qty_spin.setMaximum(999999.999)
         qty_spin.setDecimals(3)
         qty_spin.setValue(1.000)
-        qty_spin.valueChanged.connect(lambda: self._update_item_row(row))
+        qty_spin.valueChanged.connect(lambda r=row: self._update_item_row(r))
         self.items_table.setCellWidget(row, 2, qty_spin)
 
         # السعر
@@ -380,7 +380,7 @@ class PurchaseOrderDialog(BaseDialog):
         price_spin.setMinimum(0.00)
         price_spin.setMaximum(999999.99)
         price_spin.setDecimals(2)
-        price_spin.valueChanged.connect(lambda: self._update_item_row(row))
+        price_spin.valueChanged.connect(lambda r=row: self._update_item_row(r))
         self.items_table.setCellWidget(row, 3, price_spin)
 
         # الخصم%
@@ -389,7 +389,7 @@ class PurchaseOrderDialog(BaseDialog):
         discount_spin.setMaximum(100.00)
         discount_spin.setDecimals(2)
         discount_spin.setSuffix("%")
-        discount_spin.valueChanged.connect(lambda: self._update_item_row(row))
+        discount_spin.valueChanged.connect(lambda r=row: self._update_item_row(r))
         self.items_table.setCellWidget(row, 4, discount_spin)
 
         # الضريبة% (للعرض فقط - الضريبة تُطبق على مستوى الأمر)
@@ -408,7 +408,7 @@ class PurchaseOrderDialog(BaseDialog):
         self.items_table.setItem(row, 7, QTableWidgetItem("0.00"))
 
         # ربط تغيير المنتج
-        product_combo.currentIndexChanged.connect(lambda: self._on_product_changed(row))
+        product_combo.currentIndexChanged.connect(lambda r=row: self._on_product_changed(r))
 
     def _on_product_changed(self, row):
         """عند تغيير المنتج في صف"""
@@ -694,7 +694,7 @@ class PurchaseOrderDialog(BaseDialog):
                     qty_spin.setMaximum(999999.999)
                     qty_spin.setDecimals(3)
                     qty_spin.setValue(suggested_qty)
-                    qty_spin.valueChanged.connect(lambda: self._update_item_row(row))
+                    qty_spin.valueChanged.connect(lambda r=row: self._update_item_row(r))
                     self.items_table.setCellWidget(row, 2, qty_spin)
 
                     cost_price = float(product_data.get("cost_price", 0))
@@ -703,7 +703,7 @@ class PurchaseOrderDialog(BaseDialog):
                     price_spin.setMaximum(999999.99)
                     price_spin.setDecimals(2)
                     price_spin.setValue(cost_price)
-                    price_spin.valueChanged.connect(lambda: self._update_item_row(row))
+                    price_spin.valueChanged.connect(lambda r=row: self._update_item_row(r))
                     self.items_table.setCellWidget(row, 3, price_spin)
 
                     discount_spin = QDoubleSpinBox()
@@ -711,7 +711,7 @@ class PurchaseOrderDialog(BaseDialog):
                     discount_spin.setMaximum(100.00)
                     discount_spin.setDecimals(2)
                     discount_spin.setSuffix("%")
-                    discount_spin.valueChanged.connect(lambda: self._update_item_row(row))
+                    discount_spin.valueChanged.connect(lambda r=row: self._update_item_row(r))
                     self.items_table.setCellWidget(row, 4, discount_spin)
 
                     tax_spin = QDoubleSpinBox()
@@ -724,6 +724,6 @@ class PurchaseOrderDialog(BaseDialog):
 
                     self.items_table.setItem(row, 6, QTableWidgetItem("0.00"))
                     self.items_table.setItem(row, 7, QTableWidgetItem("0.00"))
-                    product_combo.currentIndexChanged.connect(lambda: self._on_product_changed(row))
+                    product_combo.currentIndexChanged.connect(lambda r=row: self._on_product_changed(r))
                     self._update_item_row(row)
                     break

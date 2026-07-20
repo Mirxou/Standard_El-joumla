@@ -560,15 +560,15 @@ class PaymentService:
             for row in results:
                 receivables.append(
                     {
-                        "customer_id": row[0],
-                        "customer_name": row[1],
-                        "phone": row[2],
-                        "balance": Decimal(str(row[3])),
-                        "credit_limit": Decimal(str(row[4])),
-                        "available_credit": Decimal(str(row[5])),
-                        "payments_count": row[6],
-                        "last_payment_date": (date.fromisoformat(row[7]) if row[7] else None),
-                        "overdue_payments": row[8],
+                        "customer_id": row.get("id"),
+                        "customer_name": row.get("name"),
+                        "phone": row.get("phone"),
+                        "balance": Decimal(str(row.get("current_balance"))),
+                        "credit_limit": Decimal(str(row.get("credit_limit"))),
+                        "available_credit": Decimal(str(row.get("available_credit"))),
+                        "payments_count": row.get("payments_count"),
+                        "last_payment_date": (date.fromisoformat(row.get("last_payment_date")) if row.get("last_payment_date") else None),
+                        "overdue_payments": row.get("overdue_payments"),
                     }
                 )
 
@@ -606,15 +606,15 @@ class PaymentService:
             for row in results:
                 payables.append(
                     {
-                        "supplier_id": row[0],
-                        "supplier_name": row[1],
-                        "phone": row[2],
-                        "balance": Decimal(str(row[3])),
-                        "credit_limit": Decimal(str(row[4])),
-                        "available_credit": Decimal(str(row[5])),
-                        "payments_count": row[6],
-                        "last_payment_date": (date.fromisoformat(row[7]) if row[7] else None),
-                        "overdue_payments": row[8],
+                        "supplier_id": row.get("id"),
+                        "supplier_name": row.get("name"),
+                        "phone": row.get("phone"),
+                        "balance": Decimal(str(row.get("current_balance"))),
+                        "credit_limit": Decimal(str(row.get("credit_limit"))),
+                        "available_credit": Decimal(str(row.get("available_credit"))),
+                        "payments_count": row.get("payments_count"),
+                        "last_payment_date": (date.fromisoformat(row.get("last_payment_date")) if row.get("last_payment_date") else None),
+                        "overdue_payments": row.get("overdue_payments"),
                     }
                 )
 
@@ -716,20 +716,20 @@ class PaymentService:
             schedules: List[Dict[str, Any]] = []
             today = date.today()
             for r in rows:
-                due = date.fromisoformat(r[3]) if r[3] else None
-                remaining = Decimal(str(r[6])) if r[6] is not None else Decimal("0.00")
+                due = date.fromisoformat(r.get("due_date")) if r.get("due_date") else None
+                remaining = Decimal(str(r.get("remaining_amount"))) if r.get("remaining_amount") is not None else Decimal("0.00")
                 days_to_due = (due - today).days if due else None
                 schedules.append(
                     {
-                        "schedule_id": r[0],
-                        "payment_id": r[1],
-                        "installment_number": r[2],
+                        "schedule_id": r.get("id"),
+                        "payment_id": r.get("payment_id"),
+                        "installment_number": r.get("installment_number"),
                         "due_date": due,
-                        "amount": Decimal(str(r[4])),
-                        "paid_amount": Decimal(str(r[5])),
+                        "amount": Decimal(str(r.get("amount"))),
+                        "paid_amount": Decimal(str(r.get("paid_amount"))),
                         "remaining_amount": remaining,
-                        "status": r[7],
-                        "notes": r[8],
+                        "status": r.get("status"),
+                        "notes": r.get("notes"),
                         "days_to_due": days_to_due,
                         "is_overdue": (due is not None and today > due and remaining > 0),
                     }
@@ -779,10 +779,10 @@ class PaymentService:
             }
 
             for row in results:
-                payment_type = row[0]
-                payment_method = row[1]
-                count = row[2]
-                amount = Decimal(str(row[3]))
+                payment_type = row.get("payment_type")
+                payment_method = row.get("payment_method")
+                count = row.get("count")
+                amount = Decimal(str(row.get("total_amount")))
 
                 summary["by_type_and_method"].append(
                     {
@@ -872,11 +872,11 @@ class PaymentService:
             buckets: Dict[int, Dict[str, Any]] = {}
 
             for row in rows:
-                account_id = row[0]
-                account_name = row[1]
-                due = row[5]          # due_date
-                sale_date = row[4]    # sale_date or purchase_date
-                remaining = Decimal(str(row[8] or 0))
+                account_id = row.get("customer_id") or row.get("supplier_id")
+                account_name = row.get("account_name")
+                due = row.get("due_date")
+                sale_date = row.get("sale_date")
+                remaining = Decimal(str(row.get("remaining") or 0))
 
                 if remaining <= 0:
                     continue
@@ -1018,16 +1018,19 @@ class PaymentService:
         """تحليل اتجاهات المدفوعات"""
         try:
             # تحديد تجميع البيانات حسب نوع الفترة
-            if period_type == "daily":
-                pass
-            elif period_type == "weekly":
-                pass
+            date_format = "DATE(payment_date)"
+            date_group = "DATE(payment_date)"
+            if period_type == "weekly":
+                date_format = "strftime('%Y-W%W', payment_date)"
+                date_group = "strftime('%Y-W%W', payment_date)"
             elif period_type == "monthly":
-                pass
-            else:  # yearly
-                pass
+                date_format = "strftime('%Y-%m', payment_date)"
+                date_group = "strftime('%Y-%m', payment_date)"
+            elif period_type == "yearly":
+                date_format = "strftime('%Y', payment_date)"
+                date_group = "strftime('%Y', payment_date)"
 
-            query = """
+            query = f"""
             SELECT
                 {date_format} as period,
                 payment_type,

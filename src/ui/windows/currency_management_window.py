@@ -654,7 +654,7 @@ class CurrencyManagementWindow(QMainWindow):
 
         if reply == QMessageBox.Yes:
             try:
-                if self.rate_service.delete_exchange_rate(rate_id):
+                if self.exchange_rate_service.delete_exchange_rate(rate_id):
                     QMessageBox.information(self, "نجح", "تم حذف سعر الصرف بنجاح")
                     self.load_exchange_rates()
                 else:

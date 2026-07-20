@@ -84,23 +84,22 @@ class AccountingService:
             accounts = self.db.fetch_all(query)
 
             for row in accounts:
-                isinstance(row, dict)
                 account = Account(
-                    id=gv("id", 0),
-                    account_code=gv("account_code", 1),
-                    account_name=gv("account_name", 2),
-                    account_type=gv("account_type", 3),
-                    sub_type=gv("sub_type", 4),
-                    description=gv("description", 5),
-                    normal_side=gv("normal_side", 6),
-                    is_header=bool(gv("is_header", 7, False)),
-                    parent_account_id=gv("parent_account_id", 8),
-                    is_active=bool(gv("is_active", 9, True)),
-                    is_locked=bool(gv("is_locked", 10, False)),
-                    opening_balance=Decimal(str(gv("opening_balance", 11, "0"))),
-                    current_balance=Decimal(str(gv("current_balance", 12, "0"))),
-                    created_at=gv("created_at", 13),
-                    updated_at=gv("updated_at", 14),
+                    id=gv(row, "id"),
+                    account_code=gv(row, "account_code"),
+                    account_name=gv(row, "account_name"),
+                    account_type=gv(row, "account_type"),
+                    sub_type=gv(row, "sub_type"),
+                    description=gv(row, "description"),
+                    normal_side=gv(row, "normal_side"),
+                    is_header=bool(gv(row, "is_header", False)),
+                    parent_account_id=gv(row, "parent_account_id"),
+                    is_active=bool(gv(row, "is_active", True)),
+                    is_locked=bool(gv(row, "is_locked", False)),
+                    opening_balance=Decimal(str(gv(row, "opening_balance", "0"))),
+                    current_balance=Decimal(str(gv(row, "current_balance", "0"))),
+                    created_at=gv(row, "created_at"),
+                    updated_at=gv(row, "updated_at"),
                 )
                 self.coa.add_account(account)
             self.logger.info(f"تم تحميل {len(accounts)} حساب من دليل الحسابات")
@@ -475,16 +474,15 @@ class AccountingService:
             if not row:
                 return None
 
-            isinstance(row, dict)
             entry = JournalEntry(
-                id=gv("id", 0),
-                entry_number=gv("entry_number", 1),
-                entry_date=(datetime.fromisoformat(gv("entry_date", 2)) if gv("entry_date", 2) else None),
-                reference_type=gv("reference_type", 3),
-                reference_id=gv("reference_id", 4),
-                description=gv("description", 5),
-                notes=gv("notes", 6),
-                is_posted=gv("is_posted", 7),
+                id=gv(row, "id"),
+                entry_number=gv(row, "entry_number"),
+                entry_date=(datetime.fromisoformat(gv(row, "entry_date")) if gv(row, "entry_date") else None),
+                reference_type=gv(row, "reference_type"),
+                reference_id=gv(row, "reference_id"),
+                description=gv(row, "description"),
+                notes=gv(row, "notes"),
+                is_posted=gv(row, "is_posted"),
             )
 
             # تحميل الأسطر
@@ -572,16 +570,15 @@ class AccountingService:
             rows = self.db.fetch_all(query)
             result = []
             for row in rows:
-                isinstance(row, dict)
                 result.append(
                     {
-                        "account_code": gv("account_code", 0),
-                        "account_name": gv("account_name", 1),
-                        "account_type": gv("account_type", 2),
-                        "normal_side": gv("normal_side", 3),
-                        "total_debits": float(gv("total_debits", 4) or 0),
-                        "total_credits": float(gv("total_credits", 5) or 0),
-                        "balance": float(gv("current_balance", 6) or 0),
+                        "account_code": gv(row, "account_code"),
+                        "account_name": gv(row, "account_name"),
+                        "account_type": gv(row, "account_type"),
+                        "normal_side": gv(row, "normal_side"),
+                        "total_debits": float(gv(row, "total_debits") or 0),
+                        "total_credits": float(gv(row, "total_credits") or 0),
+                        "balance": float(gv(row, "current_balance") or 0),
                     }
                 )
             total_debits = sum(acc["total_debits"] for acc in result)
@@ -603,8 +600,8 @@ class AccountingService:
             rows = self.db.fetch_all(query)
             totals = {"Asset": 0.0, "Liability": 0.0, "Equity": 0.0}
             for row in rows:
-                atype = gv("account_type", 0)
-                val = float(gv("total", 1) or 0.0)
+                atype = gv(row, "account_type")
+                val = float(gv(row, "total") or 0.0)
                 if atype in totals:
                     totals[atype] = val
             return {
@@ -634,9 +631,9 @@ class AccountingService:
             rows = self.db.fetch_all(query, (start_date.isoformat(), end_date.isoformat()))
             totals = {"Revenue": 0.0, "Expense": 0.0}
             for row in rows:
-                atype = gv("account_type", 0)
-                debit = float(gv("total_debit", 1) or 0.0)
-                credit = float(gv("total_credit", 2) or 0.0)
+                atype = gv(row, "account_type")
+                debit = float(gv(row, "total_debit") or 0.0)
+                credit = float(gv(row, "total_credit") or 0.0)
                 if atype == "Revenue":
                     totals["Revenue"] += (credit - debit)
                 elif atype == "Expense":

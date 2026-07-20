@@ -139,7 +139,7 @@ class AuditTrail:
             conditions.append("table_name = ?")
             params.append(table_name)
 
-        if record_id:
+        if record_id is not None:
             conditions.append("record_id = ?")
             params.append(record_id)
 

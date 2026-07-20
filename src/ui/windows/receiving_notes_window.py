@@ -50,7 +50,7 @@ class ReceivingNotesWindow(QMainWindow):
 
     def init_ui(self):
         """إعداد واجهة المستخدم"""
-        central_widget = QMainWindow()  # noqa: F841
+        central_widget = QWidget()  # noqa: F841
         layout = QVBoxLayout()
 
         # شريط البحث والفلترة
@@ -119,7 +119,7 @@ class ReceivingNotesWindow(QMainWindow):
         buttons_layout.addStretch()
         layout.addLayout(buttons_layout)
 
-        widget = QMainWindow()
+        widget = QWidget()
         widget.setLayout(layout)
         self.setCentralWidget(widget)
 
@@ -139,14 +139,21 @@ class ReceivingNotesWindow(QMainWindow):
             self.notes_table.setRowCount(len(rows))
 
             for row_idx, row in enumerate(rows):
-                for col_idx, value in enumerate(row):
-                    item = QTableWidgetItem(str(value))
-                    if col_idx == 5:  # الحالة
-                        if value == "approved":
-                            item.setBackground(QColor(144, 238, 144))
-                        elif value == "rejected":
-                            item.setBackground(QColor(255, 99, 71))
-                    self.notes_table.setItem(row_idx, col_idx, item)
+                note_id, receiving_number, receiving_date, supplier_id, status, notes = row
+
+                self.notes_table.setItem(row_idx, 0, QTableWidgetItem(str(note_id)))
+                self.notes_table.setItem(row_idx, 1, QTableWidgetItem(str(receiving_date or "")))
+                self.notes_table.setItem(row_idx, 2, QTableWidgetItem(str(supplier_id or "")))
+                self.notes_table.setItem(row_idx, 3, QTableWidgetItem(""))  # الكمية - يمكن حسابها من البنود
+
+                status_item = QTableWidgetItem(str(status or ""))
+                if status == "approved":
+                    status_item.setBackground(QColor(144, 238, 144))
+                elif status == "rejected":
+                    status_item.setBackground(QColor(255, 99, 71))
+                self.notes_table.setItem(row_idx, 4, status_item)
+
+                self.notes_table.setItem(row_idx, 5, QTableWidgetItem(str(notes or "")))
         except Exception as e:
             self.logger.error(f"خطأ في تحميل ملاحظات الاستلام: {e}")
 
@@ -159,26 +166,39 @@ class ReceivingNotesWindow(QMainWindow):
 
             cursor = self.db.get_cursor()
             query = """
-                SELECT id, note_number, note_date, supplier_id, quantity,
+                SELECT id, receiving_number, receiving_date, supplier_id,
                        status, notes
                 FROM receiving_notes
-                WHERE note_date BETWEEN ? AND ?
+                WHERE receiving_date BETWEEN ? AND ?
             """
             params = [from_date, to_date]
 
             if search_text:
-                query += " AND note_number LIKE ?"
+                query += " AND receiving_number LIKE ?"
                 params.append(f"%{search_text}%")
 
-            query += " ORDER BY note_date DESC"
+            query += " ORDER BY receiving_date DESC"
             cursor.execute(query, params)
 
             rows = cursor.fetchall()
             self.notes_table.setRowCount(len(rows))
 
             for row_idx, row in enumerate(rows):
-                for col_idx, value in enumerate(row):
-                    self.notes_table.setItem(row_idx, col_idx, QTableWidgetItem(str(value)))
+                note_id, receiving_number, receiving_date, supplier_id, status, notes = row
+
+                self.notes_table.setItem(row_idx, 0, QTableWidgetItem(str(note_id)))
+                self.notes_table.setItem(row_idx, 1, QTableWidgetItem(str(receiving_date or "")))
+                self.notes_table.setItem(row_idx, 2, QTableWidgetItem(str(supplier_id or "")))
+                self.notes_table.setItem(row_idx, 3, QTableWidgetItem(""))
+
+                status_item = QTableWidgetItem(str(status or ""))
+                if status == "approved":
+                    status_item.setBackground(QColor(144, 238, 144))
+                elif status == "rejected":
+                    status_item.setBackground(QColor(255, 99, 71))
+                self.notes_table.setItem(row_idx, 4, status_item)
+
+                self.notes_table.setItem(row_idx, 5, QTableWidgetItem(str(notes or "")))
         except Exception as e:
             QMessageBox.critical(self, "خطأ", f"خطأ في البحث: {str(e)}")
 

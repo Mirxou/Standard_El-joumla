@@ -552,7 +552,15 @@ class PaymentManager:
     def get_customer_payments(self, customer_id: int) -> List[Payment]:
         """الحصول على دفعات العميل"""
         try:
-            conn = self.db_manager.connection
+            conn = (
+                self.db_manager.connection
+                if hasattr(self.db_manager, "connection") and self.db_manager.connection
+                else None
+            )
+            if conn is None:
+                if self.logger:
+                    self.logger.error("خطأ: لا يمكن الوصول لاتصال قاعدة البيانات")
+                return []
             conn.row_factory = sqlite3.Row
             cursor = conn.execute(
                 """
@@ -573,7 +581,15 @@ class PaymentManager:
     def get_supplier_payments(self, supplier_id: int) -> List[Payment]:
         """الحصول على دفعات المورد"""
         try:
-            conn = self.db_manager.connection
+            conn = (
+                self.db_manager.connection
+                if hasattr(self.db_manager, "connection") and self.db_manager.connection
+                else None
+            )
+            if conn is None:
+                if self.logger:
+                    self.logger.error("خطأ: لا يمكن الوصول لاتصال قاعدة البيانات")
+                return []
             conn.row_factory = sqlite3.Row
             cursor = conn.execute(
                 """
@@ -626,6 +642,7 @@ class PaymentManager:
                 result = self.db_manager.fetch_one(
                     query,
                     (
+                        PaymentType.CUSTOMER_PAYMENT.value,
                         account_id,
                         PaymentType.CUSTOMER_PAYMENT.value,
                         PaymentStatus.COMPLETED.value,
@@ -657,8 +674,10 @@ class PaymentManager:
             else:
                 return Decimal("0.00")
 
-            if result and result[0] is not None:
-                return Decimal(str(result[0]))
+            if result:
+                val = result["balance"] if isinstance(result, dict) else (result[0] if len(result) > 0 else None)
+                if val is not None:
+                    return Decimal(str(val))
 
             return Decimal("0.00")
 

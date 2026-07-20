@@ -355,7 +355,7 @@ class SaleManager:
         try:
             import importlib
             mod = importlib.import_module("src.core.tenant_isolation")
-            self._tenant_manager = mod.TenantIsolationManager()
+            self._tenant_manager = mod.TenantIsolationManager(self.db_manager)
             return self._tenant_manager
         except Exception:
             if self.logger:
@@ -680,7 +680,7 @@ class SaleManager:
         """تشغيل webhook"""
         try:
             from src.services.webhook_service import WebhookService
-            ws = WebhookService()
+            ws = WebhookService(self.db_manager)
             ws.trigger_webhook(event, data)
         except Exception:
             pass

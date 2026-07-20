@@ -162,6 +162,8 @@ class AIPredictionService:
             conn = self.db.get_connection()
             df = pd.read_sql_query(query, conn, params=params if params else None)
 
+            from datetime import datetime as _dt
+
             if df.empty:
                 return {
                     "forecast": [{"date": _dt.now().strftime('%Y-%m-%d'), "predicted_demand": 0}],
@@ -170,7 +172,6 @@ class AIPredictionService:
 
             avg_demand = df["daily_demand"].mean()
 
-            from datetime import datetime as _dt
             last_date = pd.to_datetime(df["sale_date"]).max()
             forecast = []
             total_demand = 0.0

@@ -751,6 +751,21 @@ class WebhookDialog(QDialog):
         self.timeout_spin.setSuffix(" ثانية")
         form.addRow("مهلة الانتظار:", self.timeout_spin)
 
+        # Priority
+        self.priority_spin = QSpinBox()
+        self.priority_spin.setMinimum(0)
+        self.priority_spin.setMaximum(100)
+        self.priority_spin.setValue(5)
+        form.addRow("الأولوية:", self.priority_spin)
+
+        # Rate Limit per Minute
+        self.rate_limit_spin = QSpinBox()
+        self.rate_limit_spin.setMinimum(1)
+        self.rate_limit_spin.setMaximum(1000)
+        self.rate_limit_spin.setValue(60)
+        self.rate_limit_spin.setSuffix(" / دقيقة")
+        form.addRow("حد المعدل:", self.rate_limit_spin)
+
         # نشط
         self.is_active_checkbox = QCheckBox()
         self.is_active_checkbox.setChecked(True)

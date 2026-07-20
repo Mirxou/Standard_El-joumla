@@ -234,8 +234,18 @@ class ConfigManager:
         # هذه الطريقة تحول الاستدعاء إلى DatabaseManager
         from .database_manager import DatabaseManager
 
-        db_manager = DatabaseManager(self.get_database_path())
-        return db_manager.get_database_info()
+        db_manager = None
+        try:
+            db_manager = DatabaseManager(self.get_database_path())
+            db_manager.initialize()
+            result = db_manager.get_database_info()
+            return result
+        except Exception as e:
+            self.logger.error(f"خطأ في الحصول على معلومات قاعدة البيانات: {e}")
+            return {}
+        finally:
+            if db_manager is not None:
+                db_manager.close()
 
     def is_debug_mode(self) -> bool:
         """التحقق من وضع التطوير"""

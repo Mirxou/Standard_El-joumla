@@ -506,7 +506,7 @@ class PurchaseManager:
                 purchase.actual_delivery_date,
                 purchase.status,
                 purchase.payment_status,
-                purchase.payment_method,
+                purchase.payment_terms,
                 float(purchase.subtotal_amount),
                 float(purchase.tax_amount),
                 float(purchase.shipping_cost),
@@ -581,7 +581,7 @@ class PurchaseManager:
             from src.services.webhook_service import (
                 WebhookService,
             )
-            ws = WebhookService()
+            ws = WebhookService(self.db_manager)
             ws.trigger_webhook(
                 event_type=event_type,
                 payload=purchase.to_dict(),
@@ -597,26 +597,30 @@ class PurchaseManager:
         """إنشاء عنصر مشتريات في قاعدة البيانات"""
         query = """
         INSERT INTO purchase_items (
-            purchase_id, product_id, quantity,
-            unit_cost, total_cost,
+            purchase_id, product_id, batch_id,
             quantity_ordered, quantity_received,
+            unit_cost,
             discount_percent, discount_amount,
             tax_percent, tax_amount,
             total_amount, expiry_date,
-            batch_number, notes, created_at
+            batch_number, notes
         ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, CURRENT_TIMESTAMP
+            ?, ?, ?,
+            ?, ?,
+            ?,
+            ?, ?,
+            ?, ?,
+            ?, ?,
+            ?, ?
         )
         """
         params = (
             item.purchase_id,
             item.product_id,
-            float(item.quantity_ordered),
-            float(item.unit_cost),
-            float(item.total_amount),
+            item.batch_id,
             float(item.quantity_ordered),
             float(item.quantity_received),
+            float(item.unit_cost),
             float(item.discount_percent),
             float(item.discount_amount),
             float(item.tax_percent),
@@ -935,7 +939,7 @@ class PurchaseManager:
                 purchase.actual_delivery_date,
                 purchase.status,
                 purchase.payment_status,
-                purchase.payment_method,
+                purchase.payment_terms,
                 float(purchase.subtotal_amount),
                 float(purchase.tax_amount),
                 float(purchase.shipping_cost),

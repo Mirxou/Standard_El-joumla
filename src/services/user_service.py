@@ -219,7 +219,7 @@ class UserService:
             self.user_manager._update_last_login(user.id, datetime.now())
 
             # تسجيل في سجل قاعدة البيانات
-            self.db_logger.log_login(user.id, ip_address, True)
+            self.db_logger.log_login(user.username, True, ip_address)
 
             return True, session, None
 
@@ -487,7 +487,7 @@ class UserService:
             success = self.user_manager.change_password(user_id, new_password)
 
             if success:
-                self.db_logger.log_action("password_change", "users", user_id, None, None)
+                self.db_logger.log_operation("password_change", "users", user_id)
                 return True, None
             else:
                 return False, "فشل في تغيير كلمة المرور"
@@ -510,7 +510,7 @@ class UserService:
             success = self.user_manager.reset_password(user.id, temp_password)
 
             if success:
-                self.db_logger.log_action("password_reset", "users", user.id, None, None)
+                self.db_logger.log_operation("password_reset", "users", user.id)
                 return True, None, temp_password
             else:
                 return False, "فشل في إعادة تعيين كلمة المرور", None

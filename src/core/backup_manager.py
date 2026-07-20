@@ -178,11 +178,12 @@ class BackupManager:
         source_conn = sqlite3.connect(self.config.db_path)
         backup_conn = sqlite3.connect(backup_path)
 
-        with backup_conn:
-            source_conn.backup(backup_conn)
-
-        source_conn.close()
-        backup_conn.close()
+        try:
+            with backup_conn:
+                source_conn.backup(backup_conn)
+        finally:
+            source_conn.close()
+            backup_conn.close()
 
     def _backup_compressed(self, backup_path: str):
         """نسخ مع ضغط"""
@@ -218,10 +219,12 @@ class BackupManager:
 
                 # التحقق من قاعدة البيانات
                 conn = sqlite3.connect(temp_path)
-                cursor = conn.cursor()
-                cursor.execute("PRAGMA integrity_check")
-                result = cursor.fetchone()[0]
-                conn.close()
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute("PRAGMA integrity_check")
+                    result = cursor.fetchone()[0]
+                finally:
+                    conn.close()
 
                 # حذف الملف المؤقت
                 os.remove(temp_path)
@@ -230,10 +233,12 @@ class BackupManager:
             else:
                 # التحقق مباشرة
                 conn = sqlite3.connect(backup_path)
-                cursor = conn.cursor()
-                cursor.execute("PRAGMA integrity_check")
-                result = cursor.fetchone()[0]
-                conn.close()
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute("PRAGMA integrity_check")
+                    result = cursor.fetchone()[0]
+                finally:
+                    conn.close()
 
                 return result == "ok"
 
@@ -252,6 +257,7 @@ class BackupManager:
         Returns:
             نتيجة الاستعادة
         """
+        backup_current = None
         try:
             target = target_path or self.config.db_path
 
@@ -280,7 +286,7 @@ class BackupManager:
 
             if result != "ok":
                 # استعادة النسخة السابقة
-                if os.path.exists(backup_current):
+                if backup_current and os.path.exists(backup_current):
                     shutil.copy2(backup_current, target)
                 raise Exception("Restored database integrity check failed")
 
