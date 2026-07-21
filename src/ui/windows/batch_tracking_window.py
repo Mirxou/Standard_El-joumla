@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ...ui.styles.design_tokens import C
 from ...core.database_manager import DatabaseManager
 from ...models.inventory_optimization import BatchStatus, ProductBatch
 from ...services.inventory_optimization_service import InventoryOptimizationService
@@ -47,7 +48,7 @@ class BatchTrackingWindow(QMainWindow):
         self.setMinimumSize(1400, 850)
 
         # تطبيق ستايل الهوية الموحدة
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {C.BG_DEEP}; }}")
 
         self.setup_ui()
         self.load_data()

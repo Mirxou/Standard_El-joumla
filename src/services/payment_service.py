@@ -282,7 +282,8 @@ class PaymentService:
                     if r:
                         payment_id = r[0]
                 except Exception:
-                    logging.getLogger(__name__).warning("Ignored exception in payment_service.py")
+                    if self.logger:
+                        self.logger.warning("Ignored exception in payment_service.py")
             if payment_id:
                 payment_obj = self.payment_manager.get_payment_by_id(payment_id)
                 if payment_obj is None:

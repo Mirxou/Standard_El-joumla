@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QDateEdit,
 )
 
+from src.ui.styles.design_tokens import C
 from src.ui.widgets.base_dialog import BaseDialog
 
 
@@ -28,16 +29,15 @@ class WholesaleDashboardDialog(BaseDialog):
         self.setMinimumSize(1000, 700)
         self.setStyleSheet("background-color: transparent;")
 
-        self.layout = QVBoxLayout(self)
         self._setup_ui()
         self._load_data()
 
     def _setup_ui(self):
         # Header
         title = QLabel("Global Analytics Dashboard")
-        title.setStyleSheet("font-size: 24px; font-weight: bold; color: #343a40; margin-bottom: 20px;")
+        title.setStyleSheet(f"font-size: 24px; font-weight: bold; color: {C.TEXT_MUTED}; margin-bottom: 20px;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.layout.addWidget(title)
+        self.content_layout.addWidget(title)
 
         # Date filters expected by unit tests
         self.date_from = QDateEdit()
@@ -47,7 +47,7 @@ class WholesaleDashboardDialog(BaseDialog):
 
         # KPI Section
         self.kpi_layout = QHBoxLayout()
-        self.layout.addLayout(self.kpi_layout)
+        self.content_layout.addLayout(self.kpi_layout)
 
         # Labels expected by unit tests
         self.total_sales_label = QLabel()
@@ -58,7 +58,7 @@ class WholesaleDashboardDialog(BaseDialog):
         # Top Customers
         cust_layout = QVBoxLayout()
         cust_label = QLabel("🏆 أفضل الزبائن (Revenue)")
-        cust_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #495057;")
+        cust_label.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {C.TEXT_MUTED};")
         cust_layout.addWidget(cust_label)
         self.cust_table = self._create_table(["العميل", "عدد الصفقات", "إجمالي المشتريات"])
         self.top_customers_table = self.cust_table  # Alias for unit tests
@@ -68,23 +68,23 @@ class WholesaleDashboardDialog(BaseDialog):
         # Top Products / Orders
         prod_layout = QVBoxLayout()
         prod_label = QLabel("📦 المنتجات الأكثر حركة (Qty)")
-        prod_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #495057;")
+        prod_label.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {C.TEXT_MUTED};")
         prod_layout.addWidget(prod_label)
         self.prod_table = self._create_table(["المنتج", "الكمية المباعة", "القيمة الإجمالية"])
         self.orders_table = self.prod_table  # Alias for unit tests
         prod_layout.addWidget(self.prod_table)
         lists_layout.addLayout(prod_layout)
 
-        self.layout.addLayout(lists_layout)
+        self.content_layout.addLayout(lists_layout)
 
         # Close Button
         close_btn = QPushButton("إغلاق")
-        close_btn.setStyleSheet("""
-            QPushButton { background-color: #6c757d; color: white; padding: 10px; border-radius: 5px; font-size: 14px; }
-            QPushButton:hover { background-color: #5a6268; }
+        close_btn.setStyleSheet(f"""
+            QPushButton {{ background-color: {C.TEXT_SECONDARY}; color: {C.TEXT_BRIGHT}; padding: 10px; border-radius: 5px; font-size: 14px; }}
+            QPushButton:hover {{ background-color: {C.TEXT_MUTED}; }}
         """)
         close_btn.clicked.connect(self.reject)
-        self.layout.addWidget(close_btn)
+        self.content_layout.addWidget(close_btn)
 
     def _create_table(self, headers):
         table = QTableWidget()
@@ -108,7 +108,7 @@ class WholesaleDashboardDialog(BaseDialog):
         layout = QVBoxLayout(frame)
 
         lbl_title = QLabel(title)
-        lbl_title.setStyleSheet("color: #6c757d; font-size: 14px;")
+        lbl_title.setStyleSheet(f"color: {C.TEXT_SECONDARY}; font-size: 14px;")
 
         lbl_val = QLabel(value)
         lbl_val.setStyleSheet(f"color: {color}; font-size: 28px; font-weight: bold;")
@@ -127,13 +127,13 @@ class WholesaleDashboardDialog(BaseDialog):
         # (For now just add them once)
         if self.kpi_layout.count() == 0:
             self.kpi_layout.addWidget(
-                self._create_kpi_card("إجمالي المبيعات", f"{data.get('total_revenue', 0.0):,.2f}", "#0d6efd")
+                self._create_kpi_card("إجمالي المبيعات", f"{data.get('total_revenue', 0.0):,.2f}", C.ACCENT_SKY)
             )  # Blue
             self.kpi_layout.addWidget(
-                self._create_kpi_card("صافي الأرباح", f"{data.get('total_profit', 0.0):,.2f}", "#198754")
+                self._create_kpi_card("صافي الأرباح", f"{data.get('total_profit', 0.0):,.2f}", C.ACCENT_TEAL)
             )  # Green
             self.kpi_layout.addWidget(
-                self._create_kpi_card("عدد الصفقات", str(data.get("deal_count", 0)), "#fd7e14")
+                self._create_kpi_card("عدد الصفقات", str(data.get("deal_count", 0)), C.ACCENT_AMBER)
             )  # Orange
 
         # Top Customers

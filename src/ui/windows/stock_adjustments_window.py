@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 from ...core.database_manager import DatabaseManager
 from ...models.physical_count import AdjustmentStatus, AdjustmentType, StockAdjustment
 from ...services.inventory_count_service import InventoryCountService
+from ...ui.styles.design_tokens import C as Colors
 
 
 class StockAdjustmentsWindow(QMainWindow):
@@ -62,7 +63,7 @@ class StockAdjustmentsWindow(QMainWindow):
         self.setMinimumSize(1200, 700)
 
         # تطبيق ستايل الهوية الموحدة
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {Colors.BG_VOID}; }}")
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -72,7 +73,7 @@ class StockAdjustmentsWindow(QMainWindow):
 
         # العنوان
         title_label = QLabel("⚖️ إدارة تسويات المخزون")
-        title_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #f8fafc;")
+        title_label.setStyleSheet(f"font-size: 24px; font-weight: bold; color: {Colors.TEXT_BRIGHT};")
         layout.addWidget(title_label)
 
         # بطاقات الملخص
@@ -96,10 +97,10 @@ class StockAdjustmentsWindow(QMainWindow):
         layout = QHBoxLayout()
         layout.setSpacing(10)
 
-        self.total_card = self.create_summary_card("📊 إجمالي التسويات", "0", "#3498db")
-        self.pending_card = self.create_summary_card("⏳ معلقة", "0", "#f39c12")
-        self.approved_card = self.create_summary_card("✅ معتمدة", "0", "#27ae60")
-        self.applied_card = self.create_summary_card("✔️ مطبقة", "0", "#16a085")
+        self.total_card = self.create_summary_card("📊 إجمالي التسويات", "0", Colors.ACCENT_SKY)
+        self.pending_card = self.create_summary_card("⏳ معلقة", "0", Colors.ACCENT_AMBER)
+        self.approved_card = self.create_summary_card("✅ معتمدة", "0", Colors.ACCENT_TEAL)
+        self.applied_card = self.create_summary_card("✔️ مطبقة", "0", Colors.ACCENT_TEAL)
 
         layout.addWidget(self.total_card)
         layout.addWidget(self.pending_card)
@@ -228,36 +229,36 @@ class StockAdjustmentsWindow(QMainWindow):
 
         # زر إنشاء تسوية
         create_btn = QPushButton("➕ إنشاء تسوية")
-        create_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #3498db;
-                color: white;
+        create_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Colors.ACCENT_SKY};
+                color: {Colors.TEXT_BRIGHT};
                 padding: 10px 20px;
                 font-size: 14px;
                 font-weight: bold;
                 border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #2980b9;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {Colors.ACCENT_SKY_LIGHT};
+            }}
         """)
         create_btn.clicked.connect(self.show_create_adjustment_dialog)
         layout.addWidget(create_btn)
 
         # زر اعتماد
         approve_btn = QPushButton("✅ اعتماد")
-        approve_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #27ae60;
-                color: white;
+        approve_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Colors.ACCENT_TEAL};
+                color: {Colors.TEXT_BRIGHT};
                 padding: 10px 20px;
                 font-size: 14px;
                 font-weight: bold;
                 border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #229954;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {Colors.ACCENT_TEAL_LIGHT};
+            }}
         """)
         approve_btn.clicked.connect(self.approve_adjustment)
         layout.addWidget(approve_btn)
@@ -339,7 +340,7 @@ class StockAdjustmentsWindow(QMainWindow):
 
             # التسوية مع لون
             adj_item = QTableWidgetItem(f"{adj.adjustment_quantity:+,.2f}")
-            color = QColor("#27ae60") if adj.is_increase else QColor("#e74c3c")
+            color = QColor(Colors.ACCENT_TEAL) if adj.is_increase else QColor(Colors.ACCENT_CORAL)
             adj_item.setForeground(QBrush(color))
             self.table.setItem(row, 6, adj_item)
 
@@ -370,12 +371,12 @@ class StockAdjustmentsWindow(QMainWindow):
     def get_status_color(self, status: AdjustmentStatus) -> QColor:
         """الحصول على لون الحالة"""
         colors = {
-            AdjustmentStatus.PENDING: QColor("#f39c12"),
-            AdjustmentStatus.APPROVED: QColor("#27ae60"),
-            AdjustmentStatus.REJECTED: QColor("#e74c3c"),
-            AdjustmentStatus.APPLIED: QColor("#16a085"),
+            AdjustmentStatus.PENDING: QColor(Colors.ACCENT_AMBER),
+            AdjustmentStatus.APPROVED: QColor(Colors.ACCENT_TEAL),
+            AdjustmentStatus.REJECTED: QColor(Colors.ACCENT_CORAL),
+            AdjustmentStatus.APPLIED: QColor(Colors.ACCENT_TEAL),
         }
-        return colors.get(status, QColor("#000000"))
+        return colors.get(status, QColor(Colors.BG_VOID))
 
     def show_context_menu(self, position):
         """عرض قائمة السياق"""
@@ -484,7 +485,7 @@ class StockAdjustmentsWindow(QMainWindow):
         dialog = QDialog(self)
         dialog.setWindowTitle("إنشاء تسوية جديدة")
         dialog.setMinimumWidth(450)
-        dialog.setStyleSheet("QDialog { background-color: #0f172a; color: #f8fafc; }")
+        dialog.setStyleSheet(f"QDialog {{ background-color: {Colors.BG_DEEP}; color: {Colors.TEXT_BRIGHT}; }}")
 
         form = QFormLayout(dialog)
         form.setSpacing(12)
@@ -507,7 +508,7 @@ class StockAdjustmentsWindow(QMainWindow):
 
         # المخزون الحالي (تلقائي)
         current_stock_label = QLabel("0.00")
-        current_stock_label.setStyleSheet("font-weight: bold; color: #3498db;")
+        current_stock_label.setStyleSheet(f"font-weight: bold; color: {Colors.ACCENT_SKY};")
         form.addRow("المخزون الحالي:", current_stock_label)
 
         def _on_product_changed(index):
@@ -549,9 +550,9 @@ class StockAdjustmentsWindow(QMainWindow):
         # الأزرار
         btn_layout = QHBoxLayout()
         ok_btn = QPushButton("✅ إنشاء")
-        ok_btn.setStyleSheet("background-color: #27ae60; color: white; padding: 8px 16px; font-weight: bold; border-radius: 5px;")
+        ok_btn.setStyleSheet(f"background-color: {Colors.ACCENT_TEAL}; color: {Colors.TEXT_BRIGHT}; padding: 8px 16px; font-weight: bold; border-radius: 5px;")
         cancel_btn = QPushButton("❌ إلغاء")
-        cancel_btn.setStyleSheet("background-color: #e74c3c; color: white; padding: 8px 16px; font-weight: bold; border-radius: 5px;")
+        cancel_btn.setStyleSheet(f"background-color: {Colors.ACCENT_CORAL}; color: {Colors.TEXT_BRIGHT}; padding: 8px 16px; font-weight: bold; border-radius: 5px;")
         btn_layout.addStretch()
         btn_layout.addWidget(ok_btn)
         btn_layout.addWidget(cancel_btn)

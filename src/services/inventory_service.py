@@ -196,10 +196,10 @@ class InventoryService:
                 return False
             if from_product.current_stock < quantity:
                 return False
-            if not self.product_manager.update_stock(from_product_id, int(from_product.current_stock - quantity)):
+            if not self.product_manager.update_stock(from_product_id, round(from_product.current_stock - quantity, 2)):
                 return False
-            if not self.product_manager.update_stock(to_product_id, int(to_product.current_stock + quantity)):
-                self.product_manager.update_stock(from_product_id, int(from_product.current_stock))
+            if not self.product_manager.update_stock(to_product_id, round(to_product.current_stock + quantity, 2)):
+                self.product_manager.update_stock(from_product_id, round(from_product.current_stock, 2))
                 return False
             self._record_stock_movement(
                 from_product_id,
@@ -290,7 +290,7 @@ class InventoryService:
                         )
                         # تحديث المخزون الإجمالي للتوافق
                         total_stock = self.warehouse_service.get_total_stock(product_id)
-                        self.product_manager.update_stock(product_id, int(total_stock))
+                        self.product_manager.update_stock(product_id, round(total_stock, 2))
                         return True
 
             # الحالة الافتراضية (Single Warehouse)
@@ -299,7 +299,7 @@ class InventoryService:
                 return False
 
             diff = new_quantity - product.current_stock
-            if self.product_manager.update_stock(product_id, int(new_quantity)):
+            if self.product_manager.update_stock(product_id, round(new_quantity, 2)):
                 self._record_stock_movement(
                     product_id=product_id,
                     movement_type="in" if diff > 0 else "out",

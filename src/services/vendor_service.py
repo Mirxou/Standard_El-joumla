@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 # -*- coding: utf-8 -*-
 """
 خدمة إدارة الموردين (Vendor Service)
@@ -128,20 +128,16 @@ class VendorService:
 
                 # تسجيل حركة مخزون
                 try:
-                    from src.services.inventory_service import (
-                        InventoryService,
-                        StockMovement,
-                    )
+                    from src.services.inventory_service import InventoryService
 
                     inv = InventoryService(self.db, self.logger)
-                    movement = StockMovement(
+                    inv._record_stock_movement(
                         product_id=pid,
-                        movement_type="شراء",
+                        movement_type="in",
                         quantity=int(qty),
                         reference_id=purchase_id,
                         reference_type="purchase_order",
                     )
-                    inv.record_stock_movement(movement)
                 except Exception:
                     logging.getLogger(__name__).warning("Ignored exception in vendor_service.py")
 

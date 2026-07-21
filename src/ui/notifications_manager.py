@@ -701,7 +701,8 @@ class NotificationWidget(QFrame):
             NotificationType.WORKFLOW_COMPLETED: "#C8E6C9",
         }
 
-        bg_color = colors.get(self.notification.type, "#1e293b")  # noqa: F841
+        from src.ui.styles.design_tokens import C
+        bg_color = colors.get(self.notification.type, C.BG_SURFACE)  # noqa: F841
         self.setStyleSheet("""
             QFrame {{
                 background-color: {bg_color};

@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ...ui.styles.design_tokens import C
 from ...models.quote import Quote, QuoteItem, QuoteStatus
 from ...services.quote_service import QuoteService
 
@@ -54,7 +55,7 @@ class QuotesWindow(QMainWindow):
         self.setGeometry(100, 100, 1400, 800)
 
         # تطبيق ستايل الهوية الموحدة
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {C.BG_DEEP}; }}")
 
         self._create_widgets()
         self._setup_connections()
@@ -98,7 +99,7 @@ class QuotesWindow(QMainWindow):
         # زر عرض سعر جديد
         self.new_quote_btn = QPushButton("➕ عرض جديد")
         self.new_quote_btn.setStyleSheet(
-            "background-color: #4CAF50; color: white; padding: 8px 16px; font-weight: bold;"
+            f"background-color: {C.ACCENT_TEAL}; color: white; padding: 8px 16px; font-weight: bold;"
         )
         self.new_quote_btn.clicked.connect(self._new_quote)
         toolbar.addWidget(self.new_quote_btn)
@@ -469,20 +470,20 @@ class QuotesWindow(QMainWindow):
             QuoteStatus.SENT: "#FFF9C4",
             QuoteStatus.ACCEPTED: "#C8E6C9",
             QuoteStatus.REJECTED: "#FFCDD2",
-            QuoteStatus.EXPIRED: "#1e293b",
+            QuoteStatus.EXPIRED: C.BG_SURFACE,
             QuoteStatus.CONVERTED: "#B2DFDB",
             QuoteStatus.CANCELLED: "#CFD8DC",
         }
-        return colors.get(status, "#f8fafc")
+        return colors.get(status, C.TEXT_BRIGHT)
 
     def _get_status_text_color(self, status: QuoteStatus) -> str:
         """الحصول على لون نص الحالة"""
         colors = {
-            QuoteStatus.DRAFT: "#1976D2",
-            QuoteStatus.SENT: "#F57C00",
-            QuoteStatus.ACCEPTED: "#388E3C",
-            QuoteStatus.REJECTED: "#D32F2F",
-            QuoteStatus.EXPIRED: "#757575",
+            QuoteStatus.DRAFT: C.ACCENT_SKY,
+            QuoteStatus.SENT: C.ACCENT_AMBER,
+            QuoteStatus.ACCEPTED: C.ACCENT_TEAL,
+            QuoteStatus.REJECTED: C.ACCENT_CORAL,
+            QuoteStatus.EXPIRED: C.TEXT_SECONDARY,
             QuoteStatus.CONVERTED: "#00796B",
             QuoteStatus.CANCELLED: "#616161",
         }

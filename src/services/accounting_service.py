@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 # -*- coding: utf-8 -*-
 """
 خدمة إدارة المحاسبة - Accounting Service
@@ -18,7 +18,12 @@ from ..models.sale import Sale
 
 
 def gv(k, i, d=None):
-    return k[i] if isinstance(k, (list, tuple)) and len(k) > i else (k.get(i, d) if isinstance(k, dict) else d)
+    """Get value from dict, tuple/list, or sqlite3.Row safely."""
+    if isinstance(k, dict):
+        return k.get(i, d)
+    if isinstance(k, (list, tuple)) and isinstance(i, int) and len(k) > i:
+        return k[i]
+    return d
 
 
 class TrialBalanceList(list):
@@ -289,20 +294,20 @@ class AccountingService:
             inventory_line.debit_amount = total
             entry.lines.append(inventory_line)
             
-            # دائن: الدائنون
+            # مدين: الضريبة القابلة للاسترداد
+            if tax > 0:
+                tax_line = JournalLine()
+                tax_line.account_code = '2300'
+                tax_line.account_name = 'الضريبة المستحقة'
+                tax_line.debit_amount = tax
+                entry.lines.append(tax_line)
+            
+            # دائن: الدائنون (إجمالي المبلغ المستحق)
             payable_line = JournalLine()
             payable_line.account_code = purchase_data.get('payable_account', '2100')
             payable_line.account_name = purchase_data.get('payable_account_name', 'الدائنون')
             payable_line.credit_amount = total + tax
             entry.lines.append(payable_line)
-            
-            # دائن: الضريبة
-            if tax > 0:
-                tax_line = JournalLine()
-                tax_line.account_code = '2300'
-                tax_line.account_name = 'الضريبة المستحقة'
-                tax_line.credit_amount = tax
-                entry.lines.append(tax_line)
             
             return self.create_journal_entry(entry)
         except Exception as e:
@@ -534,7 +539,7 @@ class AccountingService:
                         if len(parts) >= 3:
                             seq = int(parts[2]) + 1
                     except (ValueError, IndexError):
-                        logging.getLogger(__name__).warning("Ignored exception in accounting_service.py")
+                        self.logger.warning("Ignored exception in accounting_service.py")
 
             entry_number = f"JE-{prefix}-{seq:04d}-{month}"
 

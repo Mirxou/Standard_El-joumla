@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 # -*- coding: utf-8 -*-
 """
 نافذة حوار إنشاء/تحرير أمر الشراء
@@ -35,6 +35,7 @@ from src.models.purchase_order import (
     PurchaseOrder,
     PurchaseOrderItem,
 )
+from src.ui.styles.design_tokens import C
 from src.ui.widgets.base_dialog import BaseDialog
 from src.ui.widgets.quantum_notification import NotificationManager
 
@@ -121,8 +122,8 @@ class PurchaseOrderDialog(BaseDialog):
         # المورد
         self.supplier_combo = QComboBox()
         self.supplier_combo.addItem(self.i18n.get_message("select_supplier"), None)
-        for supplier_id, name in self.suppliers:
-            self.supplier_combo.addItem(name, supplier_id)
+        for supplier in self.suppliers:
+            self.supplier_combo.addItem(supplier["name"], supplier["id"])
         self.supplier_combo.currentIndexChanged.connect(self._on_supplier_changed)
         layout.addRow(f"<b>{self.i18n.get_message('suppliers')}:</b>", self.supplier_combo)
 
@@ -198,12 +199,12 @@ class PurchaseOrderDialog(BaseDialog):
         buttons_layout = QHBoxLayout()
 
         add_item_btn = QPushButton(self.i18n.get_message("add_product"))
-        add_item_btn.setStyleSheet("background-color: #4CAF50; color: white; padding: 8px 16px; font-weight: bold;")
+        add_item_btn.setStyleSheet(f"background-color: {C.ACCENT_TEAL}; color: {C.TEXT_BRIGHT}; padding: 8px 16px; font-weight: bold;")
         add_item_btn.clicked.connect(self._add_item)
         buttons_layout.addWidget(add_item_btn)
 
         remove_item_btn = QPushButton(self.i18n.get_message("remove_item"))
-        remove_item_btn.setStyleSheet("background-color: #F44336; color: white; padding: 8px 16px; font-weight: bold;")
+        remove_item_btn.setStyleSheet(f"background-color: {C.ACCENT_CORAL}; color: {C.TEXT_BRIGHT}; padding: 8px 16px; font-weight: bold;")
         remove_item_btn.clicked.connect(self._remove_item)
         buttons_layout.addWidget(remove_item_btn)
 
@@ -305,7 +306,7 @@ class PurchaseOrderDialog(BaseDialog):
 
         # الإجمالي
         self.total_label = QLabel("0.00")
-        self.total_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #1976D2;")
+        self.total_label.setStyleSheet(f"font-size: 18px; font-weight: bold; color: {C.ACCENT_SKY};")
         layout.addRow(f"<b>{self.i18n.get_message('grand_total')}:</b>", self.total_label)
 
         return group
@@ -317,14 +318,14 @@ class PurchaseOrderDialog(BaseDialog):
 
         save_btn = QPushButton(self.i18n.get_message("save"))
         save_btn.setStyleSheet(
-            "background-color: #2196F3; color: white; padding: 10px 30px; font-weight: bold; font-size: 14px;"
+            f"background-color: {C.ACCENT_SKY}; color: {C.TEXT_BRIGHT}; padding: 10px 30px; font-weight: bold; font-size: 14px;"
         )
         save_btn.clicked.connect(self._save)
         layout.addWidget(save_btn)
 
         cancel_btn = QPushButton(self.i18n.get_message("cancel"))
         cancel_btn.setStyleSheet(
-            "background-color: #757575; color: white; padding: 10px 30px; font-weight: bold; font-size: 14px;"
+            f"background-color: {C.TEXT_SECONDARY}; color: {C.TEXT_BRIGHT}; padding: 10px 30px; font-weight: bold; font-size: 14px;"
         )
         cancel_btn.clicked.connect(self.reject)
         layout.addWidget(cancel_btn)
@@ -344,7 +345,7 @@ class PurchaseOrderDialog(BaseDialog):
                 result = self.db.execute_query(query, (supplier_id,))
                 
                 if result:
-                    self.contact_edit.setText(result[0][0] or "")
+                    self.contact_edit.setText(result[0]["contact_person"] or "")
             except Exception:
                 logging.getLogger(__name__).warning("Ignored exception in purchase_order_dialog.py")
 
@@ -354,7 +355,7 @@ class PurchaseOrderDialog(BaseDialog):
         product_combo = QComboBox()
         product_combo.addItem("-- اختر المنتج --", None)
         for product in self.products:
-            product_combo.addItem(f"{product[1]} ({product[2]})", product)
+            product_combo.addItem(f"{product['name']} ({product['code']})", product)
 
         # إضافة صف جديد
         row = self.items_table.rowCount()
@@ -417,9 +418,9 @@ class PurchaseOrderDialog(BaseDialog):
 
         if product_data:
             # تحديث الكود والسعر
-            self.items_table.item(row, 1).setText(product_data[2] or "")
+            self.items_table.item(row, 1).setText(product_data["code"] or "")
             price_spin = self.items_table.cellWidget(row, 3)
-            price_spin.setValue(float(product_data[3]) if product_data[3] else 0.00)
+            price_spin.setValue(float(product_data["unit_price"]) if product_data["unit_price"] else 0.00)
 
             self._update_item_row(row)
 
@@ -468,11 +469,17 @@ class PurchaseOrderDialog(BaseDialog):
         for row in range(self.items_table.rowCount()):
             try:
                 # Sum of row subtotals (column 6)
-                sub_text = self.items_table.item(row, 6).text().replace(",", "")
+                sub_item = self.items_table.item(row, 6)
+                if sub_item is None:
+                    continue
+                sub_text = sub_item.text().replace(",", "")
                 subtotal += Decimal(sub_text)
                 
                 # Sum of row net amounts (column 7)
-                net_text = self.items_table.item(row, 7).text().replace(",", "")
+                net_item = self.items_table.item(row, 7)
+                if net_item is None:
+                    continue
+                net_text = net_item.text().replace(",", "")
                 total_net += Decimal(net_text)
             except Exception:
                 logging.getLogger(__name__).warning("Ignored exception in purchase_order_dialog.py")

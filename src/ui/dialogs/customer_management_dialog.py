@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 # -*- coding: utf-8 -*-
 """
 نافذة إدارة العملاء
@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
 )
 
+from src.ui.styles.design_tokens import C
 from src.ui.widgets.base_dialog import BaseDialog
 from src.ui.widgets.quantum_notification import NotificationManager
 
@@ -73,20 +74,20 @@ class CustomerManagementDialog(BaseDialog):
         self.table.setColumnWidth(2, 150)
         self.table.setColumnWidth(3, 100)
         self.table.setColumnWidth(4, 120)
-        self.table.setStyleSheet("""
-            QTableWidget {
-                border: 1px solid #ddd;
-                gridline-color: #f0f0f0;
-            }
-            QTableWidget::item {
+        self.table.setStyleSheet(f"""
+            QTableWidget {{
+                border: 1px solid {C.BORDER_DEFAULT};
+                gridline-color: {C.TEXT_PRIMARY};
+            }}
+            QTableWidget::item {{
                 padding: 5px;
-            }
-            QHeaderView::section {
-                background-color: #cbd5e1;
-                color: white;
+            }}
+            QHeaderView::section {{
+                background-color: {C.TEXT_PRIMARY};
+                color: {C.TEXT_BRIGHT};
                 padding: 5px;
                 border: none;
-            }
+            }}
         """)
         layout.addWidget(self.table)
 
@@ -106,7 +107,12 @@ class CustomerManagementDialog(BaseDialog):
 
             self.customers = []
             for row in results:
-                cust_id, name, phone, email, balance, is_active = row
+                cust_id = row["id"]
+                name = row["name"]
+                phone = row["phone"]
+                email = row["email"]
+                balance = row["current_balance"]
+                is_active = row["is_active"]
                 self.customers.append(
                     {
                         "id": cust_id,
@@ -159,7 +165,7 @@ class CustomerManagementDialog(BaseDialog):
 
             delete_btn = QPushButton("حذف")
             delete_btn.setMaximumWidth(60)
-            delete_btn.setStyleSheet("background-color: #ef4444; color: white;")
+            delete_btn.setStyleSheet(f"background-color: {C.ACCENT_CORAL}; color: {C.TEXT_BRIGHT};")
             delete_btn.clicked.connect(lambda checked, cust_id=cust["id"]: self.delete_customer(cust_id))
 
             actions_layout.addWidget(edit_btn)
@@ -199,20 +205,30 @@ class CustomerManagementDialog(BaseDialog):
             self.load_customers()
 
     def delete_customer(self, customer_id):
-        """حذف عميل"""
-        reply = QMessageBox.question(
-            self,
-            "تأكيد الحذف",
-            "هل تريد حذف هذا العميل؟",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
+        """حذف عميل (soft-delete مع التحقق من السجلات المرتبطة)"""
+        try:
+            # التحقق من وجود عمليات بيع مرتبطة
+            sales_count = self.db_manager.fetch_one(
+                "SELECT COUNT(*) FROM sales WHERE customer_id = ?", (customer_id,)
+            )[0] or 0
 
-        if reply == QMessageBox.StandardButton.Yes:
-            try:
-                self.db_manager.execute_query("DELETE FROM customers WHERE id = ?", (customer_id,))
-                self.load_customers()
-                self.notify.show_success("نجاح", "تم حذف العميل بنجاح")
-            except Exception as e:
-                if self.logger:
-                    self.logger.error(f"خطأ في حذف العميل: {str(e)}")
-                self.notify.show_error("خطأ", f"فشل في حذف العميل: {str(e)}")
+            if sales_count > 0:
+                reply = QMessageBox.warning(
+                    self,
+                    "تحذير",
+                    f"هذا العميل لديه {sales_count} عملية بيع مرتبطة. سيتم تعطيل العميل بدلاً من حذفه.",
+                    QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
+                )
+                if reply != QMessageBox.StandardButton.Ok:
+                    return
+
+            # Soft-delete: تعطيل العميل بدلاً من حذفه
+            self.db_manager.execute_query(
+                "UPDATE customers SET is_active = 0 WHERE id = ?", (customer_id,)
+            )
+            self.load_customers()
+            self.notify.show_success("نجاح", "تم تعطيل العميل بنجاح")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في حذف العميل: {str(e)}")
+            self.notify.show_error("خطأ", f"فشل في حذف العميل: {str(e)}")

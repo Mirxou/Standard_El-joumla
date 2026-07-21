@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 # -*- coding: utf-8 -*-
 """
 Super Admin Dashboard - لوحة تحكم المدير الخارق
@@ -38,6 +38,7 @@ from src.core.intrusion_detection import IntrusionDetectionSystem
 from src.core.security_monitor import SecurityMonitor
 from src.services.cloud_sync_service import CloudSyncService
 from src.services.webhook_service import WebhookService
+from src.ui.styles.design_tokens import C
 from src.utils.logger import setup_logger
 
 
@@ -61,7 +62,7 @@ class SuperAdminDashboard(QMainWindow):
         self.setMinimumSize(1400, 900)
 
         # تطبيق ستايل الهوية الموحدة
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {C.BG_DEEP}; }}")
 
         self.setup_ui()
         self.start_monitoring()

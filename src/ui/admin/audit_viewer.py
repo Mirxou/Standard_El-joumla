@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 
 from ...core.database_manager import DatabaseManager
 from ...services.audit_log_service import AuditLogService
+from src.ui.styles.design_tokens import C
 
 
 class AuditViewer(QMainWindow):
@@ -33,19 +34,19 @@ class AuditViewer(QMainWindow):
         self.setMinimumSize(QSize(1000, 700))
 
         # تطبيق ستايل خاص لضمان ظهور الخلفية حتى لو كانت شفافة عالمياً
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #020617;
-            }
-            QTableWidget {
-                background-color: #000000;
-                gridline-color: #1e293b;
-                border: 1px solid #334155;
-            }
-            QHeaderView::section {
-                background-color: #0f172a;
-                color: #00f3ff;
-            }
+        self.setStyleSheet(f"""
+            QMainWindow {{
+                background-color: {C.BG_VOID};
+            }}
+            QTableWidget {{
+                background-color: {C.BG_VOID};
+                gridline-color: {C.BG_SURFACE};
+                border: 1px solid {C.BG_ELEVATED};
+            }}
+            QHeaderView::section {{
+                background-color: {C.BG_DEEP};
+                color: {C.ACCENT_SKY};
+            }}
         """)
 
         self._build_ui()
@@ -65,11 +66,11 @@ class AuditViewer(QMainWindow):
         header_layout.setContentsMargins(0, 0, 0, 10)
 
         title = QLabel("سجل العمليات والتدقيق")
-        title.setStyleSheet("font-size: 20px; font-weight: bold; color: #00f3ff;")
+        title.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {C.ACCENT_SKY};")
         header_layout.addWidget(title)
 
         subtitle = QLabel("تتبع جميع التغييرات والوصول إلى البيانات في النظام")
-        subtitle.setStyleSheet("font-size: 13px; color: #94a3b8;")
+        subtitle.setStyleSheet(f"font-size: 13px; color: {C.TEXT_SECONDARY};")
         header_layout.addWidget(subtitle)
 
         layout.addWidget(header)
@@ -101,18 +102,18 @@ class AuditViewer(QMainWindow):
         self.btn_refresh.clicked.connect(self.refresh)
 
         # Apply primary style to button
-        self.btn_refresh.setStyleSheet("""
-            QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #00f3ff, stop:1 #2563eb);
-                color: #020617;
+        self.btn_refresh.setStyleSheet(f"""
+            QPushButton {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {C.ACCENT_SKY}, stop:1 {C.ACCENT_SKY});
+                color: {C.BG_VOID};
                 font-weight: bold;
                 font-size: 14px;
                 border: none;
                 border-radius: 8px;
-            }
-            QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #5eead4, stop:1 #3b82f6);
-            }
+            }}
+            QPushButton:hover {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {C.ACCENT_TEAL_LIGHT}, stop:1 {C.ACCENT_SKY});
+            }}
         """)
 
         footer_layout.addWidget(self.btn_refresh)

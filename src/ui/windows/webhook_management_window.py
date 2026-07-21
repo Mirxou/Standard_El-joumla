@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 # -*- coding: utf-8 -*-
 """
 نافذة إدارة Webhooks - Webhook Management Window
@@ -43,6 +43,7 @@ project_root = Path(__file__).parent.parent.parent.parent
 
 from src.core.database_manager import DatabaseManager
 from src.services.webhook_service import Webhook, WebhookService
+from src.ui.styles.design_tokens import C
 from src.utils.logger import setup_logger
 
 
@@ -65,7 +66,7 @@ class WebhookManagementWindow(QMainWindow):
         self.setMinimumSize(1000, 700)
 
         # تطبيق ستايل الهوية الموحدة
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {C.BG_DEEP}; }}")
 
         self.setup_ui()
         self.load_webhooks()

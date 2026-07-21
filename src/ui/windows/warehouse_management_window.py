@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 # -*- coding: utf-8 -*-
 """
 نافذة إدارة المستودعات - Warehouse Management Window
@@ -37,6 +37,7 @@ project_root = Path(__file__).parent.parent.parent.parent
 from src.core.database_manager import DatabaseManager
 from src.models.warehouse import Warehouse
 from src.services.warehouse_service import WarehouseService
+from src.ui.styles.design_tokens import C
 from src.utils.logger import setup_logger
 
 
@@ -186,7 +187,7 @@ class WarehouseManagementWindow(QMainWindow):
         self.setMinimumSize(1400, 800)
 
         # تطبيق ستايل الهوية الموحدة
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {C.BG_DEEP}; }}")
 
         self.setup_ui()
         self.setup_connections()
@@ -205,7 +206,7 @@ class WarehouseManagementWindow(QMainWindow):
 
         # العنوان
         title_label = QLabel("🏭 إدارة المستودعات")
-        title_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #f8fafc; padding: 10px;")
+        title_label.setStyleSheet(f"font-size: 24px; font-weight: bold; color: {C.TEXT_BRIGHT}; padding: 10px;")
         layout.addWidget(title_label)
 
         # Splitter رئيسي

@@ -164,16 +164,17 @@ class ReportManager:
             """
             low_stock_result = self.db_manager.fetch_one(low_stock_query)
 
-            return {
-    def _safe_float(result, key, idx=0, default=0.0):
-        """Get float from dict or tuple result safely"""
-        if result is None:
-            return default
-        if isinstance(result, dict):
-            return float(result.get(key) or default)
-        elif isinstance(result, (tuple, list)) and len(result) > idx:
-            return float(result[idx]) or default
-        return default
+            def _safe_float(result, key, idx=0, default=0.0):
+                """Get float from dict or tuple result safely"""
+                if result is None:
+                    return default
+                if isinstance(result, dict):
+                    val = result.get(key)
+                    return float(val) if val is not None else default
+                elif isinstance(result, (tuple, list)) and len(result) > idx:
+                    val = result[idx]
+                    return float(val) if val is not None else default
+                return default
 
             return {
                 "total_cost_value": _safe_float(value_result, "total_cost_value"),

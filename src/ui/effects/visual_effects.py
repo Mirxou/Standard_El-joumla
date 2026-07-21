@@ -464,3 +464,123 @@ class VisualEffects:
 
         painter.setBrush(QBrush(core_gradient))
         painter.drawEllipse(center, int(radius), int(radius))
+
+    @staticmethod
+    def draw_aurora_border(
+        painter: QPainter,
+        rect: QRect,
+        color: QColor = GOLD,
+        opacity: int = 60,
+        width: int = 1,
+    ):
+        """
+        Draw a subtle animated aurora gradient border around a widget's edges.
+        The border glows brighter at the top and fades toward the bottom,
+        creating an aurora-like atmospheric frame.
+
+        Args:
+            painter: QPainter
+            rect: المنطقة
+            color: اللون (الافتراضي ذهبي)
+            opacity: شفافية الحد (0-255)
+            width: عرض الحد
+        """
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        # Top edge — brightest (aurora peak)
+        top_gradient = QLinearGradient(rect.topLeft(), rect.topRight())
+        bright = QColor(color)
+        bright.setAlpha(opacity)
+        mid = QColor(color)
+        mid.setAlpha(opacity // 3)
+        dim = QColor(color)
+        dim.setAlpha(0)
+        top_gradient.setColorAt(0.0, dim)
+        top_gradient.setColorAt(0.3, mid)
+        top_gradient.setColorAt(0.5, bright)
+        top_gradient.setColorAt(0.7, mid)
+        top_gradient.setColorAt(1.0, dim)
+
+        pen = QPen(QBrush(top_gradient), width)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        painter.drawLine(rect.topLeft(), rect.topRight())
+
+        # Side edges — medium glow
+        side_alpha = opacity // 2
+        left_gradient = QLinearGradient(rect.topLeft(), rect.bottomLeft())
+        left_top = QColor(color)
+        left_top.setAlpha(side_alpha)
+        left_bot = QColor(color)
+        left_bot.setAlpha(0)
+        left_gradient.setColorAt(0.0, left_top)
+        left_gradient.setColorAt(1.0, left_bot)
+
+        pen = QPen(QBrush(left_gradient), width)
+        painter.setPen(pen)
+        painter.drawLine(rect.topLeft(), rect.bottomLeft())
+
+        right_gradient = QLinearGradient(rect.topRight(), rect.bottomRight())
+        right_gradient.setColorAt(0.0, left_top)
+        right_gradient.setColorAt(1.0, left_bot)
+        pen = QPen(QBrush(right_gradient), width)
+        painter.setPen(pen)
+        painter.drawLine(rect.topRight(), rect.bottomRight())
+
+        # Bottom edge — faintest
+        bot_alpha = opacity // 5
+        bot_color = QColor(color)
+        bot_color.setAlpha(bot_alpha)
+        pen = QPen(bot_color, width)
+        painter.setPen(pen)
+        painter.drawLine(rect.bottomLeft(), rect.bottomRight())
+
+    @staticmethod
+    def draw_gold_shimmer_line(
+        painter: QPainter,
+        rect: QRect,
+        progress: float,
+        color: QColor = GOLD,
+        line_y_offset: int = 0,
+    ):
+        """
+        Draw a horizontal shimmer line that sweeps across a widget.
+        The shimmer position is controlled by `progress` (0.0 to 1.0).
+
+        Args:
+            painter: QPainter
+            rect: المنطقة
+            progress: موضع الشيمر (0.0 = يسار, 1.0 = يمين)
+            color: اللون (الافتراضي ذهبي)
+            line_y_offset: إزاحة رأسية للخط من منتصف المستطيل
+        """
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        # Calculate shimmer position
+        center_y = rect.center().y() + line_y_offset
+        shimmer_x = int(rect.left() + rect.width() * progress)
+        shimmer_width = rect.width() // 4  # shimmer spans 1/4 of widget width
+
+        start_x = max(rect.left(), shimmer_x - shimmer_width // 2)
+        end_x = min(rect.right(), shimmer_x + shimmer_width // 2)
+
+        if start_x >= end_x:
+            return
+
+        # Shimmer gradient: transparent -> color -> transparent
+        gradient = QLinearGradient(start_x, 0, end_x, 0)
+        transparent = QColor(color)
+        transparent.setAlpha(0)
+        bright = QColor(color)
+        bright.setAlpha(120)
+
+        gradient.setColorAt(0.0, transparent)
+        gradient.setColorAt(0.4, QColor(color.red(), color.green(), color.blue(), 40))
+        gradient.setColorAt(0.5, bright)
+        gradient.setColorAt(0.6, QColor(color.red(), color.green(), color.blue(), 40))
+        gradient.setColorAt(1.0, transparent)
+
+        pen = QPen(QBrush(gradient), 2)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        painter.drawLine(start_x, center_y, end_x, center_y)

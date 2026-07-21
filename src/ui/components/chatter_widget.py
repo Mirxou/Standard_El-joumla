@@ -11,6 +11,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from src.ui.styles.design_tokens import C
+
 
 class ChatterWidget(QWidget):
     """
@@ -28,11 +30,11 @@ class ChatterWidget(QWidget):
 
         # --- 1. Top Input Area ---
         self.input_container = QFrame()
-        self.input_container.setStyleSheet("""
-            QFrame {
-                background-color: #1e293b;
-                border-bottom: 1px solid #334155;
-            }
+        self.input_container.setStyleSheet(f"""
+            QFrame {{
+                background-color: {C.BG_SURFACE};
+                border-bottom: 1px solid {C.BG_ELEVATED};
+            }}
         """)
         input_layout = QVBoxLayout(self.input_container)
 
@@ -42,14 +44,14 @@ class ChatterWidget(QWidget):
         self.btn_note = QPushButton("Log Note")
 
         for btn in [self.btn_msg, self.btn_note]:
-            btn.setStyleSheet("""
-                QPushButton {
+            btn.setStyleSheet(f"""
+                QPushButton {{
                     border: none;
-                    color: #94a3b8;
+                    color: {C.TEXT_SECONDARY};
                     font-weight: 600;
                     padding: 5px;
-                }
-                QPushButton:hover { color: #f1f5f9; }
+                }}
+                QPushButton:hover {{ color: {C.TEXT_BRIGHT}; }}
             """)
             tabs_layout.addWidget(btn)
         tabs_layout.addStretch()
@@ -59,14 +61,14 @@ class ChatterWidget(QWidget):
         self.text_input = QTextEdit()
         self.text_input.setPlaceholderText("Write a note...")
         self.text_input.setFixedHeight(80)
-        self.text_input.setStyleSheet("""
-            QTextEdit {
-                background-color: #0f172a;
-                border: 1px solid #334155;
+        self.text_input.setStyleSheet(f"""
+            QTextEdit {{
+                background-color: {C.BG_DEEP};
+                border: 1px solid {C.BG_ELEVATED};
                 border-radius: 6px;
-                color: #f1f5f9;
+                color: {C.TEXT_BRIGHT};
                 padding: 10px;
-            }
+            }}
         """)
         input_layout.addWidget(self.text_input)
 
@@ -75,15 +77,15 @@ class ChatterWidget(QWidget):
         btn_layout.addStretch()
         self.btn_post = QPushButton("Log")
         self.btn_post.setCursor(Qt.PointingHandCursor)
-        self.btn_post.setStyleSheet("""
-            QPushButton {
-                background-color: #3b82f6;
+        self.btn_post.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {C.ACCENT_SKY};
                 color: white;
                 border-radius: 4px;
                 padding: 5px 15px;
                 font-weight: 600;
-            }
-            QPushButton:hover { background-color: #2563eb; }
+            }}
+            QPushButton:hover {{ background-color: #2563eb; }}
         """)
         self.btn_post.clicked.connect(self.add_note)
         btn_layout.addWidget(self.btn_post)
@@ -93,16 +95,16 @@ class ChatterWidget(QWidget):
 
         # --- 2. History Feed ---
         self.history_list = QListWidget()
-        self.history_list.setStyleSheet("""
-            QListWidget {
+        self.history_list.setStyleSheet(f"""
+            QListWidget {{
                 background-color: transparent;
                 border: none;
                 outline: none;
-            }
-            QListWidget::item {
-                border-bottom: 1px solid #1e293b;
+            }}
+            QListWidget::item {{
+                border-bottom: 1px solid {C.BG_SURFACE};
                 padding: 10px;
-            }
+            }}
         """)
         self.layout.addWidget(self.history_list)
 
@@ -126,8 +128,8 @@ class ChatterWidget(QWidget):
         avatar = QLabel(user[0])
         avatar.setFixedSize(32, 32)
         avatar.setAlignment(Qt.AlignCenter)
-        avatar.setStyleSheet("""
-            background-color: #475569;
+        avatar.setStyleSheet(f"""
+            background-color: {C.TEXT_MUTED};
             color: white;
             border-radius: 16px;
             font-weight: bold;
@@ -138,9 +140,9 @@ class ChatterWidget(QWidget):
         col = QVBoxLayout()
         top = QHBoxLayout()
         name = QLabel(user)
-        name.setStyleSheet("color: #f1f5f9; font-weight: bold;")
+        name.setStyleSheet(f"color: {C.TEXT_BRIGHT}; font-weight: bold;")
         t = QLabel(time)
-        t.setStyleSheet("color: #64748b; font-size: 11px;")
+        t.setStyleSheet(f"color: {C.TEXT_MUTED}; font-size: 11px;")
         top.addWidget(name)
         top.addWidget(t)
         top.addStretch()
@@ -148,7 +150,7 @@ class ChatterWidget(QWidget):
 
         msg = QLabel(content)
         msg.setWordWrap(True)
-        msg.setStyleSheet("color: #cbd5e1;")
+        msg.setStyleSheet(f"color: {C.TEXT_PRIMARY};")
         col.addWidget(msg)
 
         layout.addLayout(col)

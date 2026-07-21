@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 # -*- coding: utf-8 -*-
 """
 نافذة ملاحظات الاستلام
@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.core.database_manager import DatabaseManager
+from src.ui.styles.design_tokens import C as Colors
 from src.utils.logger import setup_logger
 
 
@@ -43,7 +44,7 @@ class ReceivingNotesWindow(QMainWindow):
         self.setGeometry(100, 100, 1200, 700)
 
         # تطبيق ستايل الهوية الموحدة
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {Colors.BG_VOID}; }}")
 
         self.init_ui()
         self.load_receiving_notes()
@@ -126,16 +127,16 @@ class ReceivingNotesWindow(QMainWindow):
     def load_receiving_notes(self):
         """تحميل ملاحظات الاستلام"""
         try:
-            cursor = self.db.get_cursor()
-            cursor.execute("""
-                SELECT id, receiving_number, receiving_date, supplier_id,
-                       status, notes
-                FROM receiving_notes
-                ORDER BY receiving_date DESC
-                LIMIT 100
-            """)
+            with self.db.get_cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, receiving_number, receiving_date, supplier_id,
+                           status, notes
+                    FROM receiving_notes
+                    ORDER BY receiving_date DESC
+                    LIMIT 100
+                """)
 
-            rows = cursor.fetchall()
+                rows = cursor.fetchall()
             self.notes_table.setRowCount(len(rows))
 
             for row_idx, row in enumerate(rows):
@@ -164,23 +165,23 @@ class ReceivingNotesWindow(QMainWindow):
             from_date = self.from_date.date().toString("yyyy-MM-dd")
             to_date = self.to_date.date().toString("yyyy-MM-dd")
 
-            cursor = self.db.get_cursor()
-            query = """
-                SELECT id, receiving_number, receiving_date, supplier_id,
-                       status, notes
-                FROM receiving_notes
-                WHERE receiving_date BETWEEN ? AND ?
-            """
-            params = [from_date, to_date]
+            with self.db.get_cursor() as cursor:
+                query = """
+                    SELECT id, receiving_number, receiving_date, supplier_id,
+                           status, notes
+                    FROM receiving_notes
+                    WHERE receiving_date BETWEEN ? AND ?
+                """
+                params = [from_date, to_date]
 
-            if search_text:
-                query += " AND receiving_number LIKE ?"
-                params.append(f"%{search_text}%")
+                if search_text:
+                    query += " AND receiving_number LIKE ?"
+                    params.append(f"%{search_text}%")
 
-            query += " ORDER BY receiving_date DESC"
-            cursor.execute(query, params)
+                query += " ORDER BY receiving_date DESC"
+                cursor.execute(query, params)
 
-            rows = cursor.fetchall()
+                rows = cursor.fetchall()
             self.notes_table.setRowCount(len(rows))
 
             for row_idx, row in enumerate(rows):
@@ -236,7 +237,7 @@ class ReceivingNotesWindow(QMainWindow):
         dialog = QDialog(self)
         dialog.setWindowTitle("ملاحظة استلام جديدة" if note_id is None else "تعديل ملاحظة الاستلام")
         dialog.setMinimumWidth(500)
-        dialog.setStyleSheet("background-color: #0f172a; color: #f8fafc;")
+        dialog.setStyleSheet(f"background-color: {Colors.BG_DEEP}; color: {Colors.TEXT_BRIGHT};")
 
         layout = QFormLayout(dialog)
 
@@ -265,9 +266,9 @@ class ReceivingNotesWindow(QMainWindow):
         # أزرار
         btn_layout = QHBoxLayout()
         save_btn = QPushButton("حفظ")
-        save_btn.setStyleSheet("background-color: #2196F3; color: white; padding: 8px 24px;")
+        save_btn.setStyleSheet(f"background-color: {Colors.ACCENT_SKY}; color: {Colors.TEXT_BRIGHT}; padding: 8px 24px;")
         cancel_btn = QPushButton("إلغاء")
-        cancel_btn.setStyleSheet("background-color: #757575; color: white; padding: 8px 24px;")
+        cancel_btn.setStyleSheet(f"background-color: {Colors.TEXT_MUTED}; color: {Colors.TEXT_BRIGHT}; padding: 8px 24px;")
         btn_layout.addStretch()
         btn_layout.addWidget(save_btn)
         btn_layout.addWidget(cancel_btn)
@@ -375,9 +376,9 @@ class ReceivingNotesWindow(QMainWindow):
         if reply == QMessageBox.Yes:
             try:
                 note_id = self.notes_table.item(current_row, 0).text()
-                cursor = self.db.get_cursor()
-                cursor.execute("DELETE FROM receiving_notes WHERE id = ?", (note_id,))
-                self.db.commit()
+                with self.db.get_cursor() as cursor:
+                    cursor.execute("DELETE FROM receiving_notes WHERE id = ?", (note_id,))
+                    cursor.connection.commit()
                 self.load_receiving_notes()
                 QMessageBox.information(self, "نجح", "تم حذف الملاحظة بنجاح")
             except Exception as e:
@@ -392,12 +393,12 @@ class ReceivingNotesWindow(QMainWindow):
 
         try:
             note_id = self.notes_table.item(current_row, 0).text()
-            cursor = self.db.get_cursor()
-            cursor.execute(
-                "UPDATE receiving_notes SET status = ?, approved_by = ?, approved_at = CURRENT_TIMESTAMP WHERE id = ?",
-                ("approved", self.current_user_id, note_id),
-            )
-            self.db.commit()
+            with self.db.get_cursor() as cursor:
+                cursor.execute(
+                    "UPDATE receiving_notes SET status = ?, approved_by = ?, approved_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    ("approved", self.current_user_id, note_id),
+                )
+                cursor.connection.commit()
             self.load_receiving_notes()
             QMessageBox.information(self, "نجح", "تمت الموافقة على الملاحظة")
         except Exception as e:

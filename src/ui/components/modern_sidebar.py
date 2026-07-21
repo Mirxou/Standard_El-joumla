@@ -12,6 +12,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from src.ui.styles.design_tokens import C
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  Aurora Noir v4.0 Sidebar — Gold + Deep Void
@@ -78,73 +80,73 @@ class ModernSidebar(QFrame):
 
     def _apply_aurora_noir_styles(self):
         """Apply Aurora Noir v4.0 styles — Gold + Deep Void"""
-        self.setStyleSheet("""
-            QFrame#modernSidebar {
+        self.setStyleSheet(f"""
+            QFrame#modernSidebar {{
                 background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
-                    stop:0 #111520, stop:1 #0C0E16);
-                border-left: 1px solid #1E2440;
+                    stop:0 {C.BG_PRIMARY}, stop:1 {C.BG_DEEP});
+                border-left: 1px solid {C.BORDER_SUBTLE};
                 border-radius: 0px;
-            }
-            QLabel#sidebarTitle {
+            }}
+            QLabel#sidebarTitle {{
                 font-size: 15px;
                 font-weight: 900;
-                color: #C8A54E;
+                color: {C.ACCENT_GOLD};
                 letter-spacing: 0.5px;
-            }
-            QLabel#sidebarSubtitle {
+            }}
+            QLabel#sidebarSubtitle {{
                 font-size: 11px;
-                color: #515874;
+                color: {C.TEXT_MUTED};
                 font-weight: 400;
-            }
-            QPushButton#sidebarToggleBtn {
+            }}
+            QPushButton#sidebarToggleBtn {{
                 background: transparent;
                 border: none;
                 border-radius: 8px;
                 font-size: 18px;
-                color: #515874;
+                color: {C.TEXT_MUTED};
                 padding: 6px;
-            }
-            QPushButton#sidebarToggleBtn:hover {
-                background-color: rgba(200,165,78,0.10);
-                color: #C8A54E;
-            }
-            QPushButton#modernSidebarBtn {
+            }}
+            QPushButton#sidebarToggleBtn:hover {{
+                background-color: {C.ACCENT_GOLD_SUBTLE};
+                color: {C.ACCENT_GOLD};
+            }}
+            QPushButton#modernSidebarBtn {{
                 background: transparent;
                 border: none;
                 border-right: 3px solid transparent;
                 border-radius: 10px;
                 text-align: right;
                 padding: 10px 14px;
-                color: #8B92A8;
+                color: {C.TEXT_SECONDARY};
                 font-weight: 500;
                 font-size: 13px;
-            }
-            QPushButton#modernSidebarBtn:hover {
-                background-color: rgba(200,165,78,0.10);
-                color: #F0F2F5;
-                border-right: 3px solid rgba(200,165,78,0.25);
-            }
-            QPushButton#modernSidebarBtn:checked {
+            }}
+            QPushButton#modernSidebarBtn:hover {{
+                background-color: {C.ACCENT_GOLD_SUBTLE};
+                color: {C.TEXT_PRIMARY};
+                border-right: 3px solid {C.ACCENT_GOLD_GLOW};
+            }}
+            QPushButton#modernSidebarBtn:checked {{
                 background: qlineargradient(x1:1,y1:0,x2:0,y2:0,
-                    stop:0 rgba(200,165,78,0.25), stop:1 rgba(200,165,78,0.05));
-                color: #C8A54E;
-                border-right: 3px solid #C8A54E;
+                    stop:0 {C.ACCENT_GOLD_GLOW}, stop:1 {C.ACCENT_GOLD_SHIMMER});
+                color: {C.ACCENT_GOLD};
+                border-right: 3px solid {C.ACCENT_GOLD};
                 font-weight: 700;
-            }
-            QPushButton#sidebarLogoutBtn {
-                color: #EF6B6B;
-            }
-            QPushButton#sidebarLogoutBtn:hover {
-                background-color: rgba(239,107,107,0.10);
-                color: #EF6B6B;
-            }
+            }}
+            QPushButton#sidebarLogoutBtn {{
+                color: {C.ACCENT_CORAL};
+            }}
+            QPushButton#sidebarLogoutBtn:hover {{
+                background-color: {C.ACCENT_CORAL_SUBTLE};
+                color: {C.ACCENT_CORAL};
+            }}
         """)
 
     def _setup_header(self):
         """Header with App Title — Aurora Noir branding"""
         self.header_container = QFrame()
         self.header_container.setStyleSheet(
-            "background: transparent; border-bottom: 1px solid #1E2440; padding-bottom: 8px;"
+            f"background: transparent; border-bottom: 1px solid {C.BORDER_SUBTLE}; padding-bottom: 8px;"
         )
         self.header_layout = QVBoxLayout(self.header_container)
         self.header_layout.setContentsMargins(0, 0, 0, 8)
@@ -159,7 +161,7 @@ class ModernSidebar(QFrame):
             self.app_logo.setPixmap(pixmap.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         else:
             self.app_logo.setText("🛒")
-            self.app_logo.setStyleSheet("font-size: 26px; background: transparent; color: #C8A54E;")
+            self.app_logo.setStyleSheet(f"font-size: 26px; background: transparent; color: {C.ACCENT_GOLD};")
 
         from ...utils.i18n_api import I18n
 
@@ -318,7 +320,7 @@ class ModernSidebar(QFrame):
         line = QFrame()
         line.setFrameShape(QFrame.HLine)
         line.setFrameShadow(QFrame.Sunken)
-        line.setStyleSheet("background-color: #1E2440; margin: 8px 4px; max-height: 1px;")
+        line.setStyleSheet(f"background-color: {C.BORDER_SUBTLE}; margin: 8px 4px; max-height: 1px;")
         self.layout.insertWidget(self.layout.count() - 1, line)
         return line
 

@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 """
 نافذة التقارير - Reports Window
 واجهة شاملة لعرض وتصدير التقارير المختلفة مع دعم اللغة العربية
@@ -53,6 +53,7 @@ from ...services.report_exporter import (
     ReportType,
 )
 from ...services.sales_service import SalesService
+from ...ui.styles.design_tokens import C as Colors
 from ...utils.logger import setup_logger
 
 
@@ -138,7 +139,7 @@ class ReportsWindow(QMainWindow):
         super().__init__(parent)
 
         # تطبيق ستايل الهوية الموحدة
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {Colors.BG_VOID}; }}")
 
         try:
             self.db_manager = db_manager
@@ -207,7 +208,7 @@ class ReportsWindow(QMainWindow):
         self.resize(1800, 1000)  # حجم افتراضي احترافي
 
         # تطبيق ستايل الهوية الموحدة
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {Colors.BG_VOID}; }}")
 
         # إعداد القوائم
         self.setup_menus()
@@ -373,12 +374,12 @@ class ReportsWindow(QMainWindow):
 
         # عنوان اللوحة
         title_label = QLabel("فلاتر التقارير")
-        title_label.setStyleSheet("""
+        title_label.setStyleSheet(f"""
             font-size: 16px;
             font-weight: bold;
-            color: #f8fafc;
+            color: {Colors.TEXT_BRIGHT};
             padding: 10px;
-            background-color: #1e293b;
+            background-color: {Colors.BG_SURFACE};
             border-radius: 5px;
         """)
         layout.addWidget(title_label)
@@ -541,17 +542,17 @@ class ReportsWindow(QMainWindow):
 
         self.generate_button = QPushButton("🔄 توليد التقرير")
         self.generate_button.setMinimumHeight(40)
-        self.generate_button.setStyleSheet("""
-            QPushButton {
-                background-color: #3498db;
-                color: white;
+        self.generate_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Colors.ACCENT_SKY};
+                color: {Colors.TEXT_BRIGHT};
                 font-weight: bold;
                 font-size: 14px;
                 border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #2980b9;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {Colors.ACCENT_SKY_LIGHT};
+            }}
         """)
         buttons_layout.addWidget(self.generate_button)
 
@@ -585,10 +586,10 @@ class ReportsWindow(QMainWindow):
         header_layout = QHBoxLayout()
 
         self.report_title_label = QLabel("اختر نوع التقرير وانقر على 'توليد التقرير'")
-        self.report_title_label.setStyleSheet("""
+        self.report_title_label.setStyleSheet(f"""
             font-size: 18px;
             font-weight: bold;
-            color: #f8fafc;
+            color: {Colors.TEXT_BRIGHT};
             padding: 10px;
         """)
         header_layout.addWidget(self.report_title_label)
@@ -643,19 +644,19 @@ class ReportsWindow(QMainWindow):
 
         # نص الترحيب
         welcome_label = QLabel("مرحباً بك في نظام التقارير")
-        welcome_label.setStyleSheet("""
+        welcome_label.setStyleSheet(f"""
             font-size: 24px;
             font-weight: bold;
-            color: #cbd5e1;
+            color: {Colors.TEXT_PRIMARY};
             margin: 20px;
         """)
         welcome_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(welcome_label)
 
         # تعليمات
-        instructions_label = QLabel("""
+        instructions_label = QLabel(f"""
         <div style="text-align: center; line-height: 1.6;">
-            <p style="font-size: 16px; color: #94a3b8;">
+            <p style="font-size: 16px; color: {Colors.TEXT_SECONDARY};">
                 اختر نوع التقرير من القائمة الجانبية<br>
                 حدد الفترة الزمنية والفلاتر المطلوبة<br>
                 انقر على "توليد التقرير" لعرض النتائج
@@ -679,16 +680,16 @@ class ReportsWindow(QMainWindow):
 
         def create_bento_card(title, widget, icon, color):
             card = QFrame()
-            card.setStyleSheet("""
+            card.setStyleSheet(f"""
                 QFrame {{
-                    background-color: #1e293b;
-                    border: 1px solid #334155;
+                    background-color: {Colors.BG_SURFACE};
+                    border: 1px solid {Colors.BG_RAISED};
                     border-left: 4px solid {color};
                     border-radius: 16px;
                     padding: 15px;
                 }}
                 QFrame:hover {{
-                    background-color: #334155;
+                    background-color: {Colors.BG_RAISED};
                     border: 1px solid {color};
                     border-left: 4px solid {color};
                 }}
@@ -702,13 +703,13 @@ class ReportsWindow(QMainWindow):
 
             t = QLabel(title)
             t.setStyleSheet(
-                "color: #cbd5e1; font-weight: bold; font-size: 14px; background: transparent; border: none;"
+                f"color: {Colors.TEXT_PRIMARY}; font-weight: bold; font-size: 14px; background: transparent; border: none;"
             )
             header.addWidget(t, 1)
             ly.addLayout(header)
 
             widget.setStyleSheet(
-                "color: #f8fafc; font-size: 24px; font-weight: 800; background: transparent; border: none;"
+                f"color: {Colors.TEXT_BRIGHT}; font-size: 24px; font-weight: 800; background: transparent; border: none;"
             )
             ly.addWidget(widget)
             return card
@@ -718,9 +719,9 @@ class ReportsWindow(QMainWindow):
         self.low_stock_value = QLabel("0")
 
         # ترتيب الكروت في شبكة Bento
-        card1 = create_bento_card("مبيعات اليوم", self.today_sales_value, "💰", "#28A745")
-        card2 = create_bento_card("فواتير اليوم", self.today_invoices_value, "🧾", "#007BFF")
-        card3 = create_bento_card("نواقص المخزون", self.low_stock_value, "⚠️", "#DC3545")
+        card1 = create_bento_card("مبيعات اليوم", self.today_sales_value, "💰", Colors.ACCENT_TEAL)
+        card2 = create_bento_card("فواتير اليوم", self.today_invoices_value, "🧾", Colors.ACCENT_SKY)
+        card3 = create_bento_card("نواقص المخزون", self.low_stock_value, "⚠️", Colors.ACCENT_CORAL)
 
         stats_layout.addWidget(card1, 0, 0, 1, 2)  # كبير
         stats_layout.addWidget(card2, 1, 0, 1, 1)
@@ -737,17 +738,17 @@ class ReportsWindow(QMainWindow):
 
         # تبويبات التقرير مع تصميم محسّن
         self.report_tabs = QTabWidget()
-        self.report_tabs.setStyleSheet("""
-            QTabWidget::pane {
-                border: 1px solid #334155;
+        self.report_tabs.setStyleSheet(f"""
+            QTabWidget::pane {{
+                border: 1px solid {Colors.BG_RAISED};
                 border-radius: 8px;
                 background-color: transparent;
                 top: -1px;
-            }
-            QTabBar::tab {
+            }}
+            QTabBar::tab {{
                 background-color: transparent;
-                color: #495057;
-                border: 1px solid #334155;
+                color: {Colors.TEXT_MUTED};
+                border: 1px solid {Colors.BG_RAISED};
                 border-bottom: none;
                 padding: 10px 20px;
                 margin-right: 2px;
@@ -755,15 +756,15 @@ class ReportsWindow(QMainWindow):
                 border-top-right-radius: 8px;
                 font-size: 13px;
                 font-weight: bold;
-            }
-            QTabBar::tab:selected {
+            }}
+            QTabBar::tab:selected {{
                 background-color: transparent;
-                color: #007bff;
-                border-bottom: 2px solid #007bff;
-            }
-            QTabBar::tab:hover:!selected {
-                background-color: #e9ecef;
-            }
+                color: {Colors.ACCENT_SKY};
+                border-bottom: 2px solid {Colors.ACCENT_SKY};
+            }}
+            QTabBar::tab:hover:!selected {{
+                background-color: {Colors.BG_HOVER};
+            }}
         """)
 
         # تبويب الجدول مع ScrollArea محسّن
@@ -778,48 +779,48 @@ class ReportsWindow(QMainWindow):
         table_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         table_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         table_scroll.setFrameShape(QFrame.NoFrame)
-        table_scroll.setStyleSheet("""
-            QScrollArea {
-                border: 1px solid #334155;
+        table_scroll.setStyleSheet(f"""
+            QScrollArea {{
+                border: 1px solid {Colors.BG_RAISED};
                 border-radius: 8px;
                 background-color: transparent;
-            }
-            QScrollBar:vertical {
+            }}
+            QScrollBar:vertical {{
                 background-color: transparent;
                 width: 14px;
                 border-radius: 7px;
                 border: none;
-            }
-            QScrollBar::handle:vertical {
-                background-color: #adb5bd;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: {Colors.BG_ELEVATED};
                 border-radius: 7px;
                 min-height: 40px;
                 margin: 2px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background-color: #868e96;
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background-color: {Colors.BG_HOVER};
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 height: 0px;
-            }
-            QScrollBar:horizontal {
+            }}
+            QScrollBar:horizontal {{
                 background-color: transparent;
                 height: 14px;
                 border-radius: 7px;
                 border: none;
-            }
-            QScrollBar::handle:horizontal {
-                background-color: #adb5bd;
+            }}
+            QScrollBar::handle:horizontal {{
+                background-color: {Colors.BG_ELEVATED};
                 border-radius: 7px;
                 min-width: 40px;
                 margin: 2px;
-            }
-            QScrollBar::handle:horizontal:hover {
-                background-color: #868e96;
-            }
-            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+            }}
+            QScrollBar::handle:horizontal:hover {{
+                background-color: {Colors.BG_HOVER};
+            }}
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
                 width: 0px;
-            }
+            }}
         """)
 
         # الجدول
@@ -833,39 +834,39 @@ class ReportsWindow(QMainWindow):
         self.report_table.verticalHeader().setVisible(True)
         self.report_table.horizontalHeader().setStretchLastSection(True)
         self.report_table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
-        self.report_table.setStyleSheet("""
-            QTableWidget {
+        self.report_table.setStyleSheet(f"""
+            QTableWidget {{
                 border: none;
                 background-color: transparent;
-                gridline-color: #e9ecef;
+                gridline-color: {Colors.BORDER_SUBTLE};
                 font-size: 13px;
-            }
-            QTableWidget::item {
+            }}
+            QTableWidget::item {{
                 padding: 10px 8px;
-                border-bottom: 1px solid #e9ecef;
-            }
-            QTableWidget::item:selected {
-                background-color: #e3f2fd;
-                color: #1976d2;
-            }
-            QTableWidget::item:alternate {
+                border-bottom: 1px solid {Colors.BORDER_SUBTLE};
+            }}
+            QTableWidget::item:selected {{
+                background-color: {Colors.BG_ACTIVE};
+                color: {Colors.ACCENT_SKY};
+            }}
+            QTableWidget::item:alternate {{
                 background-color: transparent;
-            }
-            QHeaderView::section {
-                background-color: #007bff;
-                color: white;
+            }}
+            QHeaderView::section {{
+                background-color: {Colors.ACCENT_SKY};
+                color: {Colors.TEXT_BRIGHT};
                 padding: 12px 8px;
                 border: none;
                 font-weight: bold;
                 font-size: 13px;
-            }
-            QHeaderView::section:hover {
-                background-color: #0056b3;
-            }
-            QTableCornerButton::section {
-                background-color: #007bff;
+            }}
+            QHeaderView::section:hover {{
+                background-color: {Colors.ACCENT_SKY_LIGHT};
+            }}
+            QTableCornerButton::section {{
+                background-color: {Colors.ACCENT_SKY};
                 border: none;
-            }
+            }}
         """)
 
         table_scroll.setWidget(self.report_table)

@@ -41,9 +41,13 @@ class PaymentPlanService:
 
         result = self.db.execute_query(query, (f"{prefix}%",))
 
-        if result and result[0][0]:
-            last_number = result[0][0]
-            sequence = int(last_number.split("-")[-1]) + 1
+        if result:
+            first_row = result[0]
+            last_number = first_row["plan_number"] if isinstance(first_row, dict) else first_row[0]
+            if not last_number:
+                sequence = 1
+            else:
+                sequence = int(last_number.split("-")[-1]) + 1
         else:
             sequence = 1
 

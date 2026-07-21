@@ -1,6 +1,8 @@
 from __future__ import annotations
 import logging
 
+from ...ui.styles.design_tokens import C
+
 from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
@@ -34,7 +36,7 @@ class CycleCountWindow(QMainWindow):
         self.resize(900, 600)
 
         # تطبيق ستايل الهوية الموحدة
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {C.BG_DEEP}; }}")
 
         self._service = service
 

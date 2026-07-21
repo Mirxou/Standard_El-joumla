@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 # -*- coding: utf-8 -*-
 """
 نافذة إدارة الفئات
@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
 )
 
+from src.ui.styles.design_tokens import C
 from src.ui.widgets.base_dialog import BaseDialog
 from src.ui.widgets.quantum_notification import NotificationManager
 
@@ -72,20 +73,20 @@ class CategoryDialog(BaseDialog):
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.table.setColumnWidth(2, 100)
         self.table.setColumnWidth(3, 120)
-        self.table.setStyleSheet("""
-            QTableWidget {
-                border: 1px solid #ddd;
-                gridline-color: #f0f0f0;
-            }
-            QTableWidget::item {
+        self.table.setStyleSheet(f"""
+            QTableWidget {{
+                border: 1px solid {C.BORDER_DEFAULT};
+                gridline-color: {C.TEXT_PRIMARY};
+            }}
+            QTableWidget::item {{
                 padding: 5px;
-            }
-            QHeaderView::section {
-                background-color: #cbd5e1;
-                color: white;
+            }}
+            QHeaderView::section {{
+                background-color: {C.TEXT_PRIMARY};
+                color: {C.TEXT_BRIGHT};
                 padding: 5px;
                 border: none;
-            }
+            }}
         """)
         layout.addWidget(self.table)
 
@@ -161,7 +162,7 @@ class CategoryDialog(BaseDialog):
 
             delete_btn = QPushButton("حذف")
             delete_btn.setMaximumWidth(60)
-            delete_btn.setStyleSheet("background-color: #ef4444; color: white;")
+            delete_btn.setStyleSheet(f"background-color: {C.ACCENT_CORAL}; color: {C.TEXT_BRIGHT};")
             delete_btn.clicked.connect(lambda checked, cat_id=cat["id"]: self.delete_category(cat_id))
 
             actions_layout.addWidget(edit_btn)

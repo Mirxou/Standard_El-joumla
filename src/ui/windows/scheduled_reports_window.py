@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 # -*- coding: utf-8 -*-
 """
 نافذة التقارير المجدولة - Scheduled Reports Window
@@ -41,6 +41,7 @@ from src.services.scheduled_reports_service import (
     ScheduledReportsService,
     ScheduleFrequency,
 )
+from src.ui.styles.design_tokens import C
 from src.utils.logger import setup_logger
 
 
@@ -247,7 +248,7 @@ class ScheduledReportsWindow(QMainWindow):
         self.setMinimumSize(1000, 700)
 
         # تطبيق ستايل الهوية الموحدة
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {C.BG_DEEP}; }}")
 
         self.setup_ui()
         self.load_reports()

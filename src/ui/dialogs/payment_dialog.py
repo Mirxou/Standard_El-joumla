@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 """
 نافذة إدارة المدفوعات - Payment Dialog
 واجهة شاملة لإدارة المدفوعات والحسابات المدينة والدائنة

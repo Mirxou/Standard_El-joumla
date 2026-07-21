@@ -122,6 +122,12 @@ class SearchCriteria:
 class SearchService:
     """خدمة البحث المتقدم"""
 
+    ALLOWED_TABLES = {
+        "sales", "purchases", "products", "customers", "suppliers",
+        "sale_items", "purchase_order_items", "stock_movements",
+        "payments", "quotes", "returns", "journal_entries", "accounts",
+    }
+
     def __init__(self, db: Optional[DatabaseManager] = None, db_manager: Optional[DatabaseManager] = None):
         self.db = db or db_manager or DatabaseManager()
 
@@ -160,6 +166,9 @@ class SearchService:
                 
             if sort_by:
                 sort_col = "p.selling_price" if sort_by in ("price", "selling_price") else "p.name"
+                sort_order = sort_order.upper()
+                if sort_order not in ("ASC", "DESC"):
+                    sort_order = "DESC"
                 query += f" ORDER BY {sort_col} {sort_order}"
             else:
                 query += " ORDER BY p.name"
@@ -393,6 +402,8 @@ class SearchService:
 
     def count_results(self, table: str, criteria_list: List[SearchCriteria]) -> int:
         """عد النتائج الكلي (للصفحات)"""
+        if table not in self.ALLOWED_TABLES:
+            return 0
         where_clause, params = self._build_where_clause(criteria_list)
 
         if where_clause:

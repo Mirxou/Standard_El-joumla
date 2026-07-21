@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ...ui.styles.design_tokens import C
 from ...core.database_manager import DatabaseManager
 from ...models.search import SavedFilter, SearchEntity, SearchQuery
 from ...services.advanced_search_service import AdvancedSearchService
@@ -86,7 +87,7 @@ class AdvancedSearchWindow(QMainWindow):
 
         # تطبيق ستايل الهوية الموحدة
 
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {C.BG_DEEP}; }}")
 
         self.current_query = SearchQuery(entity=SearchEntity.PRODUCTS)
 
@@ -122,15 +123,15 @@ class AdvancedSearchWindow(QMainWindow):
 
         self.joumla_toggle.setCheckable(True)
 
-        self.joumla_toggle.setStyleSheet("""
+        self.joumla_toggle.setStyleSheet(f"""
 
-            QPushButton {
+            QPushButton {{
 
-                background-color: #f0f0f0;
+                background-color: {C.TEXT_PRIMARY};
 
                 color: #333;
 
-                border: 1px solid #ccc;
+                border: 1px solid {C.BORDER_DEFAULT};
 
                 padding: 10px;
 
@@ -138,17 +139,17 @@ class AdvancedSearchWindow(QMainWindow):
 
                 border-radius: 5px;
 
-            }
+            }}
 
-            QPushButton:checked {
+            QPushButton:checked {{
 
-                background-color: #0F172A; /* Dark Blue */
+                background-color: {C.BG_SURFACE}; /* Dark Blue */
 
-                color: #FFD700; /* Gold */
+                color: {C.ACCENT_GOLD}; /* Gold */
 
-                border: 1px solid #FFD700;
+                border: 1px solid {C.ACCENT_GOLD};
 
-            }
+            }}
 
         """)
 
@@ -356,7 +357,7 @@ class AdvancedSearchWindow(QMainWindow):
 
         self.quote_panel.setVisible(False)
 
-        self.quote_panel.setStyleSheet("background-color: #FFFBEB; border: 1px solid #F59E0B;")  # Light Yellow
+        self.quote_panel.setStyleSheet(f"background-color: #FFFBEB; border: 1px solid {C.ACCENT_AMBER};")  # Light Yellow
 
         qp_layout = QVBoxLayout(self.quote_panel)
 
@@ -679,15 +680,15 @@ class AdvancedSearchWindow(QMainWindow):
 
         if checked:
 
-            self.setStyleSheet("""
+            self.setStyleSheet(f"""
 
-                QMainWindow { background-color: #f0f8ff; }
+                QMainWindow {{ background-color: {C.TEXT_PRIMARY}; }}
 
-                QGroupBox { font-weight: bold; color: #003366; }
+                QGroupBox {{ font-weight: bold; color: #003366; }}
 
             """)
 
-            self.results_label.setStyleSheet("color: #0F172A; font-weight: bold; font-size: 16px;")
+            self.results_label.setStyleSheet(f"color: {C.BG_SURFACE}; font-weight: bold; font-size: 16px;")
 
             # Force entity to Products if not already
 

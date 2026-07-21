@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 # -*- coding: utf-8 -*-
 """
 لوحة تحكم المدفوعات - Payment Dashboard
@@ -31,13 +31,14 @@ from PySide6.QtWidgets import (
 )
 
 from src.services.payment_service import PaymentService
+from src.ui.styles.design_tokens import C as Colors
 from src.utils.logger import setup_logger
 
 
 class KPIWidget(QFrame):
     """عنصر واجهة لعرض مؤشر أداء رئيسي"""
 
-    def __init__(self, title: str, value: str, change: str = "", color: str = "#3498db"):
+    def __init__(self, title: str, value: str, change: str = "", color: str = Colors.ACCENT_SKY):
         super().__init__()
         self.setFrameStyle(QFrame.StyledPanel)
         self.setProperty("class", "kpi-card")
@@ -47,7 +48,7 @@ class KPIWidget(QFrame):
 
         # العنوان
         title_label = QLabel(title)
-        title_label.setStyleSheet("font-size: 12px; color: #94a3b8; font-weight: bold;")
+        title_label.setStyleSheet(f"font-size: 12px; color: {Colors.TEXT_SECONDARY}; font-weight: bold;")
         title_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(title_label)
 
@@ -61,7 +62,7 @@ class KPIWidget(QFrame):
         self.change_label = None
         if change:
             self.change_label = QLabel(change)
-            change_color = "#27ae60" if change.startswith("+") else "#e74c3c"
+            change_color = Colors.ACCENT_TEAL if change.startswith("+") else Colors.ACCENT_CORAL
             self.change_label.setStyleSheet(f"font-size: 10px; color: {change_color};")
             self.change_label.setAlignment(Qt.AlignCenter)
             layout.addWidget(self.change_label)
@@ -82,7 +83,7 @@ class ChartWidget(QFrame):
 
         # العنوان
         title_label = QLabel(title)
-        title_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #f8fafc; margin-bottom: 10px;")
+        title_label.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {Colors.TEXT_BRIGHT}; margin-bottom: 10px;")
         title_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(title_label)
 
@@ -200,7 +201,7 @@ class PaymentDashboard(QMainWindow):
         self.setup_styles()
 
         # تطبيق ستايل الهوية الموحدة
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {Colors.BG_VOID}; }}")
 
         # إعداد عامل تحديث البيانات
         if self.payment_service:
@@ -261,7 +262,7 @@ class PaymentDashboard(QMainWindow):
 
         # عنوان اللوحة
         title_label = QLabel("📊 لوحة تحكم المدفوعات")
-        title_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #f8fafc;")
+        title_label.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {Colors.TEXT_BRIGHT};")
         layout.addWidget(title_label)
 
         layout.addStretch()
@@ -310,12 +311,12 @@ class PaymentDashboard(QMainWindow):
         self.kpi_widgets = {}
 
         kpi_configs = [
-            ("إجمالي المدفوعات", "0 د.ج", "", "#3498db"),
-            ("عدد المعاملات", "0", "", "#27ae60"),
-            ("متوسط قيمة المعاملة", "0 د.ج", "", "#f39c12"),
-            ("معدل التحصيل", "0%", "", "#9b59b6"),
-            ("المبالغ المستحقة", "0 د.ج", "", "#e74c3c"),
-            ("التدفق النقدي", "0 د.ج", "", "#1abc9c"),
+            ("إجمالي المدفوعات", "0 د.ج", "", Colors.ACCENT_SKY),
+            ("عدد المعاملات", "0", "", Colors.ACCENT_TEAL),
+            ("متوسط قيمة المعاملة", "0 د.ج", "", Colors.ACCENT_AMBER),
+            ("معدل التحصيل", "0%", "", Colors.BORDER_GOLD_GLOW),
+            ("المبالغ المستحقة", "0 د.ج", "", Colors.ACCENT_CORAL),
+            ("التدفق النقدي", "0 د.ج", "", Colors.ACCENT_TEAL),
         ]
 
         for i, (title, value, change, color) in enumerate(kpi_configs):
@@ -553,7 +554,7 @@ class PaymentDashboard(QMainWindow):
             return
         widget.value_label.setText(value_text)
         if change_text is not None and widget.change_label is not None:
-            change_color = "#27ae60" if change_text.startswith("+") else "#e74c3c"
+            change_color = Colors.ACCENT_TEAL if change_text.startswith("+") else Colors.ACCENT_CORAL
             widget.change_label.setText(change_text)
             widget.change_label.setStyleSheet(f"font-size: 10px; color: {change_color};")
 

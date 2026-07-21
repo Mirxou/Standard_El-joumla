@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
 from ...core.database_manager import DatabaseManager
 from ...models.report import ChartType, Report, ReportFilter, ReportPeriod, ReportType
 from ...services.report_generator import ReportGenerator
+from ...ui.styles.design_tokens import C as Colors
 
 
 class AdvancedReportsWindow(QMainWindow):
@@ -60,7 +61,7 @@ class AdvancedReportsWindow(QMainWindow):
         self.setMinimumSize(1400, 850)
 
         # تطبيق ستايل الهوية الموحدة
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {Colors.BG_VOID}; }}")
 
         self._setup_ui()
         self._connect_signals()
@@ -108,7 +109,7 @@ class AdvancedReportsWindow(QMainWindow):
         title_font.setBold(True)
         title.setFont(title_font)
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("color: #1976D2; padding: 10px;")
+        title.setStyleSheet(f"color: {Colors.ACCENT_SKY}; padding: 10px;")
         layout.addWidget(title)
 
         # الفلاتر
@@ -128,19 +129,19 @@ class AdvancedReportsWindow(QMainWindow):
     def _create_filters_section(self) -> QGroupBox:
         """إنشاء قسم الفلاتر"""
         group = QGroupBox("⚙️ إعدادات التقرير والفلاتر")
-        group.setStyleSheet("""
-            QGroupBox {
+        group.setStyleSheet(f"""
+            QGroupBox {{
                 font-weight: bold;
-                border: 2px solid #2196F3;
+                border: 2px solid {Colors.ACCENT_SKY};
                 border-radius: 6px;
                 margin-top: 10px;
                 padding: 15px;
-            }
-            QGroupBox::title {
+            }}
+            QGroupBox::title {{
                 subcontrol-origin: margin;
                 left: 10px;
                 padding: 0 5px;
-            }
+            }}
         """)
 
         layout = QVBoxLayout(group)
@@ -215,24 +216,22 @@ class AdvancedReportsWindow(QMainWindow):
         self.generate_btn = QPushButton("🔄 توليد التقرير")
         self.generate_btn.setMinimumWidth(180)
         self.generate_btn.setMinimumHeight(40)
-        self.generate_btn.setStyleSheet("""
-            QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #2196F3, stop:1 #1976D2);
-                color: white;
+        self.generate_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {Colors.GRADIENT_SKY};
+                color: {Colors.TEXT_BRIGHT};
                 font-weight: bold;
                 font-size: 14px;
                 padding: 10px;
                 border-radius: 6px;
                 border: none;
-            }
-            QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #1976D2, stop:1 #1565C0);
-            }
-            QPushButton:pressed {
-                background: #0D47A1;
-            }
+            }}
+            QPushButton:hover {{
+                background: {Colors.GRADIENT_SKY};
+            }}
+            QPushButton:pressed {{
+                background: {Colors.ACCENT_SKY};
+            }}
         """)
         row3.addWidget(self.generate_btn)
 
@@ -252,18 +251,18 @@ class AdvancedReportsWindow(QMainWindow):
         # الجدول
         self.report_table = QTableWidget()
         self.report_table.setAlternatingRowColors(True)
-        self.report_table.setStyleSheet("""
-            QTableWidget {
-                border: 1px solid #ddd;
+        self.report_table.setStyleSheet(f"""
+            QTableWidget {{
+                border: 1px solid {Colors.BORDER_DEFAULT};
                 border-radius: 4px;
-            }
-            QHeaderView::section {
-                background-color: #2196F3;
-                color: white;
+            }}
+            QHeaderView::section {{
+                background-color: {Colors.ACCENT_SKY};
+                color: {Colors.TEXT_BRIGHT};
                 padding: 8px;
                 border: none;
                 font-weight: bold;
-            }
+            }}
         """)
         self.report_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         layout.addWidget(self.report_table)
@@ -290,43 +289,43 @@ class AdvancedReportsWindow(QMainWindow):
         """إنشاء قسم الإجراءات"""
         layout = QHBoxLayout()
 
-        btn_style = """
-            QPushButton {
+        btn_style = f"""
+            QPushButton {{
                 padding: 10px 20px;
                 font-size: 13px;
                 font-weight: bold;
                 border-radius: 5px;
                 border: none;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
                 opacity: 0.9;
-            }
-            QPushButton:disabled {
-                background-color: #CCCCCC;
-                color: #666666;
-            }
+            }}
+            QPushButton:disabled {{
+                background-color: {Colors.TEXT_GHOST};
+                color: {Colors.TEXT_MUTED};
+            }}
         """
 
         self.export_pdf_btn = QPushButton("📄 تصدير PDF")
-        self.export_pdf_btn.setStyleSheet(btn_style + """
-            QPushButton { background-color: #F44336; color: white; }
-            QPushButton:hover { background-color: #D32F2F; }
+        self.export_pdf_btn.setStyleSheet(btn_style + f"""
+            QPushButton {{ background-color: {Colors.ACCENT_CORAL}; color: {Colors.TEXT_BRIGHT}; }}
+            QPushButton:hover {{ background-color: {Colors.ACCENT_CORAL_LIGHT}; }}
         """)
         self.export_pdf_btn.setEnabled(False)
         layout.addWidget(self.export_pdf_btn)
 
         self.export_excel_btn = QPushButton("📊 تصدير Excel")
-        self.export_excel_btn.setStyleSheet(btn_style + """
-            QPushButton { background-color: #4CAF50; color: white; }
-            QPushButton:hover { background-color: #388E3C; }
+        self.export_excel_btn.setStyleSheet(btn_style + f"""
+            QPushButton {{ background-color: {Colors.ACCENT_TEAL}; color: {Colors.TEXT_BRIGHT}; }}
+            QPushButton:hover {{ background-color: {Colors.ACCENT_TEAL_LIGHT}; }}
         """)
         self.export_excel_btn.setEnabled(False)
         layout.addWidget(self.export_excel_btn)
 
         self.print_btn = QPushButton("🖨️ طباعة")
-        self.print_btn.setStyleSheet(btn_style + """
-            QPushButton { background-color: #FF9800; color: white; }
-            QPushButton:hover { background-color: #F57C00; }
+        self.print_btn.setStyleSheet(btn_style + f"""
+            QPushButton {{ background-color: {Colors.ACCENT_AMBER}; color: {Colors.TEXT_INVERSE}; }}
+            QPushButton:hover {{ background-color: {Colors.ACCENT_AMBER_LIGHT}; }}
         """)
         self.print_btn.setEnabled(False)
         layout.addWidget(self.print_btn)
@@ -334,9 +333,9 @@ class AdvancedReportsWindow(QMainWindow):
         layout.addStretch()
 
         self.close_btn = QPushButton("❌ إغلاق")
-        self.close_btn.setStyleSheet(btn_style + """
-            QPushButton { background-color: #757575; color: white; }
-            QPushButton:hover { background-color: #616161; }
+        self.close_btn.setStyleSheet(btn_style + f"""
+            QPushButton {{ background-color: {Colors.TEXT_MUTED}; color: {Colors.TEXT_BRIGHT}; }}
+            QPushButton:hover {{ background-color: {Colors.BG_HOVER}; }}
         """)
         layout.addWidget(self.close_btn)
 
@@ -441,22 +440,22 @@ class AdvancedReportsWindow(QMainWindow):
 
         if self.current_report.sales_summary:
             s = self.current_report.sales_summary
-            self._add_summary_card("إجمالي المبيعات", f"{s.total_sales:,.2f} د.ج", "#4CAF50")
-            self._add_summary_card("عدد الفواتير", str(s.total_invoices), "#2196F3")
-            self._add_summary_card("الأرباح", f"{s.total_profit:,.2f} د.ج", "#FF9800")
-            self._add_summary_card("هامش الربح", f"{s.average_profit_margin:.1f}%", "#9C27B0")
+            self._add_summary_card("إجمالي المبيعات", f"{s.total_sales:,.2f} د.ج", Colors.ACCENT_TEAL)
+            self._add_summary_card("عدد الفواتير", str(s.total_invoices), Colors.ACCENT_SKY)
+            self._add_summary_card("الأرباح", f"{s.total_profit:,.2f} د.ج", Colors.ACCENT_AMBER)
+            self._add_summary_card("هامش الربح", f"{s.average_profit_margin:.1f}%", Colors.ACCENT_GOLD)
 
         elif self.current_report.inventory_summary:
             s = self.current_report.inventory_summary
-            self._add_summary_card("المنتجات", str(s.total_products), "#4CAF50")
-            self._add_summary_card("الكمية", f"{s.total_quantity:,.0f}", "#2196F3")
-            self._add_summary_card("القيمة", f"{s.total_value:,.2f} د.ج", "#FF9800")
+            self._add_summary_card("المنتجات", str(s.total_products), Colors.ACCENT_TEAL)
+            self._add_summary_card("الكمية", f"{s.total_quantity:,.0f}", Colors.ACCENT_SKY)
+            self._add_summary_card("القيمة", f"{s.total_value:,.2f} د.ج", Colors.ACCENT_AMBER)
 
         elif self.current_report.financial_summary:
             s = self.current_report.financial_summary
-            self._add_summary_card("الإيرادات", f"{s.total_revenue:,.2f} د.ج", "#4CAF50")
-            self._add_summary_card("المصروفات", f"{s.total_expenses:,.2f} د.ج", "#F44336")
-            self._add_summary_card("صافي الدخل", f"{s.net_income:,.2f} د.ج", "#2196F3")
+            self._add_summary_card("الإيرادات", f"{s.total_revenue:,.2f} د.ج", Colors.ACCENT_TEAL)
+            self._add_summary_card("المصروفات", f"{s.total_expenses:,.2f} د.ج", Colors.ACCENT_CORAL)
+            self._add_summary_card("صافي الدخل", f"{s.net_income:,.2f} د.ج", Colors.ACCENT_SKY)
 
     def _add_summary_card(self, title: str, value: str, color: str):
         """إضافة بطاقة ملخص"""
@@ -533,9 +532,9 @@ class AdvancedReportsWindow(QMainWindow):
 
             profit_item = QTableWidgetItem(f"{line.profit:,.2f}")
             if line.profit > 0:
-                profit_item.setForeground(QColor("#4CAF50"))
+                profit_item.setForeground(QColor(Colors.ACCENT_TEAL))
             elif line.profit < 0:
-                profit_item.setForeground(QColor("#F44336"))
+                profit_item.setForeground(QColor(Colors.ACCENT_CORAL))
             self.report_table.setItem(row, 9, profit_item)
 
     def _display_inventory_data(self):
@@ -584,9 +583,9 @@ class AdvancedReportsWindow(QMainWindow):
 
             balance_item = QTableWidgetItem(f"{line.closing_balance:,.2f}")
             if line.closing_balance > 0:
-                balance_item.setForeground(QColor("#4CAF50"))
+                balance_item.setForeground(QColor(Colors.ACCENT_TEAL))
             elif line.closing_balance < 0:
-                balance_item.setForeground(QColor("#F44336"))
+                balance_item.setForeground(QColor(Colors.ACCENT_CORAL))
             self.report_table.setItem(row, 5, balance_item)
 
     def _display_charts(self):

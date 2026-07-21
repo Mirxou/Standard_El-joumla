@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QPainter
 from PySide6.QtWidgets import QLabel, QProgressBar, QPushButton, QVBoxLayout, QWidget
 
+from src.ui.styles.design_tokens import C
 from src.utils.logger import setup_logger
 
 
@@ -43,33 +44,33 @@ class BlockingOverlay(QWidget):
         # رسالة
         self.message_label = QLabel(self.message)
         self.message_label.setAlignment(Qt.AlignCenter)
-        self.message_label.setStyleSheet("""
-            QLabel {
-                color: #F0F2F5;
+        self.message_label.setStyleSheet(f"""
+            QLabel {{
+                color: {C.TEXT_PRIMARY};
                 font-size: 16pt;
                 font-weight: bold;
                 background-color: transparent;
                 padding: 20px;
-            }
+            }}
         """)
         layout.addWidget(self.message_label)
 
         # Progress Bar
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 0)  # Indeterminate
-        self.progress_bar.setStyleSheet("""
-            QProgressBar {
-                border: 1px solid #2A3150;
+        self.progress_bar.setStyleSheet(f"""
+            QProgressBar {{
+                border: 1px solid {C.BORDER_DEFAULT};
                 border-radius: 5px;
                 text-align: center;
-                color: #F0F2F5;
-                background-color: #202640;
+                color: {C.TEXT_PRIMARY};
+                background-color: {C.BG_RAISED};
                 height: 30px;
-            }
-            QProgressBar::chunk {
-                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #A88A3E, stop:1 #E8C96A);
+            }}
+            QProgressBar::chunk {{
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {C.ACCENT_GOLD_DARK}, stop:1 {C.ACCENT_GOLD_LIGHT});
                 border-radius: 3px;
-            }
+            }}
         """)
         layout.addWidget(self.progress_bar)
 
@@ -79,18 +80,18 @@ class BlockingOverlay(QWidget):
         if self.show_skip:
             skip_btn = QPushButton("تخطي")
             skip_btn.clicked.connect(self.skip_requested.emit)
-            skip_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #202640;
-                    color: #F0F2F5;
-                    border: 1px solid #2A3150;
+            skip_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {C.BG_RAISED};
+                    color: {C.TEXT_PRIMARY};
+                    border: 1px solid {C.BORDER_DEFAULT};
                     border-radius: 8px;
                     padding: 10px;
                     min-width: 120px;
-                }
-                QPushButton:hover {
-                    background-color: #323C62;
-                }
+                }}
+                QPushButton:hover {{
+                    background-color: {C.BG_HOVER};
+                }}
             """)
             button_layout.addWidget(skip_btn)
 

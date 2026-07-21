@@ -34,6 +34,7 @@ project_root = Path(__file__).parent.parent.parent.parent
 
 from src.core.database_manager import DatabaseManager
 from src.services.ai_prediction_service import AIPredictionService
+from src.ui.styles.design_tokens import C
 from src.utils.logger import setup_logger
 
 
@@ -85,7 +86,7 @@ class AIPredictionsWindow(QMainWindow):
         self.setMinimumSize(1200, 800)
 
         # تطبيق ستايل الهوية الموحدة
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {C.BG_DEEP}; }}")
 
         self.prediction_worker = None
 

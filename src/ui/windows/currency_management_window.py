@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 # -*- coding: utf-8 -*-
 """
 نافذة إدارة العملات - Currency Management Window
@@ -39,6 +39,7 @@ project_root = Path(__file__).parent.parent.parent.parent
 from src.core.database_manager import DatabaseManager
 from src.models.currency import Currency, CurrencyManager, ExchangeRate
 from src.services.exchange_rate_service import ExchangeRateService
+from src.ui.styles.design_tokens import C
 from src.utils.logger import setup_logger
 
 
@@ -314,7 +315,7 @@ class CurrencyManagementWindow(QMainWindow):
         self.setMinimumSize(1200, 700)
 
         # تطبيق ستايل الهوية الموحدة
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {C.BG_DEEP}; }}")
 
         self.setup_ui()
         self.load_currencies()

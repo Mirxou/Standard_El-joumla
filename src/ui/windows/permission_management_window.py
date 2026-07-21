@@ -31,6 +31,7 @@ from ...core.database_manager import DatabaseManager
 from ...models.permission import ResourceType
 from ...services.audit_service import AuditService
 from ...services.permission_service import PermissionService
+from ...ui.styles.design_tokens import C as Colors
 
 
 class PermissionManagementWindow(QMainWindow):
@@ -51,18 +52,18 @@ class PermissionManagementWindow(QMainWindow):
         self.setMinimumSize(1200, 700)
 
         # تطبيق ستايل لضمان الخلفية
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #020617;
-            }
-            QTabWidget::pane {
-                background-color: #0f172a;
-                border: 1px solid #334155;
-            }
-            QTabBar::tab:selected {
-                background-color: #0f172a;
-                color: #00f3ff;
-            }
+        self.setStyleSheet(f"""
+            QMainWindow {{
+                background-color: {Colors.BG_VOID};
+            }}
+            QTabWidget::pane {{
+                background-color: {Colors.BG_DEEP};
+                border: 1px solid {Colors.BG_RAISED};
+            }}
+            QTabBar::tab:selected {{
+                background-color: {Colors.BG_DEEP};
+                color: {Colors.ACCENT_TEAL_LIGHT};
+            }}
         """)
 
         self.init_ui()
@@ -82,11 +83,11 @@ class PermissionManagementWindow(QMainWindow):
         header_layout.setContentsMargins(0, 0, 0, 10)
 
         title = QLabel("🔐 إدارة الصلاحيات والتدقيق المتقدمة")
-        title.setStyleSheet("font-size: 22px; font-weight: bold; color: #00f3ff; background: transparent;")
+        title.setStyleSheet(f"font-size: 22px; font-weight: bold; color: {Colors.ACCENT_TEAL_LIGHT}; background: transparent;")
         header_layout.addWidget(title)
 
         desc = QLabel("إدارة أدوار المستخدمين، منح الصلاحيات، وتتبع النشاطات الحساسة في النظام")
-        desc.setStyleSheet("font-size: 13px; color: #94a3b8; background: transparent;")
+        desc.setStyleSheet(f"font-size: 13px; color: {Colors.TEXT_SECONDARY}; background: transparent;")
         header_layout.addWidget(desc)
 
         layout.addWidget(header)

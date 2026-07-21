@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 # -*- coding: utf-8 -*-
 """
 نافذة إدارة المرتجعات
@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ...ui.styles.design_tokens import C
 from ...models.return_invoice import (
     RefundMethod,
     ReturnInvoice,
@@ -63,7 +64,7 @@ class ReturnsWindow(QMainWindow):
         self.setGeometry(100, 100, 1400, 800)
 
         # تطبيق ستايل الهوية الموحدة
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {C.BG_DEEP}; }}")
 
         self._create_widgets()
         self._setup_connections()
@@ -515,14 +516,14 @@ class ReturnsWindow(QMainWindow):
             ReturnStatus.COMPLETED: "#B2DFDB",
             ReturnStatus.CANCELLED: "#CFD8DC",
         }
-        return colors.get(status, "#f8fafc")
+        return colors.get(status, C.TEXT_BRIGHT)
 
     def _get_status_text_color(self, status: ReturnStatus) -> str:
         """الحصول على لون نص الحالة"""
         colors = {
-            ReturnStatus.PENDING: "#F57C00",
-            ReturnStatus.APPROVED: "#388E3C",
-            ReturnStatus.REJECTED: "#D32F2F",
+            ReturnStatus.PENDING: C.ACCENT_AMBER,
+            ReturnStatus.APPROVED: C.ACCENT_TEAL,
+            ReturnStatus.REJECTED: C.ACCENT_CORAL,
             ReturnStatus.COMPLETED: "#00796B",
             ReturnStatus.CANCELLED: "#616161",
         }

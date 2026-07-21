@@ -28,6 +28,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from src.ui.styles.design_tokens import C
+
 from src.ui.items.draggable_image_item import DraggableImageItem
 from src.ui.items.draggable_text_item import DraggableTextItem
 
@@ -44,7 +46,7 @@ class TemplateEditorWindow(QMainWindow):
         self.setMinimumSize(1280, 720)
 
         # تطبيق ستايل الهوية الموحدة
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {C.BG_DEEP}; }}")
 
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
 

@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 """
 نافذة إضافة/تعديل المنتجات - Product Dialog
 واجهة شاملة لإدارة المنتجات مع دعم اللغة العربية
@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from src.ui.styles.design_tokens import C
 from src.ui.widgets.base_dialog import BaseDialog
 
 from ...core.local_database_manager import LocalDatabaseManager
@@ -286,12 +287,12 @@ class ProductDialog(BaseDialog):
     def setup_header(self, layout: QVBoxLayout):
         """إعداد منطقة الرأس"""
         header_frame = QFrame()
-        header_frame.setStyleSheet("""
-            QFrame {
-                background-color: #06b6d4;
+        header_frame.setStyleSheet(f"""
+            QFrame {{
+                background-color: {C.ACCENT_SKY};
                 border-radius: 8px;
                 padding: 15px;
-            }
+            }}
         """)
 
         header_layout = QHBoxLayout(header_frame)
@@ -319,7 +320,7 @@ class ProductDialog(BaseDialog):
 
         if self.is_edit_mode and self.product:
             subtitle_label = QLabel(self.i18n.get_message("product_name_label", name=self.product.name))
-            subtitle_label.setStyleSheet("font-size: 12px; color: #cbd5e1;")
+            subtitle_label.setStyleSheet("font-size: 12px; color: {C.TEXT_PRIMARY};")
             info_layout.addWidget(subtitle_label)
 
         header_layout.addLayout(info_layout)
@@ -359,13 +360,13 @@ class ProductDialog(BaseDialog):
         self.image_label = QLabel()
         self.image_label.setFixedSize(200, 200)
         self.image_label.setAlignment(Qt.AlignCenter)
-        self.image_label.setStyleSheet("""
-            QLabel {
-                border: 2px dashed #bdc3c7;
+        self.image_label.setStyleSheet(f"""
+            QLabel {{
+                border: 2px dashed {C.BORDER_DEFAULT};
                 border-radius: 10px;
-                background-color: #0f172a;
-                color: #94a3b8;
-            }
+                background-color: {C.BG_DEEP};
+                color: {C.TEXT_SECONDARY};
+            }}
         """)
         self.image_label.setText(self.i18n.get_message("no_image"))
         self.image_label.mousePressEvent = self.select_image
@@ -415,19 +416,19 @@ class ProductDialog(BaseDialog):
 
         # معلومات الربح
         self.profit_info_label = QLabel(self.i18n.get_message("profit_margin_label", percent="0.00"))
-        self.profit_info_label.setStyleSheet("font-weight: bold; color: #94a3b8;")
+        self.profit_info_label.setStyleSheet(f"font-weight: bold; color: {C.TEXT_SECONDARY};")
         info_layout.addWidget(self.profit_info_label)
 
         # معلومات المخزون
         self.stock_info_label = QLabel(self.i18n.get_message("stock_status_good"))
-        self.stock_info_label.setStyleSheet("color: #10b981;")
+        self.stock_info_label.setStyleSheet(f"color: {C.ACCENT_TEAL};")
         info_layout.addWidget(self.stock_info_label)
 
         # آخر تحديث
         if self.is_edit_mode and self.product:
             last_update = getattr(self.product, "updated_at", "غير محدد")
             self.last_update_label = QLabel(self.i18n.get_message("last_update", date=str(last_update)))
-            self.last_update_label.setStyleSheet("font-size: 10px; color: #94a3b8;")
+            self.last_update_label.setStyleSheet(f"font-size: 10px; color: {C.TEXT_SECONDARY};")
             info_layout.addWidget(self.last_update_label)
 
         layout.addWidget(self.quick_info_widget)
@@ -521,7 +522,7 @@ class ProductDialog(BaseDialog):
 
         # هامش الربح (للعرض فقط)
         self.profit_margin_label = QLabel("0.00%")
-        self.profit_margin_label.setStyleSheet("font-weight: bold; color: #10b981;")
+        self.profit_margin_label.setStyleSheet(f"font-weight: bold; color: {C.ACCENT_TEAL};")
         pricing_layout.addRow(f"{self.i18n.get_message('profit_margin')}:", self.profit_margin_label)
 
         layout.addWidget(pricing_group)
@@ -686,16 +687,16 @@ class ProductDialog(BaseDialog):
         self.save_button = QPushButton(self.i18n.get_message("save"))
         self.save_button.setMinimumHeight(40)
         self.save_button.setDefault(True)
-        self.save_button.setStyleSheet("""
-            QPushButton {
-                background-color: #10b981;
-                color: white;
+        self.save_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {C.ACCENT_TEAL};
+                color: {C.TEXT_INVERSE};
                 font-weight: bold;
                 border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #229954;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {C.ACCENT_TEAL_DARK};
+            }}
         """)
         buttons_layout.addWidget(self.save_button)
 
@@ -735,112 +736,112 @@ class ProductDialog(BaseDialog):
 
     def setup_styles(self):
         """إعداد الأنماط"""
-        self.setStyleSheet("""
-            QDialog {
-                background-color: #0f172a;
-            }
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: {C.BG_DEEP};
+            }}
 
-            QTabWidget::pane {
-                border: 1px solid #ddd;
+            QTabWidget::pane {{
+                border: 1px solid {C.BORDER_DEFAULT};
                 border-radius: 5px;
-                background-color: #1e293b;
-            }
+                background-color: {C.BG_SURFACE};
+            }}
 
-            QTabBar::tab {
-                background-color: #e9ecef;
-                border: 1px solid #ddd;
+            QTabBar::tab {{
+                background-color: {C.TEXT_BRIGHT};
+                border: 1px solid {C.BORDER_DEFAULT};
                 padding: 8px 16px;
                 margin-right: 2px;
                 border-top-left-radius: 5px;
                 border-top-right-radius: 5px;
-            }
+            }}
 
-            QTabBar::tab:selected {
-                background-color: #1e293b;
-                border-bottom-color: white;
-            }
+            QTabBar::tab:selected {{
+                background-color: {C.BG_SURFACE};
+                border-bottom-color: {C.TEXT_BRIGHT};
+            }}
 
-            QGroupBox {
+            QGroupBox {{
                 font-weight: bold;
-                border: 2px solid #ddd;
+                border: 2px solid {C.BORDER_DEFAULT};
                 border-radius: 5px;
                 margin-top: 10px;
                 padding-top: 10px;
-            }
+            }}
 
-            QGroupBox::title {
+            QGroupBox::title {{
                 subcontrol-origin: margin;
                 left: 10px;
                 padding: 0 5px 0 5px;
-            }
+            }}
 
-            QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QDateEdit {
-                border: 2px solid #ddd;
+            QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QDateEdit {{
+                border: 2px solid {C.BORDER_DEFAULT};
                 border-radius: 5px;
                 padding: 5px;
                 font-size: 12px;
                 min-height: 25px;
-            }
+            }}
 
-            QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus, QDateEdit:focus {
-                border-color: #06b6d4;
-            }
+            QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus, QDateEdit:focus {{
+                border-color: {C.ACCENT_SKY};
+            }}
 
-            QTextEdit {
-                border: 2px solid #ddd;
+            QTextEdit {{
+                border: 2px solid {C.BORDER_DEFAULT};
                 border-radius: 5px;
                 padding: 5px;
                 font-size: 12px;
-            }
+            }}
 
-            QTextEdit:focus {
-                border-color: #06b6d4;
-            }
+            QTextEdit:focus {{
+                border-color: {C.ACCENT_SKY};
+            }}
 
-            QPushButton {
-                background-color: #06b6d4;
-                color: white;
+            QPushButton {{
+                background-color: {C.ACCENT_SKY};
+                color: {C.TEXT_INVERSE};
                 border: none;
                 border-radius: 5px;
                 padding: 8px 16px;
                 font-size: 12px;
                 font-weight: bold;
-            }
+            }}
 
-            QPushButton:hover {
-                background-color: #2980b9;
-            }
+            QPushButton:hover {{
+                background-color: {C.ACCENT_SKY};
+            }}
 
-            QPushButton:pressed {
-                background-color: #21618c;
-            }
+            QPushButton:pressed {{
+                background-color: #0EA5E9;
+            }}
 
-            QPushButton:disabled {
-                background-color: #bdc3c7;
-                color: #94a3b8;
-            }
+            QPushButton:disabled {{
+                background-color: {C.TEXT_SECONDARY};
+                color: {C.TEXT_SECONDARY};
+            }}
 
-            QCheckBox {
+            QCheckBox {{
                 font-size: 12px;
                 spacing: 5px;
-            }
+            }}
 
-            QCheckBox::indicator {
+            QCheckBox::indicator {{
                 width: 18px;
                 height: 18px;
-            }
+            }}
 
-            QCheckBox::indicator:unchecked {
-                border: 2px solid #bdc3c7;
+            QCheckBox::indicator:unchecked {{
+                border: 2px solid {C.TEXT_SECONDARY};
                 border-radius: 3px;
-                background-color: #1e293b;
-            }
+                background-color: {C.BG_SURFACE};
+            }}
 
-            QCheckBox::indicator:checked {
-                border: 2px solid #10b981;
+            QCheckBox::indicator:checked {{
+                border: 2px solid {C.ACCENT_TEAL};
                 border-radius: 3px;
-                background-color: #10b981;
-            }
+                background-color: {C.ACCENT_TEAL};
+            }}
         """)
 
     def load_data(self):
@@ -1016,16 +1017,16 @@ class ProductDialog(BaseDialog):
 
                 # تغيير لون النص حسب هامش الربح
                 if profit_margin < 10:
-                    color = "#ef4444"  # أحمر
+                    color = C.ACCENT_CORAL
                 elif profit_margin < 20:
-                    color = "#f59e0b"  # برتقالي
+                    color = C.ACCENT_AMBER
                 else:
-                    color = "#10b981"  # أخضر
+                    color = C.ACCENT_TEAL
 
                 self.profit_margin_label.setStyleSheet(f"font-weight: bold; color: {color};")
             else:
                 self.profit_margin_label.setText(self.i18n.get_message("profit_margin_label", percent="0.00"))
-                self.profit_margin_label.setStyleSheet("font-weight: bold; color: #94a3b8;")
+                self.profit_margin_label.setStyleSheet(f"font-weight: bold; color: {C.TEXT_SECONDARY};")
 
         except Exception as e:
             self.logger.error(f"خطأ في حساب هامش الربح: {str(e)}")
@@ -1755,14 +1756,14 @@ class ProductDialog(BaseDialog):
 
                 # تلوين حسب الهامش
                 if margin > 20:
-                    self.profit_info_label.setStyleSheet("font-weight: bold; color: #10b981;")
+                    self.profit_info_label.setStyleSheet(f"font-weight: bold; color: {C.ACCENT_TEAL};")
                 elif margin > 10:
-                    self.profit_info_label.setStyleSheet("font-weight: bold; color: #f59e0b;")
+                    self.profit_info_label.setStyleSheet(f"font-weight: bold; color: {C.ACCENT_AMBER};")
                 else:
-                    self.profit_info_label.setStyleSheet("font-weight: bold; color: #ef4444;")
+                    self.profit_info_label.setStyleSheet(f"font-weight: bold; color: {C.ACCENT_CORAL};")
             else:
                 self.profit_info_label.setText("هامش الربح: 0.00%")
-                self.profit_info_label.setStyleSheet("font-weight: bold; color: #94a3b8;")
+                self.profit_info_label.setStyleSheet(f"font-weight: bold; color: {C.TEXT_SECONDARY};")
 
             # تحديث معلومات المخزون
             if hasattr(self, "stock_info_label"):
@@ -1771,13 +1772,13 @@ class ProductDialog(BaseDialog):
 
                 if current_stock <= min_stock and min_stock > 0:
                     self.stock_info_label.setText("حالة المخزون: منخفض")
-                    self.stock_info_label.setStyleSheet("color: #ef4444;")
+                    self.stock_info_label.setStyleSheet(f"color: {C.ACCENT_CORAL};")
                 elif current_stock <= min_stock * 2 and min_stock > 0:
                     self.stock_info_label.setText("حالة المخزون: متوسط")
-                    self.stock_info_label.setStyleSheet("color: #f59e0b;")
+                    self.stock_info_label.setStyleSheet(f"color: {C.ACCENT_AMBER};")
                 else:
                     self.stock_info_label.setText("حالة المخزون: جيد")
-                    self.stock_info_label.setStyleSheet("color: #10b981;")
+                    self.stock_info_label.setStyleSheet(f"color: {C.ACCENT_TEAL};")
 
         except Exception as e:
             self.logger.error(f"خطأ في تحديث المعلومات السريعة: {str(e)}")

@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 # -*- coding: utf-8 -*-
 """
 النافذة الرئيسية - Main Window
@@ -94,6 +94,7 @@ from src.ui.views.app_launcher import AppLauncher  # System 4.0 Launcher
 from src.ui.widgets.animated_table import AnimatedTableWidget
 from src.ui.widgets.custom_title_bar import CustomTitleBar
 from src.ui.widgets.quantum_notification import NotificationManager  # Quantum Toasts
+from src.ui.styles.design_tokens import C as Colors
 
 # Import New Vision 2030 Windows
 from src.ui.windows.ai_predictions_window import AIPredictionsWindow
@@ -431,9 +432,12 @@ class SalesDataLoaderThread(QThread):
                 query += " LIMIT ? OFFSET ?"
                 params.extend([self.limit, self.offset])
 
-            df = pd.read_sql_query(query, conn, params=params if params else None)
-            df["actions"] = ""  # إضافة عمود الإجراءات
-            self.data_loaded.emit(df)
+            if PANDAS_AVAILABLE:
+                df = pd.read_sql_query(query, conn, params=params if params else None)
+                df["actions"] = ""  # إضافة عمود الإجراءات
+                self.data_loaded.emit(df)
+            else:
+                self.error_occurred.emit("Pandas غير متاح — يرجى تثبيت pandas لتحميل بيانات المبيعات")
 
         except Exception as e:
             import traceback
@@ -518,6 +522,7 @@ class MainWindow(QMainWindow):
         self._passed_payment_service = payment_service
         self._passed_dashboard_service = dashboard_service
         self._passed_notifications_manager = notifications_manager
+        self._passed_hybrid_service = hybrid_service
 
         # تهيئة الخدمات
         self.init_services()
@@ -621,7 +626,7 @@ class MainWindow(QMainWindow):
         self.payment_service = self._passed_payment_service
         self.dashboard_service = self._passed_dashboard_service
         self.notifications_manager = getattr(self, "_passed_notifications_manager", None)
-        self.hybrid_service = getattr(self, "_passed_hybrid_service", None)
+        self.hybrid_service = self._passed_hybrid_service
 
         # تهيئة الخدمات الأخرى
         self.product_service = None
@@ -857,7 +862,7 @@ class MainWindow(QMainWindow):
         """إعداد واجهة المستخدم - Modern Architecture"""
         # الويدجت المركزي مع خلفية صلبة
         central_container = QWidget()
-        central_container.setStyleSheet("background-color: #08090d;")
+        central_container.setStyleSheet(f"background-color: {Colors.BG_VOID};")
         self.setCentralWidget(central_container)
 
         # التخطيط الجذري
@@ -869,12 +874,12 @@ class MainWindow(QMainWindow):
         self.main_frame = QFrame()
         self.main_frame.setObjectName("mainFrame")
         # خلفية صلبة داكنة احترافية
-        self.main_frame.setStyleSheet("""
-            QFrame#mainFrame {
-                background-color: #08090d;
+        self.main_frame.setStyleSheet(f"""
+            QFrame#mainFrame {{
+                background-color: {Colors.BG_VOID};
                 border-radius: 12px;
-                border: 2px solid #C8A54E;
-            }
+                border: 2px solid {Colors.ACCENT_GOLD};
+            }}
         """)
         # إضافة ظل للإطار الرئيسي (Subtle Gold Glow)
         from PySide6.QtWidgets import QGraphicsDropShadowEffect
@@ -1015,54 +1020,54 @@ class MainWindow(QMainWindow):
 
     def apply_global_table_styles(self):
         """تطبيق ستايل موحد لجميع الجداول (خلفية سوداء، خط أبيض)"""
-        table_style = """
-            QTableWidget, QTableView {
-                background-color: #121212;
-                color: #ffffff;
-                gridline-color: #333333;
-                border: 1px solid #333333;
-                selection-background-color: #C8A54E;
-                selection-color: #000000;
-            }
-            QTableWidget::item, QTableView::item {
-                border-bottom: 1px solid #222222;
-            }
-            QHeaderView::section {
-                background-color: #0f172a;
-                color: #C8A54E;
+        table_style = f"""
+            QTableWidget, QTableView {{
+                background-color: {Colors.BG_DEEP};
+                color: {Colors.TEXT_BRIGHT};
+                gridline-color: {Colors.BORDER_DEFAULT};
+                border: 1px solid {Colors.BORDER_DEFAULT};
+                selection-background-color: {Colors.ACCENT_GOLD};
+                selection-color: {Colors.TEXT_INVERSE};
+            }}
+            QTableWidget::item, QTableView::item {{
+                border-bottom: 1px solid {Colors.BORDER_VOID};
+            }}
+            QHeaderView::section {{
+                background-color: {Colors.BG_DEEP};
+                color: {Colors.ACCENT_GOLD};
                 font-weight: bold;
-                border: 1px solid #333333;
+                border: 1px solid {Colors.BORDER_DEFAULT};
                 padding: 4px;
-            }
+            }}
             /* تحديث مظهر الـ Scrollbar ليتناسب مع النمط المظلم */
-            QScrollBar:vertical {
+            QScrollBar:vertical {{
                 border: none;
-                background: #121212;
+                background: {Colors.BG_DEEP};
                 width: 10px;
                 margin: 0px 0px 0px 0px;
-            }
-            QScrollBar::handle:vertical {
-                background: #333333;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {Colors.BORDER_DEFAULT};
                 min-height: 20px;
                 border-radius: 5px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: #C8A54E;
-            }
-            QScrollBar:horizontal {
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: {Colors.ACCENT_GOLD};
+            }}
+            QScrollBar:horizontal {{
                 border: none;
-                background: #121212;
+                background: {Colors.BG_DEEP};
                 height: 10px;
                 margin: 0px 0px 0px 0px;
-            }
-            QScrollBar::handle:horizontal {
-                background: #333333;
+            }}
+            QScrollBar::handle:horizontal {{
+                background: {Colors.BORDER_DEFAULT};
                 min-width: 20px;
                 border-radius: 5px;
-            }
-            QScrollBar::handle:horizontal:hover {
-                background: #C8A54E;
-            }
+            }}
+            QScrollBar::handle:horizontal:hover {{
+                background: {Colors.ACCENT_GOLD};
+            }}
         """
         self.setStyleSheet(self.styleSheet() + table_style)
 
@@ -1081,7 +1086,8 @@ class MainWindow(QMainWindow):
                     window.moveCenter(center_point)
                     self.move(window.topLeft())
         except (ValueError, TypeError, AttributeError) as e:
-            self.logger.warning(f"Window centering failed: {e}")
+            if self.logger:
+                self.logger.warning(f"Window centering failed: {e}")
 
     def logout(self):
         """طلب تسجيل الخروج من المستخدم"""
@@ -10594,7 +10600,7 @@ class MainWindow(QMainWindow):
                 if target == "sales_dashboard":
                     self.switch_page("dashboard")
                 elif target == "inventory":
-                    self.switch_page("products")
+                    self.switch_page("inventory")
             elif action_type == "OPEN_DIALOG":
                 if action.get("target") == "add_product":
                     self.handle_smart_command("new_product")  # Reuse existing

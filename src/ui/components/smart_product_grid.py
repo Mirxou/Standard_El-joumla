@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 # -*- coding: utf-8 -*-
 """
 شبكة المنتجات الذكية - Smart Product Grid
@@ -25,6 +25,7 @@ from ...core.database_manager import DatabaseManager
 from ...models.product import ProductManager
 from ...services.pricing_service import PricingService
 from ...utils.logger import setup_logger
+from src.ui.styles.design_tokens import C
 
 
 class SmartProductGrid(QWidget):
@@ -211,12 +212,12 @@ class ProductGridItem(QFrame):
         self.image_label = QLabel()
         self.image_label.setFixedSize(120, 120)
         self.image_label.setAlignment(Qt.AlignCenter)
-        self.image_label.setStyleSheet("""
-            QLabel {
-                border: 2px solid #e1e5e9;
+        self.image_label.setStyleSheet(f"""
+            QLabel {{
+                border: 2px solid {C.BORDER_DEFAULT};
                 border-radius: 8px;
-                background-color: #1e293b;
-            }
+                background-color: {C.BG_SURFACE};
+            }}
         """)
 
         # اسم المنتج
@@ -234,32 +235,32 @@ class ProductGridItem(QFrame):
         # السعر
         self.price_label = QLabel()
         self.price_label.setAlignment(Qt.AlignCenter)
-        self.price_label.setStyleSheet("""
-            QLabel {
+        self.price_label.setStyleSheet(f"""
+            QLabel {{
                 font-size: 14px;
                 font-weight: bold;
-                color: #059669;
-            }
+                color: {C.ACCENT_TEAL};
+            }}
         """)
 
         # زر الإضافة
         self.add_button = QPushButton("إضافة")
         self.add_button.setFixedSize(self.parent().PRIMARY_BUTTON_SIZE, self.parent().PRIMARY_BUTTON_SIZE // 2)
-        self.add_button.setStyleSheet("""
-            QPushButton {
-                background-color: #3b82f6;
+        self.add_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {C.ACCENT_SKY};
                 color: white;
                 border: none;
                 border-radius: 6px;
                 font-weight: bold;
                 font-size: 12px;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
                 background-color: #2563eb;
-            }
-            QPushButton:pressed {
+            }}
+            QPushButton:pressed {{
                 background-color: #1d4ed8;
-            }
+            }}
         """)
 
         # وضع الأزرار حسب Fitts Law
@@ -300,10 +301,10 @@ class ProductGridItem(QFrame):
         # إذا كان هناك صورة حقيقية، استخدمها
         # هنا نستخدم placeholder
         pixmap = QPixmap(120, 120)
-        pixmap.fill(QColor("#f3f4f6"))
+        pixmap.fill(QColor(C.TEXT_BRIGHT))
 
         painter = QPainter(pixmap)
-        painter.setPen(QColor("#9ca3af"))
+        painter.setPen(QColor(C.TEXT_SECONDARY))
         painter.setFont(QFont("Arial", 48))
         painter.drawText(pixmap.rect(), Qt.AlignCenter, "📦")
         painter.end()

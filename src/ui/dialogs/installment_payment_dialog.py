@@ -328,6 +328,8 @@ class InstallmentPaymentDialog(BaseDialog):
 
     def save_payment(self):
         """حفظ الدفعة"""
+        if not self.service:
+            return
         if not self.selected_installment:
             self.notify.show_warning("تحذير", "يرجى اختيار قسط للدفع")
             return
@@ -379,6 +381,8 @@ class InstallmentPaymentDialog(BaseDialog):
 
     def pay_full_installment(self):
         """دفع القسط كاملاً"""
+        if not self.service:
+            return
         if not self.selected_installment:
             return
 

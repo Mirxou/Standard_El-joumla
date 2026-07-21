@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 """
 نافذة إدارة الحسابات المدينة والدائنة - Accounts Management Window
 واجهة شاملة لإدارة الحسابات المدينة والدائنة مع دعم اللغة العربية
@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
 from ...core.local_database_manager import LocalDatabaseManager
 from ...models.payment import AccountType, PaymentType
 from ...services.payment_service import PaymentService
+from ...ui.styles.design_tokens import C as Colors
 from ...utils.logger import setup_logger
 from ..dialogs.payment_dialog import PaymentDialog
 
@@ -100,7 +101,7 @@ class AccountsWindow(QMainWindow):
         self.setup_styles()
 
         # تطبيق ستايل الهوية الموحدة
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {Colors.BG_VOID}; }}")
 
         # تحديث البيانات
         self.refresh_data()
@@ -170,7 +171,7 @@ class AccountsWindow(QMainWindow):
 
         # عنوان القسم
         title_label = QLabel("الحسابات المدينة (المستحقة من العملاء)")
-        title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #f8fafc; margin-bottom: 10px;")
+        title_label.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {Colors.TEXT_BRIGHT}; margin-bottom: 10px;")
         layout.addWidget(title_label)
 
         # فلاتر البحث
@@ -233,16 +234,16 @@ class AccountsWindow(QMainWindow):
 
         # إجمالي الحسابات المدينة
         self.receivables_total_label = QLabel("إجمالي الحسابات المدينة: 0.00 ج.م")
-        self.receivables_total_label.setStyleSheet("""
-            QLabel {
+        self.receivables_total_label.setStyleSheet(f"""
+            QLabel {{
                 font-size: 18px;
                 font-weight: bold;
-                color: #1E40AF;
-                background-color: #DBEAFE;
-                border: 1px solid #BFDBFE;
+                color: {Colors.ACCENT_SKY};
+                background-color: {Colors.ACCENT_SKY_SUBTLE};
+                border: 1px solid {Colors.INFO_BORDER};
                 border-radius: 12px;
                 padding: 15px;
-            }
+            }}
         """)
         layout.addWidget(self.receivables_total_label)
 
@@ -255,7 +256,7 @@ class AccountsWindow(QMainWindow):
 
         # عنوان القسم
         title_label = QLabel("الحسابات الدائنة (المستحقة للموردين)")
-        title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #f8fafc; margin-bottom: 10px;")
+        title_label.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {Colors.TEXT_BRIGHT}; margin-bottom: 10px;")
         layout.addWidget(title_label)
 
         # فلاتر البحث
@@ -318,16 +319,16 @@ class AccountsWindow(QMainWindow):
 
         # إجمالي الحسابات الدائنة
         self.payables_total_label = QLabel("إجمالي الحسابات الدائنة: 0.00 ج.م")
-        self.payables_total_label.setStyleSheet("""
-            QLabel {
+        self.payables_total_label.setStyleSheet(f"""
+            QLabel {{
                 font-size: 18px;
                 font-weight: bold;
-                color: #991B1B;
-                background-color: #FEE2E2;
-                border: 1px solid #FECACA;
+                color: {Colors.ACCENT_CORAL};
+                background-color: {Colors.ACCENT_CORAL_SUBTLE};
+                border: 1px solid {Colors.ERROR_BORDER};
                 border-radius: 12px;
                 padding: 15px;
-            }
+            }}
         """)
         layout.addWidget(self.payables_total_label)
 
@@ -340,7 +341,7 @@ class AccountsWindow(QMainWindow):
 
         # عنوان القسم
         title_label = QLabel("جدولة المدفوعات المستقبلية")
-        title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #f8fafc; margin-bottom: 10px;")
+        title_label.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {Colors.TEXT_BRIGHT}; margin-bottom: 10px;")
         layout.addWidget(title_label)
 
         # فلاتر البحث
@@ -416,7 +417,7 @@ class AccountsWindow(QMainWindow):
 
         # عنوان القسم
         title_label = QLabel("تقارير الحسابات والمدفوعات")
-        title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #f8fafc; margin-bottom: 10px;")
+        title_label.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {Colors.TEXT_BRIGHT}; margin-bottom: 10px;")
         layout.addWidget(title_label)
 
         # أزرار التقارير

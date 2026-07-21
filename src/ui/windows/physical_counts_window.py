@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ...ui.styles.design_tokens import C
 from ...core.database_manager import DatabaseManager
 from ...models.physical_count import CountStatus, PhysicalCount
 from ...services.inventory_count_service import InventoryCountService
@@ -98,7 +99,7 @@ class PhysicalCountsWindow(QMainWindow):
         self.setMinimumSize(1200, 700)
 
         # تطبيق ستايل الهوية الموحدة
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {C.BG_DEEP}; }}")
 
         # إعداد Toolbar (ليتم حفظ حالته بـ saveState)
         self._setup_toolbar()
@@ -112,7 +113,7 @@ class PhysicalCountsWindow(QMainWindow):
 
         # العنوان
         title_label = QLabel("📦 إدارة الجرد الدوري")
-        title_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #f8fafc;")
+        title_label.setStyleSheet(f"font-size: 24px; font-weight: bold; color: {C.TEXT_BRIGHT};")
         layout.addWidget(title_label)
 
         # بطاقات الملخص
@@ -207,11 +208,11 @@ class PhysicalCountsWindow(QMainWindow):
         layout = QHBoxLayout()
         layout.setSpacing(10)
 
-        self.total_card = self.create_summary_card("📊 إجمالي الجرود", "0", "#3498db")
+        self.total_card = self.create_summary_card("📊 إجمالي الجرود", "0", C.ACCENT_SKY)
         self.draft_card = self.create_summary_card("📝 مسودات", "0", "#95a5a6")
-        self.in_progress_card = self.create_summary_card("⏳ قيد التنفيذ", "0", "#f39c12")
-        self.completed_card = self.create_summary_card("✅ مكتملة", "0", "#27ae60")
-        self.variance_card = self.create_summary_card("⚠️ فروقات", "0", "#e74c3c")
+        self.in_progress_card = self.create_summary_card("⏳ قيد التنفيذ", "0", C.ACCENT_AMBER)
+        self.completed_card = self.create_summary_card("✅ مكتملة", "0", C.ACCENT_TEAL)
+        self.variance_card = self.create_summary_card("⚠️ فروقات", "0", C.ACCENT_CORAL)
 
         layout.addWidget(self.total_card)
         layout.addWidget(self.draft_card)
@@ -256,7 +257,7 @@ class PhysicalCountsWindow(QMainWindow):
         group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
-                border: 2px solid #bdc3c7;
+                border: 2px solid {C.BORDER_DEFAULT};
                 border-radius: 8px;
                 margin-top: 10px;
                 padding-top: 10px;
@@ -362,18 +363,18 @@ class PhysicalCountsWindow(QMainWindow):
 
         # زر جديد
         new_btn = QPushButton("➕ جرد جديد")
-        new_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #27ae60;
+        new_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {C.ACCENT_TEAL};
                 color: white;
                 padding: 10px 20px;
                 font-size: 14px;
                 font-weight: bold;
                 border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #229954;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {C.ACCENT_TEAL_DARK};
+            }}
         """)
         new_btn.clicked.connect(self.create_new_count)
         layout.addWidget(new_btn)
@@ -400,14 +401,14 @@ class PhysicalCountsWindow(QMainWindow):
 
         # زر حذف
         delete_btn = QPushButton("🗑️ حذف")
-        delete_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #e74c3c;
+        delete_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {C.ACCENT_CORAL};
                 color: white;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
                 background-color: #c0392b;
-            }
+            }}
         """)
         delete_btn.clicked.connect(self.delete_count)
         layout.addWidget(delete_btn)
@@ -486,13 +487,13 @@ class PhysicalCountsWindow(QMainWindow):
             # الفروقات
             variance_item = QTableWidgetItem(str(count.items_with_variance))
             if count.items_with_variance > 0:
-                variance_item.setForeground(QBrush(QColor("#e74c3c")))
+                variance_item.setForeground(QBrush(QColor(C.ACCENT_CORAL)))
             self.table.setItem(row, 7, variance_item)
 
             # قيمة الفروقات
             value_item = QTableWidgetItem(f"{count.total_variance_value:,.2f}")
             if count.total_variance_value != 0:
-                color = QColor("#e74c3c") if count.total_variance_value < 0 else QColor("#27ae60")
+                color = QColor(C.ACCENT_CORAL) if count.total_variance_value < 0 else QColor(C.ACCENT_TEAL)
                 value_item.setForeground(QBrush(color))
             self.table.setItem(row, 8, value_item)
 
@@ -502,9 +503,9 @@ class PhysicalCountsWindow(QMainWindow):
             # الإنجاز
             progress_item = QTableWidgetItem(f"{count.completion_percentage:.1f}%")
             if count.completion_percentage >= 100:
-                progress_item.setForeground(QBrush(QColor("#27ae60")))
+                progress_item.setForeground(QBrush(QColor(C.ACCENT_TEAL)))
             elif count.completion_percentage >= 50:
-                progress_item.setForeground(QBrush(QColor("#f39c12")))
+                progress_item.setForeground(QBrush(QColor(C.ACCENT_AMBER)))
             self.table.setItem(row, 10, progress_item)
 
     def update_summary(self, counts: List[PhysicalCount]):
@@ -525,10 +526,10 @@ class PhysicalCountsWindow(QMainWindow):
         """الحصول على لون الحالة"""
         colors = {
             CountStatus.DRAFT: QColor("#95a5a6"),
-            CountStatus.IN_PROGRESS: QColor("#f39c12"),
-            CountStatus.COMPLETED: QColor("#3498db"),
-            CountStatus.APPROVED: QColor("#27ae60"),
-            CountStatus.CANCELLED: QColor("#e74c3c"),
+            CountStatus.IN_PROGRESS: QColor(C.ACCENT_AMBER),
+            CountStatus.COMPLETED: QColor(C.ACCENT_SKY),
+            CountStatus.APPROVED: QColor(C.ACCENT_TEAL),
+            CountStatus.CANCELLED: QColor(C.ACCENT_CORAL),
         }
         return colors.get(status, QColor("#000000"))
 

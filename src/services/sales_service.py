@@ -296,7 +296,11 @@ class SalesService:
 
         query = "INSERT INTO pos_sessions (user_id, opening_cash, status) VALUES (?, ?, 'active')"
         result = self.db_manager.execute_query(query, (user_id, opening_cash))
-        session_id = getattr(result, "lastrowid", 55) if result else 55
+        session_id = getattr(result, "lastrowid", None) if result else None
+
+        if session_id is None:
+            self.logger.warning("Could not retrieve session ID after POS session insert")
+            return None
 
         class POSSession:
             def __init__(self, id, user_id, opening_cash):
@@ -518,7 +522,7 @@ class SalesService:
             query = f"""
                 SELECT p.id, p.name, p.sku,
                        SUM(si.quantity) as total_qty,
-                       SUM(si.total) as total_revenue
+                       SUM(si.total_price) as total_revenue
                 FROM sale_items si
                 JOIN sales s ON s.id = si.sale_id
                 JOIN products p ON p.id = si.product_id
@@ -657,12 +661,12 @@ class SalesService:
 
         query = """
             SELECT 
-                COUNT(*), 
-                COALESCE(SUM(final_amount), 0),
-                COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN final_amount ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN payment_method = 'card' THEN final_amount ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN payment_method = 'credit' THEN final_amount ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN status = 'returned' THEN final_amount ELSE 0 END), 0)
+                COUNT(*) as total_sales, 
+                COALESCE(SUM(final_amount), 0) as total_revenue,
+                COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN final_amount ELSE 0 END), 0) as cash_total,
+                COALESCE(SUM(CASE WHEN payment_method = 'card' THEN final_amount ELSE 0 END), 0) as card_total,
+                COALESCE(SUM(CASE WHEN payment_method = 'credit' THEN final_amount ELSE 0 END), 0) as credit_total,
+                COALESCE(SUM(CASE WHEN status = 'returned' THEN final_amount ELSE 0 END), 0) as returns_total
             FROM sales 
             WHERE sale_date = ?
         """
@@ -674,9 +678,9 @@ class SalesService:
 
         if row:
             if isinstance(row, dict):
-                total_sales = row.get("COUNT(*)", 0)
-                total_revenue = float(row.get("COALESCE(SUM(final_amount), 0)", 0.0))
-                returns = float(row.get("COALESCE(SUM(CASE WHEN status = 'returned' THEN final_amount ELSE 0 END), 0)", 0.0))
+                total_sales = row.get("total_sales", 0)
+                total_revenue = float(row.get("total_revenue", 0.0))
+                returns = float(row.get("returns_total", 0.0))
             else:
                 total_sales = row[0] if len(row) > 0 else 0
                 total_revenue = float(row[1]) if len(row) > 1 else 0.0

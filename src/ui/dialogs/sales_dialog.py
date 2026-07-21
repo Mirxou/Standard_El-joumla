@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 """
 نافذة فاتورة المبيعات - Sales Dialog
 واجهة شاملة لإنشاء وإدارة فواتير المبيعات مع دعم اللغة العربية
@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from src.ui.styles.design_tokens import C
 from src.ui.widgets.base_dialog import BaseDialog
 from src.utils.ui_utils import prevent_double_click
 
@@ -218,10 +219,10 @@ class SalesDialog(BaseDialog):
         self.card_balance = self.create_info_card(
             self.i18n.get_message("current_balance"),
             f"0.00 {currency_symbol}",
-            "#10b981",
+            C.ACCENT_TEAL,
         )
         self.card_limit = self.create_info_card(
-            self.i18n.get_message("credit_limit"), f"0.00 {currency_symbol}", "#3b82f6"
+            self.i18n.get_message("credit_limit"), f"0.00 {currency_symbol}", C.ACCENT_SKY
         )
 
         header_layout.addLayout(customer_layout)
@@ -314,19 +315,19 @@ class SalesDialog(BaseDialog):
         self.table.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         # تحسين الخط والمسافات لسهولة القراءة والتعديل
-        self.table.setStyleSheet("""
-            QTableWidget {
+        self.table.setStyleSheet(f"""
+            QTableWidget {{
                 border: none;
-                gridline-color: #f1f5f9;
+                gridline-color: {C.TEXT_BRIGHT};
                 font-size: 15px;
-            }
-            QTableWidget::item {
+            }}
+            QTableWidget::item {{
                 padding: 8px;
                 min-height: 40px;
-            }
-            QTableWidget::item:selected {
+            }}
+            QTableWidget::item:selected {{
                 background-color: #eff6ff;
-            }
+            }}
         """)
 
         # ربط حدث التعديل في الجدول
@@ -394,12 +395,12 @@ class SalesDialog(BaseDialog):
         # 3.2 طريقة الدفع - أزرار كبيرة (Button Group بدل ComboBox)
         # ============================================================
         payment_section = QFrame()
-        payment_section.setStyleSheet("""
-            QFrame {
-                background: #0f172a;
-                border: 1px solid #334155;
+        payment_section.setStyleSheet(f"""
+            QFrame {{
+                background: {C.BG_DEEP};
+                border: 1px solid {C.BG_ELEVATED};
                 border-radius: 10px;
-            }
+            }}
         """)
         payment_section_layout = QVBoxLayout(payment_section)
         payment_section_layout.setContentsMargins(14, 12, 14, 12)
@@ -407,7 +408,7 @@ class SalesDialog(BaseDialog):
 
         lbl_pay_method = QLabel("💳 " + self.i18n.get_message("payment_method"))
         lbl_pay_method.setStyleSheet(
-            "color: #94a3b8; font-size: 12px; font-weight: 600; border: none; background: transparent;"
+            f"color: {C.TEXT_SECONDARY}; font-size: 12px; font-weight: 600; border: none; background: transparent;"
         )
         payment_section_layout.addWidget(lbl_pay_method)
 
@@ -422,10 +423,10 @@ class SalesDialog(BaseDialog):
         self._selected_payment = "cash"  # الافتراضي
 
         payment_options = [
-            ("cash", "💵", self.i18n.get_message("payment_cash"), "#10b981"),
-            ("card", "💳", self.i18n.get_message("payment_card"), "#3b82f6"),
+            ("cash", "💵", self.i18n.get_message("payment_cash"), C.ACCENT_TEAL),
+            ("card", "💳", self.i18n.get_message("payment_card"), C.ACCENT_SKY),
             ("transfer", "🏦", self.i18n.get_message("payment_transfer"), "#8b5cf6"),
-            ("credit", "📅", self.i18n.get_message("payment_credit"), "#f59e0b"),
+            ("credit", "📅", self.i18n.get_message("payment_credit"), C.ACCENT_AMBER),
         ]
 
         from functools import partial as _partial
@@ -436,11 +437,11 @@ class SalesDialog(BaseDialog):
             btn.setMinimumHeight(56)
             btn.setMinimumWidth(80)
             btn.setCursor(Qt.PointingHandCursor)
-            btn.setStyleSheet("""
+            btn.setStyleSheet(f"""
                 QPushButton {{
-                    background: #1e293b;
-                    color: #94a3b8;
-                    border: 2px solid #334155;
+                    background: {C.BG_SURFACE};
+                    color: {C.TEXT_SECONDARY};
+                    border: 2px solid {C.BG_ELEVATED};
                     border-radius: 8px;
                     font-size: 11px;
                     font-weight: 600;
@@ -452,9 +453,9 @@ class SalesDialog(BaseDialog):
                     border: 2px solid {color};
                 }}
                 QPushButton:hover:!checked {{
-                    background: #334155;
-                    color: #e2e8f0;
-                    border-color: #475569;
+                    background: {C.BG_ELEVATED};
+                    color: {C.TEXT_PRIMARY};
+                    border-color: {C.TEXT_MUTED};
                 }}
             """)
             btn.clicked.connect(_partial(self._on_payment_btn_clicked, key))
@@ -473,7 +474,7 @@ class SalesDialog(BaseDialog):
         # حقل المبلغ المدفوع - نصي كبير واضح
         lbl_paid = QLabel("💰 " + self.i18n.get_message("paid_amount"))
         lbl_paid.setStyleSheet(
-            "color: #94a3b8; font-size: 12px; font-weight: 600; border: none; background: transparent;"
+            f"color: {C.TEXT_SECONDARY}; font-size: 12px; font-weight: 600; border: none; background: transparent;"
         )
         payment_section_layout.addWidget(lbl_paid)
 
@@ -485,20 +486,20 @@ class SalesDialog(BaseDialog):
         self.paid_amount_input.setMinimumHeight(52)
         self.paid_amount_input.setText("0.00")
         self.paid_amount_input.setAlignment(Qt.AlignCenter)
-        self.paid_amount_input.setStyleSheet("""
-            QLineEdit {
-                background: #0f172a;
-                border: 2px solid #334155;
+        self.paid_amount_input.setStyleSheet(f"""
+            QLineEdit {{
+                background: {C.BG_DEEP};
+                border: 2px solid {C.BG_ELEVATED};
                 border-radius: 8px;
-                color: #06b6d4;
+                color: {C.ACCENT_SKY};
                 font-size: 22px;
                 font-weight: bold;
                 padding: 8px 16px;
-            }
-            QLineEdit:focus {
-                border-color: #06b6d4;
-                background: #0a1628;
-            }
+            }}
+            QLineEdit:focus {{
+                border-color: {C.ACCENT_SKY};
+                background: {C.BG_VOID};
+            }}
         """)
         # فقط أرقام ونقطة عشرية
         validator = QRegularExpressionValidator(QRegularExpression(r"^\d{0,10}(\.\d{0,2})?$"))
@@ -513,17 +514,17 @@ class SalesDialog(BaseDialog):
         self.btn_pay_full = QPushButton("✅ دفع كامل")
         self.btn_pay_full.setMinimumHeight(36)
         self.btn_pay_full.setCursor(Qt.PointingHandCursor)
-        self.btn_pay_full.setStyleSheet("""
-            QPushButton {
-                background: #10b981;
+        self.btn_pay_full.setStyleSheet(f"""
+            QPushButton {{
+                background: {C.ACCENT_TEAL};
                 color: white;
                 border: none;
                 border-radius: 6px;
                 font-weight: bold;
                 font-size: 12px;
                 padding: 6px;
-            }
-            QPushButton:hover { background: #059669; }
+            }}
+            QPushButton:hover {{ background: {C.ACCENT_TEAL_DARK}; }}
         """)
         self.btn_pay_full.clicked.connect(self._on_pay_full)
 
@@ -532,8 +533,8 @@ class SalesDialog(BaseDialog):
         self.btn_pay_zero.setCursor(Qt.PointingHandCursor)
         self.btn_pay_zero.setStyleSheet("""
             QPushButton {
-                background: #ef4444;
-                color: white;
+                background: {C.ACCENT_CORAL};
+                color: {C.TEXT_INVERSE};
                 border: none;
                 border-radius: 6px;
                 font-weight: bold;
@@ -552,10 +553,10 @@ class SalesDialog(BaseDialog):
         remaining_row = QHBoxLayout()
         remaining_row.setSpacing(8)
         lbl_rem_title = QLabel("🔴 متبقي:")
-        lbl_rem_title.setStyleSheet("color: #94a3b8; font-size: 13px; border: none; background: transparent;")
+        lbl_rem_title.setStyleSheet(f"color: {C.TEXT_SECONDARY}; font-size: 13px; border: none; background: transparent;")
         self.lbl_remaining_amount = QLabel(f"0.00 {currency_symbol}")
         self.lbl_remaining_amount.setStyleSheet(
-            "color: #ef4444; font-weight: bold; font-size: 18px; border: none; background: transparent;"
+            f"color: {C.ACCENT_CORAL}; font-weight: bold; font-size: 18px; border: none; background: transparent;"
         )
         self.lbl_remaining_amount.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         remaining_row.addWidget(lbl_rem_title)
@@ -594,13 +595,13 @@ class SalesDialog(BaseDialog):
             totals_layout,
             self.i18n.get_message("total_discount") + ":",
             "0.00",
-            color="#ef4444",
+            color=C.ACCENT_CORAL,
         )
 
         # حقل الضريبة القابل للتعديل
         tax_row = QHBoxLayout()
         tax_label = QLabel(self.i18n.get_message("tax_percent"))
-        tax_label.setStyleSheet("color: #cbd5e1; font-size: 14px;")
+        tax_label.setStyleSheet(f"color: {C.TEXT_PRIMARY}; font-size: 14px;")
         self.tax_rate_spin = QDoubleSpinBox()
         self.tax_rate_spin.setMinimum(0.0)
         self.tax_rate_spin.setMaximum(100.0)
@@ -619,7 +620,7 @@ class SalesDialog(BaseDialog):
         # خط فاصل
         line = QFrame()
         line.setFrameShape(QFrame.HLine)
-        line.setStyleSheet("color: #cbd5e1;")
+        line.setStyleSheet(f"color: {C.TEXT_PRIMARY};")
         totals_layout.addWidget(line)
 
         # الإجمالي النهائي
@@ -637,7 +638,7 @@ class SalesDialog(BaseDialog):
 
         # 3.3 أزرار الإجراءات - ثابتة في الأسفل (Fixed at bottom)
         actions_frame = QFrame()
-        actions_frame.setStyleSheet("background: transparent; border-top: 1px solid #334155; border-radius: 0;")
+        actions_frame.setStyleSheet(f"background: transparent; border-top: 1px solid {C.BG_ELEVATED}; border-radius: 0;")
         actions_layout = QVBoxLayout(actions_frame)
         actions_layout.setContentsMargins(20, 15, 20, 20)
         actions_layout.setSpacing(12)
@@ -658,8 +659,8 @@ class SalesDialog(BaseDialog):
                 min-height: 44px;
             }
             QPushButton:hover {
-                background-color: #e2e8f0;
-                color: #0f172a;
+                background-color: {C.TEXT_PRIMARY};
+                color: {C.BG_DEEP};
             }
             QPushButton:pressed {
                 background-color: #cbd5e1;
@@ -675,7 +676,7 @@ class SalesDialog(BaseDialog):
         self.btn_cancel_invoice.setStyleSheet("""
             QPushButton#BtnDanger {
                 background-color: #fef2f2;
-                color: #ef4444;
+                color: {C.ACCENT_CORAL};
                 border: 1px solid #fecaca;
                 border-radius: 8px;
                 padding: 12px 24px;
@@ -683,7 +684,7 @@ class SalesDialog(BaseDialog):
                 font-size: 14px;
                 min-height: 44px;
             }
-            QPushButton#BtnDanger:hover { background-color: #fee2e2; }
+            QPushButton#BtnDanger:hover { background-color: {C.ERROR_BG}; }
         """)
 
         # زر حفظ
@@ -724,10 +725,10 @@ class SalesDialog(BaseDialog):
         """إنشاء بطاقة معلومات حية - Quantum Glassmorphism Style"""
         card = QFrame()
         card.setProperty("class", "glass-card")
-        card.setStyleSheet("""
+        card.setStyleSheet(f"""
             QFrame {{
-                background: #1e293b;
-                border: 1px solid #334155;
+                background: {C.BG_SURFACE};
+                border: 1px solid {C.BG_ELEVATED};
                 border-radius: 12px;
                 border-right: 5px solid {color};
             }}
@@ -737,18 +738,18 @@ class SalesDialog(BaseDialog):
         l.setContentsMargins(15, 12, 15, 12)
         l.setSpacing(5)
         t = QLabel(title)
-        t.setStyleSheet("color: #94a3b8; font-size: 11px; font-weight: normal;")
+        t.setStyleSheet(f"color: {C.TEXT_SECONDARY}; font-size: 11px; font-weight: normal;")
         v = QLabel(value)
         v.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 14px;")
         l.addWidget(t)
         l.addWidget(v)
         return card
 
-    def create_total_row(self, layout, text, value, color="#1e293b"):
+    def create_total_row(self, layout, text, value, color=C.TEXT_INVERSE):
         """إنشاء صف في الملخص المالي"""
         row = QHBoxLayout()
         l = QLabel(text)  # noqa: E741
-        l.setStyleSheet("color: #cbd5e1; font-size: 14px;")
+        l.setStyleSheet(f"color: {C.TEXT_PRIMARY}; font-size: 14px;")
         v = QLabel(value)
         v.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 15px;")
         v.setAlignment(Qt.AlignRight)
@@ -763,50 +764,50 @@ class SalesDialog(BaseDialog):
             QDialog {
                 background-color: transparent;
             }
-            QLabel {
-                color: #e2e8f0;
+            QLabel {{
+                color: {C.TEXT_PRIMARY};
             }
             QLabel#LabelDim {
-                color: #94a3b8;
+                color: {C.TEXT_SECONDARY};
                 font-size: 13px;
             }
             QLabel#InvoiceNo {
-                color: #06b6d4;
+                color: {C.ACCENT_SKY};
                 font-size: 18px;
                 font-weight: bold;
             }
             QLabel#GrandTotal {
-                color: #06b6d4;
+                color: {C.ACCENT_SKY};
                 font-size: 36px;
                 font-weight: bold;
             }
-            QFrame#Zone1, QFrame#Zone2, QFrame#Zone3 {
-                background: #1e293b;
-                border: 1px solid #1e293b;
+            QFrame#Zone1, QFrame#Zone2, QFrame#Zone3 {{
+                background: {C.BG_SURFACE};
+                border: 1px solid {C.BG_SURFACE};
                 border-radius: 12px;
-            }
-            QLineEdit, QComboBox, QDoubleSpinBox {
-                background-color: #1e293b;
-                border: 1px solid #334155;
+            }}
+            QLineEdit, QComboBox, QDoubleSpinBox {{
+                background-color: {C.BG_SURFACE};
+                border: 1px solid {C.BG_ELEVATED};
                 border-radius: 8px;
                 padding: 8px 12px;
-                color: #f8fafc;
+                color: {C.TEXT_BRIGHT};
                 font-size: 14px;
-            }
-            QLineEdit:focus, QComboBox:focus, QDoubleSpinBox:focus {
-                border: 1px solid #06b6d4;
-                background-color: #0f172a;
-            }
-            QPushButton#BtnPrimary {
+            }}
+            QLineEdit:focus, QComboBox:focus, QDoubleSpinBox:focus {{
+                border: 1px solid {C.ACCENT_SKY};
+                background-color: {C.BG_DEEP};
+            }}
+            QPushButton#BtnPrimary {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #06b6d4, stop:1 #a855f7);
+                    stop:0 {C.ACCENT_SKY}, stop:1 #a855f7);
                 color: white;
                 border: none;
                 border-radius: 8px;
                 font-weight: bold;
                 font-size: 15px;
-            }
-            QPushButton#BtnPrimary:hover {
+            }}
+            QPushButton#BtnPrimary:hover {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                     stop:0 #22d3ee, stop:1 #c084fc);
             }
@@ -1076,7 +1077,7 @@ class SalesDialog(BaseDialog):
         stock_item.setTextAlignment(Qt.AlignCenter)
         if item["stock"] <= 0:
             stock_item.setForeground(QColor("red"))
-            stock_item.setBackground(QColor("#fee2e2"))
+            stock_item.setBackground(QColor(C.ACCENT_CORAL_SUBTLE))
         self.table.setItem(row_idx, 2, stock_item)
 
         # 3. الوحدة
@@ -1085,7 +1086,7 @@ class SalesDialog(BaseDialog):
         # 4. الكمية (قابلة للتعديل) - الإصلاح 1: تحسين قابلية التعديل
         qty_item = QTableWidgetItem(str(item["qty"]))
         qty_item.setTextAlignment(Qt.AlignCenter)
-        qty_item.setBackground(QColor("#f0fdf4"))  # أخضر فاتح
+        qty_item.setBackground(QColor(C.ACCENT_TEAL_SUBTLE))  # أخضر فاتح
         qty_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsEditable | Qt.ItemIsSelectable)  # قابل للتعديل
         self.table.setItem(row_idx, 4, qty_item)
 
@@ -1093,7 +1094,7 @@ class SalesDialog(BaseDialog):
         price_item = QTableWidgetItem(f"{item['price']:.2f}")
         price_item.setTextAlignment(Qt.AlignCenter)
         price_item.setFlags(Qt.ItemIsEnabled)  # للقراءة فقط - لا يمكن التعديل
-        price_item.setBackground(QColor("#f8fafc"))  # لون رمادي فاتح للدلالة على أنه للقراءة فقط
+        price_item.setBackground(QColor(C.BG_HOVER))  # لون رمادي فاتح للدلالة على أنه للقراءة فقط
         self.table.setItem(row_idx, 5, price_item)
 
         # 6. الخصم (قابل للتعديل) - الإصلاح 1: تحسين قابلية التعديل
@@ -1114,24 +1115,24 @@ class SalesDialog(BaseDialog):
         btn_del.setCursor(Qt.PointingHandCursor)
         btn_del.setMinimumSize(44, 44)  # Fitts Law: minimum 44x44px
         btn_del.setStyleSheet("""
-            QPushButton {
+            QPushButton {{
                 background: transparent;
                 border: none;
                 font-size: 20px;
-                color: #ef4444;
+                color: {C.ACCENT_CORAL};
                 padding: 0px;
                 min-width: 44px;
                 min-height: 44px;
             }
-            QPushButton:hover {
-                background-color: #fee2e2;
+            QPushButton:hover {{
+                background-color: {C.ERROR_BG};
                 border-radius: 6px;
             }
-            QPushButton:pressed {
-                background-color: #fecaca;
+            QPushButton:pressed {{
+                background-color: {C.ERROR_BORDER};
             }
-            QPushButton:focus {
-                outline: 2px solid #ef4444;
+            QPushButton:focus {{
+                outline: 2px solid {C.ACCENT_CORAL};
                 outline-offset: 2px;
                 border-radius: 6px;
             }
@@ -1360,11 +1361,11 @@ class SalesDialog(BaseDialog):
         self.lbl_remaining_amount.setText(format_currency(remaining_amount))
         if remaining_amount > 0:
             self.lbl_remaining_amount.setStyleSheet(
-                "color: #ef4444; font-weight: bold; font-size: 18px; border: none; background: transparent;"
+                f"color: {C.ACCENT_CORAL}; font-weight: bold; font-size: 18px; border: none; background: transparent;"
             )
         else:
             self.lbl_remaining_amount.setStyleSheet(
-                "color: #10b981; font-weight: bold; font-size: 18px; border: none; background: transparent;"
+                f"color: {C.ACCENT_TEAL}; font-weight: bold; font-size: 18px; border: none; background: transparent;"
             )
 
         # تحديث حالة الفاتورة
@@ -1490,9 +1491,9 @@ class SalesDialog(BaseDialog):
                             balance_label.setText(balance)
                             # تلوين الرصيد حسب الحالة
                             if customer.current_balance and customer.current_balance > 0:
-                                balance_label.setStyleSheet("color: #ef4444; font-weight: bold; font-size: 14px;")
+                                balance_label.setStyleSheet(f"color: {C.ACCENT_CORAL}; font-weight: bold; font-size: 14px;")
                             else:
-                                balance_label.setStyleSheet("color: #10b981; font-weight: bold; font-size: 14px;")
+                                balance_label.setStyleSheet(f"color: {C.ACCENT_TEAL}; font-weight: bold; font-size: 14px;")
 
                     if limit_card_layout and limit_card_layout.count() >= 2:
                         limit_label = limit_card_layout.itemAt(1).widget()

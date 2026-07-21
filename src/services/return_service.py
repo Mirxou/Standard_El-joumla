@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 # -*- coding: utf-8 -*-
 """
 خدمة المرتجعات - Return Service
@@ -568,7 +568,7 @@ class ReturnService:
             )
 
             return_ids = [row[0] for row in cursor.fetchall()]
-            return [self.get_return(rid) for rid in return_ids if self.get_return(rid)]
+            return [r for rid in return_ids if (r := self.get_return(rid))]
 
         except Exception as e:
             logger.log(logging.ERROR, f"خطأ في الحصول على مرتجعات البيع: {str(e)}")

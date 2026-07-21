@@ -451,9 +451,11 @@ class SafetyStockDialog(BaseDialog):
 
     def get_safety_stock_settings(self):
         """الحصول على إعدادات المخزون الاحتياطي"""
+        safety_spin = getattr(self, 'safety_level_spin', None)
+        reorder_spin = getattr(self, 'reorder_point_spin', None)
         return {
-            "safety_level": self.safety_level_spin.value(),
-            "reorder_point": self.reorder_point_spin.value(),
+            "safety_level": safety_spin.value() if safety_spin is not None else None,
+            "reorder_point": reorder_spin.value() if reorder_spin is not None else None,
         }
 
     def validate_settings(self):

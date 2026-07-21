@@ -34,6 +34,7 @@ from src.models.receiving_note import (
     ReceivingNote,
     ReceivingStatus,
 )
+from src.ui.styles.design_tokens import C
 from src.ui.widgets.base_dialog import BaseDialog
 from src.ui.widgets.quantum_notification import NotificationManager
 
@@ -150,7 +151,7 @@ class ReceivingDialog(BaseDialog):
 
         # زر استلام الكل
         receive_all_btn = QPushButton("✅ استلام الكل")
-        receive_all_btn.setStyleSheet("background-color: #4CAF50; color: white; padding: 8px 16px; font-weight: bold;")
+        receive_all_btn.setStyleSheet(f"background-color: {C.ACCENT_TEAL}; color: {C.TEXT_BRIGHT}; padding: 8px 16px; font-weight: bold;")
         receive_all_btn.clicked.connect(self._receive_all)
         layout.addWidget(receive_all_btn)
 
@@ -205,14 +206,14 @@ class ReceivingDialog(BaseDialog):
 
         self.receive_button = QPushButton("💾 حفظ الاستلام")
         self.receive_button.setStyleSheet(
-            "background-color: #2196F3; color: white; padding: 10px 30px; font-weight: bold; font-size: 14px;"
+            f"background-color: {C.ACCENT_SKY}; color: {C.TEXT_BRIGHT}; padding: 10px 30px; font-weight: bold; font-size: 14px;"
         )
         self.receive_button.clicked.connect(self._save)
         layout.addWidget(self.receive_button)
 
         cancel_btn = QPushButton("✖️ إلغاء")
         cancel_btn.setStyleSheet(
-            "background-color: #757575; color: white; padding: 10px 30px; font-weight: bold; font-size: 14px;"
+            f"background-color: {C.TEXT_SECONDARY}; color: {C.TEXT_BRIGHT}; padding: 10px 30px; font-weight: bold; font-size: 14px;"
         )
         cancel_btn.clicked.connect(self.reject)
         layout.addWidget(cancel_btn)

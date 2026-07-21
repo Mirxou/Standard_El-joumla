@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.services.ai_service import AIService
+from src.ui.styles.design_tokens import C as Colors
 from src.utils.i18n_api import I18n
 
 # Add project root to path
@@ -52,7 +53,7 @@ class SmartDashboardWindow(QMainWindow):
         self.setLayoutDirection(Qt.RightToLeft)
 
         # تطبيق ستايل الهوية الموحدة
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {Colors.BG_VOID}; }}")
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)

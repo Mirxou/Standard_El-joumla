@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from src.ui.styles.design_tokens import C
 from src.ui.widgets.base_dialog import BaseDialog
 from src.ui.widgets.quantum_notification import NotificationManager
 
@@ -463,87 +464,87 @@ class EncryptionDialog(BaseDialog):
 
     def apply_styles(self):
         """تطبيق الأنماط"""
-        self.setStyleSheet("""
-            QDialog {
+        self.setStyleSheet(f"""
+            QDialog {{
 
-                color: #f8fafc;
-            }
+                color: {C.TEXT_BRIGHT};
+            }}
 
-            QGroupBox {
+            QGroupBox {{
                 font-weight: bold;
-                border: 2px solid #cccccc;
+                border: 2px solid {C.BORDER_DEFAULT};
                 border-radius: 8px;
                 margin-top: 10px;
                 padding-top: 10px;
-            }
+            }}
 
-            QGroupBox::title {
+            QGroupBox::title {{
                 subcontrol-origin: margin;
                 left: 10px;
                 padding: 0 5px 0 5px;
-            }
+            }}
 
-            QPushButton {
-                background-color: #0078d4;
-                color: white;
+            QPushButton {{
+                background-color: {C.ACCENT_SKY};
+                color: {C.TEXT_BRIGHT};
                 border: none;
                 border-radius: 4px;
                 padding: 8px 16px;
                 font-weight: bold;
-            }
+            }}
 
-            QPushButton:hover {
-                background-color: #106ebe;
-            }
+            QPushButton:hover {{
+                background-color: {C.ACCENT_SKY};
+            }}
 
-            QPushButton:pressed {
-                background-color: #005a9e;
-            }
+            QPushButton:pressed {{
+                background-color: {C.ACCENT_SKY};
+            }}
 
-            QPushButton:disabled {
-                background-color: #cccccc;
-                color: #666666;
-            }
+            QPushButton:disabled {{
+                background-color: {C.BORDER_DEFAULT};
+                color: {C.TEXT_MUTED};
+            }}
 
-            QLineEdit {
-                border: 1px solid #cccccc;
+            QLineEdit {{
+                border: 1px solid {C.BORDER_DEFAULT};
                 border-radius: 4px;
                 padding: 8px;
                 font-size: 12px;
-            }
+            }}
 
-            QLineEdit:focus {
-                border-color: #0078d4;
-            }
+            QLineEdit:focus {{
+                border-color: {C.ACCENT_SKY};
+            }}
 
-            QTabWidget::pane {
-                border: 1px solid #cccccc;
+            QTabWidget::pane {{
+                border: 1px solid {C.BORDER_DEFAULT};
                 border-radius: 4px;
-            }
+            }}
 
-            QTabBar::tab {
-                background-color: #e1e1e1;
+            QTabBar::tab {{
+                background-color: {C.BORDER_DEFAULT};
                 padding: 8px 16px;
                 margin-right: 2px;
                 border-top-left-radius: 4px;
                 border-top-right-radius: 4px;
-            }
+            }}
 
-            QTabBar::tab:selected {
+            QTabBar::tab:selected {{
                 background-color: transparent;
-                border-bottom: 2px solid #0078d4;
-            }
+                border-bottom: 2px solid {C.ACCENT_SKY};
+            }}
 
-            QProgressBar {
-                border: 1px solid #cccccc;
+            QProgressBar {{
+                border: 1px solid {C.BORDER_DEFAULT};
                 border-radius: 4px;
                 text-align: center;
-            }
+            }}
 
-            QProgressBar::chunk {
-                background-color: #0078d4;
+            QProgressBar::chunk {{
+                background-color: {C.ACCENT_SKY};
                 border-radius: 3px;
-            }
+            }}
         """)
 
 

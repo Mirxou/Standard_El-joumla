@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 # -*- coding: utf-8 -*-
 """
 Database Performance Metrics Window
@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 
 from src.core.database_manager import DatabaseManager
 from src.core.database_metrics import get_database_metrics
+from src.ui.styles.design_tokens import C
 from src.utils.logger import setup_logger
 
 
@@ -53,7 +54,7 @@ class DatabaseMetricsWindow(QMainWindow):
         self.setMinimumSize(800, 600)
 
         # تطبيق ستايل الهوية الموحدة
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {C.BG_DEEP}; }}")
 
         # Widget مركزي
         central_widget = QWidget()

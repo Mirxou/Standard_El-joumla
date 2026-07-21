@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ...ui.styles.design_tokens import C
 from ...models.purchase_order import POPriority, POStatus, PurchaseOrder
 from ...services.purchase_order_service import PurchaseOrderService
 from ...services.accounting_service import AccountingService
@@ -61,7 +62,7 @@ class PurchaseOrdersWindow(QMainWindow):
         self.setGeometry(50, 50, 1600, 900)
 
         # تطبيق ستايل الهوية الموحدة
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {C.BG_DEEP}; }}")
 
         self._create_widgets()
         self._setup_connections()
@@ -106,18 +107,18 @@ class PurchaseOrdersWindow(QMainWindow):
 
         # زر أمر شراء جديد
         self.new_po_btn = QPushButton("➕ أمر شراء جديد")
-        self.new_po_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2196F3;
+        self.new_po_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {C.ACCENT_SKY};
                 color: white;
                 padding: 10px 20px;
                 font-weight: bold;
                 font-size: 14px;
                 border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {C.ACCENT_SKY};
+            }}
         """)
         self.new_po_btn.clicked.connect(self._new_purchase_order)
         toolbar.addWidget(self.new_po_btn)
@@ -127,14 +128,14 @@ class PurchaseOrdersWindow(QMainWindow):
         # زر تحرير
         self.edit_btn = QPushButton("✏️ تحرير")
         self.edit_btn.setEnabled(False)
-        self.edit_btn.setStyleSheet(self._get_button_style("#FF9800"))
+        self.edit_btn.setStyleSheet(self._get_button_style(C.ACCENT_AMBER))
         self.edit_btn.clicked.connect(self._edit_purchase_order)
         toolbar.addWidget(self.edit_btn)
 
         # زر حذف/إلغاء
         self.delete_btn = QPushButton("🗑️ إلغاء")
         self.delete_btn.setEnabled(False)
-        self.delete_btn.setStyleSheet(self._get_button_style("#F44336"))
+        self.delete_btn.setStyleSheet(self._get_button_style(C.ACCENT_CORAL))
         self.delete_btn.clicked.connect(self._cancel_purchase_order)
         toolbar.addWidget(self.delete_btn)
 
@@ -167,7 +168,7 @@ class PurchaseOrdersWindow(QMainWindow):
         # زر المطابقة ثلاثية الأطراف
         self.match_btn = QPushButton("🔗 مطابقة ثلاثية")
         self.match_btn.setEnabled(False)
-        self.match_btn.setStyleSheet(self._get_button_style("#9C27B0"))
+        self.match_btn.setStyleSheet(self._get_button_style(C.ACCENT_GOLD))
         self.match_btn.setToolTip("مطابقة أمر الشراء مع فاتورة المورد (3-Way Match)")
         self.match_btn.clicked.connect(self._three_way_match)
         workflow_layout.addWidget(self.match_btn)
@@ -178,26 +179,26 @@ class PurchaseOrdersWindow(QMainWindow):
 
         # الفلاتر (تأثير صلب عالي التباين)
         filters_group = QGroupBox("🔍 تصفية الأوامر")
-        filters_group.setStyleSheet("""
-            QGroupBox {
-                background-color: #1e293b;
-                border: 1px solid #334155;
+        filters_group.setStyleSheet(f"""
+            QGroupBox {{
+                background-color: {C.BG_SURFACE};
+                border: 1px solid {C.BG_RAISED};
                 border-radius: 10px;
                 margin-top: 10px;
                 padding: 5px;
                 color: #06b6d4;
                 font-weight: bold;
-            }
-            QGroupBox::title {
+            }}
+            QGroupBox::title {{
                 subcontrol-origin: margin;
                 left: 10px;
                 padding: 0 5px;
                 color: #06b6d4;
-            }
-            QLabel {
-                color: #f8fafc;
+            }}
+            QLabel {{
+                color: {C.TEXT_BRIGHT};
                 font-weight: 500;
-            }
+            }}
         """)
         filters_layout = QHBoxLayout(filters_group)
 
@@ -370,7 +371,7 @@ class PurchaseOrdersWindow(QMainWindow):
         amounts_layout.addRow("<b>الشحن:</b>", self.shipping_label)
 
         self.total_label = QLabel()
-        self.total_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #1976D2;")
+        self.total_label.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {C.ACCENT_SKY};")
         amounts_layout.addRow("<b>الإجمالي:</b>", self.total_label)
 
         layout.addWidget(amounts_group)
@@ -487,7 +488,7 @@ class PurchaseOrdersWindow(QMainWindow):
         summary_layout.addRow("<b>إجمالي المستلم:</b>", self.total_received_label)
 
         self.receipt_percentage_label = QLabel("0%")
-        self.receipt_percentage_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #4CAF50;")
+        self.receipt_percentage_label.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {C.ACCENT_TEAL};")
         summary_layout.addRow("<b>نسبة الاستلام:</b>", self.receipt_percentage_label)
 
         layout.addWidget(summary_group)
@@ -559,7 +560,7 @@ class PurchaseOrdersWindow(QMainWindow):
 
         # حالة النظام
         self.status_message = QLabel("جاهز")
-        self.status_message.setStyleSheet("color: #64748B; font-style: italic;")
+        self.status_message.setStyleSheet(f"color: {C.TEXT_SECONDARY}; font-style: italic;")
         statusbar.addWidget(self.status_message)
 
         return statusbar
@@ -595,7 +596,7 @@ class PurchaseOrdersWindow(QMainWindow):
                 req_item = QTableWidgetItem(req_date_str)
                 if po.is_overdue:
                     req_item.setBackground(QColor("#FFEBEE"))
-                    req_item.setForeground(QColor("#D32F2F"))
+                    req_item.setForeground(QColor(C.ACCENT_CORAL))
                 self.pos_table.setItem(row, 3, req_item)
 
                 # الحالة
@@ -1000,7 +1001,7 @@ class PurchaseOrdersWindow(QMainWindow):
         # أزرار
         btn_layout = QHBoxLayout()
         ok_btn = QPushButton("✅ تنفيذ المطابقة")
-        ok_btn.setStyleSheet("background-color: #4CAF50; color: white; padding: 8px 20px; font-weight: bold; border-radius: 4px;")
+        ok_btn.setStyleSheet(f"background-color: {C.ACCENT_TEAL}; color: white; padding: 8px 20px; font-weight: bold; border-radius: 4px;")
         cancel_btn = QPushButton("إلغاء")
         cancel_btn.clicked.connect(match_dialog.reject)
         btn_layout.addStretch()
@@ -1063,7 +1064,7 @@ class PurchaseOrdersWindow(QMainWindow):
             }}
             QPushButton:disabled {{
                 background-color: #BDBDBD;
-                color: #757575;
+                color: {C.TEXT_SECONDARY};
             }}
         """
 
@@ -1080,7 +1081,7 @@ class PurchaseOrdersWindow(QMainWindow):
             POStatus.CLOSED: "#CFD8DC",
             POStatus.CANCELLED: "#FFCDD2",
         }
-        return colors.get(status, "#f8fafc")
+        return colors.get(status, C.TEXT_BRIGHT)
 
     def _get_priority_color(self, priority):
         """لون الأولوية"""
@@ -1090,7 +1091,7 @@ class PurchaseOrdersWindow(QMainWindow):
             POPriority.HIGH: "#FFE0B2",
             POPriority.URGENT: "#FFCDD2",
         }
-        return colors.get(priority, "#f8fafc")
+        return colors.get(priority, C.TEXT_BRIGHT)
 
     # --- Stubs for Testing ---
     def receive_purchase_order(self, *args, **kwargs):

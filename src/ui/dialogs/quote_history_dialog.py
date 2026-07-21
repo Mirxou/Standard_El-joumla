@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from src.ui.styles.design_tokens import C
 from src.ui.widgets.base_dialog import BaseDialog
 
 from ...services.quote_printer_service import QuotePrinterService
@@ -39,25 +40,25 @@ class QuoteHistoryDialog(BaseDialog):
 
         self.setWindowTitle("📜 أرشيف عروض الأسعار")
         self.setMinimumSize(900, 600)
-        self.setStyleSheet("""
-            QDialog { background-color: transparent; }
-            QTableWidget {
+        self.setStyleSheet(f"""
+            QDialog {{ background-color: transparent; }}
+            QTableWidget {{
                 background-color: transparent;
-                border: 1px solid #334155;
-                gridline-color: #ececec;
+                border: 1px solid {C.BG_RAISED};
+                gridline-color: {C.TEXT_PRIMARY};
                 font-size: 14px;
-            }
-            QHeaderView::section {
-                background-color: #e9ecef;
+            }}
+            QHeaderView::section {{
+                background-color: {C.BORDER_DEFAULT};
                 padding: 8px;
                 font-weight: bold;
                 border: none;
-            }
-            QPushButton {
+            }}
+            QPushButton {{
                 padding: 8px 16px;
                 border-radius: 4px;
                 font-weight: bold;
-            }
+            }}
         """)
 
         self._setup_ui()
@@ -73,12 +74,12 @@ class QuoteHistoryDialog(BaseDialog):
         self._load_data()
 
     def _setup_ui(self):
-        layout = QVBoxLayout(self)
+        layout = self.content_layout
 
         # Header
         header_layout = QHBoxLayout()
         title = QLabel("سجل العروض المحفوظة")
-        title.setStyleSheet("font-size: 20px; font-weight: bold; color: #343a40;")
+        title.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {C.TEXT_MUTED};")
         header_layout.addWidget(title)
         header_layout.addStretch()
         layout.addLayout(header_layout)
@@ -108,23 +109,23 @@ class QuoteHistoryDialog(BaseDialog):
         btn_layout = QHBoxLayout()
 
         self.load_btn = QPushButton("📂 تحميل العرض")
-        self.load_btn.setStyleSheet("background-color: #0d6efd; color: white;")
+        self.load_btn.setStyleSheet(f"background-color: {C.ACCENT_SKY}; color: {C.TEXT_BRIGHT};")
         self.load_btn.clicked.connect(self._on_load)
 
         self.print_btn = QPushButton("🖨️ طباعة")
-        self.print_btn.setStyleSheet("background-color: #198754; color: white;")
+        self.print_btn.setStyleSheet(f"background-color: {C.ACCENT_TEAL}; color: {C.TEXT_BRIGHT};")
         self.print_btn.clicked.connect(self._on_print)
 
         self.convert_btn = QPushButton("💰 تحويل لبيع")
-        self.convert_btn.setStyleSheet("background-color: #ffc107; color: black;")
+        self.convert_btn.setStyleSheet(f"background-color: {C.ACCENT_AMBER}; color: black;")
         self.convert_btn.clicked.connect(self._on_convert)
 
         self.delete_btn = QPushButton("🗑️ حذف")
-        self.delete_btn.setStyleSheet("background-color: #dc3545; color: white;")
+        self.delete_btn.setStyleSheet(f"background-color: {C.ACCENT_CORAL}; color: {C.TEXT_BRIGHT};")
         self.delete_btn.clicked.connect(self._on_delete)
 
         close_btn = QPushButton("إغلاق")
-        close_btn.setStyleSheet("background-color: #6c757d; color: white;")
+        close_btn.setStyleSheet(f"background-color: {C.TEXT_SECONDARY}; color: {C.TEXT_BRIGHT};")
         close_btn.clicked.connect(self.reject)
 
         btn_layout.addWidget(self.load_btn)
@@ -181,7 +182,7 @@ class QuoteHistoryDialog(BaseDialog):
             total_val = quote.get("total_value", quote.get("total", 0.0))
             val_str = f"{total_val:,.2f}"
             item_val = QTableWidgetItem(val_str)
-            item_val.setForeground(QColor("#198754"))  # Green
+            item_val.setForeground(QColor(C.ACCENT_TEAL))  # Green
             item_val.setFont(QFont("Arial", 10, QFont.Weight.Bold))
             self.table.setItem(row, 4, item_val)
 

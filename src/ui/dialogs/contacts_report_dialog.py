@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 # -*- coding: utf-8 -*-
 """
 نافذة تقارير العملاء والموردين
@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from src.ui.styles.design_tokens import C
 from src.ui.widgets.base_dialog import BaseDialog
 from src.ui.widgets.quantum_notification import NotificationManager
 
@@ -50,7 +51,7 @@ class ContactsReportDialog(BaseDialog):
         layout = self.content_layout
 
         title = QLabel("تقارير العملاء والموردين")
-        title.setStyleSheet("font-size: 16px; font-weight: bold; color: #f8fafc;")
+        title.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {C.TEXT_BRIGHT};")
         layout.addWidget(title)
 
         # تبويبات التقارير
@@ -182,8 +183,8 @@ class ContactsReportDialog(BaseDialog):
         """توليد تقرير العملاء"""
         try:
             # احسب الإحصائيات
-            self.db_manager.fetch_one("SELECT COUNT(*) FROM customers")[0] or 0
-            active = self.db_manager.fetch_one("SELECT COUNT(*) FROM customers WHERE is_active = 1")[0] or 0  # noqa: F841,E501
+            total = self.db_manager.fetch_one("SELECT COUNT(*) FROM customers")[0] or 0
+            active = self.db_manager.fetch_one("SELECT COUNT(*) FROM customers WHERE is_active = 1")[0] or 0
 
             # الأعلى رصيد مستحق - تحقق من وجود العمود أولاً
             try:
@@ -207,7 +208,7 @@ class ContactsReportDialog(BaseDialog):
                 top_buyers = []
 
             # بناء التقرير
-            report = """
+            report = f"""
 {'='*80}
 تقرير العملاء
 تاريخ التقرير: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
@@ -225,7 +226,9 @@ class ContactsReportDialog(BaseDialog):
                 report += """💰 العملاء الأعلى رصيداً مستحقاً:
 ─────────────────────────────────────────────────────────────────────────────
 """
-                for i, (name, balance) in enumerate(top_balance, 1):
+                for i, row in enumerate(top_balance, 1):
+                    name = row["name"]
+                    balance = row["balance"]
                     report += f"  {i}. {name:<30} {float(balance):>15,.2f} دج\n"
             else:
                 report += """💰 العملاء الأعلى رصيداً مستحقاً:
@@ -236,7 +239,10 @@ class ContactsReportDialog(BaseDialog):
             if top_buyers:
                 report += "\n🛍️  العملاء الأكثر شراءً:\n"
                 report += "─────────────────────────────────────────────────────────────────────────────\n"
-                for i, (name, count, amount) in enumerate(top_buyers, 1):
+                for i, row in enumerate(top_buyers, 1):
+                    name = row["name"]
+                    count = row["purchase_count"]
+                    amount = row["total_amount"]
                     amount_val = float(amount) if amount else 0
                     report += f"  {i}. {name:<30} {count:>5} فاتورة  {amount_val:>15,.2f} دج\n"
             else:
@@ -250,7 +256,7 @@ class ContactsReportDialog(BaseDialog):
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في توليد تقرير العملاء: {str(e)}")
-            error_report = """
+            error_report = f"""
 {'='*80}
 تقرير العملاء
 تاريخ التقرير: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
@@ -272,8 +278,8 @@ class ContactsReportDialog(BaseDialog):
         """توليد تقرير الموردين"""
         try:
             # احسب الإحصائيات
-            self.db_manager.fetch_one("SELECT COUNT(*) FROM suppliers")[0] or 0
-            active = self.db_manager.fetch_one("SELECT COUNT(*) FROM suppliers WHERE is_active = 1")[0] or 0  # noqa: F841,E501
+            total = self.db_manager.fetch_one("SELECT COUNT(*) FROM suppliers")[0] or 0
+            active = self.db_manager.fetch_one("SELECT COUNT(*) FROM suppliers WHERE is_active = 1")[0] or 0
 
             # الموردين الأكثر عمليات (لا يوجد عمود current_balance في جدول suppliers)
             try:
@@ -289,7 +295,7 @@ class ContactsReportDialog(BaseDialog):
                 top_suppliers = []
 
             # بناء التقرير
-            report = """
+            report = f"""
 {'='*80}
 تقرير الموردين
 تاريخ التقرير: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
@@ -306,7 +312,10 @@ class ContactsReportDialog(BaseDialog):
             if top_suppliers:
                 report += "📦 الموردين الأكثر عمليات:\n"
                 report += "─────────────────────────────────────────────────────────────────────────────\n"
-                for i, (name, count, amount) in enumerate(top_suppliers, 1):
+                for i, row in enumerate(top_suppliers, 1):
+                    name = row["name"]
+                    count = row["purchase_count"]
+                    amount = row["total_amount"]
                     amount_val = float(amount) if amount else 0
                     report += f"  {i}. {name:<30} {count:>5} عملية   {amount_val:>15,.2f} دج\n"
             else:
@@ -320,7 +329,7 @@ class ContactsReportDialog(BaseDialog):
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في توليد تقرير الموردين: {str(e)}")
-            error_report = """
+            error_report = f"""
 {'='*80}
 تقرير الموردين
 تاريخ التقرير: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
@@ -361,6 +370,7 @@ class ContactsReportDialog(BaseDialog):
                 sales_count = self.db_manager.fetch_one("SELECT COUNT(*) FROM sales")[0] or 0  # noqa: F841
             except Exception:
                 sales_total = 0
+                sales_count = 0
 
             # إحصائيات الشراء
             try:
@@ -370,9 +380,10 @@ class ContactsReportDialog(BaseDialog):
                 purchases_count = self.db_manager.fetch_one("SELECT COUNT(*) FROM purchases")[0] or 0  # noqa: F841
             except Exception:
                 purchases_total = 0
+                purchases_count = 0
 
             # بناء التقرير
-            report = """
+            report = f"""
 {'='*80}
 تقرير المقارنة: العملاء مقابل الموردين
 تاريخ التقرير: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
@@ -397,7 +408,7 @@ class ContactsReportDialog(BaseDialog):
 {'-'*70}
 {'عدد العمليات':<30} {sales_count:>20} {purchases_count:>20}
 {'إجمالي المبلغ':<30} {float(sales_total):>20,.2f} {float(purchases_total):>20,.2f}
-{'متوسط العملية':<30} {float(sales_total)/max(sales_count, 1):>20,.2f} {float(purchases_total)/max(purchases_count, 1):>20,.2f}  # noqa: E501
+{'متوسط العملية':<30} {float(sales_total)/max(sales_count, 1):>20,.2f} {float(purchases_total)/max(purchases_count, 1):>20,.2f}
 
 📋 التحليل:
 ─────────────────────────────────────────────────────────────────────────────
@@ -430,7 +441,7 @@ class ContactsReportDialog(BaseDialog):
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في توليد تقرير المقارنة: {str(e)}")
-            error_report = """
+            error_report = f"""
 {'='*80}
 تقرير المقارنة: العملاء مقابل الموردين
 تاريخ التقرير: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}

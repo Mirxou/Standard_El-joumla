@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from src.ui.styles.design_tokens import C
 from src.ui.widgets.base_dialog import BaseDialog
 
 
@@ -39,12 +40,12 @@ class CommandPalette(BaseDialog):
     def setup_ui(self):
         # Main Container (Glass Effect)
         self.container = QWidget(self)
-        self.container.setStyleSheet("""
-            QWidget {
-                background-color: #0f172a;
-                border: 1px solid #334155;
+        self.container.setStyleSheet(f"""
+            QWidget {{
+                background-color: {C.BG_DEEP};
+                border: 1px solid {C.BG_ELEVATED};
                 border-radius: 12px;
-            }
+            }}
         """)
 
         layout = QVBoxLayout(self)
@@ -58,19 +59,19 @@ class CommandPalette(BaseDialog):
         # Search Input
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Type a command or search...")
-        self.search_input.setStyleSheet("""
-            QLineEdit {
-                background-color: #1e293b;
-                border: 1px solid #334155;
+        self.search_input.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {C.BG_SURFACE};
+                border: 1px solid {C.BG_ELEVATED};
                 border-radius: 8px;
                 padding: 12px;
-                color: #e2e8f0;
+                color: {C.TEXT_PRIMARY};
                 font-size: 16px;
-                selection-background-color: #38bdf8;
-            }
-            QLineEdit:focus {
-                border: 1px solid #38bdf8;
-            }
+                selection-background-color: {C.ACCENT_SKY};
+            }}
+            QLineEdit:focus {{
+                border: 1px solid {C.ACCENT_SKY};
+            }}
         """)
         self.search_input.textChanged.connect(self.filter_items)
         self.search_input.installEventFilter(self)  # For Up/Down/Enter formatting
@@ -78,29 +79,29 @@ class CommandPalette(BaseDialog):
 
         # Action List
         self.list_widget = QListWidget()
-        self.list_widget.setStyleSheet("""
-            QListWidget {
+        self.list_widget.setStyleSheet(f"""
+            QListWidget {{
                 background-color: transparent;
                 border: none;
                 outline: none;
-            }
-            QListWidget::item {
+            }}
+            QListWidget::item {{
                 padding: 10px;
                 border-radius: 6px;
-                color: #94a3b8;
+                color: {C.TEXT_SECONDARY};
                 font-size: 14px;
-            }
-            QListWidget::item:selected {
-                background-color: #334155;
-                color: #38bdf8;
-            }
+            }}
+            QListWidget::item:selected {{
+                background-color: {C.BG_ELEVATED};
+                color: {C.ACCENT_SKY};
+            }}
         """)
         self.list_widget.itemClicked.connect(self.execute_current)
         inner_layout.addWidget(self.list_widget)
 
         # Footer
         footer = QLabel("Navigate: ↑↓ | Select: Enter | Close: Esc")
-        footer.setStyleSheet("color: #cbd5e1; font-size: 12px; margin-top: 5px;")
+        footer.setStyleSheet(f"color: {C.TEXT_PRIMARY}; font-size: 12px; margin-top: 5px;")
         footer.setAlignment(Qt.AlignCenter)
         inner_layout.addWidget(footer)
 

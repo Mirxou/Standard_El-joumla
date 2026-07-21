@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 # -*- coding: utf-8 -*-
 """
 نافذة إدارة EDI - EDI Management Window
@@ -40,6 +40,7 @@ project_root = Path(__file__).parent.parent.parent.parent
 
 from src.core.database_manager import DatabaseManager
 from src.services.edi_service import EDIDocument, EDIPartner, EDIService
+from src.ui.styles.design_tokens import C
 from src.utils.logger import setup_logger
 
 
@@ -61,7 +62,7 @@ class EDIManagementWindow(QMainWindow):
         self.setMinimumSize(1200, 800)
 
         # تطبيق ستايل الهوية الموحدة
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {C.BG_DEEP}; }}")
 
         self.setup_ui()
         self.load_partners()

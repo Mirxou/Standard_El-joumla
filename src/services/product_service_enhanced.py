@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 # -*- coding: utf-8 -*-
 """
 خدمة المنتجات المحسّنة - Enhanced Product Service
@@ -27,7 +27,7 @@ class ProductService:
 
     def __init__(self, db_manager, logger=None):
         self.db_manager = db_manager
-        self.logger = logger
+        self.logger = logger or logging.getLogger(__name__)
         self.variant_manager = ProductVariantManager(db_manager, logger)
         self.bundle_manager = BundleProductManager(db_manager, logger)
         self.label_manager = ProductLabelManager(db_manager, logger)

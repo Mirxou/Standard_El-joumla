@@ -33,6 +33,7 @@ project_root = Path(__file__).parent.parent.parent.parent
 
 from src.core.database_manager import DatabaseManager
 from src.services.analytics_service import AnalyticsService
+from src.ui.styles.design_tokens import C as Colors
 from src.ui.widgets.advanced_charts import (
     BarChartWidget,
     LineChartWidget,
@@ -59,7 +60,7 @@ class AnalyticsDashboardWindow(QMainWindow):
         self.setMinimumSize(1400, 900)
 
         # تطبيق ستايل الهوية الموحدة
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {Colors.BG_VOID}; }}")
 
         self.setup_ui()
         self.load_default_analytics()
@@ -257,7 +258,7 @@ class AnalyticsDashboardWindow(QMainWindow):
 
                 status = "نفد" if alert.get("current_stock", 0) <= 0 else "منخفض"
                 status_item = QTableWidgetItem(status)
-                status_item.setForeground(QColor("red") if status == "نفد" else QColor("orange"))
+                status_item.setForeground(QColor(Colors.ACCENT_CORAL) if status == "نفد" else QColor(Colors.ACCENT_AMBER))
                 self.stock_alerts_table.setItem(row, 3, status_item)
 
     def load_financial_analytics(self, start_date: datetime, end_date: datetime):

@@ -91,30 +91,25 @@ class CountDetailsDialog(BaseDialog):
         buttons_layout.addWidget(cancel_btn)
 
         layout.addLayout(buttons_layout)
-        self.setLayout(layout)
 
     def load_count_data(self):
         """تحميل بيانات الجرد"""
         try:
-            cursor = self.db.get_cursor()
-            cursor.execute(
-                """
-                SELECT id, count_number, count_date, location_id, notes, status
-                FROM physical_counts WHERE id = ?
-            """,
+            rows = self.db.fetch_all(
+                "SELECT id, count_number, count_date, location_id, notes, status FROM physical_counts WHERE id = ?",
                 (self.count_id,),
             )
-            row = cursor.fetchone()
-            if row:
+            if rows:
+                row = rows[0]
                 self.count_data = {
-                    "id": row[0],
-                    "number": row[1],
-                    "date": row[2],
-                    "location": row[3],
-                    "notes": row[4],
-                    "status": row[5],
+                    "id": row["id"],
+                    "number": row["count_number"],
+                    "date": row["count_date"],
+                    "location": row["location_id"],
+                    "notes": row["notes"],
+                    "status": row["status"],
                 }
-                self.count_number_label.setText(str(row[1]))
+                self.count_number_label.setText(str(row["count_number"]))
                 self.load_products()
         except Exception as e:
             self.notify.show_error("خطأ", f"خطأ في تحميل بيانات الجرد: {str(e)}")
@@ -123,11 +118,11 @@ class CountDetailsDialog(BaseDialog):
         """تحميل المنتجات المرتبطة بالجرد"""
         try:
             self.products_table.setRowCount(0)
-            cursor = self.db.get_cursor()
+            self.count_items = []
 
             if self.count_id:
                 # تحميل المنتجات المسجلة
-                cursor.execute(
+                rows = self.db.fetch_all(
                     """
                     SELECT cp.id, p.name, p.code, p.current_stock, cp.counted_quantity, cp.notes
                     FROM count_products cp
@@ -138,59 +133,54 @@ class CountDetailsDialog(BaseDialog):
                 )
             else:
                 # تحميل جميع المنتجات
-                cursor.execute("SELECT id, name, code, current_stock, 0, '' FROM products LIMIT 50")
+                rows = self.db.fetch_all("SELECT id, name, code, current_stock, 0 as counted_quantity, '' as notes FROM products LIMIT 50")
 
-            rows = cursor.fetchall()
             self.products_table.setRowCount(len(rows))
 
             for row_idx, row in enumerate(rows):
                 # المنتج
-                self.products_table.setItem(row_idx, 0, QTableWidgetItem(str(row[1])))
+                self.products_table.setItem(row_idx, 0, QTableWidgetItem(str(row["name"])))
                 # الرمز
-                self.products_table.setItem(row_idx, 1, QTableWidgetItem(str(row[2])))
+                self.products_table.setItem(row_idx, 1, QTableWidgetItem(str(row["code"])))
                 # الكمية في النظام
-                system_qty = row[3] or 0
+                system_qty = row["current_stock"] or 0
                 self.products_table.setItem(row_idx, 2, QTableWidgetItem(str(system_qty)))
                 # الكمية المحسوبة
                 spinbox = QSpinBox()
-                spinbox.setValue(row[4] or 0)
+                spinbox.setValue(row["counted_quantity"] or 0)
                 self.products_table.setCellWidget(row_idx, 3, spinbox)
                 # الفرق
-                difference = (row[4] or 0) - system_qty
+                difference = (row["counted_quantity"] or 0) - system_qty
                 diff_item = QTableWidgetItem(str(difference))
                 if difference != 0:
                     diff_item.setBackground(QColor(255, 200, 200))
                 self.products_table.setItem(row_idx, 4, diff_item)
                 # الملاحظات
-                self.products_table.setItem(row_idx, 5, QTableWidgetItem(str(row[5] or "")))
+                self.products_table.setItem(row_idx, 5, QTableWidgetItem(str(row.get("notes") or "")))
 
-                self.count_items.append(row[0])
+                self.count_items.append(row["id"])
         except Exception as e:
             self.notify.show_warning("تحذير", f"خطأ في تحميل المنتجات: {str(e)}")
 
     def save_count(self):
         """حفظ بيانات الجرد"""
         try:
-            cursor = self.db.get_cursor()
-
             for row_idx in range(self.products_table.rowCount()):
                 # الحصول على الكمية المحسوبة من SpinBox
                 spinbox = self.products_table.cellWidget(row_idx, 3)
                 if spinbox:
                     counted_qty = spinbox.value()
-                    notes = self.products_table.item(row_idx, 5).text()
+                    notes_item = self.products_table.item(row_idx, 5)
+                    notes = notes_item.text() if notes_item else ""
 
                     if self.count_id and row_idx < len(self.count_items):
                         # تحديث منتج موجود
-                        cursor.execute(
-                            """
-                            UPDATE count_products SET counted_quantity = ?, notes = ?
-                            WHERE id = ?
-                        """,
+                        self.db.execute_query(
+                            "UPDATE count_products SET counted_quantity = ?, notes = ? WHERE id = ?",
                             (counted_qty, notes, self.count_items[row_idx]),
                         )
 
-            self.db.commit()
+            self.db.execute_query("COMMIT")
             self.notify.show_success("نجاح", "تم حفظ بيانات الجرد بنجاح")
             self.accept()
         except Exception as e:

@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 # -*- coding: utf-8 -*-
 """
 Modern Action Delegate - Icon-Based Actions with Precise Click Detection

@@ -525,6 +525,100 @@ class AnimationManager(QObject):
 
     # ── Internal ─────────────────────────────────────────────────────────
 
+    def pulse_border(self, widget: QWidget, color_hex: str = "#C8A54E", duration: int = 2000):
+        """
+        Pulse a widget's border color from transparent to full color and back.
+        Creates a breathing border effect.
+
+        Args:
+            widget: عنصر واجهة المستخدم
+            color_hex: لون الحد بصيغة hex
+            duration: مدة الدورة الكاملة (ميلي ثانية)
+        """
+        animation_id = f"pulse_border_{id(widget)}"
+
+        if animation_id in self.animation_groups:
+            self.animation_groups[animation_id].stop()
+            del self.animation_groups[animation_id]
+
+        base_style = widget.styleSheet()
+        half = duration // 2
+
+        # Phase 1: fade border in
+        anim_in = QPropertyAnimation(widget, b"windowOpacity")
+        anim_in.setDuration(half)
+        anim_in.setStartValue(0.85)
+        anim_in.setEndValue(1.0)
+        anim_in.setEasingCurve(QEasingCurve.InOutSine)
+
+        def _border_on():
+            widget.setStyleSheet(
+                f"{base_style}\n"
+                f"{{ border: 1px solid {color_hex}; }}"
+            )
+
+        # Phase 2: fade border out
+        anim_out = QPropertyAnimation(widget, b"windowOpacity")
+        anim_out.setDuration(half)
+        anim_out.setStartValue(1.0)
+        anim_out.setEndValue(0.85)
+        anim_out.setEasingCurve(QEasingCurve.InOutSine)
+
+        def _border_off():
+            widget.setStyleSheet(base_style)
+
+        seq = QSequentialAnimationGroup()
+        seq.addAnimation(anim_in)
+        seq.addAnimation(anim_out)
+
+        anim_in.finished.connect(_border_on)
+        anim_out.finished.connect(_border_off)
+        seq.setLoopCount(-1)
+
+        self.animation_groups[animation_id] = seq
+        seq.start()
+        return animation_id
+
+    def shimmer_effect(self, widget: QWidget, duration: int = 1500):
+        """
+        Create a subtle opacity shimmer sweep effect on a widget.
+        Rapidly pulses opacity to create a shimmer/loading feel.
+
+        Args:
+            widget: عنصر واجهة المستخدم
+            duration: مدة الدورة (ميلي ثانية)
+        """
+        animation_id = f"shimmer_{id(widget)}"
+
+        if animation_id in self.animation_groups:
+            self.animation_groups[animation_id].stop()
+            del self.animation_groups[animation_id]
+
+        seq = QSequentialAnimationGroup()
+        steps = 6
+        step_dur = duration // steps
+
+        for i in range(steps):
+            anim = QPropertyAnimation(widget, b"windowOpacity")
+            anim.setDuration(step_dur)
+            # Alternate between 0.7 and 1.0 for shimmer
+            target = 0.7 if i % 2 == 0 else 1.0
+            anim.setStartValue(1.0 if i % 2 == 0 else 0.7)
+            anim.setEndValue(target)
+            anim.setEasingCurve(QEasingCurve.InOutQuad)
+            seq.addAnimation(anim)
+
+        seq.setLoopCount(3)  # shimmer 3 times then stop
+
+        def _cleanup():
+            widget.setWindowOpacity(1.0)
+            self._on_animation_finished(animation_id)
+
+        seq.finished.connect(_cleanup)
+        self.animation_groups[animation_id] = seq
+        seq.start()
+        return animation_id
+
     def _on_animation_finished(self, animation_id: str):
         """عند انتهاء الحركة"""
         if animation_id in self.active_animations:

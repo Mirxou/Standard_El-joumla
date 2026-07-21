@@ -327,8 +327,8 @@ class ReorderRecommendationsWindow(QMainWindow):
             self,
             "إنشاء أمر شراء",
             f"المنتج: {recommendation.product_name}\n"
-            f"الكمية المقترحة: {recommendation.suggested_order_quantity:,.2f}\n"
-            f"التكلفة المقدرة: {recommendation.estimated_order_cost:,.2f} دج\n\n"
+            f"الكمية المقترحة: {recommendation.suggested_quantity:,.2f}\n"
+            f"التكلفة المقدرة: {recommendation.estimated_cost:,.2f} دج\n\n"
             "هل تريد إنشاء أمر شراء؟",
             QMessageBox.Yes | QMessageBox.No,
         )
@@ -337,7 +337,7 @@ class ReorderRecommendationsWindow(QMainWindow):
             # إصدار إشارة لإنشاء أمر شراء
             self.create_purchase_order.emit(
                 recommendation.product_id,
-                float(recommendation.suggested_order_quantity),
+                float(recommendation.suggested_quantity),
             )
 
             QMessageBox.information(
@@ -345,7 +345,7 @@ class ReorderRecommendationsWindow(QMainWindow):
                 "نجح",
                 "سيتم فتح نافذة أمر الشراء\n"
                 f"المنتج: {recommendation.product_name}\n"
-                f"الكمية: {recommendation.suggested_order_quantity:,.2f}",
+                f"الكمية: {recommendation.suggested_quantity:,.2f}",
             )
 
     def create_all_purchase_orders(self):
@@ -358,7 +358,7 @@ class ReorderRecommendationsWindow(QMainWindow):
             self,
             "إنشاء أوامر شراء",
             f"سيتم إنشاء {len(self.recommendations)} أمر شراء\n"
-            f"التكلفة الإجمالية المقدرة: {sum(r.estimated_order_cost or Decimal('0') for r in self.recommendations):,.2f} دج\n\n"  # noqa: E501
+            f"التكلفة الإجمالية المقدرة: {sum(r.estimated_cost or Decimal('0') for r in self.recommendations):,.2f} دج\n\n"  # noqa: E501
             "هل تريد المتابعة؟",
             QMessageBox.Yes | QMessageBox.No,
         )
