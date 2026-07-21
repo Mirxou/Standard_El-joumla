@@ -1,0 +1,123 @@
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  Standard El-Joumla ERP — Project Configuration               ║
+# ║  Aurora Noir v4.0 — PySide6 Desktop Application               ║
+# ╚══════════════════════════════════════════════════════════════════╝
+
+[project]
+name = "standard-el-joumla"
+version = "4.0.0"
+description = "نظام ERP متكامل — Standard El-Joumla Aurora Noir v4.0"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+
+[tool.ruff]
+# ── General ─────────────────────────────────────────────────────
+target-version = "py310"
+line-length = 120
+src = ["src"]
+exclude = [
+    ".git",
+    ".github",
+    "__pycache__",
+    "build",
+    "dist",
+    "*.egg-info",
+    "tests/legacy",
+    "venv",
+    ".venv",
+]
+
+# ── Linter Rules ────────────────────────────────────────────────
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "C4",   # flake8-comprehensions
+    "DTZ",  # flake8-datetimez
+    "TCH",  # flake8-type-checking
+    "RUF",  # ruff-specific rules
+]
+ignore = [
+    "E402",   # module level import not at top (needed for PySide6)
+    "F403",   # star import (used extensively)
+    "F405",   # undefined from star import
+    "N802",   # function name should be lowercase (Arabic APIs)
+    "N803",   # argument name should be lowercase
+    "N815",   # class variable should be lowercase
+    "SIM108", # ternary instead of if-else-block
+    "B028",   # no explicit stacklevel for warning
+    "B904",   # raise without from inside except
+    "UP038",  # non-pep604-isinstance
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/ui/windows/main_window.py" = ["E501", "C901"]  # 10K+ line file
+"src/ui/dialogs/login_dialog.py" = ["E501"]
+"src/ui/dialogs/sales_dialog.py" = ["E501", "C901"]
+"src/ui/dialogs/purchase_order_dialog.py" = ["E501"]
+"src/services/accounting_service.py" = ["E501"]
+"src/services/sales_service.py" = ["E501"]
+"tests/*" = ["S101", "S106", "ARG001", "PLR2004"]  # tests can use asserts
+
+[tool.ruff.format]
+indent-style = "space"
+quote-style = "double"
+line-ending = "lf"
+
+# ── Pytest ──────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests/unit", "tests/integration"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+python_classes = ["Test*"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+    "-W ignore::DeprecationWarning",
+]
+markers = [
+    "slow: tests that take > 5 seconds",
+    "integration: integration tests requiring database",
+    "gui: tests requiring Qt GUI",
+    "security: security-focused tests",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+
+# ── Coverage ────────────────────────────────────────────────────
+[tool.coverage.run]
+source = ["src"]
+branch = true
+omit = [
+    "tests/*",
+    "src/ai/*",
+    "src/experimental/*",
+    "src/api/*",
+    "*/migrations/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@abstractmethod",
+    "@abc.abstractmethod",
+    "def __repr__",
+]
+show_missing = true
+fail_under = 30

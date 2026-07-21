@@ -180,7 +180,7 @@ class ReportManager:
                 "total_cost_value": _safe_float(value_result, "total_cost_value"),
                 "total_sales_value": _safe_float(value_result, "total_sales_value", 1),
                 "potential_profit": (
-                    _safe_float(value_result, "total_sales_value", 0)
+                    _safe_float(value_result, "total_sales_value", 1)
                     - _safe_float(value_result, "total_cost_value", 0)
                 ),
                 "total_products": int(_safe_float(value_result, "total_products", 2)),

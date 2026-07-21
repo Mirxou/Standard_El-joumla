@@ -1,298 +1,232 @@
-"""
-Pytest Configuration and Shared Fixtures
-إعدادات pytest والـ fixtures المشتركة
-"""
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  Tests Configuration — Standard El-Joumla ERP                ║
+# ║  Aurora Noir v4.0 — Shared Fixtures & Mocks                  ║
+# ╚══════════════════════════════════════════════════════════════════╝
 
-import os
-import shutil
-import sys
-import tempfile
-from pathlib import Path
-from types import SimpleNamespace
+import logging
+import sqlite3
+from typing import Any, Dict, List, Optional
 
 import pytest
 
-project_root = Path(__file__).parent.parent
 
-# Force heavy tests to run in production-like environment by default
-os.environ.setdefault("RUN_ALL_TESTS", "1")
-
-
-@pytest.hookimpl(tryfirst=True)
-def pytest_configure(config):
-    """
-    Setup mocks before any tests collection
-    """
-    # Pre-import cryptography to avoid PyO3 Rust module re-init bug
-    # (PyO3 modules must be initialized only once; loading during collection
-    #  after pytest capture is set up causes ValueError on sys.stdout)
-    try:
-        import cryptography.fernet  # noqa: F401
-        import cryptography.hazmat.bindings._rust  # noqa: F401
-    except Exception:
-        pass
-
-    # Disable pyqtgraph during tests to prevent OpenGL / C++ segfaults
-    # This prevents pyqtgraph.widgets.PlotWidget from crashing in headless/test environments
-    sys.modules["pyqtgraph"] = None
-
-    # Mock serial if not present to avoid ImportError in tests
-    try:
-        pass
-    except ImportError:
-        from unittest.mock import MagicMock
-
-        mock_serial = MagicMock()
-        mock_serial.Serial = MagicMock
-        mock_serial.PARITY_NONE = "N"
-        mock_serial.STOPBITS_ONE = 1
-        mock_serial.EIGHTBITS = 8
-        sys.modules["serial"] = mock_serial
-
-    # Mock textblob if not present
-    try:
-        pass
-    except ImportError:
-        from unittest.mock import MagicMock
-
-        mock_tb = MagicMock()
-        mock_tb.TextBlob = MagicMock
-        sys.modules["textblob"] = mock_tb
+@pytest.fixture()
+def logger():
+    log = logging.getLogger("test_erp")
+    log.setLevel(logging.DEBUG)
+    return log
 
 
-@pytest.fixture(scope="session")
-def project_path():
-    """مسار المشروع"""
-    return Path(__file__).parent.parent
+class MockDatabaseManager:
+    """Mock database manager mimicking LocalDatabaseManager API."""
+
+    def __init__(self, db_path: str = ":memory:"):
+        self.conn = sqlite3.connect(db_path)
+        self.conn.row_factory = sqlite3.Row
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("PRAGMA foreign_keys=ON")
+        self._setup_schema()
+
+    def _setup_schema(self):
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL, sku TEXT, barcode TEXT,
+                cost_price REAL DEFAULT 0, selling_price REAL DEFAULT 0,
+                current_stock REAL DEFAULT 0, min_stock REAL DEFAULT 0,
+                category_id INTEGER, is_active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL, parent_id INTEGER, is_active INTEGER DEFAULT 1
+            );
+            CREATE TABLE IF NOT EXISTS customers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL, phone TEXT, email TEXT, address TEXT,
+                balance REAL DEFAULT 0, is_active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS suppliers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL, contact_person TEXT, phone TEXT, email TEXT,
+                address TEXT, balance REAL DEFAULT 0, is_active INTEGER DEFAULT 1
+            );
+            CREATE TABLE IF NOT EXISTS sales (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                invoice_number TEXT UNIQUE, customer_id INTEGER,
+                total_amount REAL DEFAULT 0, paid_amount REAL DEFAULT 0,
+                remaining_amount REAL DEFAULT 0, status TEXT DEFAULT 'PENDING',
+                payment_method TEXT, sale_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                notes TEXT, is_active INTEGER DEFAULT 1
+            );
+            CREATE TABLE IF NOT EXISTS sale_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sale_id INTEGER NOT NULL, product_id INTEGER NOT NULL,
+                product_name TEXT, quantity REAL DEFAULT 0,
+                unit_price REAL DEFAULT 0, total_price REAL DEFAULT 0,
+                cost_price REAL DEFAULT 0,
+                FOREIGN KEY (sale_id) REFERENCES sales(id)
+            );
+            CREATE TABLE IF NOT EXISTS purchase_orders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                supplier_id INTEGER, status TEXT DEFAULT 'pending',
+                total REAL DEFAULT 0, order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expected_delivery_date TIMESTAMP, delivery_date TIMESTAMP,
+                notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS purchase_order_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                purchase_order_id INTEGER, product_id INTEGER,
+                quantity REAL DEFAULT 0, quantity_received REAL DEFAULT 0,
+                unit_price REAL DEFAULT 0, actual_delivery_date TIMESTAMP,
+                FOREIGN KEY (purchase_order_id) REFERENCES purchase_orders(id)
+            );
+            CREATE TABLE IF NOT EXISTS stock_movements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                product_id INTEGER, movement_type TEXT, quantity REAL,
+                reference_id INTEGER, reference_type TEXT, notes TEXT,
+                user_id INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS accounts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_code TEXT UNIQUE NOT NULL, account_name TEXT NOT NULL,
+                account_type TEXT NOT NULL, parent_id INTEGER,
+                balance REAL DEFAULT 0, is_active INTEGER DEFAULT 1
+            );
+            CREATE TABLE IF NOT EXISTS journal_entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                entry_number TEXT UNIQUE, description TEXT,
+                entry_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                reference_type TEXT, reference_id TEXT,
+                status TEXT DEFAULT 'draft',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS journal_lines (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                entry_id INTEGER NOT NULL, account_code TEXT NOT NULL,
+                account_name TEXT, debit_amount REAL DEFAULT 0,
+                credit_amount REAL DEFAULT 0, description TEXT,
+                FOREIGN KEY (entry_id) REFERENCES journal_entries(id)
+            );
+            CREATE TABLE IF NOT EXISTS payments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sale_id INTEGER, customer_id INTEGER, amount REAL DEFAULT 0,
+                payment_method TEXT, payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                notes TEXT, reference TEXT
+            );
+            CREATE TABLE IF NOT EXISTS returns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                return_number TEXT UNIQUE, sale_id INTEGER, customer_id INTEGER,
+                total_amount REAL DEFAULT 0, reason TEXT,
+                status TEXT DEFAULT 'pending',
+                return_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS return_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                return_id INTEGER NOT NULL, product_id INTEGER,
+                product_name TEXT, quantity REAL DEFAULT 0,
+                unit_price REAL DEFAULT 0, total_price REAL DEFAULT 0,
+                FOREIGN KEY (return_id) REFERENCES returns(id)
+            );
+            CREATE TABLE IF NOT EXISTS payment_plans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                plan_number TEXT UNIQUE, customer_id INTEGER,
+                total_amount REAL DEFAULT 0, paid_amount REAL DEFAULT 0,
+                remaining_amount REAL DEFAULT 0, status TEXT DEFAULT 'active',
+                start_date TIMESTAMP, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS installments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                plan_id INTEGER NOT NULL, installment_number INTEGER,
+                due_amount REAL DEFAULT 0, paid_amount REAL DEFAULT 0,
+                due_date TIMESTAMP, status TEXT DEFAULT 'pending',
+                paid_date TIMESTAMP,
+                FOREIGN KEY (plan_id) REFERENCES payment_plans(id)
+            );
+        """)
+        self.conn.commit()
+
+    def execute_query(self, query, params=None):
+        cursor = self.conn.execute(query, params or [])
+        self.conn.commit()
+        return [dict(row) for row in cursor.fetchall()]
+
+    def fetch_one(self, query, params=None):
+        cursor = self.conn.execute(query, params or [])
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def fetch_all(self, query, params=None):
+        cursor = self.conn.execute(query, params or [])
+        return [dict(row) for row in cursor.fetchall()]
+
+    def execute_insert(self, query, params=None):
+        cursor = self.conn.execute(query, params or [])
+        self.conn.commit()
+        return cursor.lastrowid
+
+    def execute_non_query(self, query, params=None):
+        cursor = self.conn.execute(query, params or [])
+        self.conn.commit()
+        return cursor.rowcount
+
+    def close(self):
+        self.conn.close()
+
+    @property
+    def connection(self):
+        return self.conn
 
 
-@pytest.fixture(scope="session")
-def temp_db_path():
-    """مسار قاعدة بيانات مؤقتة للاختبارات"""
-    temp_dir = tempfile.mkdtemp()
-    db_path = os.path.join(temp_dir, "test.db")
-    yield db_path
-    # تنظيف بعد الاختبارات
-    # 🔥 CRITICAL FIX: انتظار قليل قبل الحذف للتأكد من إغلاق جميع الاتصالات
-    import time
-
-    time.sleep(0.1)  # انتظار 100ms
-
-    # محاولة حذف الملفات بشكل آمن
-    try:
-        if os.path.exists(db_path):
-            # محاولة إزالة الملف مباشرة
-            try:
-                os.remove(db_path)
-            except PermissionError:
-                # إذا فشل، انتظر قليلاً ثم حاول مرة أخرى
-                time.sleep(0.2)
-                try:
-                    os.remove(db_path)
-                except Exception:
-                    pass  # تجاهل الخطأ - سيتم حذف المجلد لاحقاً
-
-        # حذف المجلد المؤقت
-        if os.path.exists(temp_dir):
-            try:
-                shutil.rmtree(temp_dir)
-            except PermissionError:
-                # إذا فشل، تجاهل - سيتم تنظيفه لاحقاً من النظام
-                pass
-    except Exception:
-        pass  # تجاهل أي أخطاء في التنظيف
+@pytest.fixture()
+def db_manager():
+    mgr = MockDatabaseManager()
+    yield mgr
+    mgr.close()
 
 
-@pytest.fixture(scope="function")
-def db_manager(temp_db_path):
-    """مدير قاعدة بيانات للاختبارات"""
-    from src.core.database_manager import DatabaseManager
-
-    db = DatabaseManager(db_path=temp_db_path)
-    db.initialize()
-
-    yield db
-
-    # إغلاق جميع الاتصالات بشكل صحيح
-    try:
-        db.close()
-    except Exception:
-        pass
-
-
-@pytest.fixture(scope="function")
-def sample_product_data():
-    """بيانات منتج نموذجية للاختبارات"""
-    return {
-        "name": "منتج اختبار",
-        "name_en": "Test Product",
-        "barcode": "1234567890123",
-        "category_id": 1,
-        "unit": "قطعة",
-        "cost_price": 100.0,
-        "selling_price": 150.0,
-        "min_stock": 10,
-        "current_stock": 50,
-        "description": "منتج للاختبار",
-        "is_active": True,
-    }
-
-
-@pytest.fixture(scope="function")
-def sample_customer_data():
-    """بيانات عميل نموذجية للاختبارات"""
-    return {
-        "name": "عميل اختبار",
-        "email": "test@example.com",
-        "phone": "0123456789",
-        "address": "عنوان اختبار",
-        "is_active": True,
-    }
-
-
-@pytest.fixture(scope="function")
-def sample_sale_data():
-    """بيانات فاتورة مبيعات نموذجية للاختبارات"""
-    return {
-        "customer_id": 1,
-        "invoice_number": "INV-001",
-        "subtotal": 1000.0,
-        "discount_amount": 50.0,
-        "tax_amount": 142.5,
-        "total_amount": 1092.5,
-        "payment_method": "cash",
-        "status": "confirmed",
-    }
-
-
-@pytest.fixture(scope="function")
-def sqlite_backend_fixture(temp_db_path):
-    """SQLiteBackend instance للاختبارات"""
-    from src.database.sqlite_backend import SQLiteBackend
-
-    backend = SQLiteBackend(temp_db_path)
-    backend.connect()
-    yield backend
-    backend.disconnect()
-
-
-@pytest.fixture(scope="function")
-def database_metrics_fixture():
-    """DatabaseMetrics instance للاختبارات"""
-    from src.core.database_metrics import DatabaseMetrics
-
-    metrics = DatabaseMetrics(max_history=100)
-    yield metrics
-    metrics.reset()
-
-
-@pytest.fixture(scope="function")
-def websocket_client_fixture():
-    """WebSocketClient mock للاختبارات"""
-    from unittest.mock import MagicMock
-
-    from PySide6.QtCore import QObject
-
-    client = MagicMock(spec=QObject)
-    client.is_connected = False
-    client.worker = None
-    client.event_handlers = {}
-    return client
-
-
-@pytest.fixture
-def mocker():
-    """Lightweight replacement for pytest-mock's fixture."""
-    from unittest.mock import MagicMock, Mock, patch
-
-    return SimpleNamespace(MagicMock=MagicMock, Mock=Mock, patch=patch)
-
-
-@pytest.fixture
-def qtbot():
-    """Minimal qtbot replacement for synchronous signal tests."""
-
-    class _SignalWaiter:
-        def __init__(self, signal):
-            self.signal = signal
-            self.args = None
-            self._handler = None
-
-        def __enter__(self):
-            def _handler(*args):
-                self.args = list(args)
-
-            self._handler = _handler
-            self.signal.connect(_handler)
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            try:
-                if self._handler is not None:
-                    self.signal.disconnect(self._handler)
-            except Exception:
-                pass
-            if exc_type is None and self.args is None:
-                raise AssertionError("Signal was not emitted")
-            return False
-
-    class _QtBot:
-        def waitSignal(self, signal, timeout=1000):
-            return _SignalWaiter(signal)
-
-    return _QtBot()
-
-
-def _is_heavy_test(nodeid: str) -> bool:
-    heavy_indicators = [
-        "/ai/",
-        "/integration/",
-        "/ui/",
-        "/stress_",
-        "/performance/",
-        "/web/",
-        "web/__tests__",
-    ]
-    return any(ind in nodeid for ind in heavy_indicators)
-
-
-def pytest_collection_modifyitems(config, items):
-    # Heavy tests gating: run in production-like environments only
-    if os.environ.get("RUN_ALL_TESTS") != "1":
-        marker = pytest.mark.skip(reason="Heavy tests are skipped in development. Set RUN_ALL_TESTS=1 to run all.")
-        for item in list(items):
-            if _is_heavy_test(item.nodeid):
-                item.add_marker(marker)
-
-    # Improve mocks to behave as context managers for tests that use 'with Mock()'
-    try:
-        import unittest.mock as _mock
-
-        def _cm_enter(self):
-            return self
-
-        def _cm_exit(self, exc_type, exc, tb):
-            return False
-
-        _mock.Mock.__enter__ = _cm_enter  # type: ignore
-        _mock.Mock.__exit__ = _cm_exit  # type: ignore
-        _mock.MagicMock.__enter__ = _cm_enter  # type: ignore
-        _mock.MagicMock.__exit__ = _cm_exit  # type: ignore
-    except Exception:
-        pass
-
-
-@pytest.fixture(autouse=True)
-def reset_singletons():
-    """إعادة تعيين الـ Singletons لضمان عزل الاختبارات"""
-    from src.core.tenant_isolation import reset_tenant_isolation_manager
-
-    reset_tenant_isolation_manager()
-    yield
-
-
-@pytest.fixture(autouse=True)
-def cleanup_cache_services():
-    """تنظيف خدمات التخزين المؤقت بعد كل اختبار"""
-    yield
-    # تنظيف أي CacheService instances (تم تعطيل gc.get_objects بسبب البطء)
+@pytest.fixture()
+def db_manager_with_data(db_manager):
+    """Pre-populated with test data."""
+    db_manager.execute_insert("INSERT INTO categories (name) VALUES (?)", ("إلكترونيات",))
+    db_manager.execute_insert("INSERT INTO categories (name) VALUES (?)", ("أدوات مكتبية",))
+    db_manager.execute_insert(
+        "INSERT INTO products (name, sku, cost_price, selling_price, current_stock, min_stock) VALUES (?,?,?,?,?,?)",
+        ("لابتوب HP", "LP-001", 80000, 120000, 15, 5),
+    )
+    db_manager.execute_insert(
+        "INSERT INTO products (name, sku, cost_price, selling_price, current_stock, min_stock) VALUES (?,?,?,?,?,?)",
+        ("طابعة Canon", "PR-001", 25000, 35000, 8, 3),
+    )
+    db_manager.execute_insert(
+        "INSERT INTO products (name, sku, cost_price, selling_price, current_stock, min_stock) VALUES (?,?,?,?,?,?)",
+        ("شاشة Samsung", "MN-001", 45000, 65000, 2, 2),
+    )
+    db_manager.execute_insert(
+        "INSERT INTO customers (name, phone, balance) VALUES (?,?,?)",
+        ("أحمد بن علي", "0551234567", 5000),
+    )
+    db_manager.execute_insert(
+        "INSERT INTO customers (name, phone, balance) VALUES (?,?,?)",
+        ("شركة النور", "0559876543", 0),
+    )
+    db_manager.execute_insert(
+        "INSERT INTO suppliers (name, contact_person, phone) VALUES (?,?,?)",
+        ("مؤسسة التقنية", "محمد", "0551112233"),
+    )
+    for code, name, atype in [
+        ("1010", "الصندوق", "asset"), ("1100", "البنك", "asset"),
+        ("4001", "المبيعات", "revenue"), ("4100", "المخزون", "asset"),
+        ("2100", "الدائنون", "liability"), ("2300", "الضريبة المستحقة", "liability"),
+        ("5100", "تكلفة المبيعات", "expense"), ("6000", "مصاريف إدارية", "expense"),
+    ]:
+        db_manager.execute_insert(
+            "INSERT INTO accounts (account_code, account_name, account_type) VALUES (?,?,?)",
+            (code, name, atype),
+        )
+    return db_manager

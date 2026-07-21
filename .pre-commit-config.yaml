@@ -1,0 +1,93 @@
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  Pre-commit Hooks — Standard El-Joumla ERP                   ║
+# ║  Aurora Noir v4.0 — Code Quality Gates Before Every Commit    ║
+# ╚══════════════════════════════════════════════════════════════════╝
+#
+# تثبيت: pip install pre-commit && pre-commit install
+# تشغيل يدوي على كل الملفات: pre-commit run --all-files
+# تخطي hook معين: SKIP=ruff pre-commit commit -m "message"
+#
+minimum_pre_commit_version: "3.0.0"
+default_stages: [commit]
+ci:
+    autofix_commit_msg: "style: auto-fix by pre-commit hooks"
+    autoupdate_commit_msg: "chore: update pre-commit hooks"
+
+repos:
+  # ── 1. Python Syntax Validation ───────────────────────────────
+  # التأكد من أن كل ملف Python صالح نحوياً
+  - repo: local
+    hooks:
+      - id: python-syntax-check
+        name: 🔍 Python Syntax Validation
+        entry: python -m py_compile
+        language: system
+        types: [python]
+        pass_filenames: true
+        fail_fast: false
+
+  # ── 2. Ruff — Linter & Formatter (replaces flake8+black+isort) ──
+  # فحص الجودة والتنسيق
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff
+        name: 🧹 Ruff Lint
+        args: [--fix, --exit-non-zero-on-fix]
+        files: ^src/
+      - id: ruff-format
+        name: ✨ Ruff Format
+        files: ^src/
+
+  # ── 3. Security Scan (Bandit) ────────────────────────────────
+  # فحص الثغرات الأمنية
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.2
+    hooks:
+      - id: bandit
+        name: 🔒 Security Scan (Bandit)
+        args: [-c, .bandit]
+        files: ^src/
+        additional_dependencies: ["bandit[toml]"]
+
+  # ── 4. Trailing Whitespace & EOF ─────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        name: 🧽 Trailing Whitespace
+      - id: end-of-file-fixer
+        name: 📄 EOF Fixer
+      - id: check-yaml
+        name: 📋 YAML Check
+      - id: check-json
+        name: 📦 JSON Check
+      - id: check-merge-conflict
+        name: ⚠️ Merge Conflict Markers
+      - id: check-added-large-files
+        name: 📏 Large File Check
+        args: [--maxkb=500]
+      - id: no-commit-to-branch
+        name: 🚫 Protected Branch Check
+        args: [--branch, main]
+
+  # ── 5. Docstring Check ───────────────────────────────────────
+  # التأكد من وجود docstrings للوظائف الجديدة
+  - repo: https://github.com/econchick/interrogate
+    rev: 1.7.0
+    hooks:
+      - id: interrogate
+        name: 📝 Docstring Coverage
+        args: [-vv, --fail-under=10]
+        files: ^src/services/
+        pass_filenames: false
+
+  # ── 6. Secret Detection ──────────────────────────────────────
+  # كشف المفاتيح والأسرار المنسية في الكود
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        name: 🕵️ Secret Detection
+        args: [--baseline, .secrets.baseline]
+        exclude: package-lock\.json|\.env\.example
