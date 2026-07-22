@@ -395,9 +395,7 @@ class ProductManager:
             ORDER BY (p.current_stock - p.min_stock), p.name
             """
             rows = self.db_manager.fetch_all(query)
-            if rows is not None and type(rows).__name__ in ('Mock', 'MagicMock', 'NonCallableMock', 'CallableMock', 'AsyncMock'):
-                rows = []
-            return [self._row_to_product(row) for row in rows]
+            return [self._row_to_product(row) for row in (rows or [])]
         except Exception as e:
             if self.logger:
                 self.logger.error(f"Error getting low stock: {e}")

@@ -388,21 +388,21 @@ class InventoryService:
             query += " ORDER BY sm.created_at DESC LIMIT ?"
             params.append(limit)
 
-            rows = self.db_manager.fetch_all(query, params)
+            rows = self.db_manager.fetch_all(query, tuple(params))
             movements = []
             for row in rows:
                 movements.append(
                     StockMovement(
-                        id=get_value(row, "id" if isinstance(row, dict) else 0),
-                        product_id=get_value(row, "product_id" if isinstance(row, dict) else 1, 0),
-                        movement_type=get_value(row, "movement_type" if isinstance(row, dict) else 2, ""),
-                        quantity=float(get_value(row, "quantity" if isinstance(row, dict) else 3, 0)),
-                        reference_id=get_value(row, "reference_id" if isinstance(row, dict) else 4),
-                        reference_type=get_value(row, "reference_type" if isinstance(row, dict) else 5),
-                        notes=get_value(row, "notes" if isinstance(row, dict) else 6),
-                        created_by=get_value(row, "user_id" if isinstance(row, dict) else 7),
-                        created_at=self._parse_datetime(get_value(row, "created_at" if isinstance(row, dict) else 8)),
-                        product_name=get_value(row, "product_name" if isinstance(row, dict) else 9),
+                        id=get_value(row, "id", 0),
+                        product_id=get_value(row, "product_id", 0),
+                        movement_type=get_value(row, "movement_type", ""),
+                        quantity=float(get_value(row, "quantity", 0)),
+                        reference_id=get_value(row, "reference_id"),
+                        reference_type=get_value(row, "reference_type"),
+                        notes=get_value(row, "notes"),
+                        created_by=get_value(row, "user_id"),
+                        created_at=self._parse_datetime(get_value(row, "created_at")),
+                        product_name=get_value(row, "product_name"),
                     )
                 )
             return movements
@@ -422,10 +422,10 @@ class InventoryService:
             rows = self.db_manager.fetch_all(query)
             alerts = []
             for row in rows:
-                pid = get_value(row, "id" if isinstance(row, dict) else 0)
-                name_val = get_value(row, "name" if isinstance(row, dict) else 1)
-                curr = float(get_value(row, "current_stock" if isinstance(row, dict) else 2, 0))
-                mins = float(get_value(row, "min_stock" if isinstance(row, dict) else 3, 0))
+                pid = get_value(row, "id", 0)
+                name_val = get_value(row, "name", "")
+                curr = float(get_value(row, "current_stock", 0))
+                mins = float(get_value(row, "min_stock", 0))
 
                 alerts.append(
                     StockAlert(
@@ -448,11 +448,14 @@ class InventoryService:
         try:
             stock_report = self.product_manager.get_stock_report()
 
-            # إحصائيات إضافية
-            cat_count = self.db_manager.fetch_one("SELECT COUNT(*) FROM categories")[0]
-            out_count = self.db_manager.fetch_one(
-                "SELECT COUNT(*) FROM products WHERE is_active=1 AND current_stock<=0"
-            )[0]
+            # إحصائيات إضافية - استخدام get_value لضمان التوافق
+            cat_row = self.db_manager.fetch_one("SELECT COUNT(*) as cnt FROM categories")
+            cat_count = get_value(cat_row, "cnt", 0) if cat_row else 0
+
+            out_row = self.db_manager.fetch_one(
+                "SELECT COUNT(*) as cnt FROM products WHERE is_active=1 AND current_stock<=0"
+            )
+            out_count = get_value(out_row, "cnt", 0) if out_row else 0
 
             report = InventoryReport(
                 total_products=stock_report.get("total_products", 0),
@@ -519,12 +522,12 @@ class InventoryService:
             for row in rows:
                 results.append(
                     {
-                        "id": get_value(row, "id" if isinstance(row, dict) else 0),
-                        "name": get_value(row, "name" if isinstance(row, dict) else 1),
-                        "current_stock": get_value(row, "current_stock" if isinstance(row, dict) else 2),
-                        "cost_price": get_value(row, "cost_price" if isinstance(row, dict) else 3),
-                        "selling_price": get_value(row, "selling_price" if isinstance(row, dict) else 4),
-                        "stock_value": get_value(row, "stock_value" if isinstance(row, dict) else 5),
+                        "id": get_value(row, "id", 0),
+                        "name": get_value(row, "name", ""),
+                        "current_stock": get_value(row, "current_stock", 0),
+                        "cost_price": get_value(row, "cost_price", 0),
+                        "selling_price": get_value(row, "selling_price", 0),
+                        "stock_value": get_value(row, "stock_value", 0),
                     }
                 )
             return results

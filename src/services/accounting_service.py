@@ -493,22 +493,15 @@ class AccountingService:
             # تحميل الأسطر
             lines = self.db.fetch_all("SELECT * FROM journal_lines WHERE journal_id = ?", (journal_id,))
             for lr in lines:
-                idict = isinstance(lr, dict)
-
-                def igv(k, i, d=None):
-                    if idict:
-                        return lr.get(k, d)
-                    return lr[i] if len(lr) > i else d
-
                 entry.add_line(
                     JournalLine(
-                        id=igv("id", 0),
-                        account_id=igv("account_id", 2),
-                        account_code=igv("account_code", 3),
-                        account_name=igv("account_name", 4),
-                        debit_amount=Decimal(str(igv("debit_amount", 5, 0))),
-                        credit_amount=Decimal(str(igv("credit_amount", 6, 0))),
-                        description=igv("description", 7),
+                        id=gv(lr, "id", 0),
+                        account_id=gv(lr, "account_id", 0),
+                        account_code=gv(lr, "account_code", ""),
+                        account_name=gv(lr, "account_name", ""),
+                        debit_amount=Decimal(str(gv(lr, "debit_amount", 0))),
+                        credit_amount=Decimal(str(gv(lr, "credit_amount", 0))),
+                        description=gv(lr, "description", ""),
                     )
                 )
             return entry

@@ -1,6 +1,6 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
 """
 مدير قاعدة البيانات - Database Manager
 إدارة الاتصال بقاعدة البيانات والعمليات الأساسية

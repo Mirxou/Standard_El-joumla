@@ -113,7 +113,8 @@ class SecurityService:
             rows = self.db.execute_query("SELECT secret FROM user_2fa WHERE user_id = ?", (user_id,))
             if not rows:
                 return None
-            secret = rows[0]["secret"] if isinstance(rows[0], dict) else rows[0][0]
+            row = rows[0]
+            secret = row.get("secret") if isinstance(row, dict) else (row[0] if row else None)
             if pyotp is None:
                 return None
             return pyotp.totp.TOTP(secret).provisioning_uri(name=account, issuer_name=issuer)
@@ -125,7 +126,8 @@ class SecurityService:
             rows = self.db.execute_query("SELECT secret FROM user_2fa WHERE user_id = ?", (user_id,))
             if not rows or pyotp is None:
                 return False
-            secret = rows[0]["secret"] if isinstance(rows[0], dict) else rows[0][0]
+            row = rows[0]
+            secret = row.get("secret") if isinstance(row, dict) else (row[0] if row else None)
             return bool(pyotp.TOTP(secret).verify(code, valid_window=valid_window))
         except Exception:
             return False
@@ -210,7 +212,8 @@ class SecurityService:
                 f"SELECT COUNT(*) as cnt FROM login_attempts WHERE {where}",
                 tuple(params),
             )
-            cnt = rows[0]["cnt"] if rows and isinstance(rows[0], dict) else (rows[0][0] if rows else 0)
+            row = rows[0] if rows else None
+            cnt = row.get("cnt", 0) if isinstance(row, dict) else (row[0] if row else 0)
             return cnt >= max_failures
         except Exception:
             return False
