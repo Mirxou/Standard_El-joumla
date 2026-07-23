@@ -156,7 +156,7 @@ class VendorService:
             # استخدام purchase_orders
             q_total = 'SELECT COUNT(*) FROM purchase_orders WHERE supplier_id = ? AND status = "received"'
             row = self.db.fetch_one(q_total, (vendor_id,))
-            total_orders = row[0] if row else 0
+            total_orders = row["COUNT(*)"] if row else 0
 
             if total_orders == 0:
                 return 50.0
@@ -164,7 +164,7 @@ class VendorService:
             # مقارنة delivery_date بـ expected_delivery_date
             q_on_time = 'SELECT COUNT(*) FROM purchase_orders WHERE supplier_id = ? AND status = "received" AND (expected_delivery_date IS NULL OR julianday(delivery_date) <= julianday(expected_delivery_date))'  # noqa: E501
             row = self.db.fetch_one(q_on_time, (vendor_id,))
-            on_time_count = row[0] if row else 0
+            on_time_count = row["COUNT(*)"] if row else 0
             on_time_score = (on_time_count / total_orders) * 100
 
             # 2. دقة الكميات (30%)
@@ -173,7 +173,7 @@ class VendorService:
             # 3. سرعة التوريد (30%)
             q_avg_days = 'SELECT AVG(julianday(delivery_date) - julianday(order_date)) FROM purchase_orders WHERE supplier_id = ? AND status = "received"'  # noqa: E501
             _r = self.db.fetch_one(q_avg_days, (vendor_id,))
-            avg_days = _r[0] if _r else 7
+            avg_days = _r["AVG(julianday(delivery_date) - julianday(order_date))"] if _r else 7
             lead_time_score = max(0, 100 - (avg_days * 5))
 
             final_score = (on_time_score * 0.4) + (fulfillment_score * 0.3) + (lead_time_score * 0.3)
@@ -191,7 +191,10 @@ class VendorService:
                 "SELECT id, name, current_stock, min_stock FROM products"
             )  # min_stock instead of reorder_level
             for p in products:
-                pid, name, stock, min_stock = p
+                pid = p["id"]
+                name = p["name"]
+                stock = p["current_stock"]
+                min_stock = p["min_stock"]
                 stock = stock or 0
                 min_stock = min_stock or 0
 
@@ -215,8 +218,8 @@ class VendorService:
                     """
                     best_vendor = self.db.fetch_one(q_vendor, (pid,))
 
-                    vendor_id = best_vendor[0] if best_vendor else None
-                    est_cost = best_vendor[1] if best_vendor else 0
+                    vendor_id = best_vendor["supplier_id"] if best_vendor else None
+                    est_cost = best_vendor["unit_price"] if best_vendor else 0
 
                     plan.append(
                         {
@@ -241,13 +244,13 @@ class VendorService:
             # استخدام purchase_orders
             q_avg = 'SELECT AVG(julianday(delivery_date) - julianday(order_date)) FROM purchase_orders WHERE supplier_id = ? AND status = "received"'  # noqa: E501
             _r = self.db.fetch_one(q_avg, (vendor_id,))
-            avg_days = _r[0] if _r else 0
+            avg_days = _r["AVG(julianday(delivery_date) - julianday(order_date))"] if _r else 0
             q_total = "SELECT COUNT(*) FROM purchase_orders WHERE supplier_id = ?"
             _r2 = self.db.fetch_one(q_total, (vendor_id,))
-            total = _r2[0] if _r2 else 0
+            total = _r2["COUNT(*)"] if _r2 else 0
             q_on_time = 'SELECT COUNT(*) FROM purchase_orders WHERE supplier_id = ? AND status = "received" AND (expected_delivery_date IS NULL OR julianday(delivery_date) <= julianday(expected_delivery_date))'  # noqa: E501
             _r3 = self.db.fetch_one(q_on_time, (vendor_id,))
-            on_time = _r3[0] if _r3 else 0
+            on_time = _r3["COUNT(*)"] if _r3 else 0
 
             quality_score = self.calculate_quality_score(vendor_id)
 

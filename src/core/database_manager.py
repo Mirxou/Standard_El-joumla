@@ -85,6 +85,8 @@ class DatabaseManager:
         # Database Metrics
         self.metrics = get_database_metrics()
 
+        self._temp_db_path: Optional[str] = None  # C1: تتبع ملف DB المؤقت المشفّر
+
         self._ensure_data_directory()
 
         # التحقق من حالة التشفير
@@ -179,16 +181,12 @@ class DatabaseManager:
                         try:
                             os.remove(temp_db_path)
                         except OSError:
-                            logging.getLogger(__name__).warning("Ignored exception in database_manager.py")
+                            self.logger.warning("Ignored exception during encrypted DB cleanup")
                     raise DatabaseException(f"فشل فك تشفير قاعدة البيانات: {e}")
 
-                # حذف الملف المؤقت بعد الاتصال بشكل آمن
-                finally:
-                    if temp_db_path and os.path.exists(temp_db_path):
-                        try:
-                            os.remove(temp_db_path)
-                        except OSError as e:
-                            self.logger.warning(f"无法删除临时文件 {temp_db_path}: {e}")
+                # C1 FIX: لا نحذف الملف المؤقت هنا — نحتاجه مفتوحاً مع الاتصال
+                # سيتم حذفه في close() بعد إعادة التشفير
+                self._temp_db_path = temp_db_path
 
             else:
                 # إنشاء الاتصال العادي
@@ -1143,8 +1141,8 @@ class DatabaseManager:
                     cursor.connection.commit()
                 return cursor
 
-    def fetch_one(self, query: str, params: Tuple = ()) -> Optional[Any]:
-        """تنفيذ استعلام وإرجاع صف واحد"""
+    def fetch_one(self, query: str, params: Tuple = ()) -> Optional[Dict[str, Any]]:
+        """تنفيذ استعلام وإرجاع صف واحد كـ dict"""
         with self.get_cursor() as cursor:
             start_t = time.perf_counter_ns()
             cursor.execute(query, params)
@@ -1152,10 +1150,22 @@ class DatabaseManager:
             self.metrics.record_query(query, duration_ms, self._detect_query_type(query))
             if duration_ms >= self.slow_query_threshold_ms:
                 self._log_slow_query(query, params, duration_ms)
-            return cursor.fetchone()
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            # C3 FIX: تحويل الصف إلى dict لدعم .get() بشكل موثوق
+            if isinstance(row, dict):
+                return row
+            if hasattr(row, 'keys'):
+                return dict(row)
+            # fallback: إذا كان tuple و cursor.description متوفر
+            if cursor.description:
+                columns = [desc[0] for desc in cursor.description]
+                return dict(zip(columns, row))
+            return dict(row) if row else None
 
-    def fetch_all(self, query: str, params: Tuple = ()) -> List[Any]:
-        """تنفيذ استعلام وإرجاع جميع الصفوف"""
+    def fetch_all(self, query: str, params: Tuple = ()) -> List[Dict[str, Any]]:
+        """تنفيذ استعلام وإرجاع جميع الصفوف كـ list of dict"""
         with self.get_cursor() as cursor:
             start_t = time.perf_counter()
             cursor.execute(query, params)
@@ -1163,7 +1173,15 @@ class DatabaseManager:
             self.metrics.record_query(query, duration_ms, self._detect_query_type(query))
             if duration_ms >= self.slow_query_threshold_ms:
                 self._log_slow_query(query, params, duration_ms)
-            return cursor.fetchall()
+            rows = cursor.fetchall()
+            if not rows:
+                return []
+            # C3 FIX: تحويل كل صف إلى dict
+            if cursor.description:
+                columns = [desc[0] for desc in cursor.description]
+                return [dict(zip(columns, row)) for row in rows]
+            # fallback إذا لم يكن description متوفراً
+            return [dict(r) if hasattr(r, 'keys') else r for r in rows]
 
     def execute_non_query(self, query: str, params: Tuple = ()) -> int:
         """تنفيذ استعلام INSERT/UPDATE/DELETE وإرجاع عدد الصفوف المتأثرة.
@@ -1399,13 +1417,12 @@ class DatabaseManager:
             if not self.connection:
                 return False
 
-            # تنفيذ checkpoint لدمج WAL
-            cursor = self.connection.cursor()
-            cursor.execute("PRAGMA wal_checkpoint(FULL)")
-            result = cursor.fetchone()
+            # H1 FIX: تنفيذ checkpoint مع إغلاق المؤشر
+            with self.connection.execute("PRAGMA wal_checkpoint(FULL)") as cursor:
+                result = cursor.fetchone()
 
             # التحقق من النتيجة
-            if result and result[0] == 0:
+            if result and (result[0] if not isinstance(result, dict) else result.get('busy', 0)) == 0:
                 self.logger.info("تم دمج ملفات WAL بنجاح")
                 return True
             else:
@@ -1437,11 +1454,18 @@ class DatabaseManager:
             }
 
             if self.connection:
+                # H2 FIX: إغلاق المؤشرات الضمنية
                 try:
-                    info["page_count"] = self.connection.execute("PRAGMA page_count").fetchone()[0]
-                    info["page_size"] = self.connection.execute("PRAGMA page_size").fetchone()[0]
+                    with self.connection.execute("PRAGMA page_count") as cur:
+                        row = cur.fetchone()
+                        info["page_count"] = row[0] if row else 0
                 except Exception:
                     info["page_count"] = 0
+                try:
+                    with self.connection.execute("PRAGMA page_size") as cur:
+                        row = cur.fetchone()
+                        info["page_size"] = row[0] if row else 0
+                except Exception:
                     info["page_size"] = 0
             else:
                 info["page_count"] = 0
@@ -1999,6 +2023,24 @@ class DatabaseManager:
             if self.connection is not None:
                 self.connection.close()
                 self.connection = None
+
+            # C1 FIX: إعادة تشفير الملف المؤقت وحذفه بعد إغلاق الاتصال
+            if self._temp_db_path and os.path.exists(self._temp_db_path):
+                try:
+                    if self.encryption_manager and self.encryption_password:
+                        self.encryption_manager.password = self.encryption_password
+                        self.encryption_manager.encrypt_file(
+                            self._temp_db_path, self.db_path
+                        )
+                    os.remove(self._temp_db_path)
+                    self.logger.info("تم إعادة تشفير وحذف الملف المؤقت بنجاح")
+                except Exception as e:
+                    self.logger.error(
+                        f"خطأ في إعادة تشفير/حذف الملف المؤقت: {e}",
+                        exc_info=True,
+                    )
+                finally:
+                    self._temp_db_path = None
 
             if self.logger:
                 self.logger.info("تم إغلاق قاعدة البيانات بنجاح")

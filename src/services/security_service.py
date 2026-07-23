@@ -75,8 +75,8 @@ class SecurityService:
             rows = self.db.fetch_all(q, (user_id,))
             perms = set()
             for r in rows:
-                if r[0]:
-                    perms.update([p.strip() for p in r[0].split(",") if p.strip()])
+                if r["permissions"]:
+                    perms.update([p.strip() for p in r["permissions"].split(",") if p.strip()])
             return permission in perms
         except Exception as e:
             if self.logger:
@@ -114,7 +114,7 @@ class SecurityService:
             if not rows:
                 return None
             row = rows[0]
-            secret = row.get("secret") if isinstance(row, dict) else (row[0] if row else None)
+            secret = row.get("secret")
             if pyotp is None:
                 return None
             return pyotp.totp.TOTP(secret).provisioning_uri(name=account, issuer_name=issuer)
@@ -127,7 +127,7 @@ class SecurityService:
             if not rows or pyotp is None:
                 return False
             row = rows[0]
-            secret = row.get("secret") if isinstance(row, dict) else (row[0] if row else None)
+            secret = row.get("secret")
             return bool(pyotp.TOTP(secret).verify(code, valid_window=valid_window))
         except Exception:
             return False
@@ -213,7 +213,7 @@ class SecurityService:
                 tuple(params),
             )
             row = rows[0] if rows else None
-            cnt = row.get("cnt", 0) if isinstance(row, dict) else (row[0] if row else 0)
+            cnt = row.get("cnt", 0)
             return cnt >= max_failures
         except Exception:
             return False

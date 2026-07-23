@@ -235,7 +235,7 @@ class PricingService:
             if not customer:
                 return False
 
-            total_purchases = Decimal(str(customer[0]))
+            total_purchases = Decimal(str(customer["total_purchases"]))
             new_tier = self.calculate_pricing_tier(total_purchases)
 
             self.db_manager.execute_query(

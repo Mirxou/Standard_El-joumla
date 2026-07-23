@@ -636,6 +636,9 @@ class PaymentService:
                 if payment.customer_id and payment.payment_type == PaymentType.CUSTOMER_PAYMENT.value:
                     customer = self.customer_manager.get_customer_by_id(payment.customer_id)
                     if customer:
+                        # M1 FIX: فحص due_date قبل الطرح
+                        if not payment.due_date:
+                            continue
                         days_overdue = (date.today() - payment.due_date).days
                         receivables.append(
                             {
@@ -667,6 +670,9 @@ class PaymentService:
                 if payment.supplier_id and payment.payment_type == PaymentType.SUPPLIER_PAYMENT.value:
                     supplier = self.supplier_manager.get_supplier_by_id(payment.supplier_id)
                     if supplier:
+                        # M1 FIX: فحص due_date قبل الطرح
+                        if not payment.due_date:
+                            continue
                         days_overdue = (date.today() - payment.due_date).days
                         payables.append(
                             {
@@ -978,9 +984,9 @@ class PaymentService:
             }
 
             for row in results:
-                payment_date = row[0]
-                payment_type = row[1]
-                amount = Decimal(str(row[2]))
+                payment_date = row["payment_date"]
+                payment_type = row["payment_type"]
+                amount = Decimal(str(row["daily_amount"]))
 
                 if payment_date not in cash_flow["daily_flow"]:
                     cash_flow["daily_flow"][payment_date] = {
@@ -1064,18 +1070,18 @@ class PaymentService:
 
             # تنظيم البيانات
             for row in results:
-                period = row[0]
-                payment_type = row[1]
+                period = row["period"]
+                payment_type = row["payment_type"]
 
                 if period not in trends["trends_data"]:
                     trends["trends_data"][period] = {}
 
                 trends["trends_data"][period][payment_type] = {
-                    "transaction_count": row[2],
-                    "total_amount": Decimal(str(row[3])),
-                    "avg_amount": Decimal(str(row[4])),
-                    "min_amount": Decimal(str(row[5])),
-                    "max_amount": Decimal(str(row[6])),
+                    "transaction_count": row["transaction_count"],
+                    "total_amount": Decimal(str(row["total_amount"])),
+                    "avg_amount": Decimal(str(row["avg_amount"])),
+                    "min_amount": Decimal(str(row["min_amount"])),
+                    "max_amount": Decimal(str(row["max_amount"])),
                 }
 
             # حساب معدلات النمو والتقلبات
@@ -1143,9 +1149,9 @@ class PaymentService:
             # تنظيم البيانات التاريخية
             historical_data = {}
             for row in results:
-                month = row[0]
-                payment_type = row[1]
-                amount = Decimal(str(row[2]))
+                month = row["month"]
+                payment_type = row["payment_type"]
+                amount = Decimal(str(row["monthly_amount"]))
 
                 if payment_type not in historical_data:
                     historical_data[payment_type] = []
@@ -1253,11 +1259,12 @@ class PaymentService:
                 }
 
                 for row in results:
-                    payment_type = row[0]
-                    transaction_count = row[1]
-                    total_amount = Decimal(str(row[2]))
-                    avg_amount = Decimal(str(row[3]))
-                    payment_method = row[4]
+                    # C3 FIX: استخدام أسماء الأعمدة بدلاً من الفهرس
+                    payment_type = row.get("payment_type")
+                    transaction_count = int(row.get("transaction_count", 0))
+                    total_amount = Decimal(str(row.get("total_amount", 0)))
+                    avg_amount = Decimal(str(row.get("avg_amount", 0)))
+                    payment_method = row.get("payment_method")
 
                     period_data["total_transactions"] += transaction_count
                     period_data["total_amount"] += total_amount
@@ -1303,8 +1310,9 @@ class PaymentService:
                 )
 
                 if unique_result:
-                    period_data["unique_customers"] = unique_result[0] or 0
-                    period_data["unique_suppliers"] = unique_result[1] or 0
+                    # C3 FIX: استخدام أسماء الأعمدة
+                    period_data["unique_customers"] = unique_result.get("unique_customers", 0) or 0
+                    period_data["unique_suppliers"] = unique_result.get("unique_suppliers", 0) or 0
 
                 return period_data
 
@@ -1480,12 +1488,13 @@ class PaymentService:
 
             # معالجة النتائج الأساسية
             for row in results:
-                payment_type = row[0]
-                transaction_count = row[1]
-                total_amount = Decimal(str(row[2]))
-                avg_amount = Decimal(str(row[3]))
-                min_amount = Decimal(str(row[4]))
-                max_amount = Decimal(str(row[5]))
+                # C3 FIX: استخدام أسماء الأعمدة بدلاً من الفهرس
+                payment_type = row.get("payment_type")
+                transaction_count = int(row.get("transaction_count", 0))
+                total_amount = Decimal(str(row.get("total_amount", 0)))
+                avg_amount = Decimal(str(row.get("avg_amount", 0)))
+                min_amount = Decimal(str(row.get("min_amount", 0)))
+                max_amount = Decimal(str(row.get("max_amount", 0)))
 
                 kpis["summary"]["total_transactions"] += transaction_count
                 kpis["summary"]["total_amount"] += total_amount
@@ -1499,17 +1508,20 @@ class PaymentService:
                 }
 
             # حساب متوسط قيمة المعاملة الإجمالي
-            if kpis["summary"]["total_transactions"] > 0:
+            # M6 FIX: حماية من None/0 في القسمة
+            tx_count = kpis["summary"]["total_transactions"] or 0
+            if tx_count > 0 and isinstance(tx_count, (int, float)):
                 kpis["summary"]["avg_transaction_value"] = (
-                    kpis["summary"]["total_amount"] / kpis["summary"]["total_transactions"]
+                    kpis["summary"]["total_amount"] / tx_count
                 )
 
             # معالجة مقاييس التحصيل
             if collection_results:
-                completed_payments = collection_results[0] or 0
-                total_payments = collection_results[1] or 0
-                collected_amount = Decimal(str(collection_results[2] or 0))
-                total_amount = Decimal(str(collection_results[3] or 0))
+                # C3 FIX: استخدام أسماء الأعمدة
+                completed_payments = int(collection_results.get("completed_payments", 0) or 0)
+                total_payments = int(collection_results.get("total_payments", 0) or 0)
+                collected_amount = Decimal(str(collection_results.get("collected_amount", 0) or 0))
+                total_amount = Decimal(str(collection_results.get("total_amount", 0) or 0))
 
                 if total_payments > 0:
                     kpis["collection_metrics"]["collection_rate"] = (completed_payments / total_payments) * 100
@@ -1520,8 +1532,9 @@ class PaymentService:
                     )
 
             # متوسط وقت التحصيل
-            if collection_time_result and collection_time_result[0]:
-                kpis["collection_metrics"]["avg_collection_days"] = round(collection_time_result[0], 1)
+            if collection_time_result and collection_time_result.get("avg_collection_days"):
+                # C3 FIX: استخدام اسم العمود
+                kpis["collection_metrics"]["avg_collection_days"] = round(float(collection_time_result["avg_collection_days"]), 1)
 
             # مقاييس الكفاءة
             period_days = (end_date - start_date).days + 1

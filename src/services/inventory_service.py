@@ -185,7 +185,7 @@ class InventoryService:
             return False
 
     def transfer_stock(self, from_product_id: int, to_product_id: int, quantity: float) -> bool:
-        """نقل مخزون بين منتجين"""
+        """نقل مخزون بين منتجين — H4 FIX: معاملة ذرية لمنع فقدان المخزون"""
         try:
             if from_product_id == to_product_id:
                 self.logger.warning("لا يمكن نقل المخزون لنفس المنتج")
@@ -196,25 +196,27 @@ class InventoryService:
                 return False
             if from_product.current_stock < quantity:
                 return False
-            if not self.product_manager.update_stock(from_product_id, round(from_product.current_stock - quantity, 2)):
-                return False
-            if not self.product_manager.update_stock(to_product_id, round(to_product.current_stock + quantity, 2)):
-                self.product_manager.update_stock(from_product_id, round(from_product.current_stock, 2))
-                return False
-            self._record_stock_movement(
-                from_product_id,
-                "out",
-                quantity,
-                reference_type="transfer",
-                notes=f"تحويل إلى المنتج {to_product_id}",
-            )
-            self._record_stock_movement(
-                to_product_id,
-                "in",
-                quantity,
-                reference_type="transfer",
-                notes=f"تحويل من المنتج {from_product_id}",
-            )
+
+            # H4 FIX: تنفيذ النقل داخل معاملة ذرية
+            with self.db_manager.transaction() as _tx:
+                if not self.product_manager.update_stock(from_product_id, round(from_product.current_stock - quantity, 2)):
+                    raise RuntimeError("فشل خصم مخزون المصدر")
+                if not self.product_manager.update_stock(to_product_id, round(to_product.current_stock + quantity, 2)):
+                    raise RuntimeError("فشل إضافة مخزون الهدف")
+                self._record_stock_movement(
+                    from_product_id,
+                    "out",
+                    quantity,
+                    reference_type="transfer",
+                    notes=f"تحويل إلى المنتج {to_product_id}",
+                )
+                self._record_stock_movement(
+                    to_product_id,
+                    "in",
+                    quantity,
+                    reference_type="transfer",
+                    notes=f"تحويل من المنتج {from_product_id}",
+                )
             return True
         except Exception as e:
             self.logger.warning(f"خطأ في نقل المخزون: {str(e)}")

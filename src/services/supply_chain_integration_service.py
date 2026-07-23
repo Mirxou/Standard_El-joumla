@@ -476,14 +476,14 @@ class SupplyChainIntegrationService:
             data = self.db.execute_query(query, fetch_all=True)
 
             for row in data:
-                self.suppliers[row[0]] = {
-                    "name": row[1],
-                    "contact_info": json.loads(row[2]) if row[2] else {},
-                    "payment_terms": row[3],
-                    "lead_time_days": row[4] or 7,
-                    "reliability_score": float(row[5] or 0),
-                    "status": row[6],
-                    "categories": json.loads(row[7]) if row[7] else [],
+                self.suppliers[row['supplier_id']] = {
+                    "name": row['name'],
+                    "contact_info": json.loads(row['contact_info']) if row['contact_info'] else {},
+                    "payment_terms": row['payment_terms'],
+                    "lead_time_days": row['lead_time_days'] or 7,
+                    "reliability_score": float(row['reliability_score'] or 0),
+                    "status": row['status'],
+                    "categories": json.loads(row['categories']) if row['categories'] else [],
                 }
 
         except Exception as e:
@@ -548,16 +548,16 @@ class SupplyChainIntegrationService:
 
             if data:
                 return {
-                    "po_id": data[0],
-                    "supplier_id": data[1],
-                    "items": json.loads(data[2]) if data[2] else [],
-                    "total_amount": data[3],
-                    "status": data[4],
-                    "expected_delivery": data[5],
-                    "actual_delivery": data[6],
-                    "created_by": data[7],
-                    "approved_by": data[8],
-                    "created_at": data[9],
+                    "po_id": data['po_id'],
+                    "supplier_id": data['supplier_id'],
+                    "items": json.loads(data['items']) if data['items'] else [],
+                    "total_amount": data['total_amount'],
+                    "status": data['status'],
+                    "expected_delivery": data['expected_delivery'],
+                    "actual_delivery": data['actual_delivery'],
+                    "created_by": data['created_by'],
+                    "approved_by": data['approved_by'],
+                    "created_at": data['created_at'],
                 }
 
             return {}
@@ -589,7 +589,7 @@ class SupplyChainIntegrationService:
         try:
             query = "SELECT unit_price FROM purchase_order_items WHERE po_id = ? AND product_id = ?"
             data = self.db.execute_query(query, (po_id, product_id), fetch_one=True)
-            return Decimal(str(data[0])) if data else Decimal("0")
+            return Decimal(str(data["unit_price"])) if data else Decimal("0")
 
         except Exception as e:
             self.logger.error(f"Error getting PO item cost: {e}", exc_info=True)
@@ -667,9 +667,9 @@ class SupplyChainIntegrationService:
             delivery_data = self.db.execute_query(delivery_query, (supplier_id,), fetch_all=True)
 
             return {
-                "total_orders": orders_data[0] or 0 if orders_data else 0,
-                "total_value": float(orders_data[1] or 0) if orders_data else 0,
-                "last_order_date": orders_data[2] if orders_data else None,
+                "total_orders": (orders_data.get("total_orders", 0) or 0) if orders_data else 0,
+                "total_value": float(orders_data.get("total_value", 0) or 0) if orders_data else 0,
+                "last_order_date": orders_data.get("last_order") if orders_data else None,
                 "delivery_data": delivery_data,
             }
 
@@ -691,8 +691,8 @@ class SupplyChainIntegrationService:
 
             on_time_deliveries = 0
             for row in delivery_data:
-                expected = datetime.fromisoformat(row[0])
-                actual = datetime.fromisoformat(row[1])
+                expected = datetime.fromisoformat(row["expected_delivery"])
+                actual = datetime.fromisoformat(row["actual_delivery"])
                 if actual <= expected:
                     on_time_deliveries += 1
 
@@ -717,8 +717,8 @@ class SupplyChainIntegrationService:
 
             lead_times = []
             for row in delivery_data:
-                expected = datetime.fromisoformat(row[0])
-                actual = datetime.fromisoformat(row[1])
+                expected = datetime.fromisoformat(row["expected_delivery"])
+                actual = datetime.fromisoformat(row["actual_delivery"])
                 lead_times.append((actual - expected).days)
 
             return int(sum(lead_times) / len(lead_times))
@@ -792,7 +792,9 @@ class SupplyChainIntegrationService:
             data = self.db.execute_query(query, (tomorrow.isoformat(),), fetch_all=True)
 
             for row in data:
-                po_id, supplier_id, expected_delivery = row
+                po_id = row["po_id"]
+                supplier_id = row["supplier_id"]
+                expected_delivery = row["expected_delivery"]
                 supplier_name = self.suppliers.get(supplier_id, {}).get("name", "Unknown")
 
                 alerts.append(
@@ -856,11 +858,11 @@ class SupplyChainIntegrationService:
             for row in data:
                 suppliers.append(
                     {
-                        "supplier_id": row[0],
-                        "name": row[1],
-                        "unit_price": float(row[2] or 0),
-                        "lead_time_days": row[3] or 7,
-                        "status": row[4],
+                        "supplier_id": row["supplier_id"],
+                        "name": row["name"],
+                        "unit_price": float(row["unit_price"] or 0),
+                        "lead_time_days": row["lead_time_days"] or 7,
+                        "status": row["status"],
                     }
                 )
 
@@ -924,7 +926,11 @@ class SupplyChainIntegrationService:
 
             items = []
             for row in data:
-                product_id, name, current_stock, min_stock, priority = row
+                product_id = row["id"]
+                name = row["name"]
+                current_stock = row["current_stock"]
+                min_stock = row["min_stock"]
+                priority = row["priority"]
 
                 # حساب الكمية الموصى بها
                 recommended_quantity = max(min_stock * 2 - current_stock, min_stock - current_stock)
@@ -951,7 +957,7 @@ class SupplyChainIntegrationService:
         try:
             query = "SELECT product_id FROM purchase_order_items WHERE po_id = ?"
             data = self.db.execute_query(query, (po_id,), fetch_all=True)
-            return [row[0] for row in data]
+            return [row["product_id"] for row in data]
 
         except Exception as e:
             self.logger.error(f"Error getting PO items: {e}", exc_info=True)
@@ -970,7 +976,7 @@ class SupplyChainIntegrationService:
 
             data = self.db.execute_query(query, fetch_all=True)
 
-            return [{"product_id": row[0], "name": row[1], "supplier_count": row[2]} for row in data]
+            return [{"product_id": row["id"], "name": row["name"], "supplier_count": row["supplier_count"]} for row in data]
 
         except Exception as e:
             self.logger.error(f"Error getting single supplier products: {e}", exc_info=True)

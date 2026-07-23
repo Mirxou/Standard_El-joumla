@@ -26,8 +26,8 @@ class WholesaleAnalyticsService:
             WHERE invoice_number LIKE 'J-%'
         """
         row_rev = self.db.fetch_one(sql_rev)
-        total_rev = row_rev[1] if row_rev and row_rev[1] else 0.0
-        deal_count = row_rev[2] if row_rev else 0
+        total_rev = row_rev["SUM(final_amount)"] if row_rev and row_rev["SUM(final_amount)"] else 0.0
+        deal_count = row_rev["COUNT(*)"] if row_rev else 0
 
         # 2. Total Profit (from sale_items related to J- sales)
         sql_profit = """
@@ -37,7 +37,7 @@ class WholesaleAnalyticsService:
             WHERE s.invoice_number LIKE 'J-%'
         """
         row_prof = self.db.fetch_one(sql_profit)
-        total_profit = row_prof[0] if row_prof and row_prof[0] else 0.0
+        total_profit = row_prof["SUM(si.profit)"] if row_prof and row_prof["SUM(si.profit)"] else 0.0
 
         return {
             "total_revenue": total_rev,
@@ -56,7 +56,7 @@ class WholesaleAnalyticsService:
             LIMIT ?
         """
         rows = self.db.fetch_all(sql, [limit])
-        return [{"name": r[0], "total": r[1], "count": r[2]} for r in rows]
+        return [{"name": r["customer_name"], "total": r["total_spent"], "count": r["deals"]} for r in rows]
 
     def get_top_products(self, limit: int = 5) -> List[Dict[str, Any]]:
         """Top Moving Products in Wholesale"""
@@ -71,4 +71,4 @@ class WholesaleAnalyticsService:
             LIMIT ?
         """
         rows = self.db.fetch_all(sql, [limit])
-        return [{"name": r[0], "qty": r[1], "value": r[2]} for r in rows]
+        return [{"name": r["name"], "qty": r["total_qty"], "value": r["total_val"]} for r in rows]

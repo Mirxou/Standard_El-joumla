@@ -306,7 +306,7 @@ class AIAnalyticsEngine:
 
             data = self.db.execute_query(query, (product_id, start_date), fetch_all=True)
 
-            return [{"date": row[0], "quantity": row[1], "revenue": float(row[2])} for row in data]
+            return [{"date": row["sale_date"], "quantity": row["quantity"], "revenue": float(row["revenue"])} for row in data]
 
         except Exception as e:
             self.logger.error(f"Error getting sales history: {e}")
@@ -491,7 +491,7 @@ class AIAnalyticsEngine:
 
             # فترة الخمول
             days_since_last_order = (
-                (datetime.now() - purchase_data[3]).days if purchase_data and purchase_data[3] else 999
+                (datetime.now() - purchase_data["last_order_date"]).days if purchase_data and purchase_data.get("last_order_date") else 999
             )
 
             # تنوع المنتجات المشتراة
@@ -505,11 +505,11 @@ class AIAnalyticsEngine:
             diversity_data = self.db.execute_query(product_diversity_query, (customer_id,), fetch_one=True)
 
             return {
-                "order_count": purchase_data[0] if purchase_data else 0,
-                "total_spent": float(purchase_data[1] or 0) if purchase_data else 0,
-                "avg_order_value": float(purchase_data[2] or 0) if purchase_data else 0,
+                "order_count": purchase_data.get("order_count", 0) if purchase_data else 0,
+                "total_spent": float(purchase_data.get("total_spent", 0) or 0) if purchase_data else 0,
+                "avg_order_value": float(purchase_data.get("avg_order_value", 0) or 0) if purchase_data else 0,
                 "days_since_last_order": days_since_last_order,
-                "unique_products": diversity_data[0] if diversity_data else 0,
+                "unique_products": diversity_data.get("unique_products", 0) if diversity_data else 0,
                 "customer_id": customer_id,
             }
 
@@ -682,11 +682,11 @@ class AIAnalyticsEngine:
 
             return [
                 {
-                    "product_id": row[0],
-                    "product_name": row[1],
-                    "total_quantity": row[2],
-                    "avg_price": float(row[3]),
-                    "last_purchase": row[4],
+                    "product_id": row["product_id"],
+                    "product_name": row["name"],
+                    "total_quantity": row["total_quantity"],
+                    "avg_price": float(row["avg_price"]),
+                    "last_purchase": row["last_purchase"],
                 }
                 for row in data
             ]
@@ -701,7 +701,7 @@ class AIAnalyticsEngine:
             query = "SELECT id, name, category_id FROM products WHERE is_active = 1"
             data = self.db.execute_query(query, fetch_all=True)
 
-            return [{"id": row[0], "name": row[1], "category_id": row[2]} for row in data]
+            return [{"id": row["id"], "name": row["name"], "category_id": row["category_id"]} for row in data]
 
         except Exception as e:
             self.logger.error(f"Error getting all products: {e}")
@@ -781,8 +781,8 @@ class AIAnalyticsEngine:
 
             last_sales = self.db.execute_query(current_sales_query, (last_month, current_month), fetch_one=True)
 
-            current_total = float(current_sales[0] or 0) if current_sales else 0
-            last_total = float(last_sales[0] or 0) if last_sales else 0
+            current_total = float(current_sales.get("SUM(total_amount)") or 0) if current_sales else 0
+            last_total = float(last_sales.get("SUM(total_amount)") or 0) if last_sales else 0
 
             if last_total > 0:
                 growth_rate = (current_total - last_total) / last_total
@@ -826,10 +826,10 @@ class AIAnalyticsEngine:
             data = self.db.execute_query(segment_query, fetch_all=True)
 
             for row in data:
-                segment_name = row[0]
+                segment_name = row["segment"]
                 segments[segment_name] = {
-                    "count": row[1],
-                    "avg_spent": float(row[2] or 0),
+                    "count": row["customer_count"],
+                    "avg_spent": float(row["avg_spent"] or 0),
                 }
 
         except Exception as e:
@@ -854,11 +854,11 @@ class AIAnalyticsEngine:
 
             alerts["low_stock_products"] = [
                 {
-                    "id": row[0],
-                    "name": row[1],
-                    "current_stock": row[2],
-                    "min_stock": row[3],
-                    "urgency": "high" if row[2] <= row[3] else "medium",
+                    "id": row["id"],
+                    "name": row["name"],
+                    "current_stock": row["current_stock"],
+                    "min_stock": row["min_stock"],
+                    "urgency": "high" if row["current_stock"] <= row["min_stock"] else "medium",
                 }
                 for row in low_stock_products
             ]
@@ -875,10 +875,10 @@ class AIAnalyticsEngine:
 
             alerts["excess_stock_products"] = [
                 {
-                    "id": row[0],
-                    "name": row[1],
-                    "current_stock": row[2],
-                    "min_stock": row[3],
+                    "id": row["id"],
+                    "name": row["name"],
+                    "current_stock": row["current_stock"],
+                    "min_stock": row["min_stock"],
                 }
                 for row in excess_stock_products
             ]
@@ -909,12 +909,12 @@ class AIAnalyticsEngine:
 
             opportunities["price_increase_candidates"] = [
                 {
-                    "id": row[0],
-                    "name": row[1],
-                    "current_price": float(row[2]),
-                    "avg_sold_price": float(row[3] or 0),
-                    "sales_count": row[4],
-                    "potential_increase": float(row[2] - (row[3] or 0)),
+                    "id": row["id"],
+                    "name": row["name"],
+                    "current_price": float(row["selling_price"]),
+                    "avg_sold_price": float(row["avg_sold_price"] or 0),
+                    "sales_count": row["sales_count"],
+                    "potential_increase": float(row["selling_price"] - (row["avg_sold_price"] or 0)),
                 }
                 for row in data
             ]

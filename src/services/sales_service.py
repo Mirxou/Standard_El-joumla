@@ -57,7 +57,7 @@ class SalesService:
             row = self.db_manager.fetch_one(query, (f"{prefix}%",))
 
             if row:
-                last_num = row.get("invoice_number") if isinstance(row, dict) else row[0]
+                last_num = row.get("invoice_number")
                 try:
                     seq = int(last_num.split("-")[-1]) + 1
                 except (ValueError, IndexError):
@@ -99,31 +99,43 @@ class SalesService:
                     self.logger.warning(f"Error converting currency in SalesService.create_sale: {e}")
 
             # 1. التحقق من توفر الكميات (قبل بدء المعاملة)
+            # M7 FIX: تجميع الكميات المطلوبة لكل منتج للتحقق الصحيح
+            required_quantities = {}
             for item in sale.items:
-                product = self.product_manager.get_product_by_id(item.product_id)
+                pid = item.product_id
+                required_quantities[pid] = required_quantities.get(pid, Decimal("0")) + item.quantity
+
+            for pid, total_qty in required_quantities.items():
+                product = self.product_manager.get_product_by_id(pid)
                 if not product:
-                    self.logger.warning(f"Product {item.product_id} not found")
+                    self.logger.warning(f"Product {pid} not found")
                     return None
-                if product.current_stock < item.quantity:
+                if product.current_stock < total_qty:
                     self.logger.warning(
-                        f"Stock unavailable for product {item.product_id}: "
-                        f"need {item.quantity}, have {product.current_stock}"
+                        f"Stock unavailable for product {pid}: "
+                        f"need {total_qty}, have {product.current_stock}"
                     )
                     return None
                 # تعبئة cost_price من المنتج إذا لم يكن محدداً
-                cost_price = getattr(item, "cost_price", Decimal("0.00"))
-                if cost_price == Decimal("0.00"):
-                    prod_cost = getattr(product, "cost_price", Decimal("0.00"))
-                    item.cost_price = prod_cost
+                for item in sale.items:
+                    if item.product_id == pid:
+                        cost_price = getattr(item, "cost_price", Decimal("0.00"))
+                        if cost_price == Decimal("0.00"):
+                            prod_cost = getattr(product, "cost_price", Decimal("0.00"))
+                            item.cost_price = prod_cost
 
-            # 2. إنشاء الفاتورة عبر SaleManager
-            sale.user_id = user_id
-            sale_id = self.sale_manager.create_sale(sale)
+            # 2-5. C4 FIX: تنفيذ جميع العمليات داخل معاملة واحدة (ذري)
+            with self.db_manager.transaction() as tx_cursor:
+                # 2. إنشاء الفاتورة عبر SaleManager
+                sale.user_id = user_id
+                sale_id = self.sale_manager.create_sale(sale)
 
-            if sale_id:
+                if not sale_id:
+                    raise RuntimeError("فشل إنشاء الفاتورة — rollback تلقائي")
+
                 sale.id = sale_id
 
-                # 3. تحديث المخزون بشكل ذري (Atomic Update)
+                # 3. تحديث المخزون بشكل ذري داخل المعاملة
                 for item in sale.items:
                     product = self.product_manager.get_product_by_id(item.product_id)
                     current_stock = getattr(product, "current_stock", 0) if product else 0
@@ -134,7 +146,7 @@ class SalesService:
                         user_id=user_id,
                     )
 
-                # 4. معالجة محاسبية (non-blocking)
+                # 4. معالجة محاسبية (داخل المعاملة لضمان التناسق)
                 try:
                     self.accounting_service.create_sale_journal_entry(sale)
                 except Exception as e:
@@ -157,9 +169,8 @@ class SalesService:
                             self.logger.warning(f"Customer balance update deferred: {e}")
 
                 return sale_id
-            return None
         except Exception as e:
-            self.logger.warning(f"Error in SalesService.create_sale: {e}")
+            self.logger.error(f"Error in SalesService.create_sale (transaction rolled back): {e}")
             return None
 
     def get_sale_details(self, sale_id: int) -> Optional[Dict[str, Any]]:
@@ -258,20 +269,13 @@ class SalesService:
             row = self.db_manager.fetch_one(query, (target_date.isoformat(),))
 
             if row:
-                is_dict = isinstance(row, dict)
-
-                def gv(k, i, d=0):
-                    if is_dict:
-                        return row.get(k, d)
-                    return row[i] if len(row) > i else d
-
                 return {
                     "date": target_date.isoformat(),
-                    "total_sales": gv("total_sales", 0, 0),
-                    "total_revenue": float(gv("total_revenue", 1, 0)),
-                    "total_collected": float(gv("total_collected", 2, 0)),
-                    "total_outstanding": float(gv("total_outstanding", 3, 0)),
-                    "total_discounts": float(gv("total_discounts", 4, 0)),
+                    "total_sales": row.get("total_sales", 0),
+                    "total_revenue": float(row.get("total_revenue", 0)),
+                    "total_collected": float(row.get("total_collected", 0)),
+                    "total_outstanding": float(row.get("total_outstanding", 0)),
+                    "total_discounts": float(row.get("total_discounts", 0)),
                 }
 
             return {
@@ -462,9 +466,9 @@ class SalesService:
             rows = self.db_manager.fetch_all(query, (start_date.isoformat(), end_date.isoformat()))
             return [
                 {
-                    "payment_method": row["payment_method"] if isinstance(row, dict) else row[0],
-                    "count": int(row["count"] if isinstance(row, dict) else row[1]),
-                    "total": float(row["total"] if isinstance(row, dict) else row[2]),
+                    "payment_method": row["payment_method"],
+                    "count": int(row["count"]),
+                    "total": float(row["total"]),
                 }
                 for row in rows
             ]
@@ -496,12 +500,18 @@ class SalesService:
                     COALESCE(SUM(CASE WHEN payment_status IN ('partial', 'unpaid') THEN total_amount - COALESCE(paid_amount, 0) ELSE 0 END), 0) as outstanding,
                     AVG(total_amount) as avg_sale
                 FROM sales WHERE {date_filter}
+                  AND status NOT IN ('cancelled', 'draft')
+                  AND COALESCE(is_deleted, 0) = 0
             """
             result = self.db_manager.fetch_one(query)
             if result:
-                return dict(result) if isinstance(result, dict) else {
-                    'total_sales': result[0], 'total_revenue': result[1],
-                    'paid_amount': result[2], 'outstanding': result[3], 'avg_sale': result[4]
+                # H5 FIX + C3: fetch_one يعيد dict الآن
+                return {
+                    'total_sales': result.get('total_sales', 0),
+                    'total_revenue': float(result.get('total_revenue', 0)),
+                    'paid_amount': float(result.get('paid_amount', 0)),
+                    'outstanding': float(result.get('outstanding', 0)),
+                    'avg_sale': float(result.get('avg_sale', 0) or 0),
                 }
             return {'total_sales': 0, 'total_revenue': 0, 'paid_amount': 0, 'outstanding': 0, 'avg_sale': 0}
         except Exception as e:
@@ -532,10 +542,7 @@ class SalesService:
                 LIMIT ?
             """
             results = self.db_manager.fetch_all(query, (limit,))
-            return [dict(r) if isinstance(r, dict) else {
-                'id': r[0], 'name': r[1], 'sku': r[2],
-                'total_qty': r[3], 'total_revenue': r[4]
-            } for r in results]
+            return [dict(r) for r in results]
         except Exception as e:
             self.logger.warning(f"خطأ في أفضل المنتجات: {e}")
             return []
@@ -561,10 +568,7 @@ class SalesService:
                 LIMIT ?
             """
             results = self.db_manager.fetch_all(query, (limit,))
-            return [dict(r) if isinstance(r, dict) else {
-                'id': r[0], 'name': r[1], 'phone': r[2],
-                'order_count': r[3], 'total_spent': r[4]
-            } for r in results]
+            return [dict(r) for r in results]
         except Exception as e:
             self.logger.warning(f"خطأ في أفضل العملاء: {e}")
             return []
@@ -582,32 +586,51 @@ class SalesService:
                 ORDER BY date
             """
             results = self.db_manager.fetch_all(query, (str(-days),))
-            return [dict(r) if isinstance(r, dict) else {
-                'date': r[0], 'sales_count': r[1], 'daily_total': r[2]
-            } for r in results]
+            return [dict(r) for r in results]
         except Exception as e:
             self.logger.warning(f"خطأ في المبيعات اليومية: {e}")
             return []
 
     def get_daily_profit(self, days=30):
-        """الربح اليومي"""
+        """الربح اليومي — C2 FIX: تجنّب تضخيم الإيرادات بسبب JOIN متعدد الصفوف"""
         try:
             query = """
-                SELECT DATE(s.sale_date) as date,
-                       COALESCE(SUM(s.total_amount), 0) as revenue,
-                       COALESCE(SUM(si.quantity * COALESCE(p.cost_price, p.selling_price * 0.7)), 0) as cost,
-                       COALESCE(SUM(s.total_amount) - SUM(si.quantity * COALESCE(p.cost_price, p.selling_price * 0.7)), 0) as profit
-                FROM sales s
-                JOIN sale_items si ON si.sale_id = s.id
-                JOIN products p ON p.id = si.product_id
-                WHERE s.sale_date >= DATE('now', ? || ' days')
-                GROUP BY DATE(s.sale_date)
-                ORDER BY date
+                SELECT d.date,
+                       COALESCE(sr.revenue, 0) as revenue,
+                       COALESCE(sc.cost, 0) as cost,
+                       COALESCE(sr.revenue, 0) - COALESCE(sc.cost, 0) as profit
+                FROM (
+                    SELECT DISTINCT DATE(sale_date) as date
+                    FROM sales
+                    WHERE sale_date >= DATE('now', ? || ' days')
+                      AND status NOT IN ('cancelled', 'draft')
+                      AND is_deleted = 0
+                ) d
+                LEFT JOIN (
+                    SELECT DATE(s.sale_date) as date,
+                           SUM(s.total_amount) as revenue
+                    FROM sales s
+                    WHERE s.sale_date >= DATE('now', ? || ' days')
+                      AND s.status NOT IN ('cancelled', 'draft')
+                      AND s.is_deleted = 0
+                    GROUP BY DATE(s.sale_date)
+                ) sr ON sr.date = d.date
+                LEFT JOIN (
+                    SELECT DATE(s.sale_date) as date,
+                           SUM(si.quantity * COALESCE(p.cost_price, p.selling_price * 0.7)) as cost
+                    FROM sale_items si
+                    JOIN sales s ON s.id = si.sale_id
+                    JOIN products p ON p.id = si.product_id
+                    WHERE s.sale_date >= DATE('now', ? || ' days')
+                      AND s.status NOT IN ('cancelled', 'draft')
+                      AND s.is_deleted = 0
+                      AND si.is_deleted = 0
+                    GROUP BY DATE(s.sale_date)
+                ) sc ON sc.date = d.date
+                ORDER BY d.date
             """
-            results = self.db_manager.fetch_all(query, (str(-days),))
-            return [dict(r) if isinstance(r, dict) else {
-                'date': r[0], 'revenue': r[1], 'cost': r[2], 'profit': r[3]
-            } for r in results]
+            results = self.db_manager.fetch_all(query, (str(-days), str(-days), str(-days)))
+            return [dict(r) for r in results]
         except Exception as e:
             self.logger.warning(f"خطأ في الربح اليومي: {e}")
             return []
@@ -677,14 +700,9 @@ class SalesService:
         returns = 0.0
 
         if row:
-            if isinstance(row, dict):
-                total_sales = row.get("total_sales", 0)
-                total_revenue = float(row.get("total_revenue", 0.0))
-                returns = float(row.get("returns_total", 0.0))
-            else:
-                total_sales = row[0] if len(row) > 0 else 0
-                total_revenue = float(row[1]) if len(row) > 1 else 0.0
-                returns = float(row[5]) if len(row) > 5 else 0.0
+            total_sales = row.get("total_sales", 0)
+            total_revenue = float(row.get("total_revenue", 0.0))
+            returns = float(row.get("returns_total", 0.0))
 
         net_sales = total_revenue - returns
         profit = self._calculate_daily_profit(target_date)

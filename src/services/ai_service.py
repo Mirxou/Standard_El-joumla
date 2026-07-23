@@ -39,8 +39,8 @@ class AIService:
                 # لا يمكن حساب الموسمية ببيانات قليلة، العودة إلى التنبؤ البسيط
                 return self._simple_linear_regression_forecast(rows, forecast_days)
 
-            dates = [datetime.strptime(r[0], "%Y-%m-%d") for r in rows]
-            y = [float(r[1] or 0) for r in rows]
+            dates = [datetime.strptime(r["DATE(created_at)"], "%Y-%m-%d") for r in rows]
+            y = [float(r["SUM(quantity)"] or 0) for r in rows]
 
             # 1. حساب المؤشرات الموسمية (للأسبوع)
             seasonal_indices = self._calculate_seasonal_indices(dates, y, seasonal_period)
@@ -118,10 +118,10 @@ class AIService:
         if not rows or len(rows) < 2:
             return []
 
-        dates = [datetime.strptime(r[0], "%Y-%m-%d") for r in rows]
+        dates = [datetime.strptime(r["DATE(created_at)"], "%Y-%m-%d") for r in rows]
         start_date = dates[0]
         x = [(d - start_date).days for d in dates]
-        y = [float(r[1] or 0) for r in rows]
+        y = [float(r["SUM(quantity)"] or 0) for r in rows]
 
         n = len(x)
         sum_x, sum_y = sum(x), sum(y)
@@ -157,7 +157,7 @@ class AIService:
             # افترض أن هناك جدول stock_movements حيث الحركة من نوع بيع
             q = "SELECT DATE(created_at), SUM(quantity) FROM stock_movements WHERE product_id = ? AND movement_type = ? AND created_at >= ? GROUP BY DATE(created_at) ORDER BY DATE(created_at)"  # noqa: E501
             rows = self.db.fetch_all(q, (product_id, "بيع", start))
-            daily = [r[1] or 0 for r in rows]
+            daily = [r["SUM(quantity)"] or 0 for r in rows]
             if not daily:
                 return 0.0
             # حساب متوسط متحرك بسيط آخر نافذة
@@ -177,8 +177,8 @@ class AIService:
             start = end - timedelta(days=days)
             q = "SELECT DATE(created_at), SUM(quantity) FROM stock_movements WHERE product_id = ? AND movement_type = ? AND created_at >= ? GROUP BY DATE(created_at) ORDER BY DATE(created_at)"  # noqa: E501
             rows = self.db.fetch_all(q, (product_id, "بيع", start))
-            daily = [r[1] or 0 for r in rows]
-            dates = [r[0] for r in rows]
+            daily = [r["SUM(quantity)"] or 0 for r in rows]
+            dates = [r["DATE(created_at)"] for r in rows]
             if not daily or len(daily) < 2:
                 return []
             mean = statistics.mean(daily)
@@ -207,8 +207,8 @@ class AIService:
                 q_sales += " AND created_at <= ?"
                 params.append(end_date)
             row = self.db.fetch_one(q_sales, tuple(params))
-            total_revenue = float(row[0] or 0)
-            orders = int(row[1] or 0)
+            total_revenue = float(row["SUM(total_amount)"] or 0)
+            orders = int(row["COUNT(*)"] or 0)
             return {
                 "total_revenue": total_revenue,
                 "orders_count": orders,
@@ -241,7 +241,9 @@ class AIService:
                 WHERE s.type = 'refund' AND s.created_at >= ?
             """
             high_refund_sales = self.db.fetch_all(q_refunds, (start,))
-            for sale_id, product_name, _, _ in high_refund_sales:
+            for sale in high_refund_sales:
+                sale_id = sale["id"]
+                product_name = sale["name"]
                 if sale_id not in flagged_sales:
                     self._flag_sale_for_review(sale_id)
                     flagged_sales.add(sale_id)
@@ -257,14 +259,17 @@ class AIService:
                 HAVING refund_count >= ?
             """
             suspicious_customers = self.db.fetch_all(q_customers, (start, high_sales_count))
-            for customer_id, customer_name, refund_count in suspicious_customers:
+            for cust in suspicious_customers:
+                customer_id = cust["customer_id"]
+                customer_name = cust["name"]
+                refund_count = cust["refund_count"]
                 # ضع علامة على آخر معاملة مرتجعة لهذا العميل
                 q_last_refund = (
                     "SELECT id FROM sales WHERE customer_id = ? AND type = 'refund' ORDER BY created_at DESC LIMIT 1"
                 )
                 last_sale = self.db.fetch_one(q_last_refund, (customer_id,))
-                if last_sale and last_sale[0] not in flagged_sales:
-                    sale_id = last_sale[0]
+                if last_sale and last_sale["id"] not in flagged_sales:
+                    sale_id = last_sale["id"]
                     self._flag_sale_for_review(sale_id)
                     flagged_sales.add(sale_id)
                     actions_taken.append(
@@ -286,7 +291,7 @@ class AIService:
         try:
             # التحقق من أن الحالة الحالية ليست نهائية (مثل ملغاة)
             current_status = self.db.fetch_one("SELECT status FROM sales WHERE id = ?", (sale_id,))
-            if current_status and current_status[0] not in ["canceled", "under_review"]:
+            if current_status and current_status["status"] not in ["canceled", "under_review"]:
                 self.db.execute("UPDATE sales SET status = 'under_review' WHERE id = ?", (sale_id,))
                 if self.logger:
                     self.logger.info(f"Sale {sale_id} flagged for fraud review.")
@@ -326,7 +331,7 @@ class AIService:
                 # افتراض وجود حقل reorder_level في جدول products
                 q = "SELECT name, stock_quantity, reorder_level FROM products WHERE stock_quantity < reorder_level ORDER BY stock_quantity ASC LIMIT 5"  # noqa: E501
                 low_stock_products = self.db.fetch_all(q)
-                response["data"] = [{"name": r[0], "quantity": r[1], "reorder_level": r[2]} for r in low_stock_products]
+                response["data"] = [{"name": r["name"], "quantity": r["stock_quantity"], "reorder_level": r["reorder_level"]} for r in low_stock_products]
                 if not low_stock_products:
                     response["message"] = "لا توجد منتجات حالياً تحت مستوى إعادة الطلب."
                 else:
@@ -345,7 +350,7 @@ class AIService:
                     LIMIT 5
                 """
                 top_products = self.db.fetch_all(q)
-                response["data"] = [{"name": r[0], "total_sold": r[1]} for r in top_products]
+                response["data"] = [{"name": r["name"], "total_sold": r["total_sold"]} for r in top_products]
                 response["message"] = "المنتجات الأكثر مبيعاً هي:"
                 return response
 

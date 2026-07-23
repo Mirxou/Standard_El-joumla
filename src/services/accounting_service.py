@@ -275,7 +275,7 @@ class AccountingService:
             return None
 
     def create_purchase_journal_entry(self, purchase_data: dict) -> int:
-        """إنشاء قيد محاسبي لأمر شراء (غير معطل)"""
+        """إنشاء قيد محاسبي لأمر شراء (غير معطل) — H6 FIX: تعيين account_id"""
         try:
             from ..models.journal_entry import JournalEntry, JournalLine
             entry = JournalEntry()
@@ -287,11 +287,20 @@ class AccountingService:
             total = Decimal(str(purchase_data.get('total', 0)))
             tax = Decimal(str(purchase_data.get('tax', 0)))
             
+            # H6 FIX: جلب account_id من دليل الحسابات
+            inv_code = purchase_data.get('inventory_account', '4100')
+            inv_account = self.get_account_by_code(inv_code)
+            tax_account = self.get_account_by_code('2300')
+            pay_code = purchase_data.get('payable_account', '2100')
+            pay_account = self.get_account_by_code(pay_code)
+            
             # مدين: المخزون / المشتريات
             inventory_line = JournalLine()
-            inventory_line.account_code = purchase_data.get('inventory_account', '4100')
+            inventory_line.account_code = inv_code
             inventory_line.account_name = purchase_data.get('inventory_account_name', 'المخزون')
             inventory_line.debit_amount = total
+            if inv_account:
+                inventory_line.account_id = inv_account.id
             entry.lines.append(inventory_line)
             
             # مدين: الضريبة القابلة للاسترداد
@@ -300,13 +309,17 @@ class AccountingService:
                 tax_line.account_code = '2300'
                 tax_line.account_name = 'الضريبة المستحقة'
                 tax_line.debit_amount = tax
+                if tax_account:
+                    tax_line.account_id = tax_account.id
                 entry.lines.append(tax_line)
             
             # دائن: الدائنون (إجمالي المبلغ المستحق)
             payable_line = JournalLine()
-            payable_line.account_code = purchase_data.get('payable_account', '2100')
+            payable_line.account_code = pay_code
             payable_line.account_name = purchase_data.get('payable_account_name', 'الدائنون')
             payable_line.credit_amount = total + tax
+            if pay_account:
+                payable_line.account_id = pay_account.id
             entry.lines.append(payable_line)
             
             return self.create_journal_entry(entry)
@@ -402,7 +415,14 @@ class AccountingService:
                 account.id,
             )
             self.db.execute_query(query, params)
-            # تحديث دليل الحسابات في الذاكرة
+            # H3 FIX: إزالة الكود القديم من code_index قبل إضافة الجديد
+            # (إذا تم تغيير account_code)
+            old_code = None
+            for code, acc in list(self.coa.code_index.items()):
+                if acc.id == account.id and code != account.account_code:
+                    old_code = code
+                    del self.coa.code_index[code]
+                    break
             self.coa.accounts[account.id] = account
             self.coa.code_index[account.account_code] = account
             return True
