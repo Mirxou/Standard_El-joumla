@@ -16,6 +16,7 @@ except ImportError:
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout
+from src.ui.styles.design_tokens import C
 
 logger = logging.getLogger(__name__)
 
@@ -72,8 +73,8 @@ class SalesChartWidget(QFrame):
         # إنشاء عنصر الرسم
         self.plot_widget = pg.PlotWidget()
         self.plot_widget.setTitle("")
-        self.plot_widget.setLabel("left", "المبلغ (د.ج)", color="#38bdf8", **{"font-size": "11pt"})
-        self.plot_widget.setLabel("bottom", "الأيام السابقة", color="#38bdf8", **{"font-size": "11pt"})
+        self.plot_widget.setLabel("left", "المبلغ (د.ج)", color=C.ACCENT_SKY, **{"font-size": "11pt"})
+        self.plot_widget.setLabel("bottom", "الأيام السابقة", color=C.ACCENT_SKY, **{"font-size": "11pt"})
         self.plot_widget.showGrid(x=True, y=True, alpha=0.15)  # Faint grid
         self.plot_widget.setMinimumHeight(300)
 

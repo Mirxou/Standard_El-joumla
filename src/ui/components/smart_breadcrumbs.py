@@ -1,5 +1,6 @@
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QWidget
+from src.ui.styles.design_tokens import C
 
 
 class SmartBreadcrumbs(QWidget):
@@ -21,26 +22,26 @@ class SmartBreadcrumbs(QWidget):
             QPushButton {
                 background: transparent;
                 border: none;
-                color: #515874;
+                color: C.TEXT_MUTED;
                 font-size: 14px;
                 font-weight: 500;
             }
             QPushButton:hover {
-                color: #E8C96A;
+                color: C.ACCENT_GOLD_LIGHT;
                 text-decoration: underline;
             }
             QLabel {
-                color: #2A3150;
+                color: C.BORDER_DEFAULT;
                 font-weight: bold;
             }
             QPushButton#Active {
-                color: #C8A54E;
+                color: C.ACCENT_GOLD;
                 font-weight: bold;
                 cursor: default;
             }
             QPushButton#Active:hover {
                 text-decoration: none;
-                color: #C8A54E;
+                color: C.ACCENT_GOLD;
             }
         """)
 

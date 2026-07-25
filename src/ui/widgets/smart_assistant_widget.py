@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.services.smart_assistant import SmartAssistantService
+from src.ui.styles.design_tokens import C
 
 
 class ChatBubble(QFrame):
@@ -41,7 +42,7 @@ class ChatBubble(QFrame):
         # Style
         if is_user:
             container.setStyleSheet("""
-                background-color: #d97706;
+                background-color: C.ACCENT_AMBER_DARK;
                 border-radius: 15px;
                 border-bottom-right-radius: 2px;
             """)
@@ -139,7 +140,7 @@ class SmartAssistantWidget(QWidget):
         send_btn = QPushButton("➤")
         send_btn.setFixedSize(35, 35)
         send_btn.setStyleSheet("""
-            background-color: #d97706;
+            background-color: C.ACCENT_AMBER_DARK;
             color: white;
             border-radius: 17px;
             font-weight: bold;

@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 
 from src.ui.widgets.base_dialog import BaseDialog
 from src.utils.logger import setup_logger
+from src.ui.styles.design_tokens import C
 
 
 class ConflictResolutionDialog(BaseDialog):
@@ -55,13 +56,13 @@ class ConflictResolutionDialog(BaseDialog):
 
         # العنوان
         title = QLabel("تم اكتشاف تعارض في البيانات")
-        title.setStyleSheet("""
-            QLabel {
+        title.setStyleSheet(f"""
+            QLabel {{
                 font-size: 16pt;
                 font-weight: bold;
-                color: #f59e0b;
+                color: {C.ACCENT_AMBER};
                 padding: 10px;
-            }
+            }}
         """)
         layout.addWidget(title)
 

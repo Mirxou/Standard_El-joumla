@@ -1,6 +1,7 @@
 from PySide6.QtCore import QEasingCurve, QPoint, QPropertyAnimation, Qt, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QGraphicsDropShadowEffect, QLabel, QVBoxLayout, QWidget
+from src.ui.styles.design_tokens import C
 
 
 class QuantumNotification(QWidget):
@@ -10,10 +11,10 @@ class QuantumNotification(QWidget):
     """
 
     # Types
-    SUCCESS = "#2DD4BF"
-    ERROR = "#EF6B6B"
-    WARNING = "#F59E0B"
-    INFO = "#38BDF8"
+    SUCCESS = C.ACCENT_TEAL
+    ERROR = C.ACCENT_CORAL
+    WARNING = C.ACCENT_AMBER
+    INFO = C.ACCENT_SKY
 
     def __init__(self, parent, title, message, color_hex=SUCCESS, duration=3000):
         super().__init__(parent)
@@ -23,14 +24,14 @@ class QuantumNotification(QWidget):
 
         # Setup UI
         self.setFixedWidth(300)
-        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)  # Click through allowed? Maybe not.
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         self.setAttribute(Qt.WA_DeleteOnClose)
 
         # Styling
-        self.setStyleSheet("""
+        self.setStyleSheet(f"""
             QWidget {{
-                background-color: #181D2E;
-                border: 1px solid #2A3150;
+                background-color: {C.BG_SURFACE};
+                border: 1px solid {C.BG_ELEVATED};
                 border-left: 4px solid {color_hex};
                 border-radius: 12px;
             }}
@@ -39,13 +40,13 @@ class QuantumNotification(QWidget):
                 background: transparent;
             }}
             QLabel#Title {{
-                color: #FFFFFF;
+                color: {C.TEXT_BRIGHT};
                 font-weight: bold;
                 font-size: 14px;
                 font-family: 'Cairo';
             }}
             QLabel#Message {{
-                color: #8B92A8;
+                color: {C.TEXT_SECONDARY};
                 font-size: 12px;
                 font-family: 'Cairo';
             }}

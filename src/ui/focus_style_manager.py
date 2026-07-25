@@ -7,6 +7,7 @@ Based on ui-ux-pro-max accessibility guidelines
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
+from src.ui.styles.design_tokens import C
 
 
 class FocusStyleManager:
@@ -170,18 +171,18 @@ class AccessibleColorScheme:
     SCHEMES = {
         "professional": {
             "name": "Professional",
-            "background": "#FFFFFF",
+            "background": "C.TEXT_BRIGHT",
             "foreground": "#1F2937",  # 15.3:1 contrast
             "link": "#2563EB",
             "visited": "#7C3AED",
             "button_bg": "#1E3A5F",
-            "button_text": "#FFFFFF",  # 13.6:1 contrast
-            "input_bg": "#FFFFFF",
+            "button_text": "C.TEXT_BRIGHT",  # 13.6:1 contrast
+            "input_bg": "C.TEXT_BRIGHT",
             "input_border": "#D1D5DB",
             "input_focus_border": "#2563EB",
             "error": "#DC2626",
             "success": "#059669",
-            "warning": "#D97706",
+            "warning": "C.ACCENT_AMBER_DARK",
         },
         "dark": {
             "name": "Dark Mode",
@@ -190,24 +191,24 @@ class AccessibleColorScheme:
             "link": "#60A5FA",
             "visited": "#A78BFA",
             "button_bg": "#3B82F6",
-            "button_text": "#FFFFFF",
+            "button_text": "C.TEXT_BRIGHT",
             "input_bg": "#374151",
             "input_border": "#4B5563",
             "input_focus_border": "#60A5FA",
             "error": "#F87171",
             "success": "#34D399",
-            "warning": "#FBBF24",
+            "warning": "C.ACCENT_AMBER_LIGHT",
         },
         "high_contrast": {
             "name": "High Contrast",
             "background": "#000000",
-            "foreground": "#FFFFFF",  # 21:1 contrast
+            "foreground": "C.TEXT_BRIGHT",  # 21:1 contrast
             "link": "#00FFFF",
             "visited": "#FFFF00",
-            "button_bg": "#FFFFFF",
+            "button_bg": "C.TEXT_BRIGHT",
             "button_text": "#000000",
             "input_bg": "#000000",
-            "input_border": "#FFFFFF",
+            "input_border": "C.TEXT_BRIGHT",
             "input_focus_border": "#FFFF00",
             "error": "#FF0000",
             "success": "#00FF00",

@@ -527,23 +527,33 @@ class CloudSyncService:
     # ============================================================================
 
     def _get_local_entity(self, entity_type: str, entity_id: int) -> Optional[Dict[str, Any]]:
-        """الحصول على كيان محلي"""
+        """الحصول على كيان محلي — مع حماية من حقن SQL"""
+        ALLOWED_TABLES = {"sales", "purchases", "products", "customers", "suppliers",
+                        "sale_items", "purchase_items", "categories", "stock_movements"}
+        if entity_type not in ALLOWED_TABLES:
+            self.logger.warning(f"Entity type not in whitelist: {entity_type}")
+            return None
         try:
             query = f"SELECT * FROM {entity_type} WHERE id = ?"
             row = self.db_manager.fetch_one(query, (entity_id,))
             return dict(row) if row else None
         except Exception as e:
-            self.logger.error(f"❌ خطأ في الحصول على الكيان المحلي: {e}", exc_info=True)
+            self.logger.error(f"خطأ في الحصول على الكيان المحلي: {e}", exc_info=True)
             return None
 
     def _get_all_local_entities(self, entity_type: str) -> List[Dict[str, Any]]:
-        """الحصول على جميع الكيانات المحلية"""
+        """الحصول على جميع الكيانات المحلية — مع حماية من حقن SQL"""
+        ALLOWED_TABLES = {"sales", "purchases", "products", "customers", "suppliers",
+                        "sale_items", "purchase_items", "categories", "stock_movements"}
+        if entity_type not in ALLOWED_TABLES:
+            self.logger.warning(f"Entity type not in whitelist: {entity_type}")
+            return []
         try:
-            query = f"SELECT * FROM {entity_type} LIMIT 1000"  # حد أقصى
+            query = f"SELECT * FROM {entity_type} LIMIT 1000"
             rows = self.db_manager.fetch_all(query)
             return [dict(row) for row in rows]
         except Exception as e:
-            self.logger.error(f"❌ خطأ في الحصول على الكيانات المحلية: {e}", exc_info=True)
+            self.logger.error(f"خطأ في الحصول على الكيانات المحلية: {e}", exc_info=True)
             return []
 
     def _encrypt_data(self, data: Dict[str, Any], key: str) -> Dict[str, Any]:

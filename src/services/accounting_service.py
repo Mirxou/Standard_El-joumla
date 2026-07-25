@@ -563,7 +563,8 @@ class AccountingService:
                 entry_number = f"JE-{prefix}-{seq:04d}-{uuid.uuid4().hex[:6].upper()}"
 
             return entry_number
-        except Exception:
+        except Exception as e:
+            self.logger.debug(f"Fallback to UUID for entry number: {e}")
             # Fallback مطلق: UUID كامل
             return f"JE-{uuid.uuid4().hex[:12].upper()}"
 

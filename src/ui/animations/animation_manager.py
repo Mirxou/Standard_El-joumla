@@ -5,8 +5,8 @@ Animation Manager
 مدير الحركات - نظام شامل للحركات والتأثيرات
 
 Color Palette:
-    GOLD=#C8A54E, GOLD_LIGHT=#E8C96A, TEAL=#2DD4BF, CORAL=#EF6B6B,
-    AMBER=#F59E0B, SKY=#38BDF8
+    GOLD=C.ACCENT_GOLD, GOLD_LIGHT=C.ACCENT_GOLD_LIGHT, TEAL=C.ACCENT_TEAL, CORAL=C.ACCENT_CORAL,
+    AMBER=C.ACCENT_AMBER, SKY=C.ACCENT_SKY
 """
 
 from enum import Enum
@@ -27,6 +27,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QWidget
 
 from src.utils.logger import setup_logger
+from src.ui.styles.design_tokens import C
 
 
 class AnimationType(Enum):
@@ -431,7 +432,7 @@ class AnimationManager(QObject):
     def pulse_glow(
         self,
         widget: QWidget,
-        color_hex: str = "#C8A54E",
+        color_hex: str = "C.ACCENT_GOLD",
         duration: int = 2000,
     ) -> str:
         """
@@ -525,7 +526,7 @@ class AnimationManager(QObject):
 
     # ── Internal ─────────────────────────────────────────────────────────
 
-    def pulse_border(self, widget: QWidget, color_hex: str = "#C8A54E", duration: int = 2000):
+    def pulse_border(self, widget: QWidget, color_hex: str = "C.ACCENT_GOLD", duration: int = 2000):
         """
         Pulse a widget's border color from transparent to full color and back.
         Creates a breathing border effect.

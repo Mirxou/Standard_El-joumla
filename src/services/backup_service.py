@@ -9,6 +9,7 @@ import logging
 import hashlib
 import json
 import os
+import re
 import shutil
 import threading
 import zipfile
@@ -545,6 +546,8 @@ class BackupService:
             total_records = 0
 
             for table in tables:
+                if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', str(table)):
+                    continue
                 result = self.db.execute_query(f"SELECT * FROM {table}")
                 data[table] = result
                 total_records += len(result)

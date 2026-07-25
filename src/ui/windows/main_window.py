@@ -1540,13 +1540,13 @@ class MainWindow(QMainWindow):
         header_layout.setContentsMargins(15, 10, 15, 10)
 
         title = QLabel(self.i18n.get_message("main_dashboard"))
-        title.setStyleSheet("font-size: 26px; font-weight: 900; color: #ffffff; font-family: 'Cairo'; letter-spacing: 0.3px;")
+        title.setStyleSheet(f"font-size: 26px; font-weight: 900; color: {Colors.TEXT_BRIGHT}; font-family: 'Cairo'; letter-spacing: 0.3px;")
         header_layout.addWidget(title)
         header_layout.addStretch()
 
         # أزرار الفترة الزمنية
         period_label = QLabel(self.i18n.get_message("period") + ":")
-        period_label.setStyleSheet("color: #8B92A8; font-weight: 600; font-size: 13px; font-family: 'Cairo';")
+        period_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; font-weight: 600; font-size: 13px; font-family: 'Cairo';")
         header_layout.addWidget(period_label)
 
         self.dashboard_period_combo = QComboBox()
@@ -1560,7 +1560,7 @@ class MainWindow(QMainWindow):
         # زر التحديث التلقائي
         auto_refresh_check = QCheckBox("تحديث تلقائي")
         auto_refresh_check.setChecked(True)
-        auto_refresh_check.setStyleSheet("color: #8B92A8; font-weight: 600; font-family: 'Cairo';")
+        auto_refresh_check.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; font-weight: 600; font-family: 'Cairo';")
         auto_refresh_check.stateChanged.connect(self.toggle_auto_refresh)
         header_layout.addWidget(auto_refresh_check)
 
@@ -1654,7 +1654,7 @@ class MainWindow(QMainWindow):
         adaptive_layout.setContentsMargins(10, 5, 10, 5)
 
         adaptive_label = QLabel("🧠 اقتراحات ذكية:")
-        adaptive_label.setStyleSheet("color: #fbbf24; font-weight: bold;")
+        adaptive_label.setStyleSheet(f"color: {Colors.ACCENT_AMBER_LIGHT}; font-weight: bold;")
         adaptive_layout.addWidget(adaptive_label)
 
         # Dynamic Suggestions
@@ -1675,18 +1675,18 @@ class MainWindow(QMainWindow):
 
                     s_btn = QPushButton(btn_text)
                     s_btn.setCursor(Qt.PointingHandCursor)
-                    s_btn.setStyleSheet("""
-                        QPushButton {
+                    s_btn.setStyleSheet(f"""
+                        QPushButton {{
                             background-color: #451a03;
-                            color: #fbbf24;
-                            border: 1px solid #fbbf24;
+                            color: {Colors.ACCENT_AMBER_LIGHT};
+                            border: 1px solid {Colors.ACCENT_AMBER_LIGHT};
                             border-radius: 15px;
                             padding: 3px 12px;
                             font-size: 12px;
-                        }
-                        QPushButton:hover {
+                        }}
+                        QPushButton:hover {{
                             background-color: #78350f;
-                        }
+                        }}
                     """)
                     # Use closure to capture loop variable
                     s_btn.clicked.connect(lambda checked, name=clean_name: self.switch_page(name))
@@ -1715,7 +1715,7 @@ class MainWindow(QMainWindow):
             ("daily_revenue", "إيراد اليوم", "#10b981", "↑"),
             ("daily_expenses", "مصروفات اليوم", "#ef4444", "↓"),
             ("net_profit", "صافي الربح", "#3b82f6", "↑"),
-            ("avg_basket", "متوسط السلة", "#f59e0b", "-"),
+            ("avg_basket", "متوسط السلة", f"{Colors.ACCENT_AMBER}", "-"),
         ]
 
         # إضافة KPIs المالية (ملخص نصي)
@@ -1913,7 +1913,7 @@ class MainWindow(QMainWindow):
         filters_layout.setSpacing(10)
 
         filter_label = QLabel(self.i18n.get_message("filter") + ":")
-        filter_label.setStyleSheet("font-weight: bold; color: #f8fafc;")
+        filter_label.setStyleSheet(f"font-weight: bold; color: {Colors.TEXT_BRIGHT};")
         filters_layout.addWidget(filter_label)
 
         self.dashboard_activity_filter = QComboBox()
@@ -2092,7 +2092,7 @@ class MainWindow(QMainWindow):
         # العنوان مع الاتجاه
         title_layout = QHBoxLayout()
         title_label = QLabel(title_text)
-        title_label.setStyleSheet("color: #f8fafc; font-size: 15px; font-weight: bold;")
+        title_label.setStyleSheet(f"color: {Colors.TEXT_BRIGHT}; font-size: 15px; font-weight: bold;")
         title_layout.addWidget(title_label)
         title_layout.addStretch()
 
@@ -2105,7 +2105,7 @@ class MainWindow(QMainWindow):
 
         # القيمة
         value_label = QLabel("-")
-        value_label.setStyleSheet("font-size: 32px; font-weight: bold; color: #f8fafc;")
+        value_label.setStyleSheet(f"font-size: 32px; font-weight: bold; color: {Colors.TEXT_BRIGHT};")
         container_layout.addWidget(value_label)
 
         # التغيير (سيتم تحديثه لاحقاً)
@@ -3783,7 +3783,7 @@ class MainWindow(QMainWindow):
         theme_box = QGroupBox("السمة الحالية")
         theme_layout = QVBoxLayout(theme_box)
         self.perf_theme_label = QLabel("-")
-        self.perf_theme_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #f8fafc;")
+        self.perf_theme_label.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {Colors.TEXT_BRIGHT};")
         theme_layout.addWidget(self.perf_theme_label)
         grid.addWidget(theme_box)
 
@@ -3791,7 +3791,7 @@ class MainWindow(QMainWindow):
         notif_box = QGroupBox("الإشعارات غير المقروءة")
         notif_layout = QVBoxLayout(notif_box)
         self.perf_unread_label = QLabel("0")
-        self.perf_unread_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #f8fafc;")
+        self.perf_unread_label.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {Colors.TEXT_BRIGHT};")
         notif_layout.addWidget(self.perf_unread_label)
         grid.addWidget(notif_box)
 
@@ -3799,7 +3799,7 @@ class MainWindow(QMainWindow):
         db_box = QGroupBox("حالة قاعدة البيانات")
         db_layout = QVBoxLayout(db_box)
         self.perf_db_label = QLabel("-")
-        self.perf_db_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #f8fafc;")
+        self.perf_db_label.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {Colors.TEXT_BRIGHT};")
         db_layout.addWidget(self.perf_db_label)
         grid.addWidget(db_box)
 
@@ -3807,7 +3807,7 @@ class MainWindow(QMainWindow):
         uptime_box = QGroupBox("وقت التشغيل")
         uptime_layout = QVBoxLayout(uptime_box)
         self.perf_uptime_label = QLabel("00:00:00")
-        self.perf_uptime_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #f8fafc;")
+        self.perf_uptime_label.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {Colors.TEXT_BRIGHT};")
         uptime_layout.addWidget(self.perf_uptime_label)
         grid.addWidget(uptime_box)
 
@@ -4076,9 +4076,9 @@ class MainWindow(QMainWindow):
                 "border: 1px solid #333333; "
                 "border-radius: 6px; "
                 "} "
-                "QLabel { color: #ffffff; font-weight: 600; } "
-                "QLineEdit, QComboBox { background-color: #111111; color: #ffffff; border: 1px solid #444444; border-radius: 4px; padding: 4px; } "  # noqa: E501
-                "QPushButton { background-color: #2563eb; color: #ffffff; font-weight: bold; border-radius: 4px; } "
+                f"QLabel { color: {Colors.TEXT_BRIGHT}; font-weight: 600; } "
+                f"QLineEdit, QComboBox { background-color: #111111; color: {Colors.TEXT_BRIGHT}; border: 1px solid #444444; border-radius: 4px; padding: 4px; } "  # noqa: E501
+                f"QPushButton { background-color: #2563eb; color: {Colors.TEXT_BRIGHT}; font-weight: bold; border-radius: 4px; } "
                 "QPushButton:hover { background-color: #1d4ed8; }"
             )
             filters_layout = QHBoxLayout(filters_frame)
@@ -4230,7 +4230,7 @@ class MainWindow(QMainWindow):
             self.inventory_table.setStyleSheet(
                 "QTableView, QTableWidget {"
                 "background-color: #000000;"
-                "color: #ffffff;"
+                f"color: {Colors.TEXT_BRIGHT};"
                 "gridline-color: #333333;"
                 "border: 1px solid #333333;"
                 "border-radius: 4px;"
@@ -4241,14 +4241,14 @@ class MainWindow(QMainWindow):
                 "}"
                 "QTableView::item:selected, QTableWidget::item:selected {"
                 "background-color: #1e3a8a;"
-                "color: #ffffff;"
+                f"color: {Colors.TEXT_BRIGHT};"
                 "}"
                 "QTableView::item:hover, QTableWidget::item:hover {"
                 "background-color: #1f2937;"
                 "}"
                 "QHeaderView::section {"
                 "background-color: #111111;"
-                "color: #ffffff;"
+                f"color: {Colors.TEXT_BRIGHT};"
                 "font-weight: bold;"
                 "padding: 8px;"
                 "border: 1px solid #333333;"
@@ -4639,9 +4639,9 @@ class MainWindow(QMainWindow):
             "border: 1px solid #333333; "
             "border-radius: 6px; "
             "} "
-            "QLabel { color: #ffffff; font-weight: 600; } "
-            "QLineEdit, QComboBox { background-color: #111111; color: #ffffff; border: 1px solid #444444; border-radius: 4px; padding: 4px; } "  # noqa: E501
-            "QPushButton { background-color: #2563eb; color: #ffffff; font-weight: bold; border-radius: 4px; } "
+            f"QLabel { color: {Colors.TEXT_BRIGHT}; font-weight: 600; } "
+            f"QLineEdit, QComboBox { background-color: #111111; color: {Colors.TEXT_BRIGHT}; border: 1px solid #444444; border-radius: 4px; padding: 4px; } "  # noqa: E501
+            f"QPushButton { background-color: #2563eb; color: {Colors.TEXT_BRIGHT}; font-weight: bold; border-radius: 4px; } "
             "QPushButton:hover { background-color: #1d4ed8; }"
         )
         filters_layout = QHBoxLayout(filters_frame)
@@ -4714,7 +4714,7 @@ class MainWindow(QMainWindow):
             title_label = QLabel(title_text)
             title_label.setStyleSheet("color: rgb(127, 140, 141); font-size: 12px;")
             value_label = QLabel("-")
-            value_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #f8fafc;")
+            value_label.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {Colors.TEXT_BRIGHT};")
 
             container_layout.addWidget(title_label)
             container_layout.addWidget(value_label)
@@ -7418,7 +7418,7 @@ class MainWindow(QMainWindow):
             summary_text = (
                 f"الموردون النشطون: {report.get('active_suppliers', 0):,} | "
                 f"موردون لديهم رصيد مستحق: {report.get('suppliers_with_balance', 0):,} | "
-                f"إجمالي الأرصدة المستحقة: {report.get('total_outstanding_balance', 0):,.2f} دج"
+                f"إجمالي الأرصدة المستحقة: {report.get('total_outstanding_balancef', 0):,.2f} دج"
             )
             if hasattr(self, "suppliers_summary_label"):
                 self.suppliers_summary_label.setText(summary_text)
@@ -7536,7 +7536,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(12, 12, 12, 12)
 
         title = QLabel("إدارة المشتريات وأوامر التوريد")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #C8A54E; margin-bottom: 4px;")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: {Colors.ACCENT_GOLD}; margin-bottom: 4px;")
         layout.addWidget(title)
 
         # أزرار الإجراءات
@@ -7575,9 +7575,9 @@ class MainWindow(QMainWindow):
             "border: 1px solid #333333; "
             "border-radius: 6px; "
             "} "
-            "QLabel { color: #ffffff; font-weight: 600; } "
-            "QLineEdit, QComboBox { background-color: #111111; color: #ffffff; border: 1px solid #444444; border-radius: 4px; padding: 4px; } "  # noqa: E501
-            "QPushButton { background-color: #2563eb; color: #ffffff; font-weight: bold; border-radius: 4px; } "
+            "QLabel { color: {Colors.TEXT_BRIGHT}; font-weight: 600; } "
+            "QLineEdit, QComboBox { background-color: #111111; color: {Colors.TEXT_BRIGHT}; border: 1px solid #444444; border-radius: 4px; padding: 4px; } "  # noqa: E501
+            "QPushButton { background-color: #2563eb; color: {Colors.TEXT_BRIGHT}; font-weight: bold; border-radius: 4px; } "
             "QPushButton:hover { background-color: #1d4ed8; }"
         )
         filters_layout = QHBoxLayout(filters_frame)
@@ -7654,7 +7654,7 @@ class MainWindow(QMainWindow):
             title_label = QLabel(title_text)
             title_label.setStyleSheet("color: rgb(127, 140, 141); font-size: 12px;")
             value_label = QLabel("-")
-            value_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #f8fafc;")
+            value_label.setStyleSheet("font-size: 20px; font-weight: bold; color: {Colors.TEXT_BRIGHT};")
 
             container_layout.addWidget(title_label)
             container_layout.addWidget(value_label)
@@ -7694,7 +7694,7 @@ class MainWindow(QMainWindow):
         self.purchases_table.setStyleSheet(
             "QTableView, QTableWidget { "
             "background-color: #000000; "
-            "color: #ffffff; "
+            "color: {Colors.TEXT_BRIGHT}; "
             "gridline-color: #333333; "
             "border: 1px solid #333333; "
             "border-radius: 4px; "
@@ -7705,14 +7705,14 @@ class MainWindow(QMainWindow):
             "} "
             "QTableView::item:selected, QTableWidget::item:selected { "
             "background-color: #1e3a8a; "
-            "color: #ffffff; "
+            "color: {Colors.TEXT_BRIGHT}; "
             "} "
             "QTableView::item:hover, QTableWidget::item:hover { "
             "background-color: #1f2937; "
             "} "
             "QHeaderView::section { "
             "background-color: #111111; "
-            "color: #ffffff; "
+            "color: {Colors.TEXT_BRIGHT}; "
             "font-weight: bold; "
             "padding: 8px; "
             "border: 1px solid #333333; "
@@ -7815,7 +7815,7 @@ class MainWindow(QMainWindow):
             title_label = QLabel(title_text)
             title_label.setStyleSheet("color: rgb(127, 140, 141); font-size: 12px;")
             value_label = QLabel("-")
-            value_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #f8fafc;")
+            value_label.setStyleSheet("font-size: 20px; font-weight: bold; color: {Colors.TEXT_BRIGHT};")
 
             container_layout.addWidget(title_label)
             container_layout.addWidget(value_label)
@@ -7987,7 +7987,7 @@ class MainWindow(QMainWindow):
             payment_date = payment.payment_date.strftime("%Y-%m-%d") if getattr(payment, "payment_date", None) else "-"
 
             row_values = [
-                getattr(payment, "payment_number", None) or f"PAY-{getattr(payment, 'id', '')}",
+                getattr(payment, "payment_number", None) or f"PAY-{getattr(payment, 'id', 'f')}",
                 getattr(payment, "payment_type", "-"),
                 entity,
                 payment_date,
@@ -8194,7 +8194,7 @@ class MainWindow(QMainWindow):
             title_label = QLabel(title_text)
             title_label.setStyleSheet("color: rgb(127, 140, 141); font-size: 12px;")
             value_label = QLabel("-")
-            value_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #f8fafc;")
+            value_label.setStyleSheet("font-size: 20px; font-weight: bold; color: {Colors.TEXT_BRIGHT};")
 
             container_layout.addWidget(title_label)
             container_layout.addWidget(value_label)
@@ -8409,7 +8409,7 @@ class MainWindow(QMainWindow):
         customers_summary_layout = QVBoxLayout(customers_summary_group)
         customers_summary_layout.setContentsMargins(12, 12, 12, 12)
         self.customers_summary_label = QLabel("-")
-        self.customers_summary_label.setStyleSheet("font-size: 14px; color: #f8fafc;")
+        self.customers_summary_label.setStyleSheet("font-size: 14px; color: {Colors.TEXT_BRIGHT};")
         customers_summary_layout.addWidget(self.customers_summary_label)
         customers_layout.addWidget(customers_summary_group)
 
@@ -8451,7 +8451,7 @@ class MainWindow(QMainWindow):
         suppliers_summary_layout = QVBoxLayout(suppliers_summary_group)
         suppliers_summary_layout.setContentsMargins(12, 12, 12, 12)
         self.suppliers_summary_label = QLabel("-")
-        self.suppliers_summary_label.setStyleSheet("font-size: 14px; color: #f8fafc;")
+        self.suppliers_summary_label.setStyleSheet("font-size: 14px; color: {Colors.TEXT_BRIGHT};")
         suppliers_summary_layout.addWidget(self.suppliers_summary_label)
         suppliers_layout.addWidget(suppliers_summary_group)
 
@@ -8732,7 +8732,7 @@ class MainWindow(QMainWindow):
             s.setValue("printer/product_id", selected_data["product_id"])
             s.setValue("printer/name", selected_data["name"])
 
-            QMessageBox.information(self, "نجاح", f"تم حفظ الطابعة بنجاح:\n{selected_data['name']}")
+            QMessageBox.information(self, "نجاح", f"تم حفظ الطابعة بنجاح:\n{selected_data['namef']}")
         except Exception:
             logging.getLogger(__name__).warning("Ignored exception in main_window.py")
 
@@ -8790,7 +8790,7 @@ class MainWindow(QMainWindow):
             }
             QMenuBar::item:selected {
                 background-color: rgba(212,168,83,0.1);
-                color: #C8A54E;
+                color: {Colors.ACCENT_GOLD};
             }
             QMenuBar::item:pressed {
                 background-color: rgba(212,168,83,0.2);
@@ -8808,7 +8808,7 @@ class MainWindow(QMainWindow):
             }
             QMenu::item:selected {
                 background-color: rgba(212,168,83,0.15);
-                color: #C8A54E;
+                color: {Colors.ACCENT_GOLD};
             }
             QMenu::separator {
                 height: 1px;
@@ -9442,7 +9442,7 @@ class MainWindow(QMainWindow):
                 f"<p>جلسات مفتوحة: <b>{data.get('open_sessions', 0)}</b></p>"
                 f"<p>جلسات مغلقة (7 أيام): <b>{data.get('recent_closed', 0)}</b></p>"
                 f"<p>فرق الكمية الإجمالي: <b>{data.get('variance_qty', 0):,.2f}</b></p>"
-                f"<p>قيمة الفرق الإجمالية: <b>{data.get('variance_value', 0):,.2f} دج</b></p>"
+                f"<p>قيمة الفرق الإجمالية: <b>{data.get('variance_valuef', 0):,.2f} دج</b></p>"
             )
             QMessageBox.information(self, "ملخص الجرد الدوري", msg)
         except Exception as e:
@@ -9471,9 +9471,9 @@ class MainWindow(QMainWindow):
         statusbar = self.statusBar()
         statusbar.setStyleSheet("""
             QStatusBar {
-                background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #0C0E16,stop:1 #06070B);
-                color: #515874;
-                border-top: 1px solid #202640;
+                background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 {Colors.BG_DEEP},stop:1 {Colors.BG_VOID});
+                color: {Colors.TEXT_MUTED};
+                border-top: 1px solid {Colors.BG_RAISED};
                 font-size: 11px;
                 padding: 2px 8px;
             }
@@ -9483,7 +9483,7 @@ class MainWindow(QMainWindow):
         from PySide6.QtWidgets import QLabel
 
         self._status_unread = QLabel("")
-        self._status_unread.setStyleSheet("color:#515874; padding:0 8px;")
+        self._status_unread.setStyleSheet("color:{Colors.TEXT_MUTED}; padding:0 8px;")
         statusbar.addPermanentWidget(self._status_unread)
 
         # مؤشر حالة المزامنة (إذا كان hybrid_service متاحاً)
@@ -9505,7 +9505,7 @@ class MainWindow(QMainWindow):
         from PySide6.QtWidgets import QLabel
 
         self._status_websocket = QLabel("⚪ WebSocket: غير متصل")
-        self._status_websocket.setStyleSheet("color:#515874; padding:0 8px; font-size:10px;")
+        self._status_websocket.setStyleSheet("color:{Colors.TEXT_MUTED}; padding:0 8px; font-size:10px;")
         statusbar.addPermanentWidget(self._status_websocket)
 
         # رسالة قاعدة البيانات الأولى
@@ -9542,7 +9542,7 @@ class MainWindow(QMainWindow):
                     try:
                         last_check = getattr(self.notifications_manager, "last_check_time", None)
                         if last_check:
-                            self._status_unread.setToolTip(f"آخر فحص: {last_check.strftime('%H:%M')}")
+                            self._status_unread.setToolTip(f"آخر فحص: {last_check.strftime('%H:%Mf')}")
                     except Exception:
                         logging.getLogger(__name__).warning("Ignored exception in main_window.py")
                 except Exception:
@@ -9552,10 +9552,10 @@ class MainWindow(QMainWindow):
             if hasattr(self, "_status_websocket") and hasattr(self, "ws_client") and self.ws_client:
                 if self.ws_client.is_connected:
                     self._status_websocket.setText("🟢 WebSocket: متصل")
-                    self._status_websocket.setStyleSheet("color:#2DD4BF; padding:0 8px; font-size:10px;")
+                    self._status_websocket.setStyleSheet("color:{Colors.ACCENT_TEAL}; padding:0 8px; font-size:10px;")
                 else:
                     self._status_websocket.setText("🔴 WebSocket: غير متصل")
-                    self._status_websocket.setStyleSheet("color:#EF6B6B; padding:0 8px; font-size:10px;")
+                    self._status_websocket.setStyleSheet("color:{Colors.ACCENT_CORAL}; padding:0 8px; font-size:10px;")
         except Exception:
             logging.getLogger(__name__).warning("Ignored exception in main_window.py")
 
@@ -9640,10 +9640,10 @@ class MainWindow(QMainWindow):
             if hasattr(self, "_status_websocket"):
                 if connected:
                     self._status_websocket.setText("🟢 WebSocket: متصل")
-                    self._status_websocket.setStyleSheet("color:#2DD4BF; padding:0 8px; font-size:10px;")
+                    self._status_websocket.setStyleSheet("color:{Colors.ACCENT_TEAL}; padding:0 8px; font-size:10px;")
                 else:
                     self._status_websocket.setText(f"🔴 WebSocket: {message}")
-                    self._status_websocket.setStyleSheet("color:#EF6B6B; padding:0 8px; font-size:10px;")
+                    self._status_websocket.setStyleSheet("color:{Colors.ACCENT_CORAL}; padding:0 8px; font-size:10px;")
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في تحديث حالة WebSocket: {e}")
@@ -10934,7 +10934,7 @@ class MainWindow(QMainWindow):
         # Value
         val = QLabel(value)
         val.setObjectName(f"kpi_{id}")
-        val.setStyleSheet("color: #f8fafc; font-size: 28px; font-weight: 800; background: transparent;")
+        val.setStyleSheet(f"color: {Colors.TEXT_BRIGHT}; font-size: 28px; font-weight: 800; background: transparent;")
         l.addWidget(val)
 
         return card

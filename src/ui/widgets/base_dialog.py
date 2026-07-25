@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.ui.widgets.custom_title_bar import CustomTitleBar
+from src.ui.styles.design_tokens import C
 
 
 class BaseDialog(QDialog):
@@ -35,22 +36,22 @@ class BaseDialog(QDialog):
         # الإطار الرئيسي الذي يحتوي على التصميم الفعلي
         self.main_frame = QFrame()
         self.main_frame.setObjectName("MainFrame")
-        self.main_frame.setStyleSheet("""
-            QFrame#MainFrame {
-                background-color: #181D2E;
-                border: 1px solid #2A3150;
+        self.main_frame.setStyleSheet(f"""
+            QFrame#MainFrame {{
+                background-color: {C.BG_SURFACE};
+                border: 1px solid {C.BG_ELEVATED};
                 border-radius: 16px;
-                color: #F0F2F5;
-            }
-            QLabel {
-                color: #F0F2F5;
-            }
+                color: {C.TEXT_PRIMARY};
+            }}
+            QLabel {{
+                color: {C.TEXT_PRIMARY};
+            }}
         """)
 
         # إضافة ظل للإطار لتمييز النافذة
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(20)
-        shadow.setColor(QColor("#C8A54E"))  # لون الهوية (gold)
+        shadow.setColor(QColor(C.ACCENT_GOLD))  # لون الهوية (gold)
         shadow.setOffset(0, 0)
         self.main_frame.setGraphicsEffect(shadow)
 

@@ -7,6 +7,7 @@ Based on ui-ux-pro-max guidelines
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QCheckBox, QComboBox, QLabel, QLineEdit, QPushButton
+from src.ui.styles.design_tokens import C
 
 
 class AccessibilityUtils:
@@ -255,10 +256,10 @@ ACCESSIBLE_PALETTES = {
         "secondary": "#4A5568",
         "accent": "#D4AF37",
         "success": "#059669",
-        "warning": "#D97706",
+        "warning": "C.ACCENT_AMBER_DARK",
         "error": "#DC2626",
         "bg_light": "#F3F4F6",
-        "bg_white": "#FFFFFF",
+        "bg_white": "C.TEXT_BRIGHT",
         "text_primary": "#1F2937",
         "text_secondary": "#6B7280",
     },
@@ -270,7 +271,7 @@ ACCESSIBLE_PALETTES = {
         "warning": "#EAB308",
         "error": "#DC2626",
         "bg_light": "#F7FEE7",
-        "bg_white": "#FFFFFF",
+        "bg_white": "C.TEXT_BRIGHT",
         "text_primary": "#1F2937",
         "text_secondary": "#4B5563",
     },

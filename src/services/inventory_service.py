@@ -142,7 +142,7 @@ class InventoryService:
         try:
             return self.product_manager.search_products(query, category_id, active_only, limit)
         except Exception as e:
-            self.logger.warning(f"خطأ في البحث عن المنتجات: {str(e)}")
+            self.logger.warning(f"خطأ في البحث عن المنتجات: {e}", exc_info=True)
             return []
 
     def get_product_by_barcode(self, barcode: str) -> Optional[Product]:
@@ -150,7 +150,7 @@ class InventoryService:
         try:
             return self.product_manager.get_product_by_barcode(barcode)
         except Exception as e:
-            self.logger.warning(f"خطأ في الحصول على المنتج بالباركود: {str(e)}")
+            self.logger.warning(f"خطأ في الحصول على المنتج بالباركود: {e}", exc_info=True)
             return None
 
     def update_product(self, product: Product) -> bool:
@@ -173,7 +173,7 @@ class InventoryService:
                 return True
             return False
         except Exception as e:
-            self.logger.warning(f"خطأ في تحديث المنتج: {str(e)}")
+            self.logger.warning(f"خطأ في تحديث المنتج: {e}", exc_info=True)
             return False
 
     def delete_product(self, product_id: int, hard_delete: bool = False) -> bool:
@@ -181,7 +181,7 @@ class InventoryService:
         try:
             return self.product_manager.delete_product(product_id, hard_delete)
         except Exception as e:
-            self.logger.warning(f"خطأ في حذف المنتج: {str(e)}")
+            self.logger.warning(f"خطأ في حذف المنتج: {e}", exc_info=True)
             return False
 
     def transfer_stock(self, from_product_id: int, to_product_id: int, quantity: float) -> bool:
@@ -219,7 +219,7 @@ class InventoryService:
                 )
             return True
         except Exception as e:
-            self.logger.warning(f"خطأ في نقل المخزون: {str(e)}")
+            self.logger.warning(f"خطأ في نقل المخزون: {e}", exc_info=True)
             return False
 
     def add_category(self, category) -> Optional[int]:
@@ -227,7 +227,7 @@ class InventoryService:
         try:
             return self.category_manager.create_category(category)
         except Exception as e:
-            self.logger.warning(f"خطأ في إضافة الفئة: {str(e)}")
+            self.logger.warning(f"خطأ في إضافة الفئة: {e}", exc_info=True)
             return None
 
     def get_category_tree(self) -> List[Dict[str, Any]]:
@@ -235,7 +235,7 @@ class InventoryService:
         try:
             return self.category_manager.get_category_tree()
         except Exception as e:
-            self.logger.warning(f"خطأ في الحصول على شجرة الفئات: {str(e)}")
+            self.logger.warning(f"خطأ في الحصول على شجرة الفئات: {e}", exc_info=True)
             return []
 
     # ===== إدارة المنتجات =====
@@ -258,7 +258,7 @@ class InventoryService:
                 )
             return product_id
         except Exception as e:
-            self.logger.warning(f"خطأ في إضافة المنتج: {str(e)}")
+            self.logger.warning(f"خطأ في إضافة المنتج: {e}", exc_info=True)
             return None
 
     def adjust_stock(
@@ -293,6 +293,7 @@ class InventoryService:
                         # تحديث المخزون الإجمالي للتوافق
                         total_stock = self.warehouse_service.get_total_stock(product_id)
                         self.product_manager.update_stock(product_id, round(total_stock, 2))
+                        self.logger.info(f"تم تعديل مخزون المنتج {product_id} إلى {new_quantity} في المستودع {warehouse_id}: {reason}")
                         return True
 
             # الحالة الافتراضية (Single Warehouse)
@@ -310,10 +311,11 @@ class InventoryService:
                     notes=f"تعديل المخزون: {reason}",
                     created_by=user_id,
                 )
+                self.logger.info(f"تم تعديل مخزون المنتج {product_id} إلى {new_quantity}: {reason}")
                 return True
             return False
         except Exception as e:
-            self.logger.warning(f"خطأ في تعديل مخزون المنتج {product_id}: {str(e)}")
+            self.logger.warning(f"خطأ في تعديل مخزون المنتج {product_id}: {e}", exc_info=True)
             return False
 
     def adjust_stock_relative(
@@ -343,6 +345,7 @@ class InventoryService:
                         )
                         # تحديث المخزون الإجمالي للتوافق بشكل نسبي
                         self.product_manager.adjust_stock_relative(product_id, diff)
+                        self.logger.info(f"تم تعديل مخزون المنتج {product_id} نسبياً بـ {diff:+.2f} في المستودع {warehouse_id}: {reason}")
                         return True
 
             # الحالة الافتراضية (Single Warehouse)
@@ -355,10 +358,11 @@ class InventoryService:
                     notes=f"تعديل المخزون النسبي: {reason}",
                     created_by=user_id,
                 )
+                self.logger.info(f"تم تعديل مخزون المنتج {product_id} نسبياً بـ {diff:+.2f}: {reason}")
                 return True
             return False
         except Exception as e:
-            self.logger.warning(f"خطأ في التعديل النسبي للمخزون {product_id}: {str(e)}")
+            self.logger.warning(f"خطأ في التعديل النسبي للمخزون {product_id}: {e}", exc_info=True)
             return False
 
     def get_stock_movements(
@@ -409,7 +413,7 @@ class InventoryService:
                 )
             return movements
         except Exception as e:
-            self.logger.warning(f"خطأ في الحصول على حركات المخزون: {str(e)}")
+            self.logger.warning(f"خطأ في الحصول على حركات المخزون: {e}", exc_info=True)
             return []
 
     def get_stock_alerts(self) -> List[StockAlert]:
@@ -442,7 +446,7 @@ class InventoryService:
                 )
             return alerts
         except Exception as e:
-            self.logger.warning(f"خطأ في تنبيهات المخزون: {str(e)}")
+            self.logger.warning(f"خطأ في تنبيهات المخزون: {e}", exc_info=True)
             return []
 
     def generate_inventory_report(self, include_movements: bool = True) -> InventoryReport:
@@ -472,7 +476,7 @@ class InventoryService:
             )
             return report
         except Exception as e:
-            self.logger.warning(f"خطأ في تقرير المخزون: {str(e)}")
+            self.logger.warning(f"خطأ في تقرير المخزون: {e}", exc_info=True)
             return InventoryReport(0, 0, 0, 0, 0, 0, [], [], [])
 
     def _get_expired_products(self) -> List[Product]:
@@ -508,7 +512,7 @@ class InventoryService:
             )
             self.db_manager.execute_insert(query, params)
         except Exception as e:
-            self.logger.warning(f"خطأ في تسجيل حركة المخزون: {str(e)}")
+            self.logger.warning(f"خطأ في تسجيل حركة المخزون: {e}", exc_info=True)
 
     def _get_top_products_by_value(self, limit: int = 10) -> List[Dict[str, Any]]:
         """أفضل المنتجات حسب القيمة مع Mapping مرن"""
@@ -534,5 +538,5 @@ class InventoryService:
                 )
             return results
         except Exception as e:
-            self.logger.warning(f"خطأ في جلب أفضل المنتجات: {str(e)}")
+            self.logger.warning(f"خطأ في جلب أفضل المنتجات: {e}", exc_info=True)
             return []

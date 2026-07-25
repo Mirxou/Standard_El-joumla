@@ -2,6 +2,7 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QPushButton, QVBoxLayout, QWi
 
 from src.ui.components.smart_breadcrumbs import SmartBreadcrumbs
 from src.ui.components.status_bar_stage import StatusBarStage
+from src.ui.styles.design_tokens import C
 
 
 class FormViewWrapper(QWidget):
@@ -26,8 +27,8 @@ class FormViewWrapper(QWidget):
         self.header = QFrame()
         self.header.setStyleSheet("""
             QFrame {
-                background-color: #181D2E; /* Dark Surface */
-                border-bottom: 1px solid #2A3150;
+                background-color: C.BG_SURFACE; /* Dark Surface */
+                border-bottom: 1px solid C.BORDER_DEFAULT;
             }
         """)
         self.header_layout = QVBoxLayout(self.header)
@@ -73,7 +74,7 @@ class FormViewWrapper(QWidget):
         self.content_layout.setContentsMargins(20, 20, 20, 20)
 
         # Background for content area
-        self.content_area.setStyleSheet("background-color: #111520;")
+        self.content_area.setStyleSheet("background-color: C.BG_PRIMARY;")
         self.content_layout.addLayout(self.form_layout)
 
         self.main_layout.addWidget(self.content_area)
@@ -90,19 +91,19 @@ class FormViewWrapper(QWidget):
     def create_action_btn(self, text, variant="secondary"):
         btn = QPushButton(text)
         if variant == "primary":
-            bg = "#C8A54E"
-            fg = "#111520"
-            hover = "#E8C96A"
+            bg = "C.ACCENT_GOLD"
+            fg = "C.BG_PRIMARY"
+            hover = "C.ACCENT_GOLD_LIGHT"
         else:  # secondary
-            bg = "#202640"
-            fg = "#8B92A8"
-            hover = "#323C62"
+            bg = "C.BG_RAISED"
+            fg = "C.TEXT_SECONDARY"
+            hover = "C.BG_HOVER"
 
         btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {bg};
                 color: {fg};
-                border: 1px solid {('#b8923f' if variant=='primary' else '#2A3150')};
+                border: 1px solid {('#b8923f' if variant=='primary' else 'C.BORDER_DEFAULT')};
                 padding: 6px 12px;
                 border-radius: 4px;
                 font-weight: 600;

@@ -153,7 +153,7 @@ class PaymentService:
 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في إنشاء جداول المدفوعات: {str(e)}")
+                self.logger.error(f"خطأ في إنشاء جداول المدفوعات: {e}", exc_info=True)
 
     def _create_indexes(self):
         """إنشاء الفهارس"""
@@ -189,7 +189,7 @@ class PaymentService:
 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في إنشاء فهارس المدفوعات: {str(e)}")
+                self.logger.error(f"خطأ في إنشاء فهارس المدفوعات: {e}", exc_info=True)
 
     # ===== إدارة المدفوعات =====
 
@@ -258,7 +258,7 @@ class PaymentService:
                         payment.exchange_rate = Decimal("1.0")
                 except Exception as e:
                     if self.logger:
-                        self.logger.warning(f"خطأ في حساب سعر الصرف: {str(e)}")
+                        self.logger.warning(f"خطأ في حساب سعر الصرف: {e}", exc_info=True)
                     # في حالة الخطأ، استخدم المبلغ الأساسي
                     payment.base_amount = amount
                     payment.converted_amount = amount
@@ -354,7 +354,7 @@ class PaymentService:
 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في إنشاء دفعة العميل: {str(e)}")
+                self.logger.error(f"خطأ في إنشاء دفعة العميل: {e}", exc_info=True)
             return None
 
     def get_payment_by_id(self, payment_id: int) -> Optional[Payment]:
@@ -363,7 +363,7 @@ class PaymentService:
             return self.payment_manager.get_payment_by_id(payment_id)
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في الحصول على الدفعة {payment_id}: {str(e)}")
+                self.logger.error(f"خطأ في الحصول على الدفعة {payment_id}: {e}", exc_info=True)
             return None
 
     def get_customer_payments(self, customer_id: int) -> List[Payment]:
@@ -372,7 +372,7 @@ class PaymentService:
             return self.payment_manager.get_customer_payments(customer_id)
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في الحصول على دفعات العميل {customer_id}: {str(e)}")
+                self.logger.error(f"خطأ في الحصول على دفعات العميل {customer_id}: {e}", exc_info=True)
             return []
 
     def get_supplier_payments(self, supplier_id: int) -> List[Payment]:
@@ -381,7 +381,7 @@ class PaymentService:
             return self.payment_manager.get_supplier_payments(supplier_id)
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في الحصول على دفعات المورد {supplier_id}: {str(e)}")
+                self.logger.error(f"خطأ في الحصول على دفعات المورد {supplier_id}: {e}", exc_info=True)
             return []
 
     def create_supplier_payment(
@@ -439,7 +439,7 @@ class PaymentService:
                         payment.exchange_rate = Decimal("1.0")
                 except Exception as e:
                     if self.logger:
-                        self.logger.warning(f"خطأ في حساب سعر الصرف: {str(e)}")
+                        self.logger.warning(f"خطأ في حساب سعر الصرف: {e}", exc_info=True)
                     # في حالة الخطأ، استخدم المبلغ الأساسي
                     payment.base_amount = amount
                     payment.converted_amount = amount
@@ -506,7 +506,7 @@ class PaymentService:
 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في إنشاء دفعة المورد: {str(e)}")
+                self.logger.error(f"خطأ في إنشاء دفعة المورد: {e}", exc_info=True)
             return None
 
     def get_payments_by_date_range(self, start_date: date, end_date: date, payment_type: str = None) -> List[Payment]:
@@ -529,7 +529,7 @@ class PaymentService:
 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في الحصول على المدفوعات: {str(e)}")
+                self.logger.error(f"خطأ في الحصول على المدفوعات: {e}", exc_info=True)
             return []
 
     # ===== إدارة الذمم المدينة =====
@@ -577,7 +577,7 @@ class PaymentService:
 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في الحصول على الذمم المدينة: {str(e)}")
+                self.logger.error(f"خطأ في الحصول على الذمم المدينة: {e}", exc_info=True)
             return []
 
     def get_accounts_payable(self) -> List[Dict[str, Any]]:
@@ -623,7 +623,7 @@ class PaymentService:
 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في الحصول على الذمم الدائنة: {str(e)}")
+                self.logger.error(f"خطأ في الحصول على الذمم الدائنة: {e}", exc_info=True)
             return []
 
     def get_overdue_receivables(self) -> List[Dict[str, Any]]:
@@ -657,7 +657,7 @@ class PaymentService:
 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في الحصول على الذمم المدينة المتأخرة: {str(e)}")
+                self.logger.error(f"خطأ في الحصول على الذمم المدينة المتأخرة: {e}", exc_info=True)
             return []
 
     def get_overdue_payables(self) -> List[Dict[str, Any]]:
@@ -691,7 +691,7 @@ class PaymentService:
 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في الحصول على الذمم الدائنة المتأخرة: {str(e)}")
+                self.logger.error(f"خطأ في الحصول على الذمم الدائنة المتأخرة: {e}", exc_info=True)
             return []
 
     # ===== جدولة المدفوعات (الأقساط) =====
@@ -745,7 +745,7 @@ class PaymentService:
             return schedules
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في الحصول على جدولة المدفوعات: {str(e)}")
+                self.logger.error(f"خطأ في الحصول على جدولة المدفوعات: {e}", exc_info=True)
             return []
 
     # ===== التقارير المالية =====
@@ -817,7 +817,7 @@ class PaymentService:
 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في ملخص المدفوعات: {str(e)}")
+                self.logger.error(f"خطأ في ملخص المدفوعات: {e}", exc_info=True)
             return {}
 
     def get_aging_report(self, account_type: str = None) -> List[Dict[str, Any]]:
@@ -947,7 +947,7 @@ class PaymentService:
 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في تقرير أعمار الذمم: {str(e)}")
+                self.logger.error(f"خطأ في تقرير أعمار الذمم: {e}", exc_info=True)
             return []
 
     def get_cash_flow_report(self, start_date: date, end_date: date) -> Dict[str, Any]:
@@ -1016,7 +1016,7 @@ class PaymentService:
 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في تقرير التدفق النقدي: {str(e)}")
+                self.logger.error(f"خطأ في تقرير التدفق النقدي: {e}", exc_info=True)
             return {}
 
     def get_payment_trends_analysis(
@@ -1116,7 +1116,7 @@ class PaymentService:
 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في تحليل اتجاهات المدفوعات: {str(e)}")
+                self.logger.error(f"خطأ في تحليل اتجاهات المدفوعات: {e}", exc_info=True)
             return {}
 
     def get_payment_forecast(self, historical_months: int = 12, forecast_months: int = 3) -> Dict[str, Any]:
@@ -1210,7 +1210,7 @@ class PaymentService:
 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في توقع المدفوعات: {str(e)}")
+                self.logger.error(f"خطأ في توقع المدفوعات: {e}", exc_info=True)
             return {}
 
     def get_period_comparison_analysis(
@@ -1394,7 +1394,7 @@ class PaymentService:
 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في مقارنة فترات المدفوعات: {str(e)}")
+                self.logger.error(f"خطأ في مقارنة فترات المدفوعات: {e}", exc_info=True)
             return {}
 
     def get_payment_performance_kpis(self, start_date: date, end_date: date) -> Dict[str, Any]:
@@ -1549,5 +1549,5 @@ class PaymentService:
 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في مؤشرات الأداء الرئيسية: {str(e)}")
+                self.logger.error(f"خطأ في مؤشرات الأداء الرئيسية: {e}", exc_info=True)
             return {}

@@ -5,6 +5,7 @@ Comprehensive Import/Export System
 
 import csv
 import json
+import re
 import xml.etree.ElementTree as ET
 import zipfile
 from datetime import datetime
@@ -90,7 +91,15 @@ class DataExportService:
             ORDER BY name
         """)
 
-        return [row[0] for row in cursor.fetchall()]
+        rows = cursor.fetchall()
+        return [row[0] if isinstance(row, (list, tuple)) else row.get('name', '') for row in rows]
+
+    def _validate_table_name(self, table_name: str) -> bool:
+        """تحقق من صحة اسم الجدول (منع SQL injection)"""
+        if not table_name or not isinstance(table_name, str):
+            return False
+        # فقط أحرف إنجليزية وأرقام وشرطة سفلية
+        return bool(re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', table_name))
 
     def _export_table(self, table_name: str) -> List[Dict]:
         """
@@ -102,6 +111,8 @@ class DataExportService:
         Returns:
             قائمة الصفوف
         """
+        if not self._validate_table_name(table_name):
+            return []
         cursor = self.db.connection.cursor()
         cursor.execute(f"SELECT * FROM {table_name}")
 

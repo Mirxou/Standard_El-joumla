@@ -1,5 +1,6 @@
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QHBoxLayout, QPushButton, QWidget
+from src.ui.styles.design_tokens import C
 
 
 class StatusBarStage(QWidget):
@@ -41,21 +42,21 @@ class StatusBarStage(QWidget):
             btn.setStyleSheet("""
                 QPushButton {
                     padding: 5px 15px;
-                    border: 1px solid #2A3150;
-                    color: #8B92A8;
-                    background-color: #202640;
+                    border: 1px solid C.BORDER_DEFAULT;
+                    color: C.TEXT_SECONDARY;
+                    background-color: C.BG_RAISED;
                     font-weight: 600;
                     border-radius: 0px;
                     margin-left: -1px; /* collapse borders */
                 }
                 QPushButton:checked {
-                    background-color: #C8A54E;
-                    color: #111520;
-                    border-color: #C8A54E;
+                    background-color: C.ACCENT_GOLD;
+                    color: C.BG_PRIMARY;
+                    border-color: C.ACCENT_GOLD;
                 }
                 QPushButton:hover:!checked {
-                    background-color: #323C62;
-                    color: #F0F2F5;
+                    background-color: C.BG_HOVER;
+                    color: C.TEXT_PRIMARY;
                 }
                 /* First Item Radius */
                 QPushButton:first-child {

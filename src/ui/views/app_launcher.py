@@ -1,6 +1,7 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import QFrame, QGridLayout, QLabel, QVBoxLayout, QWidget
+from src.ui.styles.design_tokens import C
 
 
 class AppCard(QFrame):
@@ -103,7 +104,7 @@ class AppLauncher(QWidget):
             ("sales", "المبيعات", "💰", "#34d399"),
             ("inventory", "المخزون", "📦", "#f472b6"),
             ("purchases", "المشتريات", "🛒", "#a78bfa"),
-            ("payments", "الحسابات", "💳", "#fbbf24"),
+            ("payments", "الحسابات", "💳", "C.ACCENT_AMBER_LIGHT"),
             ("contacts", "الجهات", "👥", "#60a5fa"),
             ("reports", "التقارير", "📈", "#f87171"),
             ("settings", "الإعدادات", "⚙️", "#94a3b8"),

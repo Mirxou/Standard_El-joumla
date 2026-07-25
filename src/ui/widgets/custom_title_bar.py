@@ -3,6 +3,8 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QWidget
 
+from src.ui.styles.design_tokens import C
+
 
 class CustomTitleBar(QWidget):
     """
@@ -16,39 +18,39 @@ class CustomTitleBar(QWidget):
         self.setFixedHeight(42)
 
         # Aurora Noir styling
-        self.setStyleSheet("""
-            CustomTitleBar {
+        self.setStyleSheet(f"""
+            CustomTitleBar {{
                 background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
-                    stop:0 #111520, stop:1 #0C0E16);
-                border-bottom: 1px solid #1E2440;
+                    stop:0 {C.BG_PRIMARY}, stop:1 {C.BG_DEEP});
+                border-bottom: 1px solid {C.BORDER_SUBTLE};
                 border-top-left-radius: 16px;
                 border-top-right-radius: 16px;
-            }
-            QLabel {
-                color: #F0F2F5;
+            }}
+            QLabel {{
+                color: {C.TEXT_PRIMARY};
                 font-family: 'Cairo', 'Segoe UI';
                 font-weight: 700;
                 font-size: 13px;
                 background: transparent;
-            }
-            QPushButton {
+            }}
+            QPushButton {{
                 background: transparent;
                 border: none;
-                color: #515874;
+                color: {C.TEXT_MUTED};
                 font-size: 15px;
                 width: 46px;
                 height: 42px;
                 border-radius: 0px;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
                 background-color: rgba(200,165,78,0.08);
-                color: #F0F2F5;
-            }
-            QPushButton#btnClose:hover {
+                color: {C.TEXT_PRIMARY};
+            }}
+            QPushButton#btnClose:hover {{
                 background-color: rgba(239,107,107,0.85);
-                color: #ffffff;
+                color: {C.TEXT_BRIGHT};
                 border-top-right-radius: 16px;
-            }
+            }}
         """)
 
         layout = QHBoxLayout(self)
@@ -61,7 +63,6 @@ class CustomTitleBar(QWidget):
         logo_path = Path(__file__).parent.parent.parent.parent / "assets" / "images" / "standard_eljoumla_logo.png"
         if logo_path.exists():
             from PySide6.QtGui import QPixmap
-
             pixmap = QPixmap(str(logo_path))
             self.icon_label.setPixmap(pixmap.scaled(20, 20, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         else:
@@ -72,7 +73,7 @@ class CustomTitleBar(QWidget):
         # Title
         self.title_label = QLabel(title or "ستاندرد الجملة")
         self.title_label.setStyleSheet(
-            "background: transparent; color: #8B92A8; font-weight: 600; font-size: 12px;"
+            f"background: transparent; color: {C.TEXT_SECONDARY}; font-weight: 600; font-size: 12px;"
         )
         layout.addWidget(self.title_label)
 

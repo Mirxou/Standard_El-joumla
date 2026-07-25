@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from src.ui.styles.design_tokens import C
 
 
 class SmartCommandPalette(QDialog):
@@ -31,12 +32,12 @@ class SmartCommandPalette(QDialog):
         # حاوية رئيسية لتطبيق التأثيرات والحدود
         self.main_container = QWidget()
         self.main_container.setObjectName("ContentContainer")  # To match new QSS
-        self.main_container.setStyleSheet("""
-            QWidget#ContentContainer {
-                background-color: #ffffff;
+        self.main_container.setStyleSheet(f"""
+            QWidget#ContentContainer {{
+                background-color: {C.BG_SURFACE};
                 border-radius: 16px;
-                border: 1px solid #e5e7eb;
-            }
+                border: 1px solid {C.BORDER_DEFAULT};
+            }}
         """)
 
         container_layout = QVBoxLayout(self.main_container)
@@ -45,39 +46,39 @@ class SmartCommandPalette(QDialog):
         # حقل البحث الذكي
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("ابحث عن أمر، فاتورة، عميل، أو إجراء... (Esc للإغلاق)")
-        self.search_input.setStyleSheet("""
-            QLineEdit {
-                border: 2px solid #e5e7eb;
+        self.search_input.setStyleSheet(f"""
+            QLineEdit {{
+                border: 2px solid {C.BORDER_DEFAULT};
                 border-radius: 8px;
                 padding: 12px;
-                background-color: #f9fafb;
-                color: #1f2937;
+                background-color: {C.BG_RAISED};
+                color: {C.TEXT_PRIMARY};
                 font-size: 16px;
-            }
-            QLineEdit:focus {
-                border-color: #3b82f6;
-                background-color: #ffffff;
-            }
+            }}
+            QLineEdit:focus {{
+                border-color: {C.ACCENT_GOLD};
+                background-color: {C.BG_SURFACE};
+            }}
         """)
         self.search_input.textChanged.connect(self.filter_commands)
 
         # قائمة النتائج
         self.results_list = QListWidget()
-        self.results_list.setStyleSheet("""
-            QListWidget {
+        self.results_list.setStyleSheet(f"""
+            QListWidget {{
                 background-color: transparent;
                 border: none;
-                color: #374151;
+                color: {C.TEXT_SECONDARY};
                 font-size: 14px;
-            }
-            QListWidget::item {
+            }}
+            QListWidget::item {{
                 padding: 10px;
                 border-radius: 6px;
-            }
-            QListWidget::item:selected {
-                background-color: #eff6ff;
-                color: #2563eb;
-            }
+            }}
+            QListWidget::item:selected {{
+                background-color: {C.ACCENT_GOLD_SUBTLE};
+                color: {C.ACCENT_GOLD};
+            }}
         """)
         self.results_list.itemActivated.connect(self.execute_command)
 

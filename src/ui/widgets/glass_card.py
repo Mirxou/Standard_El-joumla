@@ -6,6 +6,8 @@ Glass Card Widget - بطاقة زجاجية بتأثير Glassmorphism
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, Signal
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
+from src.ui.styles.design_tokens import C
+
 
 class GlassCard(QFrame):
     """
@@ -41,17 +43,17 @@ class GlassCard(QFrame):
 
     def _apply_glass_style(self):
         """تطبيق نمط الزجاج"""
-        self.setStyleSheet("""
-            GlassCard {
+        self.setStyleSheet(f"""
+            GlassCard {{
                 background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
-                    stop:0 #202640,stop:1 #181D2E);
-                border: 1px solid #2A3150;
+                    stop:0 {C.BG_RAISED},stop:1 {C.BG_SURFACE});
+                border: 1px solid {C.BORDER_DEFAULT};
                 border-radius: 16px;
-            }
-            GlassCard:hover {
-                background: #202640;
-                border: 1px solid #C8A54E;
-            }
+            }}
+            GlassCard:hover {{
+                background: {C.BG_RAISED};
+                border: 1px solid {C.ACCENT_GOLD};
+            }}
         """)
 
     def add_widget(self, widget: QWidget):
@@ -121,7 +123,7 @@ class KPICard(GlassCard):
         self.value_label.setStyleSheet("""
             font-size: 28px;
             font-weight: 800;
-            color: #FFFFFF;
+            color: {C.TEXT_BRIGHT};
             font-family: 'Cairo';
         """)
         value_layout.addWidget(self.value_label)
@@ -131,7 +133,7 @@ class KPICard(GlassCard):
 
         # Trend
         if self.trend_text:
-            trend_color = "#2DD4BF" if self.trend_positive else "#EF6B6B"  # noqa: F841
+            trend_color = C.ACCENT_TEAL if self.trend_positive else C.ACCENT_CORAL  # noqa: F841
             trend_icon = "↑" if self.trend_positive else "↓"
 
             trend_label = QLabel(f"{trend_icon} {self.trend_text}")

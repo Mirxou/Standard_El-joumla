@@ -227,16 +227,13 @@ class PaymentDialog(BaseDialog):
         self.amount_spinbox.setSuffix(f" {currency_symbol}")
         form_layout.addRow(self.i18n.get_message("amount") + ":", self.amount_spinbox)
 
-        # طريقة الدفع
+        # طريقة الدفع - استخدام الـ Enum المركزي لضمان التوافق
         self.payment_method_combo = QComboBox()
-        payment_methods = [
-            self.i18n.get_message("cash"),
-            self.i18n.get_message("check"),
-            self.i18n.get_message("bank_transfer"),
-            self.i18n.get_message("credit_card"),
-            self.i18n.get_message("debit_card"),
-        ]
+        from ...models.payment import PaymentMethod
+        self._payment_method_map = {pm.value: pm for pm in PaymentMethod}
+        payment_methods = [pm.value for pm in PaymentMethod]
         self.payment_method_combo.addItems(payment_methods)
+        self.payment_method_combo.setCurrentText(PaymentMethod.CASH.value)
         form_layout.addRow(self.i18n.get_message("payment_method") + ":", self.payment_method_combo)
 
         # رقم المرجع
