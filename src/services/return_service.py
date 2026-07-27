@@ -19,6 +19,7 @@ from src.models.return_invoice import (
     ReturnStatus,
     ReturnType,
 )
+from src.utils.db_helpers import get_value
 from src.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -252,7 +253,7 @@ class ReturnService:
             row = cursor.fetchone()
 
             if row:
-                return self.get_return(row[0])
+                return self.get_return(get_value(row, 'id'))
             return None
 
         except Exception as e:
@@ -567,7 +568,7 @@ class ReturnService:
                 (sale_id,),
             )
 
-            return_ids = [row[0] for row in cursor.fetchall()]
+            return_ids = [get_value(row, 'id') for row in cursor.fetchall()]
             return [r for rid in return_ids if (r := self.get_return(rid))]
 
         except Exception as e:
@@ -583,35 +584,35 @@ class ReturnService:
 
             # العدد والقيمة حسب النوع
             cursor.execute("""
-                SELECT return_type, COUNT(*), SUM(total_amount)
+                SELECT return_type, COUNT(*) AS cnt, SUM(total_amount) AS total
                 FROM return_invoices
                 GROUP BY return_type
             """)
-            stats["by_type"] = {row[0]: {"count": row[1], "total": row[2] or 0} for row in cursor.fetchall()}
+            stats["by_type"] = {get_value(row, 'return_type'): {"count": get_value(row, 'cnt', 0), "total": get_value(row, 'total', 0) or 0} for row in cursor.fetchall()}
 
             # العدد حسب الحالة
             cursor.execute("""
-                SELECT status, COUNT(*), SUM(total_amount)
+                SELECT status, COUNT(*) AS cnt, SUM(total_amount) AS total
                 FROM return_invoices
                 GROUP BY status
             """)
-            stats["by_status"] = {row[0]: {"count": row[1], "total": row[2] or 0} for row in cursor.fetchall()}
+            stats["by_status"] = {get_value(row, 'status'): {"count": get_value(row, 'cnt', 0), "total": get_value(row, 'total', 0) or 0} for row in cursor.fetchall()}
 
             # العدد حسب السبب
             cursor.execute("""
-                SELECT return_reason, COUNT(*)
+                SELECT return_reason, COUNT(*) AS cnt
                 FROM return_invoices
                 WHERE return_reason IS NOT NULL
                 GROUP BY return_reason
             """)
-            stats["by_reason"] = {row[0]: row[1] for row in cursor.fetchall()}
+            stats["by_reason"] = {get_value(row, 'return_reason'): get_value(row, 'cnt', 0) for row in cursor.fetchall()}
 
             # إجمالي المرتجعات
-            cursor.execute("SELECT COUNT(*), SUM(total_amount), SUM(refund_amount) FROM return_invoices")
+            cursor.execute("SELECT COUNT(*) AS total_count, SUM(total_amount) AS total_value, SUM(refund_amount) AS total_refunded FROM return_invoices")
             row = cursor.fetchone()
-            stats["total_count"] = row[0] or 0
-            stats["total_value"] = row[1] or 0
-            stats["total_refunded"] = row[2] or 0
+            stats["total_count"] = get_value(row, 'total_count', 0) or 0
+            stats["total_value"] = get_value(row, 'total_value', 0) or 0
+            stats["total_refunded"] = get_value(row, 'total_refunded', 0) or 0
 
             return stats
 

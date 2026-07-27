@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from src.core.database_manager import DatabaseManager
 from src.models.quote import Quote, QuoteItem, QuoteStatus
+from src.utils.db_helpers import get_value
 from src.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -208,7 +209,7 @@ class QuoteService:
             row = cursor.fetchone()
 
             if row:
-                return self.get_quote(row[0])
+                return self.get_quote(get_value(row, 'id'))
             return None
 
         except Exception as e:
@@ -439,7 +440,7 @@ class QuoteService:
                 (today,),
             )
 
-            expired_ids = [row[0] for row in cursor.fetchall()]
+            expired_ids = [get_value(row, 'id') for row in cursor.fetchall()]
 
             # تحديث الحالة
             if expired_ids:
@@ -472,17 +473,17 @@ class QuoteService:
 
             # العدد حسب الحالة
             cursor.execute("""
-                SELECT status, COUNT(*), SUM(total_amount)
+                SELECT status, COUNT(*) AS cnt, SUM(total_amount) AS total
                 FROM quotes
                 GROUP BY status
             """)
-            stats["by_status"] = {row[0]: {"count": row[1], "total": row[2] or 0} for row in cursor.fetchall()}
+            stats["by_status"] = {get_value(row, 'status'): {"count": get_value(row, 'cnt', 0), "total": get_value(row, 'total', 0) or 0} for row in cursor.fetchall()}
 
             # إجمالي العروض
-            cursor.execute("SELECT COUNT(*), SUM(total_amount) FROM quotes")
+            cursor.execute("SELECT COUNT(*) AS total_count, SUM(total_amount) AS total_value FROM quotes")
             row = cursor.fetchone()
-            stats["total_count"] = row[0] or 0
-            stats["total_value"] = row[1] or 0
+            stats["total_count"] = get_value(row, 'total_count', 0) or 0
+            stats["total_value"] = get_value(row, 'total_value', 0) or 0
 
             # معدل القبول
             cursor.execute("""
@@ -493,8 +494,8 @@ class QuoteService:
                 WHERE status IN ('ACCEPTED', 'REJECTED', 'CONVERTED')
             """)
             row = cursor.fetchone()
-            stats["acceptance_rate"] = row[0] or 0
-            stats["conversion_rate"] = row[1] or 0
+            stats["acceptance_rate"] = get_value(row, 'acceptance_rate', 0) or 0
+            stats["conversion_rate"] = get_value(row, 'conversion_rate', 0) or 0
 
             return stats
 

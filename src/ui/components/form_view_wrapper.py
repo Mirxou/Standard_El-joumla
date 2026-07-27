@@ -103,7 +103,7 @@ class FormViewWrapper(QWidget):
             QPushButton {{
                 background-color: {bg};
                 color: {fg};
-                border: 1px solid {('#b8923f' if variant=='primary' else 'C.BORDER_DEFAULT')};
+                border: 1px solid {(C.ACCENT_GOLD_DARK if variant=='primary' else C.BORDER_DEFAULT)};
                 padding: 6px 12px;
                 border-radius: 4px;
                 font-weight: 600;

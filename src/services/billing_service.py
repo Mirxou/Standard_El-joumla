@@ -137,10 +137,10 @@ class BillingService:
 
     def generate_invoice_for_subscription(self, sub_row) -> Optional[int]:
         try:
-            # sub_row: (id, customer_id, amount, frequency_days)
+            # sub_row: dict with keys (id, customer_id, amount, frequency_days)
             now = datetime.now()
             q = "INSERT INTO invoices (sale_id, customer_id, amount, status, issued_at) VALUES (?, ?, ?, ?, ?)"
-            res = self.db.execute_query(q, (None, sub_row[1], float(sub_row[2]), "unpaid", now))
+            res = self.db.execute_query(q, (None, sub_row.get('customer_id'), float(sub_row.get('amount', 0)), "unpaid", now))
             if res and hasattr(res, "lastrowid"):
                 return res.lastrowid
         except Exception as e:

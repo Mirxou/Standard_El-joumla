@@ -20,6 +20,7 @@ from src.models.product_enhanced import (
     ProductLabelManager,
     ProductVariantManager,
 )
+from src.utils.db_helpers import get_value
 
 
 class ProductService:
@@ -76,7 +77,7 @@ class ProductService:
 
             # get existing columns from DB
             cols_info = self.db_manager.fetch_all("PRAGMA table_info(products)")
-            existing_cols = [row[1] for row in cols_info] if cols_info else []
+            existing_cols = [row.get('name', '') for row in cols_info] if cols_info else []
 
             insert_cols = []
             insert_vals = []
@@ -178,7 +179,7 @@ class ProductService:
 
             row = self.db_manager.fetch_one(query, (sku,))
             if row:
-                return self.get_product_by_id(row[0])
+                return self.get_product_by_id(get_value(row, 'id'))
 
         except Exception as e:
             if self.logger:
@@ -197,7 +198,7 @@ class ProductService:
 
             row = self.db_manager.fetch_one(query, (barcode,))
             if row:
-                return self.get_product_by_id(row[0])
+                return self.get_product_by_id(get_value(row, 'id'))
 
         except Exception as e:
             if self.logger:
@@ -296,7 +297,7 @@ class ProductService:
         try:
             # الحصول على الأعمدة المتاحة فقط
             cols_info = self.db_manager.fetch_all("PRAGMA table_info(products)")
-            available_cols = {row[1] for row in cols_info} if cols_info else set()
+            available_cols = {row.get('name', '') for row in cols_info} if cols_info else set()
 
             # اختيار الأعمدة الموجودة فقط من الجدول
             all_cols_to_check = [
@@ -377,7 +378,7 @@ class ProductService:
         try:
             # Get available columns
             cols_info = self.db_manager.fetch_all("PRAGMA table_info(products)")
-            available_cols = {row[1] for row in cols_info} if cols_info else set()
+            available_cols = {row.get('name', '') for row in cols_info} if cols_info else set()
 
             all_cols_to_check = [
                 "id",
@@ -563,16 +564,18 @@ class ProductService:
             results = self.db_manager.fetch_all(query, (product_id,))
             tiers = []
             for row in results:
+                valid_from_raw = get_value(row, 'valid_from')
+                valid_until_raw = get_value(row, 'valid_until')
                 tier = PricingTier(
-                    id=row[0],
-                    product_id=row[1],
-                    min_quantity=row[2],
-                    max_quantity=row[3],
-                    price=Decimal(str(row[4])),
-                    discount_percent=Decimal(str(row[5])),
-                    valid_from=datetime.fromisoformat(row[6]) if row[6] else None,
-                    valid_until=datetime.fromisoformat(row[7]) if row[7] else None,
-                    description=row[8],
+                    id=get_value(row, 'id'),
+                    product_id=get_value(row, 'product_id'),
+                    min_quantity=get_value(row, 'min_quantity'),
+                    max_quantity=get_value(row, 'max_quantity'),
+                    price=Decimal(str(get_value(row, 'price') or 0)),
+                    discount_percent=Decimal(str(get_value(row, 'discount_percent') or 0)),
+                    valid_from=datetime.fromisoformat(valid_from_raw) if valid_from_raw else None,
+                    valid_until=datetime.fromisoformat(valid_until_raw) if valid_until_raw else None,
+                    description=get_value(row, 'description'),
                 )
                 tiers.append(tier)
 
@@ -599,16 +602,18 @@ class ProductService:
             results = self.db_manager.fetch_all(query, (product_id,))
             labels = []
             for row in results:
+                start_raw = get_value(row, 'start_date')
+                end_raw = get_value(row, 'end_date')
                 label = ProductLabel(
-                    id=row[0],
-                    product_id=row[1],
-                    label_type=row[2],
-                    label_text=row[3],
-                    label_color=row[4],
-                    priority=row[5],
-                    start_date=datetime.fromisoformat(row[6]) if row[6] else None,
-                    end_date=datetime.fromisoformat(row[7]) if row[7] else None,
-                    is_active=bool(row[8]),
+                    id=get_value(row, 'id'),
+                    product_id=get_value(row, 'product_id'),
+                    label_type=get_value(row, 'label_type'),
+                    label_text=get_value(row, 'label_text'),
+                    label_color=get_value(row, 'label_color'),
+                    priority=get_value(row, 'priority'),
+                    start_date=datetime.fromisoformat(start_raw) if start_raw else None,
+                    end_date=datetime.fromisoformat(end_raw) if end_raw else None,
+                    is_active=bool(get_value(row, 'is_active')),
                 )
                 labels.append(label)
 
@@ -635,12 +640,12 @@ class ProductService:
             items = []
             for row in results:
                 item = BundleProduct(
-                    id=row[0],
-                    bundle_id=row[1],
-                    product_id=row[2],
-                    product_name=row[3],
-                    quantity=row[4],
-                    unit_price=Decimal(str(row[5])),
+                    id=get_value(row, 'id'),
+                    bundle_id=get_value(row, 'bundle_id'),
+                    product_id=get_value(row, 'product_id'),
+                    product_name=get_value(row, 'product_name'),
+                    quantity=get_value(row, 'quantity'),
+                    unit_price=Decimal(str(get_value(row, 'unit_price') or 0)),
                 )
                 items.append(item)
 

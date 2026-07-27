@@ -65,6 +65,7 @@ try:
     from ..models.report import ExportFormat, ReportData, ReportFilter, ReportType
     from ..models.sale import SaleManager
     from ..models.supplier import SupplierManager
+    from ..utils.db_helpers import get_value
     from ..utils.logger import DatabaseLogger, setup_logger
 except ImportError:
     # Fallback للاستيراد المطلق (عند الاستيراد المباشر)
@@ -76,6 +77,7 @@ except ImportError:
         from src.models.report import ExportFormat, ReportData, ReportFilter, ReportType
         from src.models.sale import SaleManager
         from src.models.supplier import SupplierManager
+        from src.utils.db_helpers import get_value
         from src.utils.logger import DatabaseLogger, setup_logger
     except ImportError:
         # Fallback: تعريف محلي إذا لم يكن models.report متوفراً
@@ -1062,16 +1064,16 @@ class ReportExporter:
         monthly_data = {}
 
         for row in sales_results:
-            month = row[0]
+            month = get_value(row, 'month')
             if month not in monthly_data:
                 monthly_data[month] = {"sales": 0, "profit": 0}
-            monthly_data[month]["sales"] = row[1] or 0
+            monthly_data[month]["sales"] = get_value(row, 'monthly_sales', 0) or 0
 
         for row in profit_results:
-            month = row[0]
+            month = get_value(row, 'month')
             if month not in monthly_data:
                 monthly_data[month] = {"sales": 0, "profit": 0}
-            monthly_data[month]["profit"] = row[1] or 0
+            monthly_data[month]["profit"] = get_value(row, 'monthly_profit', 0) or 0
 
         return monthly_data
 
@@ -2045,10 +2047,10 @@ class ReportExporter:
             total_outflow = 0
 
             for row in results:
-                date = row[0]
-                payment_type = row[1]
-                payment_method = row[2]
-                amount = float(row[3])
+                date = get_value(row, 'payment_date')
+                payment_type = get_value(row, 'payment_type')
+                payment_method = get_value(row, 'payment_method')
+                amount = float(get_value(row, 'daily_amount') or 0)
 
                 if date not in daily_flow:
                     daily_flow[date] = {
@@ -2139,19 +2141,21 @@ class ReportExporter:
             total_amount = 0
 
             for row in results:
+                transaction_count = get_value(row, 'transaction_count', 0)
+                total_amt = float(get_value(row, 'total_amount') or 0)
                 analysis_data = {
-                    "payment_type": row[0],
-                    "payment_method": row[1],
-                    "transaction_count": row[2],
-                    "total_amount": float(row[3]),
-                    "average_amount": float(row[4]),
-                    "min_amount": float(row[5]),
-                    "max_amount": float(row[6]),
+                    "payment_type": get_value(row, 'payment_type'),
+                    "payment_method": get_value(row, 'payment_method'),
+                    "transaction_count": transaction_count,
+                    "total_amount": total_amt,
+                    "average_amount": float(get_value(row, 'average_amount') or 0),
+                    "min_amount": float(get_value(row, 'min_amount') or 0),
+                    "max_amount": float(get_value(row, 'max_amount') or 0),
                     "percentage": 0,  # سيتم حسابها لاحقاً
                 }
                 data.append(analysis_data)
-                total_transactions += row[2]
-                total_amount += float(row[3])
+                total_transactions += transaction_count
+                total_amount += total_amt
 
             # حساب النسب المئوية
             for item in data:
@@ -2215,19 +2219,21 @@ class ReportExporter:
             total_amount = 0
 
             for row in results:
+                usage_count = get_value(row, 'usage_count', 0)
+                total_amt = float(get_value(row, 'total_amount') or 0)
                 method_data = {
-                    "payment_method": row[0],
-                    "usage_count": row[1],
-                    "total_amount": float(row[2]),
-                    "average_amount": float(row[3]),
-                    "customer_payments": row[4],
-                    "supplier_payments": row[5],
+                    "payment_method": get_value(row, 'payment_method'),
+                    "usage_count": usage_count,
+                    "total_amount": total_amt,
+                    "average_amount": float(get_value(row, 'average_amount') or 0),
+                    "customer_payments": get_value(row, 'customer_payments'),
+                    "supplier_payments": get_value(row, 'supplier_payments'),
                     "usage_percentage": 0,
                     "amount_percentage": 0,
                 }
                 data.append(method_data)
-                total_usage += row[1]
-                total_amount += float(row[2])
+                total_usage += usage_count
+                total_amount += total_amt
 
             # حساب النسب المئوية
             for item in data:

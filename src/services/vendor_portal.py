@@ -14,6 +14,8 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
+from src.utils.db_helpers import get_value
+
 
 class VendorPortal:
     """بوابة الموردين للخدمة الذاتية"""
@@ -157,10 +159,10 @@ class VendorPortal:
             rating_row = cursor.fetchone()
             performance = (
                 {
-                    "quality": rating_row[0] if rating_row else 0,
-                    "delivery": rating_row[1] if rating_row else 0,
-                    "communication": rating_row[2] if rating_row else 0,
-                    "overall": rating_row[3] if rating_row else 0,
+                    "quality": get_value(rating_row, 'quality_rating', 0) if rating_row else 0,
+                    "delivery": get_value(rating_row, 'delivery_rating', 0) if rating_row else 0,
+                    "communication": get_value(rating_row, 'communication_rating', 0) if rating_row else 0,
+                    "overall": get_value(rating_row, 'overall_rating', 0) if rating_row else 0,
                 }
                 if rating_row
                 else None
@@ -220,13 +222,13 @@ class VendorPortal:
         for row in cursor.fetchall():
             orders.append(
                 {
-                    "id": row[0],
-                    "order_number": row[1],
-                    "order_date": row[2],
-                    "total_amount": row[3],
-                    "status": row[4],
-                    "expected_delivery": row[5],
-                    "notes": row[6],
+                    "id": get_value(row, 'id'),
+                    "order_number": get_value(row, 'order_number'),
+                    "order_date": get_value(row, 'order_date'),
+                    "total_amount": get_value(row, 'total_amount'),
+                    "status": get_value(row, 'status'),
+                    "expected_delivery": get_value(row, 'expected_delivery_date'),
+                    "notes": get_value(row, 'notes'),
                 }
             )
 
@@ -267,13 +269,13 @@ class VendorPortal:
         for row in cursor.fetchall():
             messages.append(
                 {
-                    "id": row[0],
-                    "type": row[1],
-                    "subject": row[2],
-                    "message": row[3],
-                    "is_read": bool(row[4]),
-                    "priority": row[5],
-                    "date": row[6],
+                    "id": get_value(row, 'id'),
+                    "type": get_value(row, 'message_type'),
+                    "subject": get_value(row, 'subject'),
+                    "message": get_value(row, 'message'),
+                    "is_read": bool(get_value(row, 'is_read')),
+                    "priority": get_value(row, 'priority'),
+                    "date": get_value(row, 'created_at'),
                 }
             )
 
@@ -386,12 +388,12 @@ class VendorPortal:
         for row in cursor.fetchall():
             documents.append(
                 {
-                    "id": row[0],
-                    "type": row[1],
-                    "file_name": row[2],
-                    "file_path": row[3],
-                    "uploaded_by": row[4],
-                    "uploaded_at": row[5],
+                    "id": get_value(row, 'id'),
+                    "type": get_value(row, 'document_type'),
+                    "file_name": get_value(row, 'file_name'),
+                    "file_path": get_value(row, 'file_path'),
+                    "uploaded_by": get_value(row, 'uploaded_by'),
+                    "uploaded_at": get_value(row, 'uploaded_at'),
                 }
             )
 
@@ -433,12 +435,12 @@ class VendorPortal:
         for row in cursor.fetchall():
             history.append(
                 {
-                    "date": row[0],
-                    "quality": row[1],
-                    "delivery": row[2],
-                    "communication": row[3],
-                    "overall": row[4],
-                    "comments": row[5],
+                    "date": get_value(row, 'rating_date'),
+                    "quality": get_value(row, 'quality_rating'),
+                    "delivery": get_value(row, 'delivery_rating'),
+                    "communication": get_value(row, 'communication_rating'),
+                    "overall": get_value(row, 'overall_rating'),
+                    "comments": get_value(row, 'comments'),
                 }
             )
 

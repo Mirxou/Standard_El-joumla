@@ -33,7 +33,7 @@ class MFAService:
     def get_otp_secret(self, user_id: int) -> Optional[str]:
         q = "SELECT otp_secret FROM users WHERE id=?"
         row = self.db.fetch_one(q, (user_id,))
-        return row[0] if row and row[0] else None
+        return row.get('otp_secret') if row else None
 
     def generate_otp(self, secret: str, interval: int = 30, digits: int = 6) -> str:
         key = base64.b32decode(secret, True)

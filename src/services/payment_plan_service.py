@@ -18,6 +18,7 @@ from src.models.payment_plan import (
     PaymentPlan,
     PaymentPlanStatus,
 )
+from src.utils.db_helpers import get_value
 
 
 class PaymentPlanService:
@@ -43,7 +44,7 @@ class PaymentPlanService:
 
         if result:
             first_row = result[0]
-            last_number = first_row["plan_number"] if isinstance(first_row, dict) else first_row[0]
+            last_number = get_value(first_row, 'plan_number')
             if not last_number:
                 sequence = 1
             else:
@@ -414,7 +415,7 @@ class PaymentPlanService:
 
         count = 0
         for row in results:
-            plan_id = row[0]
+            plan_id = get_value(row, 'id')
             if self.apply_late_fees_to_plan(plan_id):
                 count += 1
 
@@ -441,18 +442,18 @@ class PaymentPlanService:
 
         row = result[0]
         return {
-            "total_plans": row[0] or 0,
-            "total_financed": float(row[1]) if row[1] else 0.0,
-            "total_paid": float(row[2]) if row[2] else 0.0,
-            "total_remaining": float(row[3]) if row[3] else 0.0,
-            "total_late_fees": float(row[4]) if row[4] else 0.0,
+            "total_plans": get_value(row, 'total_plans', 0) or 0,
+            "total_financed": float(get_value(row, 'total_financed') or 0),
+            "total_paid": float(get_value(row, 'total_paid') or 0),
+            "total_remaining": float(get_value(row, 'total_remaining') or 0),
+            "total_late_fees": float(get_value(row, 'total_late_fees') or 0),
         }
 
     def get_payment_plan_statistics(self) -> Dict[str, Any]:
         """إحصائيات خطط الدفع"""
         # حسب الحالة
         status_query = """
-        SELECT status, COUNT(*), SUM(total_amount), SUM(total_remaining)
+        SELECT status, COUNT(*) AS cnt, SUM(total_amount) AS total_amount, SUM(total_remaining) AS total_remaining
         FROM payment_plans
         GROUP BY status
         """
@@ -460,10 +461,10 @@ class PaymentPlanService:
         status_results = self.db.execute_query(status_query)
         by_status = {}
         for row in status_results:
-            by_status[row[0]] = {
-                "count": row[1],
-                "total_amount": float(row[2]) if row[2] else 0.0,
-                "total_remaining": float(row[3]) if row[3] else 0.0,
+            by_status[get_value(row, 'status')] = {
+                "count": get_value(row, 'cnt', 0),
+                "total_amount": float(get_value(row, 'total_amount') or 0),
+                "total_remaining": float(get_value(row, 'total_remaining') or 0),
             }
 
         # الأقساط المتأخرة

@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from src.core.database_manager import DatabaseManager
+from src.utils.db_helpers import get_value
 from src.utils.logger import setup_logger
 
 
@@ -954,7 +955,7 @@ class CognitiveAIService:
 
                 summary = {}
                 for row in cursor.fetchall():
-                    summary[row[0]] = {"count": row[1], "avg_confidence": row[2]}
+                    summary[get_value(row, 'insight_type')] = {"count": get_value(row, 'count', 0), "avg_confidence": get_value(row, 'avg_confidence')}
 
                 return summary
 
@@ -977,7 +978,7 @@ class CognitiveAIService:
 
                 overview = {}
                 for row in cursor.fetchall():
-                    overview[row[0]] = {"avg_accuracy": row[1], "model_count": row[2]}
+                    overview[get_value(row, 'model_type')] = {"avg_accuracy": get_value(row, 'avg_accuracy'), "model_count": get_value(row, 'model_count', 0)}
 
                 return overview
 
@@ -1054,7 +1055,7 @@ class CognitiveAIService:
 
                 risks = []
                 for row in cursor.fetchall():
-                    risk_data = json.loads(row[0])
+                    risk_data = json.loads(get_value(row, 'risk_analysis'))
                     risks.append(risk_data)
 
                 # تجميع المخاطر

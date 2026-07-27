@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 from src.core.config_manager import ConfigManager
 from src.core.database_manager import DatabaseManager
 from src.services.sales_prediction_service import SalesPredictionService
+from src.utils.db_helpers import get_value
 from src.utils.logger import setup_logger
 
 
@@ -449,16 +450,17 @@ class AdvancedInventoryManagementService:
 
             expiring_items = []
             for row in data:
+                expiry_raw = get_value(row, 'expiry_date')
                 expiring_items.append(
                     {
-                        "product_id": row[0],
-                        "product_name": row[1],
-                        "batch_id": row[2],
-                        "quantity": row[3],
-                        "expiry_date": row[4],
-                        "warehouse_id": row[5],
-                        "warehouse_name": row[6],
-                        "days_until_expiry": (datetime.fromisoformat(row[4]) - datetime.now()).days,
+                        "product_id": get_value(row, 'product_id'),
+                        "product_name": get_value(row, 'name'),
+                        "batch_id": get_value(row, 'batch_id'),
+                        "quantity": get_value(row, 'quantity'),
+                        "expiry_date": expiry_raw,
+                        "warehouse_id": get_value(row, 'warehouse_id'),
+                        "warehouse_name": get_value(row, 'warehouse_name'),
+                        "days_until_expiry": (datetime.fromisoformat(expiry_raw) - datetime.now()).days if expiry_raw else None,
                     }
                 )
 
@@ -519,11 +521,12 @@ class AdvancedInventoryManagementService:
             data = self.db.execute_query(query, fetch_all=True)
 
             for row in data:
-                self.warehouses[row[0]] = {
-                    "name": row[1],
-                    "location": row[2],
-                    "capacity": row[3],
-                    "status": row[4],
+                wh_id = get_value(row, 'warehouse_id')
+                self.warehouses[wh_id] = {
+                    "name": get_value(row, 'name'),
+                    "location": get_value(row, 'location'),
+                    "capacity": get_value(row, 'capacity'),
+                    "status": get_value(row, 'status'),
                 }
 
         except Exception as e:
@@ -838,12 +841,12 @@ class AdvancedInventoryManagementService:
             for row in data:
                 products.append(
                     {
-                        "id": row[0],
-                        "name": row[1],
-                        "current_stock": row[2] or 0,
-                        "min_stock": row[3] or 0,
-                        "max_stock": row[4] or 0,
-                        "selling_price": float(row[5] or 0),
+                        "id": get_value(row, 'id'),
+                        "name": get_value(row, 'name'),
+                        "current_stock": get_value(row, 'current_stock', 0) or 0,
+                        "min_stock": get_value(row, 'min_stock', 0) or 0,
+                        "max_stock": get_value(row, 'max_stock', 0) or 0,
+                        "selling_price": float(get_value(row, 'selling_price') or 0),
                     }
                 )
 
@@ -969,14 +972,14 @@ class AdvancedInventoryManagementService:
             for row in data:
                 products.append(
                     {
-                        "product_id": row[0],
-                        "product_name": row[1],
-                        "current_stock": row[2] or 0,
-                        "min_stock": row[3] or 0,
-                        "max_stock": row[4] or 0,
-                        "inventory_quantity": row[5] or 0,
-                        "avg_cost": float(row[6] or 0),
-                        "batch_count": row[7] or 0,
+                        "product_id": get_value(row, 'id'),
+                        "product_name": get_value(row, 'name'),
+                        "current_stock": get_value(row, 'current_stock', 0) or 0,
+                        "min_stock": get_value(row, 'min_stock', 0) or 0,
+                        "max_stock": get_value(row, 'max_stock', 0) or 0,
+                        "inventory_quantity": get_value(row, 'inventory_quantity', 0) or 0,
+                        "avg_cost": float(get_value(row, 'avg_cost') or 0),
+                        "batch_count": get_value(row, 'batch_count', 0) or 0,
                     }
                 )
 
@@ -1047,17 +1050,17 @@ class AdvancedInventoryManagementService:
             for row in data:
                 transactions.append(
                     {
-                        "transaction_id": row[0],
-                        "product_id": row[1],
-                        "transaction_type": row[2],
-                        "quantity": row[3],
-                        "unit_cost": float(row[4] or 0),
-                        "reference_id": row[5],
-                        "warehouse_from": row[6],
-                        "warehouse_to": row[7],
-                        "performed_by": row[8],
-                        "notes": row[9],
-                        "created_at": row[10],
+                        "transaction_id": get_value(row, 'transaction_id'),
+                        "product_id": get_value(row, 'product_id'),
+                        "transaction_type": get_value(row, 'transaction_type'),
+                        "quantity": get_value(row, 'quantity'),
+                        "unit_cost": float(get_value(row, 'unit_cost') or 0),
+                        "reference_id": get_value(row, 'reference_id'),
+                        "warehouse_from": get_value(row, 'warehouse_from'),
+                        "warehouse_to": get_value(row, 'warehouse_to'),
+                        "performed_by": get_value(row, 'performed_by'),
+                        "notes": get_value(row, 'notes'),
+                        "created_at": get_value(row, 'created_at'),
                     }
                 )
 

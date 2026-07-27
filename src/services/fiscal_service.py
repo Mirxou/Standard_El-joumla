@@ -26,7 +26,7 @@ class FiscalService:
                 "SELECT key, value FROM app_settings WHERE key IN (?, ?)",
                 ("fiscal_tap_rate", "fiscal_timbre_rate"),
             )
-            rate_map = {row[0]: float(row[1]) for row in rows}
+            rate_map = {row.get('key'): float(row.get('value', 0)) for row in rows}
             if "fiscal_tap_rate" in rate_map:
                 self.tap_rate = rate_map["fiscal_tap_rate"]
             if "fiscal_timbre_rate" in rate_map:
@@ -70,8 +70,8 @@ class FiscalService:
             (start_date, end_date),
         )
 
-        total_turnover = sum(row[0] for row in sales)
-        total_vat_collected = sum(row[1] for row in sales)
+        total_turnover = sum(float(row.get('total_amount', 0)) for row in sales)
+        total_vat_collected = sum(float(row.get('tax_amount', 0)) for row in sales)
 
         # Algerian Tax Rules (2025)
         # TAP & Timbre rates are configurable via settings or constructor

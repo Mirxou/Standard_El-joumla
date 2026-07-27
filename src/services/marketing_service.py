@@ -11,6 +11,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from ..core.database_manager import DatabaseManager
+from ..utils.db_helpers import get_value
 from ..utils.logger import setup_logger
 
 
@@ -432,7 +433,7 @@ class MarketingService:
 
         if segment_type == CustomerSegmentType.ALL:
             cursor.execute("SELECT customer_id FROM customers WHERE is_active = 1")
-            return [row[0] for row in cursor.fetchall()]
+            return [get_value(row, 'customer_id') for row in cursor.fetchall()]
 
         elif segment_type == CustomerSegmentType.NEW_CUSTOMERS:
             # العملاء الجدد خلال آخر 30 يوم
@@ -441,7 +442,7 @@ class MarketingService:
                 WHERE created_at >= datetime('now', '-30 days')
                 AND is_active = 1
             """)
-            return [row[0] for row in cursor.fetchall()]
+            return [get_value(row, 'customer_id') for row in cursor.fetchall()]
 
         elif segment_type == CustomerSegmentType.HIGH_VALUE:
             # العملاء ذوي القيمة العالية (أكثر من 10000)
@@ -451,7 +452,7 @@ class MarketingService:
                 AND is_active = 1
                 ORDER BY total_purchases DESC
             """)
-            return [row[0] for row in cursor.fetchall()]
+            return [get_value(row, 'customer_id') for row in cursor.fetchall()]
 
         elif segment_type == CustomerSegmentType.INACTIVE:
             # العملاء غير النشطين (لم يشتروا منذ 90 يوم)
@@ -464,7 +465,7 @@ class MarketingService:
                 )
                 AND c.is_active = 1
             """)
-            return [row[0] for row in cursor.fetchall()]
+            return [get_value(row, 'customer_id') for row in cursor.fetchall()]
 
         return []
 
@@ -525,19 +526,21 @@ class MarketingService:
 
         row = cursor.fetchone()
 
-        total_budget = row[2] or 0
-        total_revenue = row[3] or 0
+        total_budget = get_value(row, 'total_budget', 0) or 0
+        total_revenue = get_value(row, 'total_revenue', 0) or 0
         overall_roi = ((total_revenue - total_budget) / total_budget * 100) if total_budget > 0 else 0
+        total_sent = get_value(row, 'total_sent', 0) or 0
+        total_conversions = get_value(row, 'total_conversions', 0) or 0
 
         return {
-            "total_campaigns": row[0] or 0,
-            "active_campaigns": row[1] or 0,
+            "total_campaigns": get_value(row, 'total_campaigns', 0) or 0,
+            "active_campaigns": get_value(row, 'active_campaigns', 0) or 0,
             "total_budget": total_budget,
             "total_revenue": total_revenue,
             "overall_roi": round(overall_roi, 2),
-            "total_sent": row[4] or 0,
-            "total_conversions": row[5] or 0,
-            "average_conversion_rate": round((row[5] / row[4] * 100) if row[4] > 0 else 0, 2),
+            "total_sent": total_sent,
+            "total_conversions": total_conversions,
+            "average_conversion_rate": round((total_conversions / total_sent * 100) if total_sent > 0 else 0, 2),
         }
 
     # ==================== التواصل ====================

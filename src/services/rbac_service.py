@@ -7,6 +7,8 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Optional
 
+from src.utils.db_helpers import get_value
+
 
 class RBACService:
     """خدمة إدارة الصلاحيات والأدوار"""
@@ -93,18 +95,20 @@ class RBACService:
     def get_role(self, role_id: int) -> Optional[Dict]:
         """الحصول على دور بالمعرف"""
         cursor = self.db.conn.cursor()
-        self._roles_cols["id"]
-        self._roles_cols["name"]
-        self._roles_cols["display"]
-        self._roles_cols["desc"] or "''"
-        self._roles_cols["active"] or "1"
-        self._roles_cols["system"] or "0"
-        self._roles_cols["created"] or "CURRENT_TIMESTAMP"
-        self._roles_cols["updated"] or "CURRENT_TIMESTAMP"
+        id_col = self._roles_cols["id"]
+        name_col = self._roles_cols["name"]
+        disp_col = self._roles_cols["display"]
+        desc_col = self._roles_cols["desc"] or "''"
+        act_col = self._roles_cols["active"] or "1"
+        sys_col = self._roles_cols["system"] or "0"
+        crt_col = self._roles_cols["created"] or "CURRENT_TIMESTAMP"
+        upd_col = self._roles_cols["updated"] or "CURRENT_TIMESTAMP"
         cursor.execute(
-            """
-            SELECT {id_col}, {name_col}, {disp_col}, {desc_col},
-                   {act_col}, {sys_col}, {crt_col}, {upd_col}
+            f"""
+            SELECT {id_col} AS role_id, {name_col} AS role_name,
+                   {disp_col} AS display_name, {desc_col} AS description,
+                   {act_col} AS is_active, {sys_col} AS is_system,
+                   {crt_col} AS created_at, {upd_col} AS updated_at
             FROM roles
             WHERE {id_col} = ?
         """,
@@ -113,15 +117,17 @@ class RBACService:
 
         row = cursor.fetchone()
         if row:
+            is_active_raw = get_value(row, 'is_active')
+            is_system_raw = get_value(row, 'is_system')
             return {
-                "role_id": row[0],
-                "role_name": row[1],
-                "display_name": row[2],
-                "description": row[3],
-                "is_active": bool(row[4]) if isinstance(row[4], (int, bool)) else True,
-                "is_system": bool(row[5]) if isinstance(row[5], (int, bool)) else False,
-                "created_at": row[6],
-                "updated_at": row[7],
+                "role_id": get_value(row, 'role_id'),
+                "role_name": get_value(row, 'role_name'),
+                "display_name": get_value(row, 'display_name'),
+                "description": get_value(row, 'description'),
+                "is_active": bool(is_active_raw) if isinstance(is_active_raw, (int, bool)) else True,
+                "is_system": bool(is_system_raw) if isinstance(is_system_raw, (int, bool)) else False,
+                "created_at": get_value(row, 'created_at'),
+                "updated_at": get_value(row, 'updated_at'),
             }
         return None
 
@@ -136,7 +142,12 @@ class RBACService:
         sys_col = self._roles_cols["system"] or "0"
         crt_col = self._roles_cols["created"] or "CURRENT_TIMESTAMP"
 
-        base = f"SELECT {id_col}, {name_col}, {disp_col}, {desc_col}, {act_col}, {sys_col}, {crt_col} FROM roles"
+        base = (
+            f"SELECT {id_col} AS role_id, {name_col} AS role_name, "
+            f"{disp_col} AS display_name, {desc_col} AS description, "
+            f"{act_col} AS is_active, {sys_col} AS is_system, "
+            f"{crt_col} AS created_at FROM roles"
+        )
         if not include_inactive and self._roles_cols["active"]:
             base += f" WHERE {act_col} = 1"
         base += f" ORDER BY {disp_col}"
@@ -144,15 +155,17 @@ class RBACService:
         roles = []
 
         for row in cursor.fetchall():
+            is_active_raw = get_value(row, 'is_active')
+            is_system_raw = get_value(row, 'is_system')
             roles.append(
                 {
-                    "role_id": row[0],
-                    "role_name": row[1],
-                    "display_name": row[2],
-                    "description": row[3],
-                    "is_active": (bool(row[4]) if isinstance(row[4], (int, bool)) else True),
-                    "is_system": (bool(row[5]) if isinstance(row[5], (int, bool)) else False),
-                    "created_at": row[6],
+                    "role_id": get_value(row, 'role_id'),
+                    "role_name": get_value(row, 'role_name'),
+                    "display_name": get_value(row, 'display_name'),
+                    "description": get_value(row, 'description'),
+                    "is_active": (bool(is_active_raw) if isinstance(is_active_raw, (int, bool)) else True),
+                    "is_system": (bool(is_system_raw) if isinstance(is_system_raw, (int, bool)) else False),
+                    "created_at": get_value(row, 'created_at'),
                 }
             )
 
@@ -277,11 +290,11 @@ class RBACService:
         for row in cursor.fetchall():
             permissions.append(
                 {
-                    "permission_id": row[0],
-                    "permission_name": row[1],
-                    "module": row[2],
-                    "action": row[3],
-                    "description": row[4],
+                    "permission_id": get_value(row, 'permission_id'),
+                    "permission_name": get_value(row, 'permission_name'),
+                    "module": get_value(row, 'module'),
+                    "action": get_value(row, 'action'),
+                    "description": get_value(row, 'description'),
                 }
             )
 
@@ -305,11 +318,11 @@ class RBACService:
         for row in cursor.fetchall():
             permissions.append(
                 {
-                    "permission_id": row[0],
-                    "permission_name": row[1],
-                    "module": row[2],
-                    "action": row[3],
-                    "description": row[4],
+                    "permission_id": get_value(row, 'permission_id'),
+                    "permission_name": get_value(row, 'permission_name'),
+                    "module": get_value(row, 'module'),
+                    "action": get_value(row, 'action'),
+                    "description": get_value(row, 'description'),
                 }
             )
 
@@ -416,15 +429,16 @@ class RBACService:
     def get_user_roles(self, user_id: int) -> List[Dict]:
         """الحصول على أدوار المستخدم"""
         cursor = self.db.conn.cursor()
-        self._roles_cols["id"]
-        self._roles_cols["name"]
-        self._roles_cols["display"]
-        self._roles_cols["desc"] or "''"
-        self._roles_cols["active"] or "1"
+        rid = self._roles_cols["id"]
+        rname = self._roles_cols["name"]
+        rdisp = self._roles_cols["display"]
+        rdesc = self._roles_cols["desc"] or "''"
+        ractive = self._roles_cols["active"] or "1"
         cursor.execute(
-            """
-            SELECT r.{rid}, r.{rname}, r.{rdisp}, {rdesc},
-                   ur.assigned_at, ur.expires_at
+            f"""
+            SELECT r.{rid} AS role_id, r.{rname} AS role_name,
+                   r.{rdisp} AS display_name, {rdesc} AS description,
+                   ur.assigned_at AS assigned_at, ur.expires_at AS expires_at
             FROM roles r
             INNER JOIN user_roles ur ON r.{rid} = ur.role_id
             WHERE ur.user_id = ?
@@ -438,12 +452,12 @@ class RBACService:
         for row in cursor.fetchall():
             roles.append(
                 {
-                    "role_id": row[0],
-                    "role_name": row[1],
-                    "display_name": row[2],
-                    "description": row[3],
-                    "assigned_at": row[4],
-                    "expires_at": row[5],
+                    "role_id": get_value(row, 'role_id'),
+                    "role_name": get_value(row, 'role_name'),
+                    "display_name": get_value(row, 'display_name'),
+                    "description": get_value(row, 'description'),
+                    "assigned_at": get_value(row, 'assigned_at'),
+                    "expires_at": get_value(row, 'expires_at'),
                 }
             )
 
@@ -471,7 +485,7 @@ class RBACService:
             (user_id,),
         )
 
-        permissions = [row[0] for row in cursor.fetchall()]
+        permissions = [get_value(row, 'permission_name') for row in cursor.fetchall()]
 
         # Cache the result
         self._permission_cache[user_id] = (datetime.now(), permissions)
@@ -570,8 +584,8 @@ class RBACService:
         """)
         row = cursor.fetchone()
         stats["most_assigned_role"] = {
-            "name": row[0] if row else None,
-            "count": row[1] if row else 0,
+            "name": get_value(row, 'display_name') if row else None,
+            "count": get_value(row, 'count', 0) if row else 0,
         }
 
         return stats

@@ -18,6 +18,7 @@ from ..models.inventory_optimization import (
     ReorderStatus,
     SafetyStockConfig,
 )
+from ..utils.db_helpers import get_value
 
 
 class InventoryOptimizationService:
@@ -213,10 +214,10 @@ class InventoryOptimizationService:
             WHERE ssc.product_id = ?
             """
 
-            row = self.db.execute_query(query, (product_id,))
+            results = self.db.execute_query(query, (product_id,))
 
-            if row:
-                config = SafetyStockConfig.from_dict(self._row_to_dict(row[0]))
+            if results:
+                config = SafetyStockConfig.from_dict(self._row_to_dict(results[0]))
                 config.update_reorder_status()
                 config.calculate_suggested_order()
                 return config
@@ -320,11 +321,12 @@ class InventoryOptimizationService:
             WHERE si.product_id = ? AND s.sale_date >= ?
             """
 
-            row = self.db.execute_query(query, (product_id, start_date))
+            results = self.db.execute_query(query, (product_id, start_date))
 
-            if row:
-                total_qty = Decimal(str(row[0]["total_quantity"]))
-                days_with_sales = row[0]["days_with_sales"] or 1
+            if results:
+                first_row = results[0]
+                total_qty = Decimal(str(get_value(first_row, 'total_quantity', 0)))
+                days_with_sales = get_value(first_row, 'days_with_sales', 0) or 1
 
                 # متوسط الطلب اليومي
                 avg_daily = total_qty / days_with_sales
@@ -371,12 +373,12 @@ class InventoryOptimizationService:
         try:
             # جلب معلومات المنتج
             product_query = "SELECT code, name, stock_quantity, cost_price FROM products WHERE id = ?"
-            product_row = self.db.execute_query(product_query, (product_id,))
+            product_results = self.db.execute_query(product_query, (product_id,))
 
-            if not product_row:
+            if not product_results:
                 raise Exception("Product not found")
 
-            product = product_row[0]
+            product = product_results[0]
 
             # حساب إحصائيات الطلب
             stats = self.calculate_demand_statistics(product_id)

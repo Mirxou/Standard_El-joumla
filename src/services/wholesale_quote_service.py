@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 from ..core.database_manager import DatabaseManager
+from ..utils.db_helpers import get_value
 
 
 class WholesaleQuoteService:
@@ -116,13 +117,13 @@ class WholesaleQuoteService:
         for row in rows:
             quotes.append(
                 {
-                    "id": row[0],
-                    "customer_name": row[1],
-                    "total_value": row[2],
-                    "total_profit": row[3],
-                    "item_count": row[4],
-                    "created_at": row[5],
-                    "items_json": row[6],
+                    "id": get_value(row, 'id'),
+                    "customer_name": get_value(row, 'customer_name'),
+                    "total_value": get_value(row, 'total_value'),
+                    "total_profit": get_value(row, 'total_profit'),
+                    "item_count": get_value(row, 'item_count'),
+                    "created_at": get_value(row, 'created_at'),
+                    "items_json": get_value(row, 'items_json'),
                 }
             )
         return quotes
@@ -140,7 +141,7 @@ class WholesaleQuoteService:
             return False
 
         try:
-            items_data = json.loads(row[0])
+            items_data = json.loads(get_value(row, 'items_json'))
             self.items = items_data
             return True
         except Exception as e:
@@ -222,7 +223,7 @@ class WholesaleQuoteService:
                 sql_batch = "SELECT id FROM product_batches WHERE product_id = ? ORDER BY current_quantity DESC LIMIT 1"
                 batch_row = self.db.fetch_one(sql_batch, [p_id])
                 if batch_row:
-                    batch_id = batch_row[0]
+                    batch_id = get_value(batch_row, 'id')
                     # Update Batch Qty
                     sql_update_batch = "UPDATE product_batches SET current_quantity = current_quantity - ? WHERE id = ?"
                     self.db.execute_update(sql_update_batch, [qty, batch_id])

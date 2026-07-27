@@ -8,6 +8,8 @@ import json
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 
+from src.utils.db_helpers import get_value
+
 
 class AuditLogService:
     """خدمة سجل التدقيق الشامل"""
@@ -501,14 +503,14 @@ class AuditLogService:
             f"""SELECT action, COUNT(*) as count FROM {tbl} WHERE user_id = ? AND {ts} >= ? GROUP BY action ORDER BY count DESC""",  # noqa: E501
             (user_id, start_date),
         )
-        stats["actions_by_type"] = {row[0]: row[1] for row in cursor.fetchall()}
+        stats["actions_by_type"] = {get_value(row, 'action'): get_value(row, 'count', 0) for row in cursor.fetchall()}
 
         # Actions by module
         cursor.execute(
             f"""SELECT {mod}, COUNT(*) as count FROM {tbl} WHERE user_id = ? AND {ts} >= ? GROUP BY {mod} ORDER BY count DESC""",  # noqa: E501
             (user_id, start_date),
         )
-        stats["actions_by_module"] = {row[0]: row[1] for row in cursor.fetchall()}
+        stats["actions_by_module"] = {get_value(row, mod): get_value(row, 'count', 0) for row in cursor.fetchall()}
 
         # Success rate
         cursor.execute(
@@ -524,8 +526,8 @@ class AuditLogService:
         )
         row = cursor.fetchone()
         stats["most_active_day"] = {
-            "date": row[0] if row else None,
-            "count": row[1] if row else 0,
+            "date": get_value(row, 'day') if row else None,
+            "count": get_value(row, 'count', 0) if row else 0,
         }
 
         return stats
@@ -554,14 +556,14 @@ class AuditLogService:
             f"""SELECT username, COUNT(*) as count FROM {tbl} WHERE {mod} = ? AND {ts} >= ? GROUP BY user_id ORDER BY count DESC LIMIT 5""",  # noqa: E501
             (module, start_date),
         )
-        stats["top_users"] = [{"username": row[0], "count": row[1]} for row in cursor.fetchall()]
+        stats["top_users"] = [{"username": get_value(row, 'username'), "count": get_value(row, 'count', 0)} for row in cursor.fetchall()]
 
         # Actions breakdown
         cursor.execute(
             f"""SELECT action, COUNT(*) as count FROM {tbl} WHERE {mod} = ? AND {ts} >= ? GROUP BY action""",
             (module, start_date),
         )
-        stats["actions"] = {row[0]: row[1] for row in cursor.fetchall()}
+        stats["actions"] = {get_value(row, 'action'): get_value(row, 'count', 0) for row in cursor.fetchall()}
 
         return stats
 
@@ -590,14 +592,16 @@ class AuditLogService:
 
         summary = []
         for row in cursor.fetchall():
+            total = get_value(row, 'total', 0) or 0
+            successful = get_value(row, 'successful', 0) or 0
             summary.append(
                 {
-                    "date": row[0],
-                    "total_actions": row[1],
-                    "unique_users": row[2],
-                    "successful": row[3],
-                    "failed": row[4],
-                    "success_rate": (round(row[3] * 100.0 / row[1], 2) if row[1] > 0 else 0),
+                    "date": get_value(row, 'date'),
+                    "total_actions": total,
+                    "unique_users": get_value(row, 'unique_users', 0),
+                    "successful": successful,
+                    "failed": get_value(row, 'failed', 0),
+                    "success_rate": (round(successful * 100.0 / total, 2) if total > 0 else 0),
                 }
             )
 
@@ -687,15 +691,15 @@ class AuditLogService:
         for row in cursor.fetchall():
             sessions.append(
                 {
-                    "session_id": row[0],
-                    "user_id": row[1],
-                    "username": row[2],
-                    "full_name": row[3],
-                    "login_time": row[4],
-                    "last_activity": row[5],
-                    "ip_address": row[6],
-                    "user_agent": row[7],
-                    "idle_minutes": row[8],
+                    "session_id": get_value(row, 'session_id'),
+                    "user_id": get_value(row, 'user_id'),
+                    "username": get_value(row, 'username'),
+                    "full_name": get_value(row, 'full_name'),
+                    "login_time": get_value(row, 'login_time'),
+                    "last_activity": get_value(row, 'last_activity'),
+                    "ip_address": get_value(row, 'ip_address'),
+                    "user_agent": get_value(row, 'user_agent'),
+                    "idle_minutes": get_value(row, 'idle_minutes'),
                 }
             )
 
@@ -724,46 +728,49 @@ class AuditLogService:
 
     def _row_to_dict(self, row) -> Dict:
         """تحويل صف إلى قاموس"""
+        old_values_raw = get_value(row, 'old_values')
+        new_values_raw = get_value(row, 'new_values')
         return {
-            "audit_id": row[0],
-            "user_id": row[1],
-            "username": row[2],
-            "action": row[3],
-            "module": row[4],
-            "entity_type": row[5],
-            "entity_id": row[6],
-            "old_values": json.loads(row[7]) if row[7] else None,
-            "new_values": json.loads(row[8]) if row[8] else None,
-            "changes_summary": row[9],
-            "ip_address": row[10],
-            "user_agent": row[11],
-            "session_id": row[12],
-            "status": row[13],
-            "error_message": row[14],
-            "timestamp": row[15],
+            "audit_id": get_value(row, 'audit_id'),
+            "user_id": get_value(row, 'user_id'),
+            "username": get_value(row, 'username'),
+            "action": get_value(row, 'action'),
+            "module": get_value(row, 'module'),
+            "entity_type": get_value(row, 'entity_type'),
+            "entity_id": get_value(row, 'entity_id'),
+            "old_values": json.loads(old_values_raw) if old_values_raw else None,
+            "new_values": json.loads(new_values_raw) if new_values_raw else None,
+            "changes_summary": get_value(row, 'changes_summary'),
+            "ip_address": get_value(row, 'ip_address'),
+            "user_agent": get_value(row, 'user_agent'),
+            "session_id": get_value(row, 'session_id'),
+            "status": get_value(row, 'status'),
+            "error_message": get_value(row, 'error_message'),
+            "timestamp": get_value(row, 'timestamp'),
         }
 
     def _select_clause(self) -> str:
-        """Build a SELECT list that maps available columns to canonical order used in _row_to_dict"""
+        """Build a SELECT list that aliases available columns to canonical names used in _row_to_dict"""
         a = self._audit
-        # Use NULLs for missing fields to keep index positions stable
+        # Use NULLs for missing fields but always alias to canonical name
+        empty = "''"
         parts = [
-            a["id"] or "NULL",
-            a["user_id"] or "NULL",
-            a["username"] or "''",
-            a["action"] or "''",
-            a["module"] or "''",
-            a["entity_type"] or "''",
-            a["entity_id"] or "NULL",
-            a["old_values"] or "NULL",
-            a["new_values"] or "NULL",
-            a["changes_summary"] or "NULL",
-            a["ip_address"] or "''",
-            a["user_agent"] or "''",
-            a["session_id"] or "''",
-            a["status"] or "''",
-            a["error_message"] or "NULL",
-            a["timestamp"] or "CURRENT_TIMESTAMP",
+            f"{a['id'] or 'NULL'} AS audit_id",
+            f"{a['user_id'] or 'NULL'} AS user_id",
+            f"{a['username'] or empty} AS username",
+            f"{a['action'] or empty} AS action",
+            f"{a['module'] or empty} AS module",
+            f"{a['entity_type'] or empty} AS entity_type",
+            f"{a['entity_id'] or 'NULL'} AS entity_id",
+            f"{a['old_values'] or 'NULL'} AS old_values",
+            f"{a['new_values'] or 'NULL'} AS new_values",
+            f"{a['changes_summary'] or 'NULL'} AS changes_summary",
+            f"{a['ip_address'] or empty} AS ip_address",
+            f"{a['user_agent'] or empty} AS user_agent",
+            f"{a['session_id'] or empty} AS session_id",
+            f"{a['status'] or empty} AS status",
+            f"{a['error_message'] or 'NULL'} AS error_message",
+            f"{a['timestamp'] or 'CURRENT_TIMESTAMP'} AS timestamp",
         ]
         return ", ".join(parts)
 

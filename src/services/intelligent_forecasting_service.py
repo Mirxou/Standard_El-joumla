@@ -23,6 +23,7 @@ warnings.filterwarnings("ignore")
 from src.core.database_manager import DatabaseManager
 from src.services.advanced_analytics_service import AdvancedAnalyticsService
 from src.services.cognitive_ai_service import CognitiveAIService
+from src.utils.db_helpers import get_value
 from src.utils.logger import setup_logger
 
 
@@ -919,17 +920,17 @@ class IntelligentForecastingService:
                     if product_id:
                         sales_data.append(
                             {
-                                "date": row[0],
-                                "quantity": row[1] or 0,
-                                "value": row[2] or 0,
+                                "date": get_value(row, 'date'),
+                                "quantity": get_value(row, 'quantity', 0) or 0,
+                                "value": get_value(row, 'value', 0) or 0,
                             }
                         )
                     else:
                         sales_data.append(
                             {
-                                "date": row[0],
-                                "sales_count": row[1] or 0,
-                                "value": row[2] or 0,
+                                "date": get_value(row, 'date'),
+                                "sales_count": get_value(row, 'sales_count', 0) or 0,
+                                "value": get_value(row, 'value', 0) or 0,
                             }
                         )
 
@@ -968,7 +969,7 @@ class IntelligentForecastingService:
 
                 financial_data = []
                 for row in cursor.fetchall():
-                    financial_data.append({"month": row[0], "revenue": row[1] or 0, "costs": row[2] or 0})
+                    financial_data.append({"month": get_value(row, 'month'), "revenue": get_value(row, 'revenue', 0) or 0, "costs": get_value(row, 'costs', 0) or 0})
 
                 return financial_data
 
@@ -1011,8 +1012,8 @@ class IntelligentForecastingService:
 
                 inventory_data = {}
                 for row in cursor.fetchall():
-                    product_id = str(row[0])  # Convert to string for consistency
-                    quantity = int(row[1] or 0)
+                    product_id = str(get_value(row, 'product_id'))  # Convert to string for consistency
+                    quantity = int(get_value(row, 'total_quantity', 0) or 0)
                     inventory_data[product_id] = quantity
 
                 return inventory_data
@@ -1282,17 +1283,20 @@ class IntelligentForecastingService:
 
                 models = []
                 for row in models_data:
+                    features_raw = get_value(row, 'features')
+                    params_raw = get_value(row, 'model_parameters')
+                    metrics_raw = get_value(row, 'performance_metrics')
                     models.append(
                         ForecastModel(
-                            model_id=row[0],
-                            model_type=row[1],
-                            target_variable=row[2],
-                            features=json.loads(row[3]) if row[3] else [],
-                            training_data_period=row[4],
-                            accuracy_score=row[5],
-                            last_trained=row[6],
-                            model_parameters=json.loads(row[7]) if row[7] else {},
-                            performance_metrics=json.loads(row[8]) if row[8] else {},
+                            model_id=get_value(row, 'model_id'),
+                            model_type=get_value(row, 'model_type'),
+                            target_variable=get_value(row, 'target_variable'),
+                            features=json.loads(features_raw) if features_raw else [],
+                            training_data_period=get_value(row, 'training_data_period'),
+                            accuracy_score=get_value(row, 'accuracy_score'),
+                            last_trained=get_value(row, 'last_trained'),
+                            model_parameters=json.loads(params_raw) if params_raw else {},
+                            performance_metrics=json.loads(metrics_raw) if metrics_raw else {},
                         )
                     )
 

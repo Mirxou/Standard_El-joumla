@@ -95,6 +95,7 @@ except ImportError:
 from src.core.database_manager import DatabaseManager
 from src.services.advanced_analytics_service import AdvancedAnalyticsService
 from src.services.cognitive_ai_service import CognitiveAIService
+from src.utils.db_helpers import get_value
 from src.utils.logger import setup_logger
 
 
@@ -889,8 +890,9 @@ class AdvancedAIService:
 
                 training_data = []
                 for row in cursor.fetchall():
-                    data_content = [row[1], row[2], row[3]]  # sales, count, avg
-                    labels = row[1]  # sales as target
+                    sales = get_value(row, 'sales')
+                    data_content = [sales, get_value(row, 'transaction_count'), get_value(row, 'avg_transaction')]  # sales, count, avg
+                    labels = sales  # sales as target
 
                     training_data.append(
                         TrainingData(
@@ -902,7 +904,7 @@ class AdvancedAIService:
                             quality_score=0.9,
                             collected_at=datetime.now(),
                             used_in_training=False,
-                            metadata={"date": row[0]},
+                            metadata={"date": get_value(row, 'date')},
                         )
                     )
 
@@ -931,8 +933,9 @@ class AdvancedAIService:
 
                 training_data = []
                 for row in cursor.fetchall():
-                    data_content = [row[1], row[2], row[3]]  # count, total, avg
-                    labels = 1 if row[1] > 5 else 0  # high vs low value customer
+                    order_count = get_value(row, 'order_count')
+                    data_content = [order_count, get_value(row, 'total_spent'), get_value(row, 'avg_order')]  # count, total, avg
+                    labels = 1 if order_count and order_count > 5 else 0  # high vs low value customer
 
                     training_data.append(
                         TrainingData(
@@ -944,7 +947,7 @@ class AdvancedAIService:
                             quality_score=0.85,
                             collected_at=datetime.now(),
                             used_in_training=False,
-                            metadata={"customer_id": row[0], "last_order": row[4]},
+                            metadata={"customer_id": get_value(row, 'customer_id'), "last_order": get_value(row, 'last_order_date')},
                         )
                     )
 
@@ -972,8 +975,9 @@ class AdvancedAIService:
 
                 training_data = []
                 for row in cursor.fetchall():
-                    data_content = [row[1], row[2], row[3]]  # sold, price, count
-                    labels = 1 if row[1] > 100 else 0  # high vs low selling product
+                    total_sold = get_value(row, 'total_sold')
+                    data_content = [total_sold, get_value(row, 'avg_price'), get_value(row, 'sale_count')]  # sold, price, count
+                    labels = 1 if total_sold and total_sold > 100 else 0  # high vs low selling product
 
                     training_data.append(
                         TrainingData(
@@ -985,7 +989,7 @@ class AdvancedAIService:
                             quality_score=0.8,
                             collected_at=datetime.now(),
                             used_in_training=False,
-                            metadata={"product_id": row[0]},
+                            metadata={"product_id": get_value(row, 'product_id')},
                         )
                     )
 
@@ -1779,15 +1783,16 @@ class AdvancedAIService:
 
                 row = cursor.fetchone()
                 if row:
+                    features_raw = get_value(row, 'features')
                     return {
-                        "experiment_id": row[0],
-                        "target_column": row[1],
-                        "features": json.loads(row[2]) if row[2] else [],
-                        "status": row[3],
-                        "best_model": row[4],
-                        "best_score": row[5],
-                        "created_at": row[6],
-                        "completed_at": row[7],
+                        "experiment_id": get_value(row, 'experiment_id'),
+                        "target_column": get_value(row, 'target_column'),
+                        "features": json.loads(features_raw) if features_raw else [],
+                        "status": get_value(row, 'status'),
+                        "best_model": get_value(row, 'best_model'),
+                        "best_score": get_value(row, 'best_score'),
+                        "created_at": get_value(row, 'created_at'),
+                        "completed_at": get_value(row, 'completed_at'),
                     }
                 else:
                     return {"error": "تجربة غير موجودة"}
@@ -2071,7 +2076,7 @@ class AdvancedAIService:
 
                 history = []
                 for row in cursor.fetchall():
-                    history.append({"type": row[0], "content": row[1], "timestamp": row[2]})
+                    history.append({"type": get_value(row, 'message_type'), "content": get_value(row, 'message_content'), "timestamp": get_value(row, 'created_at')})
 
                 return history[::-1]  # عكس الترتيب ليكون الأقدم أولاً
 
@@ -2497,14 +2502,15 @@ class AdvancedAIService:
 
                 insights = []
                 for row in cursor.fetchall():
+                    related_raw = get_value(row, 'related_data')
                     insights.append(
                         {
-                            "type": row[0],
-                            "content": row[1],
-                            "confidence": row[2],
-                            "impact": row[3],
-                            "related_data": json.loads(row[4]) if row[4] else None,
-                            "generated_at": row[5],
+                            "type": get_value(row, 'insight_type'),
+                            "content": get_value(row, 'content'),
+                            "confidence": get_value(row, 'confidence'),
+                            "impact": get_value(row, 'impact'),
+                            "related_data": json.loads(related_raw) if related_raw else None,
+                            "generated_at": get_value(row, 'generated_at'),
                         }
                     )
 
