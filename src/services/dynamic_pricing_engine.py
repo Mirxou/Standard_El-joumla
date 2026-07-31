@@ -560,12 +560,12 @@ class DynamicPricingEngine:
     ) -> Dict[str, Any]:
         """الحصول على رؤى التسعير المتقدمة"""
         try:
-            base_price = self.db_manager.fetch_one("SELECT retail_price FROM products WHERE id = ?", (product_id,))
+            bp_row = self.db_manager.fetch_one("SELECT retail_price FROM products WHERE id = ?", (product_id,))
 
-            if not base_price or not base_price[0]:
+            if not bp_row or not bp_row.get('retail_price'):
                 return {}
 
-            base_price = Decimal(str(base_price[0]))
+            base_price = Decimal(str(bp_row.get('retail_price')))
 
             # Get all adjustments
             inventory_adj = self._calculate_inventory_adjustment(product_id)
@@ -702,12 +702,12 @@ class DynamicPricingEngine:
     def get_price_recommendation(self, product_id: int) -> Dict[str, Any]:
         """الحصول على توصية تسعير مفصلة"""
         try:
-            base_price = self.db_manager.fetch_one("SELECT retail_price FROM products WHERE id = ?", (product_id,))
+            bp_row = self.db_manager.fetch_one("SELECT retail_price FROM products WHERE id = ?", (product_id,))
 
-            if not base_price or not base_price[0]:
+            if not bp_row or not bp_row.get('retail_price'):
                 return {}
 
-            base_price = Decimal(str(base_price[0]))
+            base_price = Decimal(str(bp_row.get('retail_price')))
 
             # Create a mock customer for testing
             mock_customer = Customer(id=1, name="Test Customer")  # noqa: F841

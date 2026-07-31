@@ -103,7 +103,7 @@ class SalesService:
             required_quantities = {}
             for item in sale.items:
                 pid = item.product_id
-                required_quantities[pid] = required_quantities.get(pid, Decimal("0")) + item.quantity
+                required_quantities[pid] = required_quantities.get(pid, Decimal("0")) + Decimal(str(item.quantity))
 
             for pid, total_qty in required_quantities.items():
                 product = self.product_manager.get_product_by_id(pid)
