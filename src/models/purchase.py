@@ -103,6 +103,7 @@ class PurchaseItem:
     id: Optional[int] = None
     purchase_id: Optional[int] = None
     product_id: int = 0
+    batch_id: Optional[int] = None
     product_name: str = ""
     quantity_ordered: Decimal = Decimal("0.00")
     quantity_received: Decimal = Decimal("0.00")
@@ -235,6 +236,7 @@ class Purchase:
     converted_amount: Decimal = Decimal("0.00")
     notes: Optional[str] = None
     user_id: Optional[int] = None
+    payment_terms: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     items: List[PurchaseItem] = field(default_factory=list)
@@ -465,7 +467,7 @@ class PurchaseManager:
             row = self.db_manager.fetch_one(
                 "SELECT COUNT(*) FROM purchases"
             )
-            count = int(row[0]) if row else 0
+            count = int(row.get("COUNT(*)", row.get("count", 0))) if row else 0
         except Exception:
             count = 0
         return f"PUR{count + 1:06d}"
@@ -1173,7 +1175,7 @@ class PurchaseManager:
                 if row:
                     self.db_manager.execute_non_query(
                         "UPDATE batches SET quantity = quantity + ?, cost_price = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                        (float(quantity), float(unit_cost), row[0])
+                        (float(quantity), float(unit_cost), row.get("id") if isinstance(row, dict) else row[0])
                     )
                 else:
                     self.db_manager.execute_insert(
@@ -1209,7 +1211,13 @@ class PurchaseManager:
             row = self.db_manager.fetch_one(
                 "SELECT COUNT(*), SUM(total_amount), SUM(paid_amount), SUM(remaining_amount) FROM purchases"
             )
-            if not row or row[0] == 0:
+            is_d = isinstance(row, dict)
+            def _v(idx, d=0):
+                if is_d:
+                    return list(row.values())[idx] if row and len(row) > idx else d
+                return row[idx] if row and len(row) > idx else d
+            count = _v(0)
+            if not row or count == 0:
                 return {
                     "total_purchases": 0,
                     "total_amount": 0.0,
@@ -1217,10 +1225,9 @@ class PurchaseManager:
                     "total_remaining": 0.0,
                     "avg_purchase_value": 0.0,
                 }
-            count = row[0]
-            total = float(row[1] or 0)
-            paid = float(row[2] or 0)
-            remaining = float(row[3] or 0)
+            total = float(_v(1))
+            paid = float(_v(2))
+            remaining = float(_v(3))
             avg = total / count if count > 0 else 0.0
             return {
                 "total_purchases": count,
@@ -1263,21 +1270,20 @@ class PurchaseManager:
             )
             if not row:
                 return self._empty_report()
+            is_d = isinstance(row, dict)
+            def _v(idx, d=0):
+                if is_d:
+                    return list(row.values())[idx] if len(row) > idx else d
+                return row[idx] if len(row) > idx else d
             return {
-                "total_purchases": row[0] or 0,
-                "pending_purchases": row[1] or 0,
-                "received_purchases": row[2] or 0,
-                "partial_purchases": row[3] or 0,
-                "cancelled_purchases": row[4] or 0,
-                "total_amount": float(
-                    row[5] or 0
-                ),
-                "paid_amount": float(
-                    row[6] or 0
-                ),
-                "remaining_amount": float(
-                    row[7] or 0
-                ),
+                "total_purchases": _v(0) or 0,
+                "pending_purchases": _v(1) or 0,
+                "received_purchases": _v(2) or 0,
+                "partial_purchases": _v(3) or 0,
+                "cancelled_purchases": _v(4) or 0,
+                "total_amount": float(_v(5) or 0),
+                "paid_amount": float(_v(6) or 0),
+                "remaining_amount": float(_v(7) or 0),
             }
         except Exception as e:
             if self.logger:

@@ -781,7 +781,10 @@ class ReportGenerator:
                    COALESCE((SELECT SUM(current_balance) FROM customers WHERE current_balance > 0), 0) as receivables
             FROM products
         """
-        assets_row = self.db.execute_query(q_assets)[0]
+        assets_result = self.db.execute_query(q_assets)
+        if not assets_result:
+            return {"liquidity_ratios": {}, "profitability_ratios": {}, "efficiency_ratios": {}}
+        assets_row = assets_result[0]
         current_assets = float(assets_row["inventory_value"]) + float(assets_row["receivables"])
 
         q_liabilities = """
@@ -798,7 +801,10 @@ class ReportGenerator:
             LEFT JOIN sale_items si ON si.sale_id = s.id
             WHERE DATE(s.sale_date) BETWEEN ? AND ?
         """
-        sales_row = self.db.execute_query(q_sales, [start, end])[0]
+        sales_result = self.db.execute_query(q_sales, [start, end])
+        if not sales_result:
+            return {"liquidity_ratios": {}, "profitability_ratios": {}, "efficiency_ratios": {}}
+        sales_row = sales_result[0]
         sales = float(sales_row["sales"])
         profit = float(sales_row["profit"])
 
@@ -921,15 +927,23 @@ class ReportGenerator:
                 LEFT JOIN sale_items si ON si.sale_id = s.id
                 WHERE DATE(s.sale_date) BETWEEN ? AND ?
             """
-            row = self.db.execute_query(q, [period_start, period_end])[0]
+            result = self.db.execute_query(q, [period_start, period_end])
+            if not result:
+                return {
+                    "invoice_count": 0, "total_sales": 0.0, "total_profit": 0.0,
+                    "total_qty": 0.0, "customer_count": 0, "avg_invoice_value": 0.0,
+                }
+            row = result[0]
+            invoice_count = int(row["invoice_count"])
+            total_sales = float(row["total_sales"])
             return {
-                "invoice_count": int(row["invoice_count"]),
-                "total_sales": float(row["total_sales"]),
+                "invoice_count": invoice_count,
+                "total_sales": total_sales,
                 "total_profit": float(row["total_profit"]),
                 "total_qty": float(row["total_qty"]),
                 "customer_count": int(row["customer_count"]),
                 "avg_invoice_value": (
-                    float(row["total_sales"]) / int(row["invoice_count"]) if int(row["invoice_count"]) > 0 else 0.0
+                    total_sales / invoice_count if invoice_count > 0 else 0.0
                 ),
             }
 

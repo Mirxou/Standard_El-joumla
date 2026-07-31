@@ -1730,6 +1730,8 @@ class SalesDialog(BaseDialog):
             # تحويل cart_items إلى SaleItem objects
             sale_items: List[SaleItem] = []
             for item in self.cart_items:
+                line_subtotal = item["qty"] * item["price"]
+                discount_pct = (item["discount"] / line_subtotal * Decimal("100.00")) if line_subtotal > 0 and item["discount"] > 0 else Decimal("0.00")
                 sale_item = SaleItem(
                     id=None,
                     sale_id=None,
@@ -1737,7 +1739,7 @@ class SalesDialog(BaseDialog):
                     product_name=item["name"],
                     quantity=Decimal(str(item["qty"])),
                     unit_price=item["price"],
-                    discount=item["discount"],
+                    discount_percentage=discount_pct,
                     total_price=item["total"],
                 )
                 sale_item.calculate_totals()

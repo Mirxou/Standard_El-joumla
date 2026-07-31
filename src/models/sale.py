@@ -372,7 +372,7 @@ class SaleManager:
                 "WHERE invoice_number LIKE ?",
                 (f"INV-{today}-%",)
             )
-            count = int(row[0]) if row else 0
+            count = int(row.get("COUNT(*)", row.get("count", 0))) if row else 0
         except Exception:
             count = 0
         return f"INV-{today}-{count+1:04d}"
@@ -695,7 +695,7 @@ class SaleManager:
                 (item.product_id,)
             )
             if cost_row:
-                item.cost_price = Decimal(str(cost_row[0]))
+                item.cost_price = Decimal(str(cost_row.get("cost_price", 0)))
 
             # جلب أو إنشاء الدفعة بنظام FEFO (الأقرب للانتهاء أولاً)
             batch_row = self.db_manager.fetch_one(
@@ -713,7 +713,7 @@ class SaleManager:
                 )
 
             if batch_row:
-                item.batch_id = batch_row[0]
+                item.batch_id = batch_row.get("id", batch_row[0] if not isinstance(batch_row, dict) else 0)
             else:
                 # إنشاء دفعة جديدة
                 batch_id = self.db_manager.execute_insert(
@@ -1718,7 +1718,14 @@ class SaleManager:
                     "SUM(paid_amount) FROM sales"
                 )
 
-            if not row or row[0] == 0:
+            is_d = isinstance(row, dict)
+            def _v(idx, d=0):
+                if is_d:
+                    return list(row.values())[idx] if row and len(row) > idx else d
+                return row[idx] if row and len(row) > idx else d
+
+            count = _v(0)
+            if not row or count == 0:
                 return {
                     "total_sales": 0,
                     "total_invoices": 0,
@@ -1727,11 +1734,11 @@ class SaleManager:
                     "total_paid": 0.0,
                 }
             return {
-                "total_sales": row[0],
-                "total_invoices": row[0],
-                "total_amount": float(row[1] or 0),
-                "total_revenue": float(row[1] or 0),
-                "total_paid": float(row[2] or 0),
+                "total_sales": count,
+                "total_invoices": count,
+                "total_amount": float(_v(1)),
+                "total_revenue": float(_v(1)),
+                "total_paid": float(_v(2)),
             }
         except Exception as e:
             if self.logger:
@@ -1762,15 +1769,20 @@ class SaleManager:
             )
             if not row:
                 return {"total_invoices": 0}
+            is_d = isinstance(row, dict)
+            def _v(idx, d=0):
+                if is_d:
+                    return list(row.values())[idx] if len(row) > idx else d
+                return row[idx] if len(row) > idx else d
             return {
-                "total_invoices": row[0] or 0,
-                "paid_invoices": row[1] or 0,
-                "cancelled_invoices": row[2] or 0,
-                "returned_invoices": row[3] or 0,
-                "total_amount": float(row[4] or 0),
-                "total_paid": float(row[5] or 0),
-                "total_discount": float(row[6] or 0),
-                "total_tax": float(row[7] or 0),
+                "total_invoices": _v(0) or 0,
+                "paid_invoices": _v(1) or 0,
+                "cancelled_invoices": _v(2) or 0,
+                "returned_invoices": _v(3) or 0,
+                "total_amount": float(_v(4) or 0),
+                "total_paid": float(_v(5) or 0),
+                "total_discount": float(_v(6) or 0),
+                "total_tax": float(_v(7) or 0),
             }
         except Exception as e:
             if self.logger:

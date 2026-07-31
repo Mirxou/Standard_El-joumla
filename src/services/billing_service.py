@@ -29,13 +29,14 @@ class BillingService:
                 else:
                     print(f"WARN: sale {sale_id} not found when generating invoice")
                 return None
-            total = sale[2]
+            total = sale.get("total_amount", sale[2] if not isinstance(sale, dict) else 0)
+            customer_id = sale.get("customer_id", sale[1] if not isinstance(sale, dict) else None)
             now = datetime.now()
             due = None
             if due_days and isinstance(due_days, int) and due_days > 0:
                 due = now + timedelta(days=due_days)
             q = "INSERT INTO invoices (sale_id, customer_id, amount, status, issued_at, due_at) VALUES (?, ?, ?, ?, ?, ?)"  # noqa: E501
-            self.db.execute_query(q, (sale_id, sale[1], float(total), "unpaid", now, due))
+            self.db.execute_query(q, (sale_id, customer_id, float(total), "unpaid", now, due))
             try:
                 invoice_id = self.db.get_last_insert_id()
             except Exception:
@@ -95,7 +96,11 @@ class BillingService:
                     raise
             # تحديث حالة الفاتورة - تبسيط: اعتبار هذه الدفعة كافية إذا غطت مبلغ الفاتورة
             try:
-                invoice_amount = self.db.fetch_one("SELECT amount FROM invoices WHERE id = ?", (invoice_id,))[0] or 0
+                invoice_row = self.db.fetch_one("SELECT amount FROM invoices WHERE id = ?", (invoice_id,))
+                if invoice_row:
+                    invoice_amount = invoice_row.get("amount", invoice_row[0] if not isinstance(invoice_row, dict) else 0) or 0
+                else:
+                    invoice_amount = 0
                 if float(amount) >= float(invoice_amount):
                     self.db.execute_query(
                         "UPDATE invoices SET status = ?, paid_at = ? WHERE id = ?",

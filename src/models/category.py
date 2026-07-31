@@ -281,7 +281,9 @@ class CategoryManager:
         try:
             query = "SELECT COUNT(*) FROM products WHERE category_id = ? AND is_active = 1"
             result = self.db_manager.fetch_one(query, (category_id,))
-            return result[0] if result else 0
+            if result:
+                return result.get("COUNT(*)", result.get("count", 0)) if isinstance(result, dict) else result[0]
+            return 0
 
         except Exception as e:
             if self.logger:
@@ -333,6 +335,13 @@ class CategoryManager:
 
             result = self.db_manager.fetch_one(query)
             if result:
+                if isinstance(result, dict):
+                    return {
+                        "total_categories": result.get("total_categories", 0) or 0,
+                        "active_categories": result.get("active_categories", 0) or 0,
+                        "parent_categories": result.get("parent_categories", 0) or 0,
+                        "sub_categories": result.get("sub_categories", 0) or 0,
+                    }
                 return {
                     "total_categories": result[0] or 0,
                     "active_categories": result[1] or 0,

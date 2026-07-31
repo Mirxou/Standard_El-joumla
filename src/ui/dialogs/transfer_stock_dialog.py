@@ -129,7 +129,6 @@ class TransferStockDialog(BaseDialog):
                 from_product_id=from_product.id,
                 to_product_id=to_product.id,
                 quantity=quantity,
-                reason=reason or self.i18n.get_message("transfer_via_ui"),
             )
             if success:
                 # 🔥 إطلاق الإشارات: إعلام النظام بالتغييرات

@@ -564,17 +564,18 @@ class PaymentDialog(BaseDialog):
         if hasattr(self, "amount_input") and not hasattr(self, "amount_spinbox"):
             return {
                 "amount": Decimal(self.amount_input.text() or "0.00"),
-                "payment_method": self.payment_method_combo.currentText() or "CASH",
+                "payment_method": self.payment_method_combo.currentText() or PaymentMethod.CASH.value,
             }
 
         entity_id = self.entity_combo.currentData()
 
         payment_method_map = {
-            "نقدي": PaymentMethod.CASH,
-            "شيك": PaymentMethod.CHECK,
-            "تحويل بنكي": PaymentMethod.BANK_TRANSFER,
-            "بطاقة ائتمان": PaymentMethod.CREDIT_CARD,
-            "بطاقة مدين": PaymentMethod.DEBIT_CARD,
+            "نقدي": PaymentMethod.CASH.value,
+            "شيك": PaymentMethod.CHECK.value,
+            "تحويل بنكي": PaymentMethod.BANK_TRANSFER.value,
+            "بطاقة ائتمان": PaymentMethod.CREDIT_CARD.value,
+            "بطاقة خصم": PaymentMethod.DEBIT_CARD.value,
+            "دفع إلكتروني": PaymentMethod.ONLINE.value,
         }
 
         return {

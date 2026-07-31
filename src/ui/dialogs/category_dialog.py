@@ -106,13 +106,12 @@ class CategoryDialog(BaseDialog):
 
             self.categories = []
             for row in results:
-                cat_id, name, description, is_active = row
                 self.categories.append(
                     {
-                        "id": cat_id,
-                        "name": name,
-                        "description": description or "",
-                        "is_active": is_active,
+                        "id": row.get("id") if isinstance(row, dict) else row[0],
+                        "name": row.get("name") if isinstance(row, dict) else row[1],
+                        "description": (row.get("description") or "") if isinstance(row, dict) else (row[2] or ""),
+                        "is_active": row.get("is_active") if isinstance(row, dict) else row[3],
                     }
                 )
 
@@ -145,7 +144,7 @@ class CategoryDialog(BaseDialog):
                     "SELECT COUNT(*) FROM products WHERE category_id = ? AND is_active = 1",
                     (cat["id"],),
                 )
-                count = count_result[0] if count_result else 0
+                count = (count_result.get("COUNT(*)", count_result.get("count", 0)) if isinstance(count_result, dict) else (count_result[0] if count_result else 0))
             except Exception:
                 count = 0
 
@@ -208,7 +207,7 @@ class CategoryDialog(BaseDialog):
             count_result = self.db_manager.fetch_one(
                 "SELECT COUNT(*) FROM products WHERE category_id = ?", (category_id,)
             )
-            count = count_result[0] if count_result else 0
+            count = (count_result.get("COUNT(*)", count_result.get("count", 0)) if isinstance(count_result, dict) else (count_result[0] if count_result else 0))
 
             if count > 0:
                 self.notify.show_warning("تحذير", f"لا يمكن حذف هذه الفئة. هناك {count} منتج مرتبط بها.")

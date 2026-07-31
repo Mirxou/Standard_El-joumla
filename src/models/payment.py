@@ -617,7 +617,7 @@ class PaymentManager:
             """
             today = date.today().isoformat()
             results = self.db_manager.fetch_all(query, (today, PaymentStatus.COMPLETED.value))
-            return [self._row_to_payment(row) for row in results]
+            return [self._row_to_payment_dict(dict(row)) if isinstance(row, dict) else self._row_to_payment(row) for row in results]
 
         except Exception as e:
             if self.logger:

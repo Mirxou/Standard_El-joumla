@@ -200,7 +200,7 @@ class RBACService:
             if not set_parts:
                 return False
             set_clause = ", ".join(set_parts)
-            values = list(updates.values()) + [role_id]
+            values.append(role_id)
 
             cursor = self.db.conn.cursor()
             id_col = self._roles_cols["id"]
