@@ -991,6 +991,9 @@ class LocalDatabaseManager:
             True إذا نجح القفل
         """
         try:
+            # التحقق من اسم الجدول لمنع حقن SQL
+            if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', table_name):
+                raise DatabaseException(f"اسم جدول غير صالح: {table_name}")
             # استخدام SELECT ... FOR UPDATE لـ Row-level Locking
             self.connection.execute(f"SELECT * FROM {table_name} WHERE id = ? FOR UPDATE", (record_id,))
             return True
