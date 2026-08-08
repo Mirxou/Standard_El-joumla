@@ -166,7 +166,8 @@ class PaymentService:
                 "CREATE INDEX IF NOT EXISTS idx_payments_method ON payments(payment_method)",
                 "CREATE INDEX IF NOT EXISTS idx_account_balances_entity ON account_balances(entity_id)",
                 "CREATE INDEX IF NOT EXISTS idx_account_balances_type ON account_balances(account_type)",
-                "CREATE INDEX IF NOT EXISTS idx_payment_schedules_entity ON payment_schedules(entity_id)",
+                # entity_id غير موجود في payment_schedules — تم إزالته
+                # "CREATE INDEX IF NOT EXISTS idx_payment_schedules_entity ON payment_schedules(entity_id)",
                 "CREATE INDEX IF NOT EXISTS idx_payment_schedules_due_date ON payment_schedules(due_date)",
                 "CREATE INDEX IF NOT EXISTS idx_payment_schedules_status ON payment_schedules(status)",
             ]

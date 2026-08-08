@@ -5,16 +5,20 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import date, timedelta
 from typing import Any, Dict, List
 
 from ..core.database_manager import DatabaseManager
 from ..models.dashboard import KPI, ChartSeries, DashboardData, TimeSeriesPoint
 
+logger = logging.getLogger(__name__)
+
 
 class DashboardService:
     def __init__(self, db: DatabaseManager):
         self.db = db
+        self.logger = logger
 
     # ============================ Public API ============================
     def load_dashboard(self, start: date, end: date) -> DashboardData:
@@ -380,6 +384,10 @@ class DashboardService:
                 return 0.0
             return float(value)
         except (ValueError, TypeError):
+            self.logger.warning("_scalar conversion error for query: %s", query[:80])
+            return 0.0
+        except Exception:
+            self.logger.exception("_scalar unexpected error for query: %s", query[:80])
             return 0.0
 
     def _change_pct(self, prev: float, curr: float) -> float:

@@ -40,7 +40,7 @@ class ReminderService:
     def __init__(self, db_manager: DatabaseManager, email_service: EmailService):
         self.db = db_manager
         self.email = email_service
-        self.print_service = PrintService()
+        self.print_service = PrintService(db_manager=db_manager)
 
     def schedule_payment_reminder(
         self,

@@ -41,6 +41,7 @@ from ...ai.chatbot import ChatbotEngine
 from ...core.database_manager import DatabaseManager
 from ...services.cycle_count_service import CycleCountService
 from ...services.dashboard_service import DashboardService
+from ...ui.styles.design_tokens import C
 
 
 class DashboardWindow(QMainWindow):
@@ -58,9 +59,10 @@ class DashboardWindow(QMainWindow):
 
         self.setWindowTitle("📊 لوحة المعلومات الرئيسية")
         self.setMinimumSize(1400, 850)
+        self.setLayoutDirection(Qt.RightToLeft)
 
         # تطبيق ستايل الهوية الموحدة
-        self.setStyleSheet("QMainWindow { background-color: #020617; }")
+        self.setStyleSheet(f"QMainWindow {{ background-color: {C.BG_VOID}; }}")
 
         self.refresh_timer = QTimer()
         self.refresh_timer.timeout.connect(self._load)
@@ -90,7 +92,7 @@ class DashboardWindow(QMainWindow):
         f.setBold(True)
         title.setFont(f)
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("color:#1976D2; padding: 8px;")
+        title.setStyleSheet(f"color: {C.ACCENT_SKY}; padding: 8px;")
         root.addWidget(title)
 
         # Filters
@@ -255,15 +257,15 @@ class DashboardWindow(QMainWindow):
         card = QGroupBox()
 
         # Bento Grid / Solid styling (No transparency)
-        card.setStyleSheet("""
+        card.setStyleSheet(f"""
             QGroupBox {{
-                background-color: #1e293b;
-                border: 1px solid #334155;
+                background-color: {C.BG_SURFACE};
+                border: 1px solid {C.BORDER_DEFAULT};
                 border-radius: 16px;
                 padding: 15px;
             }}
             QGroupBox:hover {{
-                background-color: #334155;
+                background-color: {C.BG_RAISED};
                 border: 1px solid {color};
             }}
         """)
@@ -277,7 +279,7 @@ class DashboardWindow(QMainWindow):
         header.addWidget(icon_lbl)
 
         t = QLabel(title)
-        t.setStyleSheet("color: #cbd5e1; font-weight: 600; font-size: 13px; background: transparent;")
+        t.setStyleSheet(f"color: {C.TEXT_SECONDARY}; font-weight: 600; font-size: 13px; background: transparent;")
         t.setWordWrap(True)
         header.addWidget(t, 1)
         lay.addLayout(header)
@@ -287,7 +289,7 @@ class DashboardWindow(QMainWindow):
         # إذا كانت البطاقة كبيرة، كبر الخط
         val_size = "32px" if is_large else "24px"
         v.setStyleSheet(
-            f"color: #f8fafc; font-size: {val_size}; font-weight: 800; background: transparent; letter-spacing: -0.5px;"
+            f"color: {C.TEXT_BRIGHT}; font-size: {val_size}; font-weight: 800; background: transparent; letter-spacing: -0.5px;"
         )
         v.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         lay.addWidget(v)
@@ -296,10 +298,10 @@ class DashboardWindow(QMainWindow):
         if change is not None:
             arrow = "↑" if change >= 0 else "↓"
             # Green for positive, Red for negative (standard financial colors)
-            ch_color = "#10b981" if change >= 0 else "#ef4444"
+            ch_color = C.SUCCESS if change >= 0 else C.ACCENT_CORAL
             if "expense" in kpi_key or "payables" in kpi_key:
                 # Reverse for expenses: Red if goes up
-                ch_color = "#ef4444" if change >= 0 else "#10b981"
+                ch_color = C.ACCENT_CORAL if change >= 0 else C.SUCCESS
 
             ch = QLabel(f"{arrow} {abs(change):.1f}%")
             ch.setStyleSheet(f"color: {ch_color}; font-size: 12px; font-weight: bold; background: transparent;")
@@ -322,27 +324,27 @@ class DashboardWindow(QMainWindow):
         """تبديل حالة الوميض"""
         self._blink_state = not self._blink_state
         if self._blink_state:
-            # لون أحمر فاتح
-            card.setStyleSheet("""
-                QGroupBox {
+            # لون أحمر فاتح (مع حدود)
+            card.setStyleSheet(f"""
+                QGroupBox {{
                     background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                        stop:0 #F44336, stop:1 #D32F2F);
+                        stop:0 {C.ACCENT_CORAL}, stop:1 {C.ACCENT_CORAL_DARK});
                     border-radius: 12px;
                     padding: 10px;
                     min-height: 100px;
-                    border: 2px solid #FF5252;
-                }
+                    border: 2px solid {C.ACCENT_CORAL_LIGHT};
+                }}
             """)
         else:
-            # لون أحمر عادي
-            card.setStyleSheet("""
-                QGroupBox {
+            # لون أحمر عادي (بدون حدود بارزة)
+            card.setStyleSheet(f"""
+                QGroupBox {{
                     background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                        stop:0 #F44336, stop:1 #D32F2F);
+                        stop:0 {C.ACCENT_CORAL}, stop:1 {C.ACCENT_CORAL_DARK});
                     border-radius: 12px;
                     padding: 10px;
                     min-height: 100px;
-                }
+                }}
             """)
 
     def _show_low_stock_dialog(self):
@@ -1028,4 +1030,7 @@ class LowStockDialog(QDialog):
 
     def refresh_data(self, *args, **kwargs):
         """تحديث البيانات (Stub for testing)"""
-        return self._load()
+        # LowStockDialog has no _load(); repopulate table instead
+        if hasattr(self, '_populate_table'):
+            return self._populate_table()
+        return None

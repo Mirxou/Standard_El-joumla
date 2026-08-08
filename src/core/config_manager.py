@@ -714,9 +714,12 @@ class ConfigManager:
 
         # التحقق من إعدادات الطباعة
         printing_config = self.get("printing", {})
-        if printing_config.get("paper_size") not in ["A4", "A3", "Letter", "Legal"]:
+        paper_size = printing_config.get("paper_size")
+        orientation = printing_config.get("orientation")
+        # لا تحذر إذا لم يتم تعيين القيم بعد (تشغيل أولي)
+        if paper_size and paper_size not in ["A4", "A3", "Letter", "Legal"]:
             errors.append("إعدادات الطباعة: حجم الورق غير صحيح")
-        if printing_config.get("orientation") not in ["portrait", "landscape"]:
+        if orientation and orientation not in ["portrait", "landscape"]:
             errors.append("إعدادات الطباعة: اتجاه الورق غير صحيح")
 
         # التحقق من إعدادات القوالب
