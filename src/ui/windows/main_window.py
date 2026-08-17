@@ -592,11 +592,9 @@ class MainWindow(QMainWindow):
         # تطبيق الإعدادات
         self.apply_settings()
 
-        # إعداد Opacity للـ fade in
-        self.setWindowOpacity(0.0)
-
-        # Safety: ضمان استعادة الشفافية حتى لو فشلت الحركة
-        QTimer.singleShot(800, lambda: self.setWindowOpacity(1.0))
+        # NOTE: تم تعطيل fade-in animation لأنها تسبب شاشة سوداء على Windows
+        # self.setWindowOpacity(0.0)
+        # QTimer.singleShot(800, lambda: self.setWindowOpacity(1.0))
 
         # مؤقت لتحديث مؤشرات الحالة
         try:

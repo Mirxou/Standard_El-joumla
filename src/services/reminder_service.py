@@ -87,7 +87,19 @@ class ReminderService:
             return {"success": False, "error": str(e)}
 
     def list_pending(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """List pending reminders - works with both full and local DB schemas."""
         try:
+            # Check if the table has 'status' column (full schema vs local schema)
+            schema_rows = self.db.execute_query("PRAGMA table_info(reminders)")
+            has_status = any(
+                isinstance(r, dict) and r.get("name") == "status"
+                for r in (schema_rows or [])
+            )
+            if not has_status:
+                # Local DB schema: (id, title, description, due_date, is_completed, created_at)
+                # No pending reminders to process in this schema
+                return []
+
             rows = self.db.execute_query(
                 """
                 SELECT * FROM reminders
@@ -97,7 +109,7 @@ class ReminderService:
                 """,
                 (datetime.now(timezone.utc).isoformat(timespec="seconds"), limit),
             )
-            return rows
+            return rows or []
         except Exception as e:
             logger.log(logging.ERROR, f"Failed to list pending reminders: {e}")
             return []
