@@ -565,7 +565,7 @@ class PaymentManager:
             cursor = conn.execute(
                 """
                 SELECT * FROM payments
-                WHERE customer_id = ? AND payment_type = 'customer_payment'
+                WHERE entity_id = ? AND payment_type = 'customer_payment'
                 ORDER BY payment_date DESC, created_at DESC
             """,
                 (customer_id,),
@@ -594,7 +594,7 @@ class PaymentManager:
             cursor = conn.execute(
                 """
                 SELECT * FROM payments
-                WHERE supplier_id = ? AND payment_type = 'supplier_payment'
+                WHERE entity_id = ? AND payment_type = 'supplier_payment'
                 ORDER BY payment_date DESC, created_at DESC
             """,
                 (supplier_id,),

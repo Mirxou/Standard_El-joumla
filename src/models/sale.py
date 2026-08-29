@@ -735,12 +735,13 @@ class SaleManager:
 
             item.calculate_total()
 
+            # NOTE: discount و tax_amount غير موجودين في جدول sale_items
+            # تمت إزالتهما من INSERT لتجنب OperationalError
             query = """
             INSERT INTO sale_items (
                 sale_id, product_id, batch_id, quantity,
-                unit_price, total_price, cost_price, profit,
-                discount, tax_amount
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                unit_price, total_price, cost_price, profit
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """
             params = (
                 item.sale_id,
@@ -751,8 +752,6 @@ class SaleManager:
                 float(item.total_price),
                 float(item.cost_price),
                 float(item.profit),
-                float(item.discount),
-                float(item.tax_amount),
             )
             return self.db_manager.execute_insert(query, params)
         except Exception as e:
@@ -797,12 +796,12 @@ class SaleManager:
 
             item.calculate_total()
 
+            # NOTE: discount و tax_amount غير موجودين في جدول sale_items
             cursor.execute(
                 "INSERT INTO sale_items "
                 "(sale_id, product_id, batch_id, quantity, "
-                "unit_price, total_price, cost_price, profit, "
-                "discount, tax_amount) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "unit_price, total_price, cost_price, profit) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     item.sale_id,
                     item.product_id,
@@ -812,8 +811,6 @@ class SaleManager:
                     float(item.total_price),
                     float(item.cost_price),
                     float(item.profit),
-                    float(item.discount),
-                    float(item.tax_amount),
                 ),
             )
             return cursor.lastrowid
@@ -1794,13 +1791,15 @@ class SaleManager:
         self, target_date: date
     ) -> List[Sale]:
         try:
-            return self.search_sales(
-                search_term=""
+            date_str = target_date.isoformat() if isinstance(target_date, date) else str(target_date)
+            results = self.db_manager.fetch_all(
+                "SELECT * FROM sales WHERE sale_date = ? ORDER BY id DESC",
+                (date_str,),
             )
+            return [self._row_to_sale(r) for r in (results or [])]
         except Exception as e:
             if self.logger:
-                self.logger.error(f"Error getting daily sales: {e}"
-                )
+                self.logger.error(f"Error getting daily sales: {e}")
             return []
 
     def get_recent_sales(
@@ -1825,7 +1824,7 @@ class SaleManager:
                     f"RET-{sale_id}",
                     SaleStatus.RETURNED.value,
                     sum(
-                        i.get("price", 0) * i.get("qty", 0)
+                        i.get("unit_price", i.get("price", 0)) * i.get("quantity", i.get("qty", 0))
                         for i in items
                     ),
                 ),
@@ -1837,7 +1836,7 @@ class SaleManager:
                 cursor.execute(
                     "UPDATE products SET current_stock = "
                     "current_stock + ? WHERE id = ?",
-                    (item.get("qty", 0), item["product_id"]),
+                    (item.get("quantity", item.get("qty", 0)), item["product_id"]),
                 )
 
             conn.commit()

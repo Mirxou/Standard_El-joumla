@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -6,8 +5,10 @@ import logging
 إدارة قاعدة البيانات المحلية (Local Cache) للتطبيق المكتبي
 """
 
+import logging
 import os
 import platform
+import re
 import sqlite3
 from contextlib import contextmanager
 from datetime import date, datetime
@@ -369,6 +370,7 @@ class LocalDatabaseManager:
             CREATE TABLE IF NOT EXISTS stock_movements (
                 id INTEGER PRIMARY KEY,
                 product_id INTEGER NOT NULL,
+                batch_id INTEGER,
                 warehouse_id INTEGER,
                 movement_type TEXT NOT NULL, -- in, out, adjustment, transfer
                 quantity REAL NOT NULL,
@@ -377,8 +379,14 @@ class LocalDatabaseManager:
                 notes TEXT,
                 user_id INTEGER,
                 created_by INTEGER,
+                is_synced INTEGER DEFAULT 0,
+                last_synced_at TIMESTAMP,
+                sync_version INTEGER DEFAULT 1,
+                is_deleted INTEGER DEFAULT 0,
+                deleted_at TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (product_id) REFERENCES products(id),
+                FOREIGN KEY (batch_id) REFERENCES batches(id),
                 FOREIGN KEY (warehouse_id) REFERENCES warehouses(id)
             )
         """)
@@ -647,68 +655,26 @@ class LocalDatabaseManager:
             )
         """)
 
-        # جدول stock_movements - نسخة محلية من حركات المخزون
-        self.connection.execute("""
-            CREATE TABLE IF NOT EXISTS stock_movements (
-                id INTEGER PRIMARY KEY,
-                product_id INTEGER NOT NULL,
-                batch_id INTEGER,
-                movement_type TEXT NOT NULL,
-                quantity INTEGER NOT NULL,
-                reference_id INTEGER,
-                reference_type TEXT,
-                notes TEXT,
-                user_id INTEGER,
-                is_synced INTEGER DEFAULT 0,
-                last_synced_at TIMESTAMP,
-                sync_version INTEGER DEFAULT 1,
-                is_deleted INTEGER DEFAULT 0,
-                deleted_at TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (product_id) REFERENCES products(id)
-            )
-        """)
+        # [تمت إزالة التعريف المكرر لـ stock_movements - موجود أعلاه]
 
-        # جدول users - المستخدمين
-        self.connection.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY,
-                username TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                full_name TEXT,
-                role TEXT DEFAULT 'user',
-                is_active BOOLEAN DEFAULT 1,
-                otp_secret TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+        # [تمت إزالة التعريف المكرر لـ users - موجود أعلاه مع المخطط الكامل]
 
-        # إضافة مستخدم افتراضي
-        self.connection.execute("""
-            INSERT OR IGNORE INTO users (id, username, password_hash, full_name, role)
-            VALUES (1, 'admin', 'admin', 'Administrator', 'admin')
-        """)
+        # إضافة مستخدم افتراضي (فقط إذا لم يكن موجوداً)
+        try:
+            existing_admin = self.connection.execute(
+                "SELECT id FROM users WHERE id = 1"
+            ).fetchone()
+            if not existing_admin:
+                self.connection.execute("""
+                    INSERT INTO users (id, username, password_hash, full_name, role, salt, is_active)
+                    VALUES (1, 'admin', 'admin', 'Administrator', 'admin', 'default_salt', 1)
+                """)
+        except Exception:
+            pass  # سيتم إنشاء المستخدم عبر UserManager في main.py
 
-        # جدول categories - التصنيفات
-        self.connection.execute("""
-            CREATE TABLE IF NOT EXISTS categories (
-                id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL,
-                parent_id INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+        # [تمت إزالة التعريف المكرر لـ categories - موجود أعلاه مع المخطط الكامل]
 
-        # جدول suppliers - الموردين
-        self.connection.execute("""
-            CREATE TABLE IF NOT EXISTS suppliers (
-                id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL,
-                phone TEXT,
-                email TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+        # [تمت إزالة التعريف المكرر لـ suppliers - موجود أعلاه مع المخطط الكامل]
 
         # جدول reminders - التذكيرات
         self.connection.execute("""
@@ -1025,7 +991,7 @@ class LocalDatabaseManager:
             # وإذا كان الجدول يحتوي فعلاً على هذا العمود (لتجنب الأخطاء)
             if exclude_deleted and is_select and "is_deleted" not in query_upper and "JOIN" not in query_upper:
                 # محاولة استخراج اسم الجدول من الاستعلام
-                import re
+                import re  # already imported at module level, kept for clarity
 
                 table_match = re.search(r"FROM\s+([a-zA-Z0-9_]+)", query_upper)
                 if table_match:
@@ -1099,23 +1065,10 @@ class LocalDatabaseManager:
             self.logger.error(f"خطأ في تنفيذ الاستعلام: {query} - {str(e)}")
             raise DatabaseException(f"خطأ في تنفيذ الاستعلام: {str(e)}")
 
-    def get_connection(self):  # noqa: F811
-        """الحصول على كائن الاتصال المباشر (للتوافق)"""
-        return self.connection
-
-    def get_last_insert_id(self) -> int:
-        """الحصول على معرف آخر صف تم إدراجه"""
-        if not self.connection:
-            return 0
-        cursor = self.connection.execute("SELECT last_insert_rowid()")
-        return cursor.fetchone()[0]
-
-    def execute_insert(self, query: str, params: tuple = ()) -> int:
-        """تنفيذ استعلام إدراج وإرجاع المعرف الجديد"""
-        cursor = self.execute_query(query, params)
-        if hasattr(cursor, "lastrowid"):
-            return cursor.lastrowid
-        return self.get_last_insert_id()
+    # NOTE: get_connection(), get_last_insert_id(), execute_insert()
+    # are defined above in their proper locations (lines ~183, ~1106, ~1113)
+    # The compatibility aliases below (execute_update, execute_insert, fetch_all)
+    # provide backward compatibility for services expecting different method names.
 
     def execute(self, query: str, params: Tuple = ()):
         """تنفيذ استعلام SQL مباشر"""
@@ -1194,12 +1147,10 @@ class LocalDatabaseManager:
             True إذا نجح الحذف
         """
         try:
+            if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', table_name):
+                raise DatabaseException(f"اسم جدول غير صالح: {table_name}")
             self.execute_non_query(
-                """
-                UPDATE {table_name}
-                SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP, is_synced = 0
-                WHERE id = ?
-                """,
+                f"UPDATE {table_name} SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP, is_synced = 0 WHERE id = ?",
                 (record_id,),
             )
             self.logger.info(f"✅ تم حذف السجل منطقياً: {table_name}.{record_id}")
@@ -1220,12 +1171,10 @@ class LocalDatabaseManager:
             True إذا نجحت الاستعادة
         """
         try:
+            if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', table_name):
+                raise DatabaseException(f"اسم جدول غير صالح: {table_name}")
             self.execute_non_query(
-                """
-                UPDATE {table_name}
-                SET is_deleted = 0, deleted_at = NULL, is_synced = 0
-                WHERE id = ?
-                """,
+                f"UPDATE {table_name} SET is_deleted = 0, deleted_at = NULL, is_synced = 0 WHERE id = ?",
                 (record_id,),
             )
             self.logger.info(f"✅ تم استعادة السجل: {table_name}.{record_id}")
@@ -1247,12 +1196,10 @@ class LocalDatabaseManager:
             قائمة بالعناصر المعلقة
         """
         if table_name:
-            query = """
-                SELECT * FROM {table_name}
-                WHERE is_synced = 0 AND is_deleted = 0
-                ORDER BY created_at ASC
-            """
-            return self.execute_query(query)
+            if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', table_name):
+                raise DatabaseException(f"اسم جدول غير صالح: {table_name}")
+            query = f"SELECT * FROM {table_name} WHERE is_synced = 0 AND is_deleted = 0 ORDER BY created_at ASC"
+            return self.execute_query(query, exclude_deleted=False)
         else:
             # الحصول على جميع العناصر المعلقة من جميع الجداول
             tables = [
@@ -1266,11 +1213,8 @@ class LocalDatabaseManager:
             ]
             all_pending = []
             for table in tables:
-                query = """
-                    SELECT *, '{table}' as source_table FROM {table}
-                    WHERE is_synced = 0 AND is_deleted = 0
-                """
-                all_pending.extend(self.execute_query(query))
+                query = f"SELECT *, '{table}' as source_table FROM {table} WHERE is_synced = 0 AND is_deleted = 0"
+                all_pending.extend(self.execute_query(query, exclude_deleted=False))
             return all_pending
 
     def mark_as_synced(self, table_name: str, record_id: int, sync_version: int = 1):
@@ -1282,12 +1226,10 @@ class LocalDatabaseManager:
             record_id: معرف السجل
             sync_version: إصدار المزامنة
         """
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', table_name):
+            raise DatabaseException(f"اسم جدول غير صالح: {table_name}")
         self.execute_non_query(
-            """
-            UPDATE {table_name}
-            SET is_synced = 1, last_synced_at = CURRENT_TIMESTAMP, sync_version = ?
-            WHERE id = ?
-            """,
+            f"UPDATE {table_name} SET is_synced = 1, last_synced_at = CURRENT_TIMESTAMP, sync_version = ? WHERE id = ?",
             (sync_version, record_id),
         )
 
@@ -1319,10 +1261,7 @@ class LocalDatabaseManager:
         results = self.execute_query(query, params)
         return results[0] if results else None
 
-    def get_last_insert_id(self) -> int:  # noqa: F811
-        """الحصول على آخر ID تم إدراجه"""
-        result = self.execute_scalar("SELECT last_insert_rowid()")
-        return result if result else 0
+    # get_last_insert_id is already defined above — no duplicate
 
     # ========== Compatibility Aliases ==========
     # هذه الدوال تضمن التوافق مع الخدمات التي تستدعي أسماء مختلفة
@@ -1342,20 +1281,7 @@ class LocalDatabaseManager:
             self.logger.error(f"خطأ في تنفيذ الاستعلام: {query} - {str(e)}")
             raise DatabaseException(f"خطأ في تنفيذ الاستعلام: {str(e)}")
 
-    def execute_insert(self, query: str, params: Tuple = ()) -> int:  # noqa: F811
-        """تنفيذ INSERT وإرجاع الـ ID الجديد"""
-        if not self.connection:
-            raise DatabaseException("قاعدة البيانات غير مهيأة")
-        try:
-            from enum import Enum
-
-            converted_params = tuple(p.name if isinstance(p, Enum) else p for p in params) if params else ()
-            cursor = self.connection.execute(query, converted_params)
-            self.connection.commit()
-            return cursor.lastrowid if cursor.lastrowid else 0
-        except Exception as e:
-            self.logger.error(f"خطأ في تنفيذ الاستعلام: {query} - {str(e)}")
-            raise DatabaseException(f"خطأ في تنفيذ الاستعلام: {str(e)}")
+    # execute_insert is already defined above — no duplicate
 
     def fetch_all(self, query: str, params: Tuple = ()) -> List[Dict[str, Any]]:
         """Alias لـ execute_query - للتوافق مع الخدمات القديمة"""

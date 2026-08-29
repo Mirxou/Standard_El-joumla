@@ -172,7 +172,10 @@ class WholesaleQuoteService:
         if not row:
             raise Exception("Quote not found")
 
-        customer_name, total_val, items_json = row
+        # FIX: fetch_one يُرجع dict وليس tuple
+        customer_name = get_value(row, 'customer_name', '')
+        total_val = get_value(row, 'total_value', 0)
+        items_json = get_value(row, 'items_json', '{}')
         items = json.loads(items_json)
 
         # 2. Generate Invoice Number (Simple Format: J-Timestamp)

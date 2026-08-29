@@ -243,11 +243,18 @@ class QuoteHistoryDialog(BaseDialog):
             QMessageBox.question(self, "تأكيد", "هل تريد تحميل هذا العرض؟ (سيتم استبدال السلة الحالية)")
             == QMessageBox.StandardButton.Yes
         ):
-            if self.quote_service.load_quote(quote_id):
-                self.selected_quote_id = quote_id
-                self.accept()
+            # FIX: load_quote غير موجود - استخدم get_quote أو الطرق المتاحة
+            load_fn = getattr(self.quote_service, 'load_quote', None) \
+                       or getattr(self.quote_service, 'get_quote', None)
+            if load_fn:
+                result = load_fn(quote_id)
+                if result:
+                    self.selected_quote_id = quote_id
+                    self.accept()
+                else:
+                    QMessageBox.critical(self, "خطأ", "فشل تحميل العرض")
             else:
-                QMessageBox.critical(self, "خطأ", "فشل تحميل العرض")
+                QMessageBox.critical(self, "خطأ", "ميزة تحميل العرض غير متاحة")
 
     def _on_delete(self):
         quote_id = self._get_selected_id()

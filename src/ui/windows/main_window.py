@@ -635,7 +635,7 @@ class MainWindow(QMainWindow):
         self.customer_manager = None
         self.supplier_manager = None
         self.ai_service = None
-        self.printing_service = None
+        self.printing_service = None  # سيتم ربطه بـ print_service بعد التهيئة
 
         # Phase 19: New Services
         self.hardware_service = None
@@ -712,12 +712,14 @@ class MainWindow(QMainWindow):
             from src.services.print_service import initialize_print_service
 
             self.print_service = initialize_print_service()
+            self.printing_service = self.print_service  # FIX: ربط الاسمين معاً
             if self.logger:
                 self.logger.info("✅ تم تهيئة خدمة الطباعة المتقدمة (PrintService)")
         except Exception as e:
             if self.logger:
                 self.logger.warning(f"تعذر تهيئة خدمة الطباعة: {e}")
             self.print_service = None
+            self.printing_service = None
 
         # تهيئة خدمة العتاد (Hardware Service)
         try:
@@ -5903,7 +5905,16 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "تحذير", "خدمة التقارير غير متوفرة")
             return
         try:
-            filepath = self.reports_service.export_summary(format_type)
+            # FIX: export_summary غير موجود - استخدم الطرق المتاحة
+            export_fn = getattr(self.reports_service, 'export_summary', None) \
+                       or getattr(self.reports_service, 'export_report', None)
+            if not export_fn:
+                QMessageBox.warning(self, "تحذير", "ميزة التصدير غير متاحة في هذه النسخة")
+                return
+            try:
+                filepath = export_fn(format_type)
+            except TypeError:
+                filepath = export_fn(format_type=format_type)
             if filepath:
                 QMessageBox.information(self, "تم التصدير", f"تم حفظ التقرير في:\n{filepath}")
         except Exception as e:
@@ -5915,14 +5926,21 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "تحذير", "خدمة التقارير غير متوفرة")
             return
         try:
-            filepath = self.reports_service.export_summary(ExportFormat.PDF)
+            # FIX: export_summary غير موجود - استخدم الطرق المتاحة
+            export_fn = getattr(self.reports_service, 'export_summary', None) \
+                       or getattr(self.reports_service, 'export_report', None)
+            if not export_fn:
+                QMessageBox.warning(self, "تحذير", "ميزة الطباعة غير متاحة في هذه النسخة")
+                return
+            try:
+                filepath = export_fn(ExportFormat.PDF)
+            except TypeError:
+                filepath = export_fn(format_type=ExportFormat.PDF)
             if filepath:
                 QDesktopServices.openUrl(QUrl.fromLocalFile(filepath))
                 QMessageBox.information(self, "جاهز للطباعة", "تم إنشاء ملف PDF وفتحه للطباعة.")
         except Exception as e:
             QMessageBox.critical(self, "خطأ", f"فشل في طباعة التقرير:\n{str(e)}")
-        except Exception as e:
-            QMessageBox.critical(self, "خطأ", f"فشل في تجهيز التقرير للطباعة:\n{str(e)}")
 
     def _build_report_filter(self) -> ReportFilter:
         """بناء كائن فلاتر للتقارير من واجهة المستخدم"""
@@ -9970,7 +9988,8 @@ class MainWindow(QMainWindow):
         """معالجة حفظ المنتج"""
         try:
             if hasattr(self, "inventory_service") and self.inventory_service:
-                self.inventory_service.refresh_cache()
+                if hasattr(self.inventory_service, 'refresh_cache'):
+                    self.inventory_service.refresh_cache()
             # إبطال cache لتغييرات البيانات
             if getattr(self, "cache", None):
                 self.cache.clear()
@@ -10027,7 +10046,13 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            report = self.inventory_service.get_inventory_report()
+            # FIX: اسم الطريقة الصحيح هو generate_inventory_report
+            gen_fn = getattr(self.inventory_service, 'generate_inventory_report', None) \
+                     or getattr(self.inventory_service, 'get_inventory_report', None)
+            if not gen_fn:
+                QMessageBox.warning(self, "تقرير المخزون", "خدمة التقرير غير متاحة.")
+                return
+            report = gen_fn()
             report_text = (
                 "<h3>تقرير المخزون</h3>"
                 f"<p>إجمالي المنتجات: <b>{report.total_products:,}</b></p>"
