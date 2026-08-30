@@ -476,15 +476,26 @@ class PermissionManager:
         row = self.db.fetch_one("SELECT * FROM roles WHERE role_id = ?", (role_id,))
 
         if row:
-            permissions = set(json.loads(row[3]))  # permissions column
-            return Role(
-                role_id=row[0],
-                name=row[1],
-                description=row[2],
-                permissions=permissions,
-                is_active=bool(row[4]),
-                created_at=datetime.fromisoformat(row[5]) if row[5] else None,
-            )
+            if isinstance(row, dict):
+                permissions = set(json.loads(row.get("permissions", "[]")))
+                return Role(
+                    role_id=row.get("role_id"),
+                    name=row.get("name", ""),
+                    description=row.get("description", ""),
+                    permissions=permissions,
+                    is_active=bool(row.get("is_active", 1)),
+                    created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None,
+                )
+            else:
+                permissions = set(json.loads(row[3]))  # permissions column
+                return Role(
+                    role_id=row[0],
+                    name=row[1],
+                    description=row[2],
+                    permissions=permissions,
+                    is_active=bool(row[4]),
+                    created_at=datetime.fromisoformat(row[5]) if row[5] else None,
+                )
         return None
 
     def get_role_by_name(self, name: str) -> Optional[Role]:
@@ -492,15 +503,26 @@ class PermissionManager:
         row = self.db.fetch_one("SELECT * FROM roles WHERE name = ?", (name,))
 
         if row:
-            permissions = set(json.loads(row[3]))
-            return Role(
-                role_id=row[0],
-                name=row[1],
-                description=row[2],
-                permissions=permissions,
-                is_active=bool(row[4]),
-                created_at=datetime.fromisoformat(row[5]) if row[5] else None,
-            )
+            if isinstance(row, dict):
+                permissions = set(json.loads(row.get("permissions", "[]")))
+                return Role(
+                    role_id=row.get("role_id"),
+                    name=row.get("name", ""),
+                    description=row.get("description", ""),
+                    permissions=permissions,
+                    is_active=bool(row.get("is_active", 1)),
+                    created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None,
+                )
+            else:
+                permissions = set(json.loads(row[3]))
+                return Role(
+                    role_id=row[0],
+                    name=row[1],
+                    description=row[2],
+                    permissions=permissions,
+                    is_active=bool(row[4]),
+                    created_at=datetime.fromisoformat(row[5]) if row[5] else None,
+                )
         return None
 
     def list_roles(self, active_only: bool = True) -> List[Role]:
@@ -522,17 +544,30 @@ class PermissionManager:
 
         roles = []
         for row in rows:
-            permissions = set(json.loads(row[3]))
-            roles.append(
-                Role(
-                    role_id=row[0],
-                    name=row[1],
-                    description=row[2],
-                    permissions=permissions,
-                    is_active=bool(row[4]),
-                    created_at=datetime.fromisoformat(row[5]) if row[5] else None,
+            if isinstance(row, dict):
+                permissions = set(json.loads(row.get("permissions", "[]")))
+                roles.append(
+                    Role(
+                        role_id=row.get("role_id"),
+                        name=row.get("name", ""),
+                        description=row.get("description", ""),
+                        permissions=permissions,
+                        is_active=bool(row.get("is_active", 1)),
+                        created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None,
+                    )
                 )
-            )
+            else:
+                permissions = set(json.loads(row[3]))
+                roles.append(
+                    Role(
+                        role_id=row[0],
+                        name=row[1],
+                        description=row[2],
+                        permissions=permissions,
+                        is_active=bool(row[4]),
+                        created_at=datetime.fromisoformat(row[5]) if row[5] else None,
+                    )
+                )
 
         return roles
 
@@ -592,7 +627,8 @@ class PermissionManager:
             )
 
             if row:
-                permissions = set(json.loads(row[0]))
+                perms_data = row.get("permissions") if isinstance(row, dict) else row[0]
+                permissions = set(json.loads(perms_data))
                 return permission in permissions
 
             return False
@@ -627,7 +663,8 @@ class PermissionManager:
             )
 
             if row:
-                return set(json.loads(row[0]))
+                perms_data = row.get("permissions") if isinstance(row, dict) else row[0]
+                return set(json.loads(perms_data))
 
             return set()
 

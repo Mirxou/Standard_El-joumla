@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -6,6 +5,7 @@ Delta Sync Service
 خدمة المزامنة الجزئية - مزامنة فقط البيانات المتغيرة
 """
 
+import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -45,7 +45,7 @@ class DeltaSyncService:
                 # إذا لم تكن هناك مزامنة سابقة، إرجاع جميع العناصر
                 since = datetime.fromtimestamp(0)
 
-        query = """
+        query = f"""
             SELECT * FROM {table_name}
             WHERE (updated_at > ? OR created_at > ?) AND is_deleted = 0
             ORDER BY updated_at ASC, created_at ASC
@@ -100,12 +100,12 @@ class DeltaSyncService:
             عدد العناصر المعلقة
         """
         if table_name:
-            query = """
+            query = f"""
                 SELECT COUNT(*) as count FROM {table_name}
                 WHERE is_synced = 0 AND is_deleted = 0
             """
             results = self.local_db.execute_query(query)
-            return results[0]["count"] if results else 0
+            return results[0].get("count", results[0].get("COUNT(*)", 0)) if results else 0
         else:
             # إجمالي من جميع الجداول
             tables = [

@@ -406,9 +406,11 @@ class ErrorRecoveryService:
             self.logger.debug("فحص سلامة قاعدة البيانات...")
             result = self.db.fetch_one("PRAGMA integrity_check")
 
-            if result and result[0] != "ok":
-                self.logger.warning(f"مشكلة في السلامة: {result}")
-                return False
+            if result:
+                integrity_val = result.get("integrity_check") if isinstance(result, dict) else (result[0] if result else None)
+                if integrity_val != "ok":
+                    self.logger.warning(f"مشكلة في السلامة: {result}")
+                    return False
 
             # 2. VACUUM لتحسين الأداء
             self.logger.debug("تنفيذ VACUUM...")

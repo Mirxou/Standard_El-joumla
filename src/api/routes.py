@@ -39,6 +39,7 @@ from src.models.sale import PaymentMethod, Sale, SaleItem, SaleManager, SaleStat
 from src.models.supplier import SupplierManager
 from src.models.user import UserManager
 from src.models.warehouse import WarehouseManager
+from src.services.inventory_service import InventoryService
 from src.utils.logger import setup_logger
 
 # Router

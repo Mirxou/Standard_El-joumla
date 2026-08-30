@@ -107,17 +107,29 @@ class SupplierManagementDialog(BaseDialog):
 
             self.suppliers = []
             for row in results:
-                supp_id, name, phone, email, contact_person, is_active = row
-                self.suppliers.append(
-                    {
-                        "id": supp_id,
-                        "name": name,
-                        "phone": phone or "",
-                        "email": email or "",
-                        "contact_person": contact_person or "",
-                        "is_active": is_active,
-                    }
-                )
+                if isinstance(row, dict):
+                    self.suppliers.append(
+                        {
+                            "id": row.get("id"),
+                            "name": row.get("name", ""),
+                            "phone": row.get("phone", "") or "",
+                            "email": row.get("email", "") or "",
+                            "contact_person": row.get("contact_person", "") or "",
+                            "is_active": row.get("is_active"),
+                        }
+                    )
+                else:
+                    supp_id, name, phone, email, contact_person, is_active = row
+                    self.suppliers.append(
+                        {
+                            "id": supp_id,
+                            "name": name,
+                            "phone": phone or "",
+                            "email": email or "",
+                            "contact_person": contact_person or "",
+                            "is_active": is_active,
+                        }
+                    )
 
             self.display_suppliers(self.suppliers)
         except Exception as e:
@@ -205,7 +217,7 @@ class SupplierManagementDialog(BaseDialog):
             count_result = self.db_manager.fetch_one(
                 "SELECT COUNT(*) FROM products WHERE supplier_id = ?", (supplier_id,)
             )
-            count = count_result[0] if count_result else 0
+            count = (count_result.get("COUNT(*)", count_result.get("count", 0)) if isinstance(count_result, dict) else (count_result[0] if count_result else 0))
 
             if count > 0:
                 self.notify.show_warning("تحذير", f"لا يمكن حذف هذا المورد. هناك {count} منتج مرتبط به.")

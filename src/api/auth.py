@@ -407,11 +407,28 @@ class JWTAuthManager:
             if not user:
                 return None
 
-            user_id, username, full_name, role_id, is_active, company_id = user
+            # التعامل مع النتيجة (قد تكون dict أو tuple)
+            if isinstance(user, dict):
+                user_id = user.get("id")
+                db_username = user.get("username")
+                full_name = user.get("full_name")
+                role_id = user.get("role_id")
+                is_active = user.get("is_active")
+                company_id = user.get("company_id", None)
+            else:
+                # إذا كانت tuple، نتعامل معها حسب عدد الأعمدة
+                if len(user) >= 6:
+                    user_id, db_username, full_name, role_id, is_active, company_id = user[:6]
+                elif len(user) >= 5:
+                    user_id, db_username, full_name, role_id, is_active = user[:5]
+                    company_id = None
+                else:
+                    self.logger.error(f"نتيجة غير متوقعة من قاعدة البيانات: {user}")
+                    return None
 
             return {
                 "user_id": user_id,
-                "username": username,
+                "username": db_username or "",
                 "full_name": full_name,
                 "role_id": role_id,
                 "company_id": company_id,

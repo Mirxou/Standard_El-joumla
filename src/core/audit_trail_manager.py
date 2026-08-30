@@ -518,15 +518,15 @@ class AuditTrailManager:
         for row in rows:
             summaries.append(
                 {
-                    "user_id": row[0],
-                    "date": row[1],
-                    "total_actions": row[2],
-                    "creates": row[3],
-                    "updates": row[4],
-                    "deletes": row[5],
-                    "views": row[6],
-                    "failed_attempts": row[7],
-                    "last_activity": row[8],
+                    "user_id": row.get("user_id"),
+                    "date": row.get("date"),
+                    "total_actions": row.get("total_actions", 0),
+                    "creates": row.get("creates", 0),
+                    "updates": row.get("updates", 0),
+                    "deletes": row.get("deletes", 0),
+                    "views": row.get("views", 0),
+                    "failed_attempts": row.get("failed_attempts", 0),
+                    "last_activity": row.get("last_activity"),
                 }
             )
 
@@ -556,31 +556,31 @@ class AuditTrailManager:
             logger.log(logging.ERROR, f"Failed to cleanup old records: {str(e)}")
             return 0
 
-    def _rows_to_entries(self, rows: List[tuple]) -> List[AuditEntry]:
+    def _rows_to_entries(self, rows) -> List[AuditEntry]:
         """تحويل صفوف قاعدة البيانات إلى كائنات AuditEntry"""
         entries = []
 
         for row in rows:
-            old_values = json.loads(row[6]) if row[6] else {}
-            new_values = json.loads(row[7]) if row[7] else {}
-            changes = json.loads(row[8]) if row[8] else {}
+            old_values = json.loads(row.get("old_values")) if row.get("old_values") else {}
+            new_values = json.loads(row.get("new_values")) if row.get("new_values") else {}
+            changes = json.loads(row.get("changes")) if row.get("changes") else {}
 
             entries.append(
                 AuditEntry(
-                    audit_id=row[0],
-                    user_id=row[1],
-                    username=row[2],
-                    action=row[3],
-                    entity_type=row[4],
-                    entity_id=row[5],
+                    audit_id=row.get("audit_id"),
+                    user_id=row.get("user_id"),
+                    username=row.get("username", ""),
+                    action=row.get("action", ""),
+                    entity_type=row.get("entity_type", ""),
+                    entity_id=row.get("entity_id"),
                     old_values=old_values,
                     new_values=new_values,
                     changes=changes,
-                    ip_address=row[9],
-                    user_agent=row[10],
-                    timestamp=datetime.fromisoformat(row[11]) if row[11] else None,
-                    success=bool(row[12]),
-                    error_message=row[13] or "",
+                    ip_address=row.get("ip_address"),
+                    user_agent=row.get("user_agent"),
+                    timestamp=datetime.fromisoformat(row["timestamp"]) if row.get("timestamp") else None,
+                    success=bool(row.get("success", 1)),
+                    error_message=row.get("error_message") or "",
                 )
             )
 

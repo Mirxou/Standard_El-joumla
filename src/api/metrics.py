@@ -1,10 +1,11 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Prometheus Metrics for API
 مقاييس Prometheus للـ API
 """
+
+import logging
 
 
 logger = logging.getLogger(__name__)

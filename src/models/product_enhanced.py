@@ -524,19 +524,34 @@ class ProductVariantManager:
             results = self.db_manager.fetch_all(query, (product_id,))
             variants = []
             for row in results:
+                if not row:
+                    continue
+                is_d = isinstance(row, dict)
+
+                def gv(k, i, d=None):
+                    if is_d:
+                        return row.get(k, d)
+                    return row[i] if len(row) > i else d
+
+                attr_raw = gv("attributes", 3, None)
+                try:
+                    attributes = json.loads(attr_raw) if attr_raw else {}
+                except Exception:
+                    attributes = {}
+
                 variant = ProductVariant(
-                    id=row[0],
-                    product_id=row[1],
-                    sku=row[2],
-                    attributes=json.loads(row[3]) if row[3] else {},
-                    cost_price=Decimal(str(row[4])),
-                    selling_price=Decimal(str(row[5])),
-                    stock_quantity=row[6],
-                    barcode=row[7],
-                    image_path=row[8],
-                    is_active=bool(row[9]),
-                    created_at=datetime.fromisoformat(row[10]) if row[10] else None,
-                    updated_at=datetime.fromisoformat(row[11]) if row[11] else None,
+                    id=gv("id", 0),
+                    product_id=gv("product_id", 1),
+                    sku=gv("sku", 2, ""),
+                    attributes=attributes,
+                    cost_price=Decimal(str(gv("cost_price", 4, 0))),
+                    selling_price=Decimal(str(gv("selling_price", 5, 0))),
+                    stock_quantity=gv("stock_quantity", 6, 0),
+                    barcode=gv("barcode", 7),
+                    image_path=gv("image_path", 8),
+                    is_active=bool(gv("is_active", 9, 1)),
+                    created_at=datetime.fromisoformat(gv("created_at", 10)) if gv("created_at", 10) else None,
+                    updated_at=datetime.fromisoformat(gv("updated_at", 11)) if gv("updated_at", 11) else None,
                 )
                 variants.append(variant)
 

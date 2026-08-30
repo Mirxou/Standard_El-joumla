@@ -1,6 +1,6 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
 """
 Database Lock Handler - معالج قفل قاعدة البيانات
 معالجة أخطاء القفل وإعادة المحاولة

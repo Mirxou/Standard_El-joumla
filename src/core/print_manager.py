@@ -712,20 +712,20 @@ table td {
         row = self.db.fetch_one("SELECT * FROM print_templates WHERE template_id = ?", (template_id,))
 
         if row:
-            margins = json.loads(row[7]) if row[7] else {}
+            margins = json.loads(row.get("margins", "{}")) if row.get("margins") else {}
             return PrintTemplate(
-                template_id=row[0],
-                name=row[1],
-                template_type=row[2],
-                html_content=row[3],
-                css_content=row[4],
-                paper_size=row[5],
-                orientation=row[6],
+                template_id=row.get("template_id"),
+                name=row.get("name", ""),
+                template_type=row.get("template_type", ""),
+                html_content=row.get("html_content", ""),
+                css_content=row.get("css_content", ""),
+                paper_size=row.get("paper_size", "A4"),
+                orientation=row.get("orientation", "portrait"),
                 margins=margins,
-                header_html=row[8],
-                footer_html=row[9],
-                is_default=bool(row[10]),
-                created_at=datetime.fromisoformat(row[11]) if row[11] else None,
+                header_html=row.get("header_html"),
+                footer_html=row.get("footer_html"),
+                is_default=bool(row.get("is_default", 0)),
+                created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None,
             )
         return None
 
@@ -734,20 +734,20 @@ table td {
         row = self.db.fetch_one("SELECT * FROM print_templates WHERE name = ?", (name,))
 
         if row:
-            margins = json.loads(row[7]) if row[7] else {}
+            margins = json.loads(row.get("margins", "{}")) if row.get("margins") else {}
             return PrintTemplate(
-                template_id=row[0],
-                name=row[1],
-                template_type=row[2],
-                html_content=row[3],
-                css_content=row[4],
-                paper_size=row[5],
-                orientation=row[6],
+                template_id=row.get("template_id"),
+                name=row.get("name", ""),
+                template_type=row.get("template_type", ""),
+                html_content=row.get("html_content", ""),
+                css_content=row.get("css_content", ""),
+                paper_size=row.get("paper_size", "A4"),
+                orientation=row.get("orientation", "portrait"),
                 margins=margins,
-                header_html=row[8],
-                footer_html=row[9],
-                is_default=bool(row[10]),
-                created_at=datetime.fromisoformat(row[11]) if row[11] else None,
+                header_html=row.get("header_html"),
+                footer_html=row.get("footer_html"),
+                is_default=bool(row.get("is_default", 0)),
+                created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None,
             )
         return None
 
@@ -759,20 +759,20 @@ table td {
         )
 
         if row:
-            margins = json.loads(row[7]) if row[7] else {}
+            margins = json.loads(row.get("margins", "{}")) if row.get("margins") else {}
             return PrintTemplate(
-                template_id=row[0],
-                name=row[1],
-                template_type=row[2],
-                html_content=row[3],
-                css_content=row[4],
-                paper_size=row[5],
-                orientation=row[6],
+                template_id=row.get("template_id"),
+                name=row.get("name", ""),
+                template_type=row.get("template_type", ""),
+                html_content=row.get("html_content", ""),
+                css_content=row.get("css_content", ""),
+                paper_size=row.get("paper_size", "A4"),
+                orientation=row.get("orientation", "portrait"),
                 margins=margins,
-                header_html=row[8],
-                footer_html=row[9],
-                is_default=bool(row[10]),
-                created_at=datetime.fromisoformat(row[11]) if row[11] else None,
+                header_html=row.get("header_html"),
+                footer_html=row.get("footer_html"),
+                is_default=bool(row.get("is_default", 0)),
+                created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None,
             )
         return None
 
@@ -787,21 +787,21 @@ table td {
 
         templates = []
         for row in rows:
-            margins = json.loads(row[7]) if row[7] else {}
+            margins = json.loads(row.get("margins", "{}")) if row.get("margins") else {}
             templates.append(
                 PrintTemplate(
-                    template_id=row[0],
-                    name=row[1],
-                    template_type=row[2],
-                    html_content=row[3],
-                    css_content=row[4],
-                    paper_size=row[5],
-                    orientation=row[6],
+                    template_id=row.get("template_id"),
+                    name=row.get("name", ""),
+                    template_type=row.get("template_type", ""),
+                    html_content=row.get("html_content", ""),
+                    css_content=row.get("css_content", ""),
+                    paper_size=row.get("paper_size", "A4"),
+                    orientation=row.get("orientation", "portrait"),
                     margins=margins,
-                    header_html=row[8],
-                    footer_html=row[9],
-                    is_default=bool(row[10]),
-                    created_at=datetime.fromisoformat(row[11]) if row[11] else None,
+                    header_html=row.get("header_html"),
+                    footer_html=row.get("footer_html"),
+                    is_default=bool(row.get("is_default", 0)),
+                    created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None,
                 )
             )
 

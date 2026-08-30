@@ -129,13 +129,22 @@ class SupplierFormDialog(BaseDialog):
             result = self.db_manager.fetch_one(query, (self.supplier_id,))
 
             if result:
-                self.name_input.setText(result[0])
-                self.phone_input.setText(result[1] or "")
-                self.phone2_input.setText(result[2] or "")
-                self.email_input.setText(result[3] or "")
-                self.contact_input.setText(result[4] or "")
-                self.address_input.setText(result[5] or "")
-                self.active_checkbox.setChecked(bool(result[6]))
+                if isinstance(result, dict):
+                    self.name_input.setText(result.get("name") or "")
+                    self.phone_input.setText(result.get("phone") or "")
+                    self.phone2_input.setText(result.get("phone2") or "")
+                    self.email_input.setText(result.get("email") or "")
+                    self.contact_input.setText(result.get("contact_person") or "")
+                    self.address_input.setText(result.get("address") or "")
+                    self.active_checkbox.setChecked(bool(result.get("is_active")))
+                else:
+                    self.name_input.setText(result[0])
+                    self.phone_input.setText(result[1] or "")
+                    self.phone2_input.setText(result[2] or "")
+                    self.email_input.setText(result[3] or "")
+                    self.contact_input.setText(result[4] or "")
+                    self.address_input.setText(result[5] or "")
+                    self.active_checkbox.setChecked(bool(result[6]))
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في تحميل المورد: {str(e)}")

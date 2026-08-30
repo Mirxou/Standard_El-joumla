@@ -24,6 +24,15 @@ from src.ui.widgets.base_dialog import BaseDialog
 from src.ui.widgets.quantum_notification import NotificationManager
 
 
+def _count_val(r):
+    """Helper to safely extract a scalar from fetch_one result (dict or tuple)."""
+    if r is None:
+        return 0
+    if isinstance(r, dict):
+        return r.get("COUNT(*)", r.get("count", r.get("COALESCE(SUM(COALESCE(current_balance, 0)), 0)", 0)))
+    return (r[0] if r else 0) or 0
+
+
 class ContactsReportDialog(BaseDialog):
     """نافذة تقارير العملاء والموردين"""
 
@@ -183,8 +192,8 @@ class ContactsReportDialog(BaseDialog):
         """توليد تقرير العملاء"""
         try:
             # احسب الإحصائيات
-            total = self.db_manager.fetch_one("SELECT COUNT(*) FROM customers")[0] or 0
-            active = self.db_manager.fetch_one("SELECT COUNT(*) FROM customers WHERE is_active = 1")[0] or 0
+            total = _count_val(self.db_manager.fetch_one("SELECT COUNT(*) FROM customers"))
+            active = _count_val(self.db_manager.fetch_one("SELECT COUNT(*) FROM customers WHERE is_active = 1"))
 
             # الأعلى رصيد مستحق - تحقق من وجود العمود أولاً
             try:
@@ -278,8 +287,8 @@ class ContactsReportDialog(BaseDialog):
         """توليد تقرير الموردين"""
         try:
             # احسب الإحصائيات
-            total = self.db_manager.fetch_one("SELECT COUNT(*) FROM suppliers")[0] or 0
-            active = self.db_manager.fetch_one("SELECT COUNT(*) FROM suppliers WHERE is_active = 1")[0] or 0
+            total = _count_val(self.db_manager.fetch_one("SELECT COUNT(*) FROM suppliers"))
+            active = _count_val(self.db_manager.fetch_one("SELECT COUNT(*) FROM suppliers WHERE is_active = 1"))
 
             # الموردين الأكثر عمليات (لا يوجد عمود current_balance في جدول suppliers)
             try:
@@ -351,23 +360,22 @@ class ContactsReportDialog(BaseDialog):
         """توليد تقرير المقارنة بين العملاء والموردين"""
         try:
             # إحصائيات العملاء
-            customers_total = self.db_manager.fetch_one("SELECT COUNT(*) FROM customers")[0] or 0
-            customers_active = self.db_manager.fetch_one("SELECT COUNT(*) FROM customers WHERE is_active = 1")[0] or 0  # noqa: F841,E501
+            customers_total = _count_val(self.db_manager.fetch_one("SELECT COUNT(*) FROM customers"))
+            customers_active = _count_val(self.db_manager.fetch_one("SELECT COUNT(*) FROM customers WHERE is_active = 1"))  # noqa: F841,E501
             customers_balance = (  # noqa: F841
-                self.db_manager.fetch_one("SELECT COALESCE(SUM(COALESCE(current_balance, 0)), 0) FROM customers")[0]
-                or 0
+                _count_val(self.db_manager.fetch_one("SELECT COALESCE(SUM(COALESCE(current_balance, 0)), 0) FROM customers"))
             )
 
             # إحصائيات الموردين
-            suppliers_total = self.db_manager.fetch_one("SELECT COUNT(*) FROM suppliers")[0] or 0
-            suppliers_active = self.db_manager.fetch_one("SELECT COUNT(*) FROM suppliers WHERE is_active = 1")[0] or 0  # noqa: F841,E501
+            suppliers_total = _count_val(self.db_manager.fetch_one("SELECT COUNT(*) FROM suppliers"))
+            suppliers_active = _count_val(self.db_manager.fetch_one("SELECT COUNT(*) FROM suppliers WHERE is_active = 1"))  # noqa: F841,E501
             # لا يوجد current_balance في جدول suppliers
             suppliers_balance = 0  # noqa: F841
 
             # إحصائيات المبيعات
             try:
-                sales_total = self.db_manager.fetch_one("SELECT COALESCE(SUM(total_amount), 0) FROM sales")[0] or 0
-                sales_count = self.db_manager.fetch_one("SELECT COUNT(*) FROM sales")[0] or 0  # noqa: F841
+                sales_total = _count_val(self.db_manager.fetch_one("SELECT COALESCE(SUM(total_amount), 0) FROM sales"))
+                sales_count = _count_val(self.db_manager.fetch_one("SELECT COUNT(*) FROM sales"))  # noqa: F841
             except Exception:
                 sales_total = 0
                 sales_count = 0
@@ -375,9 +383,9 @@ class ContactsReportDialog(BaseDialog):
             # إحصائيات الشراء
             try:
                 purchases_total = (
-                    self.db_manager.fetch_one("SELECT COALESCE(SUM(total_amount), 0) FROM purchases")[0] or 0
+                    _count_val(self.db_manager.fetch_one("SELECT COALESCE(SUM(total_amount), 0) FROM purchases"))
                 )
-                purchases_count = self.db_manager.fetch_one("SELECT COUNT(*) FROM purchases")[0] or 0  # noqa: F841
+                purchases_count = _count_val(self.db_manager.fetch_one("SELECT COUNT(*) FROM purchases"))  # noqa: F841
             except Exception:
                 purchases_total = 0
                 purchases_count = 0

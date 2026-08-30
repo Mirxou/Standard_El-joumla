@@ -982,18 +982,16 @@ class PurchaseManager:
     def _update_purchase_item(self, item: PurchaseItem):
         query = """
         UPDATE purchase_items SET
-            quantity = ?, unit_cost = ?, total_cost = ?,
             quantity_ordered = ?, quantity_received = ?,
+            unit_cost = ?,
             discount_percent = ?, discount_amount = ?, tax_percent = ?, tax_amount = ?,
             total_amount = ?, expiry_date = ?, batch_number = ?, notes = ?
         WHERE id = ?
         """
         params = (
             float(item.quantity_ordered),
-            float(item.unit_cost),
-            float(item.total_amount),
-            float(item.quantity_ordered),
             float(item.quantity_received),
+            float(item.unit_cost),
             float(item.discount_percent),
             float(item.discount_amount),
             float(item.tax_percent),

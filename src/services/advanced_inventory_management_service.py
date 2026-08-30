@@ -499,10 +499,10 @@ class AdvancedInventoryManagementService:
             data = self.db.execute_query(query, params, fetch_one=True)
 
             valuation = {
-                "total_value": float(data[0] or 0) if data else 0,
-                "average_cost": float(data[1] or 0) if data else 0,
-                "product_count": data[2] or 0 if data else 0,
-                "total_quantity": data[3] or 0 if data else 0,
+                "total_value": float(data.get("total_value", 0) or 0) if data else 0,
+                "average_cost": float(data.get("avg_cost", 0) or 0) if data else 0,
+                "product_count": data.get("product_count", 0) or 0 if data else 0,
+                "total_quantity": data.get("total_quantity", 0) or 0 if data else 0,
                 "warehouse_id": warehouse_id,
                 "calculated_at": datetime.now().isoformat(),
             }
@@ -541,7 +541,7 @@ class AdvancedInventoryManagementService:
                 WHERE product_id = ? AND warehouse_id = ? AND batch_id = ? AND status = 'active'
             """
             data = self.db.execute_query(query, (product_id, warehouse_id, batch_id), fetch_one=True)
-            return data[0] if data else 0
+            return data.get("quantity", 0) if data else 0
 
         except Exception as e:
             self.logger.error(f"Error getting batch quantity: {e}", exc_info=True)
@@ -556,7 +556,7 @@ class AdvancedInventoryManagementService:
                 ORDER BY created_at DESC LIMIT 1
             """
             data = self.db.execute_query(query, (product_id, batch_id), fetch_one=True)
-            return Decimal(str(data[0])) if data else Decimal("0")
+            return Decimal(str(data.get("unit_cost", 0))) if data else Decimal("0")
 
         except Exception as e:
             self.logger.error(f"Error getting batch cost: {e}", exc_info=True)
@@ -931,10 +931,10 @@ class AdvancedInventoryManagementService:
             data = self.db.execute_query(query, params, fetch_one=True)
 
             summary = {
-                "total_products": data[0] or 0 if data else 0,
-                "total_quantity": data[1] or 0 if data else 0,
-                "active_items": data[2] or 0 if data else 0,
-                "damaged_items": data[3] or 0 if data else 0,
+                "total_products": data.get("total_products", 0) or 0 if data else 0,
+                "total_quantity": data.get("total_quantity", 0) or 0 if data else 0,
+                "active_items": data.get("active_items", 0) or 0 if data else 0,
+                "damaged_items": data.get("damaged_items", 0) or 0 if data else 0,
                 "total_value": valuation.get("total_value", 0),
                 "warehouse_id": warehouse_id,
             }

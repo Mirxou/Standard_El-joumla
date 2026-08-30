@@ -181,7 +181,9 @@ class TemplateEditorWindow(QMainWindow):
         try:
             result = self.db_manager.fetch_one("SELECT definition FROM document_templates WHERE id = ?", (template_id,))
             if result:
-                self.render_scene_from_json(result[0])
+                definition = result.get("definition") if isinstance(result, dict) else (result[0] if result else None)
+                if definition:
+                    self.render_scene_from_json(definition)
             else:
                 QMessageBox.warning(self, "خطأ", "لم يتم العثور على القالب المحدد.")
         except Exception as e:

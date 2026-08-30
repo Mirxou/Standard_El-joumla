@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -6,6 +5,7 @@ Sync Service
 خدمة المزامنة ثنائية الاتجاه مع Ultimate Sync Flow
 """
 
+import logging
 from datetime import datetime
 from typing import Any, Dict, Optional
 

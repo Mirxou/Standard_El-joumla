@@ -689,10 +689,10 @@ class ProductService:
             result = self.db_manager.fetch_one(query)
             if result:
                 return {
-                    "total_cost_value": Decimal(str(result[0] or 0)),
-                    "total_selling_value": Decimal(str(result[1] or 0)),
-                    "total_products": result[2] or 0,
-                    "potential_profit": Decimal(str(result[1] or 0)) - Decimal(str(result[0] or 0)),
+                    "total_cost_value": Decimal(str(result.get("total_cost_value", 0) or 0)),
+                    "total_selling_value": Decimal(str(result.get("total_selling_value", 0) or 0)),
+                    "total_products": result.get("total_products", 0) or 0,
+                    "potential_profit": Decimal(str(result.get("total_selling_value", 0) or 0)) - Decimal(str(result.get("total_cost_value", 0) or 0)),
                 }
 
         except Exception as e:
@@ -724,13 +724,13 @@ class ProductService:
             result = self.db_manager.fetch_one(query)
             if result:
                 return {
-                    "total_products": result[0] or 0,
-                    "active_products": result[1] or 0,
-                    "discontinued_products": result[2] or 0,
-                    "low_stock_count": result[3] or 0,
-                    "avg_stock": int(result[4] or 0),
-                    "min_stock_qty": result[5] or 0,
-                    "max_stock_qty": result[6] or 0,
+                    "total_products": result.get("total_products", 0) or 0,
+                    "active_products": result.get("active_products", 0) or 0,
+                    "discontinued_products": result.get("discontinued_products", 0) or 0,
+                    "low_stock_count": result.get("low_stock_count", 0) or 0,
+                    "avg_stock": int(result.get("avg_stock", 0) or 0),
+                    "min_stock_qty": result.get("min_stock_qty", 0) or 0,
+                    "max_stock_qty": result.get("max_stock_qty", 0) or 0,
                 }
 
         except Exception as e:

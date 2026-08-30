@@ -26,41 +26,41 @@ class AnimatedTableWidget(QTableWidget):
         header.setMinimumSectionSize(120)
         header.setDefaultSectionSize(150)
         header.setStretchLastSection(True)
-        header.setStyleSheet("""
-            QHeaderView::section {
-                background-color: C.BG_PRIMARY;
-                color: C.ACCENT_GOLD;
+        header.setStyleSheet(f"""
+            QHeaderView::section {{
+                background-color: {C.BG_PRIMARY};
+                color: {C.ACCENT_GOLD};
                 padding: 12px;
                 border: none;
-                border-bottom: 2px solid C.BORDER_SUBTLE;
+                border-bottom: 2px solid {C.BORDER_SUBTLE};
                 font-weight: bold;
                 text-transform: uppercase;
                 font-size: 13px;
-            }
+            }}
         """)
 
         # Table Styling (Base)
-        self.setStyleSheet("""
-            QTableWidget {
+        self.setStyleSheet(f"""
+            QTableWidget {{
                 background-color: transparent;
                 border: none;
                 gridline-color: transparent;
                 selection-background-color: rgba(200, 165, 78, 0.15);
-                selection-color: C.TEXT_PRIMARY;
-                color: C.TEXT_PRIMARY;
+                selection-color: {C.TEXT_PRIMARY};
+                color: {C.TEXT_PRIMARY};
                 font-size: 14px;
-            }
-            QTableWidget::item {
+            }}
+            QTableWidget::item {{
                 padding: 8px;
-                border-bottom: 1px solid C.BORDER_SUBTLE;
-            }
-            QTableWidget::item:hover {
+                border-bottom: 1px solid {C.BORDER_SUBTLE};
+            }}
+            QTableWidget::item:hover {{
                 background-color: rgba(200, 165, 78, 0.06);
-            }
-            QTableWidget::item:selected {
+            }}
+            QTableWidget::item:selected {{
                 background-color: rgba(200, 165, 78, 0.15);
-                border-left: 3px solid C.ACCENT_GOLD;
-            }
+                border-left: 3px solid {C.ACCENT_GOLD};
+            }}
         """)
 
     def enterEvent(self, event):

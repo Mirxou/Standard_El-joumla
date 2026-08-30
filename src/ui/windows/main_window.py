@@ -2265,13 +2265,17 @@ class MainWindow(QMainWindow):
                 self.dashboard_refresh_timer.stop()
 
     def _db_fetch_one(self, query, params=()):
-        """Helper: run a SELECT and return a single row tuple, or None."""
+        """Helper: run a SELECT and return a single row tuple, or None.
+        Always returns a tuple (or None) regardless of underlying fetch method."""
         try:
             if hasattr(self.db_manager, "connection") and self.db_manager.connection:
                 cursor = self.db_manager.connection.execute(query, params)
                 return cursor.fetchone()
             if hasattr(self.db_manager, "fetch_one"):
-                return self.db_manager.fetch_one(query, params)
+                result = self.db_manager.fetch_one(query, params)
+                if result and isinstance(result, dict):
+                    return tuple(result.values())
+                return result
         except Exception:
             pass
         return None
@@ -2359,8 +2363,12 @@ class MainWindow(QMainWindow):
                     profit_result = self.db_manager.execute_query(profit_query)
                 elif hasattr(self.db_manager, "fetch_all"):
                     profit_result = self.db_manager.fetch_all(profit_query)
-                if profit_result and profit_result[0]:
-                    total_profit = float(profit_result[0][0])
+                if profit_result and len(profit_result) > 0:
+                    first_row = profit_result[0]
+                    if isinstance(first_row, dict):
+                        total_profit = float(list(first_row.values())[0] or 0)
+                    else:
+                        total_profit = float(first_row[0] if first_row else 0)
                 else:
                     total_profit = 0.0
             except Exception:
@@ -2645,13 +2653,20 @@ class MainWindow(QMainWindow):
             """تحميل جميع بيانات الصفحة الرئيسية"""
             try:
                 sales_query = """
-                SELECT COALESCE(SUM(total_amount), 0), COUNT(*)
+                SELECT COALESCE(SUM(total_amount), 0) as total_sales, COUNT(*) as sales_count
                 FROM sales
                 WHERE DATE(sale_date) BETWEEN ? AND ? AND status = 'مكتمل'
                 """
                 sales_result = self.db_manager.fetch_one(sales_query, (start_date.isoformat(), end_date.isoformat()))
-                total_sales = float(sales_result[0] or 0) if sales_result else 0
-                sales_count = sales_result[1] or 0 if sales_result else 0
+                if sales_result and isinstance(sales_result, dict):
+                    total_sales = float(sales_result.get("total_sales", 0) or 0)
+                    sales_count = sales_result.get("sales_count", 0) or 0
+                elif sales_result:
+                    total_sales = float(sales_result[0] or 0)
+                    sales_count = sales_result[1] or 0
+                else:
+                    total_sales = 0
+                    sales_count = 0
 
                 # المقارنة مع الفترة السابقة
                 period_days = (end_date - start_date).days
@@ -2659,21 +2674,31 @@ class MainWindow(QMainWindow):
                 prev_sales_result = self.db_manager.fetch_one(
                     sales_query, (prev_start.isoformat(), start_date.isoformat())
                 )
-                prev_total_sales = float(prev_sales_result[0] or 0) if prev_sales_result else 0
+                if prev_sales_result and isinstance(prev_sales_result, dict):
+                    prev_total_sales = float(prev_sales_result.get("total_sales", 0) or 0)
+                elif prev_sales_result:
+                    prev_total_sales = float(prev_sales_result[0] or 0)
+                else:
+                    prev_total_sales = 0
                 sales_change = (
                     ((total_sales - prev_total_sales) / prev_total_sales * 100) if prev_total_sales > 0 else 0
                 )
 
                 # حساب الربح
                 profit_query = """
-                SELECT COALESCE(SUM(si.quantity * (si.unit_price - p.cost_price)), 0)
+                SELECT COALESCE(SUM(si.quantity * (si.unit_price - p.cost_price)), 0) as total_profit
                 FROM sale_items si
                 JOIN sales s ON si.sale_id = s.id
                 JOIN products p ON si.product_id = p.id
                 WHERE DATE(s.sale_date) BETWEEN ? AND ? AND s.status = 'مكتمل'
                 """
                 profit_result = self.db_manager.fetch_one(profit_query, (start_date.isoformat(), end_date.isoformat()))
-                total_profit = float(profit_result[0] or 0) if profit_result else 0
+                if profit_result and isinstance(profit_result, dict):
+                    total_profit = float(profit_result.get("total_profit", 0) or 0)
+                elif profit_result:
+                    total_profit = float(profit_result[0] or 0)
+                else:
+                    total_profit = 0
                 avg_order = total_sales / sales_count if sales_count > 0 else 0
 
                 # ملخص المخزون
@@ -2967,19 +2992,26 @@ class MainWindow(QMainWindow):
                     # الإحصائيات المتقدمة
                     period_days = (end_date - start_date).days or 1
                     sales_query = """
-                    SELECT COALESCE(SUM(total_amount), 0), COUNT(*)
+                    SELECT COALESCE(SUM(total_amount), 0) as total_sales, COUNT(*) as sales_count
                     FROM sales
                     WHERE DATE(sale_date) BETWEEN ? AND ? AND status = 'مكتمل'
                     """
                     sales_result = self.db_manager.fetch_one(
                         sales_query, (start_date.isoformat(), end_date.isoformat())
                     )
-                    total_sales = float(sales_result[0] or 0) if sales_result else 0
-                    sales_count = sales_result[1] or 0 if sales_result else 0
+                    if sales_result and isinstance(sales_result, dict):
+                        total_sales = float(sales_result.get("total_sales", 0) or 0)
+                        sales_count = sales_result.get("sales_count", 0) or 0
+                    elif sales_result:
+                        total_sales = float(sales_result[0] or 0)
+                        sales_count = sales_result[1] or 0
+                    else:
+                        total_sales = 0
+                        sales_count = 0
                     avg_daily = total_sales / period_days if period_days > 0 else 0
 
                     customers_query_stats = """
-                    SELECT COUNT(DISTINCT customer_id)
+                    SELECT COUNT(DISTINCT customer_id) as active_customers
                     FROM sales
                     WHERE DATE(sale_date) BETWEEN ? AND ? AND status = 'مكتمل'
                     """
@@ -2987,16 +3019,26 @@ class MainWindow(QMainWindow):
                         customers_query_stats,
                         (start_date.isoformat(), end_date.isoformat()),
                     )
-                    active_customers = customers_result[0] or 0 if customers_result else 0
+                    if customers_result and isinstance(customers_result, dict):
+                        active_customers = customers_result.get("active_customers", 0) or 0
+                    elif customers_result:
+                        active_customers = customers_result[0] or 0
+                    else:
+                        active_customers = 0
                     conversion_rate = (sales_count / active_customers * 100) if active_customers > 0 else 0
 
                     inventory_query = """
-                    SELECT COALESCE(SUM(current_stock * cost_price), 0)
+                    SELECT COALESCE(SUM(current_stock * cost_price), 0) as inventory_value
                     FROM products
                     WHERE is_active = 1
                     """
                     inventory_result = self.db_manager.fetch_one(inventory_query)
-                    inventory_value = float(inventory_result[0] or 0) if inventory_result else 0
+                    if inventory_result and isinstance(inventory_result, dict):
+                        inventory_value = float(inventory_result.get("inventory_value", 0) or 0)
+                    elif inventory_result:
+                        inventory_value = float(inventory_result[0] or 0)
+                    else:
+                        inventory_value = 0
                     turnover = (total_sales / inventory_value) if inventory_value > 0 else 0
 
                     return {
@@ -3045,32 +3087,49 @@ class MainWindow(QMainWindow):
         try:
             # إجمالي المبيعات
             sales_query = """
-            SELECT COALESCE(SUM(total_amount), 0), COUNT(*)
+            SELECT COALESCE(SUM(total_amount), 0) as total_sales, COUNT(*) as sales_count
             FROM sales
             WHERE DATE(sale_date) BETWEEN ? AND ? AND status = 'مكتمل'
             """
             sales_result = self.db_manager.fetch_one(sales_query, (start_date.isoformat(), end_date.isoformat()))
-            total_sales = float(sales_result[0] or 0) if sales_result else 0
-            sales_count = sales_result[1] or 0 if sales_result else 0
+            if sales_result and isinstance(sales_result, dict):
+                total_sales = float(sales_result.get("total_sales", 0) or 0)
+                sales_count = sales_result.get("sales_count", 0) or 0
+            elif sales_result:
+                total_sales = float(sales_result[0] or 0)
+                sales_count = sales_result[1] or 0
+            else:
+                total_sales = 0
+                sales_count = 0
 
             # المقارنة مع الفترة السابقة
             period_days = (end_date - start_date).days
             prev_start = start_date - timedelta(days=period_days)
             prev_sales_result = self.db_manager.fetch_one(sales_query, (prev_start.isoformat(), start_date.isoformat()))
-            prev_total_sales = float(prev_sales_result[0] or 0) if prev_sales_result else 0
+            if prev_sales_result and isinstance(prev_sales_result, dict):
+                prev_total_sales = float(prev_sales_result.get("total_sales", 0) or 0)
+            elif prev_sales_result:
+                prev_total_sales = float(prev_sales_result[0] or 0)
+            else:
+                prev_total_sales = 0
 
             sales_change = ((total_sales - prev_total_sales) / prev_total_sales * 100) if prev_total_sales > 0 else 0
 
             # حساب الربح
             profit_query = """
-            SELECT COALESCE(SUM(si.quantity * (si.unit_price - p.cost_price)), 0)
+            SELECT COALESCE(SUM(si.quantity * (si.unit_price - p.cost_price)), 0) as total_profit
             FROM sale_items si
             JOIN sales s ON si.sale_id = s.id
             JOIN products p ON si.product_id = p.id
             WHERE DATE(s.sale_date) BETWEEN ? AND ? AND s.status = 'مكتمل'
             """
             profit_result = self.db_manager.fetch_one(profit_query, (start_date.isoformat(), end_date.isoformat()))
-            total_profit = float(profit_result[0] or 0) if profit_result else 0
+            if profit_result and isinstance(profit_result, dict):
+                total_profit = float(profit_result.get("total_profit", 0) or 0)
+            elif profit_result:
+                total_profit = float(profit_result[0] or 0)
+            else:
+                total_profit = 0
 
             # متوسط قيمة الطلب
             avg_order = total_sales / sales_count if sales_count > 0 else 0
@@ -3741,8 +3800,12 @@ class MainWindow(QMainWindow):
                             expense_result = self.db_manager.execute_query(expense_query)
                         elif hasattr(self.db_manager, "fetch_all"):
                             expense_result = self.db_manager.fetch_all(expense_query)
-                        if expense_result and expense_result[0]:
-                            expense = float(expense_result[0][0])
+                        if expense_result and len(expense_result) > 0:
+                            first_row = expense_result[0]
+                            if isinstance(first_row, dict):
+                                expense = float(list(first_row.values())[0] or 0)
+                            else:
+                                expense = float(first_row[0] if first_row else 0)
                         else:
                             expense = 0.0
                     except Exception:
@@ -4207,9 +4270,9 @@ class MainWindow(QMainWindow):
                 "border: 1px solid #333333; "
                 "border-radius: 6px; "
                 "} "
-                f"QLabel { color: {Colors.TEXT_BRIGHT}; font-weight: 600; } "
-                f"QLineEdit, QComboBox { background-color: #111111; color: {Colors.TEXT_BRIGHT}; border: 1px solid #444444; border-radius: 4px; padding: 4px; } "  # noqa: E501
-                f"QPushButton { background-color: #2563eb; color: {Colors.TEXT_BRIGHT}; font-weight: bold; border-radius: 4px; } "
+                f"QLabel {{ color: {Colors.TEXT_BRIGHT}; font-weight: 600; }} "
+                f"QLineEdit, QComboBox {{ background-color: #111111; color: {Colors.TEXT_BRIGHT}; border: 1px solid #444444; border-radius: 4px; padding: 4px; }} "  # noqa: E501
+                f"QPushButton {{ background-color: #2563eb; color: {Colors.TEXT_BRIGHT}; font-weight: bold; border-radius: 4px; }} "
                 "QPushButton:hover { background-color: #1d4ed8; }"
             )
             filters_layout = QHBoxLayout(filters_frame)
@@ -4770,9 +4833,9 @@ class MainWindow(QMainWindow):
             "border: 1px solid #333333; "
             "border-radius: 6px; "
             "} "
-            f"QLabel { color: {Colors.TEXT_BRIGHT}; font-weight: 600; } "
-            f"QLineEdit, QComboBox { background-color: #111111; color: {Colors.TEXT_BRIGHT}; border: 1px solid #444444; border-radius: 4px; padding: 4px; } "  # noqa: E501
-            f"QPushButton { background-color: #2563eb; color: {Colors.TEXT_BRIGHT}; font-weight: bold; border-radius: 4px; } "
+            f"QLabel {{ color: {Colors.TEXT_BRIGHT}; font-weight: 600; }} "
+            f"QLineEdit, QComboBox {{ background-color: #111111; color: {Colors.TEXT_BRIGHT}; border: 1px solid #444444; border-radius: 4px; padding: 4px; }} "  # noqa: E501
+            f"QPushButton {{ background-color: #2563eb; color: {Colors.TEXT_BRIGHT}; font-weight: bold; border-radius: 4px; }} "
             "QPushButton:hover { background-color: #1d4ed8; }"
         )
         filters_layout = QHBoxLayout(filters_frame)

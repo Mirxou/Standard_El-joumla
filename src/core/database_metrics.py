@@ -156,9 +156,8 @@ class DatabaseMetrics:
                 }
 
             durations = [q["duration_ms"] for q in recent_queries]
-            [q for q in recent_queries if q["success"]]
+            successful = [q for q in recent_queries if q["success"]]
             errors = [q for q in recent_queries if not q["success"]]
-
             # حساب percentiles
             sorted_durations = sorted(durations)
             p95_index = int(len(sorted_durations) * 0.95)

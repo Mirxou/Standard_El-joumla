@@ -548,8 +548,9 @@ class PaymentService:
                 (c.credit_limit - c.current_balance) as available_credit,
                 (SELECT COUNT(*) FROM payments WHERE entity_id = c.id AND payment_type = 'customer_payment') as payments_count,
             (SELECT MAX(payment_date) FROM payments WHERE entity_id = c.id AND payment_type = 'customer_payment') as last_payment_date,
-            (SELECT COUNT(*) FROM payment_schedules
-             WHERE entity_id = c.id AND due_date < ? AND status != ?) as overdue_payments
+            (SELECT COUNT(*) FROM payment_schedules ps
+             JOIN payments p ON ps.payment_id = p.id
+             WHERE p.customer_id = c.id AND ps.due_date < ? AND ps.status != ?) as overdue_payments
             FROM customers c
             WHERE c.current_balance > 0 AND c.is_active = 1
             ORDER BY c.current_balance DESC
@@ -594,8 +595,9 @@ class PaymentService:
                 (s.credit_limit - s.current_balance) as available_credit,
                 (SELECT COUNT(*) FROM payments WHERE entity_id = s.id AND payment_type = 'supplier_payment') as payments_count,
             (SELECT MAX(payment_date) FROM payments WHERE entity_id = s.id AND payment_type = 'supplier_payment') as last_payment_date,
-            (SELECT COUNT(*) FROM payment_schedules
-             WHERE entity_id = s.id AND due_date < ? AND status != ?) as overdue_payments
+            (SELECT COUNT(*) FROM payment_schedules ps
+             JOIN payments p ON ps.payment_id = p.id
+             WHERE p.supplier_id = s.id AND ps.due_date < ? AND ps.status != ?) as overdue_payments
             FROM suppliers s
             WHERE s.current_balance > 0 AND s.is_active = 1
             ORDER BY s.current_balance DESC

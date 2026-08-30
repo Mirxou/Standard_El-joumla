@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -6,6 +5,7 @@ Prometheus Middleware for FastAPI
 Middleware لـ Prometheus Metrics
 """
 
+import logging
 import time
 from typing import Callable
 

@@ -41,8 +41,8 @@ class ChatBubble(QFrame):
 
         # Style
         if is_user:
-            container.setStyleSheet("""
-                background-color: C.ACCENT_AMBER_DARK;
+            container.setStyleSheet(f"""
+                background-color: {C.ACCENT_AMBER_DARK};
                 border-radius: 15px;
                 border-bottom-right-radius: 2px;
             """)
@@ -139,8 +139,8 @@ class SmartAssistantWidget(QWidget):
 
         send_btn = QPushButton("➤")
         send_btn.setFixedSize(35, 35)
-        send_btn.setStyleSheet("""
-            background-color: C.ACCENT_AMBER_DARK;
+        send_btn.setStyleSheet(f"""
+            background-color: {C.ACCENT_AMBER_DARK};
             color: white;
             border-radius: 17px;
             font-weight: bold;

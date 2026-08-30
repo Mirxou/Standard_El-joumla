@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -6,6 +5,7 @@ Product Repository
 Repository للمنتجات
 """
 
+import logging
 from typing import Any, Dict, List, Optional
 
 from src.core.local_database_manager import LocalDatabaseManager

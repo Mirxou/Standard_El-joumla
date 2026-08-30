@@ -57,7 +57,7 @@ class RoleBasedMorpher:
 
     def _apply_color_scheme(self, color):
         """تطبيق نظام الألوان"""
-        style = """
+        style = f"""
         QMainWindow {{
             background-color: {color}10;
         }}

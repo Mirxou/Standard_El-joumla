@@ -478,7 +478,7 @@ class PaymentPlanService:
             overdue_query,
             (InstallmentStatus.PENDING.name, InstallmentStatus.PARTIALLY_PAID.name),
         )
-        overdue_count = overdue_result[0][0] if overdue_result else 0
+        overdue_count = overdue_result[0].get("COUNT(*)", 0) if overdue_result else 0
 
         return {
             "by_status": by_status,

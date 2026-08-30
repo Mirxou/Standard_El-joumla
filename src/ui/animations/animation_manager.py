@@ -351,11 +351,11 @@ class AnimationManager(QObject):
 
             delay_timer.timeout.connect(_do_fade)
             # Store timer for cleanup
-            timer_id = f"stagger_timer_{i}_{id(widget)}"
+            timer_id = f"stagger_timer_{captured_idx}_{id(widget)}"
             self._pulse_timers[timer_id] = delay_timer
-            delay_timer.start(i * delay_ms)
+            delay_timer.start(captured_idx * delay_ms)
 
-            animation_ids.append(f"stagger_{i}_{id(widget)}")
+            animation_ids.append(f"stagger_{captured_idx}_{id(widget)}")
 
         return animation_ids
 

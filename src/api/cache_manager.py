@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -6,6 +5,7 @@ Redis Cache Manager for API
 مدير Redis Cache للـ API
 """
 
+import logging
 import json
 import os
 from functools import wraps

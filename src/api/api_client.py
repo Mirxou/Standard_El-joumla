@@ -1,10 +1,10 @@
-import logging
 #!/usr/bin/env python3
 """
 API Client للتطبيق - يدعم الوضع المحلي والسحابي
 Hybrid Mode: يعمل محليًا أو عبر API حسب توفر الاتصال
 """
 
+import logging
 import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
@@ -434,6 +434,7 @@ class HybridDataService:
         """
         self.db = db_manager
         self.api = api_client
+        self.logger = logging.getLogger(__name__)
 
     def get_products(self, page: int = 1, page_size: int = 50) -> List[Dict[str, Any]]:
         """

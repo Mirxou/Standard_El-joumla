@@ -1466,6 +1466,8 @@ class ReportsWindow(QMainWindow):
             pass
         return True
 
+    def export_report(self, export_format: ExportFormat):
+        """تصدير التقرير الحالي بالتنسيق المحدد"""
         try:
             # اختيار مسار الحفظ
             format_extensions = {

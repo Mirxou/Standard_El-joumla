@@ -531,8 +531,8 @@ class SalesDialog(BaseDialog):
         self.btn_pay_zero = QPushButton("✖️ صفر")
         self.btn_pay_zero.setMinimumHeight(36)
         self.btn_pay_zero.setCursor(Qt.PointingHandCursor)
-        self.btn_pay_zero.setStyleSheet("""
-            QPushButton {
+        self.btn_pay_zero.setStyleSheet(f"""
+            QPushButton {{
                 background: {C.ACCENT_CORAL};
                 color: {C.TEXT_INVERSE};
                 border: none;
@@ -540,8 +540,8 @@ class SalesDialog(BaseDialog):
                 font-weight: bold;
                 font-size: 12px;
                 padding: 6px;
-            }
-            QPushButton:hover { background: #dc2626; }
+            }}
+            QPushButton:hover {{ background: #dc2626; }}
         """)
         self.btn_pay_zero.clicked.connect(self._on_pay_zero)
 
@@ -647,8 +647,8 @@ class SalesDialog(BaseDialog):
         self.btn_cancel = QPushButton(self.i18n.get_message("cancel_button"))
         self.btn_cancel.setMinimumSize(120, 44)
         self.btn_cancel.setCursor(Qt.PointingHandCursor)
-        self.btn_cancel.setStyleSheet("""
-            QPushButton {
+        self.btn_cancel.setStyleSheet(f"""
+            QPushButton {{
                 background-color: #f1f5f9;
                 color: #475569;
                 border: 1px solid #cbd5e1;
@@ -657,14 +657,14 @@ class SalesDialog(BaseDialog):
                 font-weight: 700;
                 font-size: 14px;
                 min-height: 44px;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
                 background-color: {C.TEXT_PRIMARY};
                 color: {C.BG_DEEP};
-            }
-            QPushButton:pressed {
+            }}
+            QPushButton:pressed {{
                 background-color: #cbd5e1;
-            }
+            }}
         """)
 
         # زر إلغاء الفاتورة (يظهر فقط في وضع التعديل)
@@ -673,8 +673,8 @@ class SalesDialog(BaseDialog):
         self.btn_cancel_invoice.setMinimumSize(140, 44)
         self.btn_cancel_invoice.setCursor(Qt.PointingHandCursor)
         self.btn_cancel_invoice.setVisible(self.is_edit_mode)
-        self.btn_cancel_invoice.setStyleSheet("""
-            QPushButton#BtnDanger {
+        self.btn_cancel_invoice.setStyleSheet(f"""
+            QPushButton#BtnDanger {{
                 background-color: #fef2f2;
                 color: {C.ACCENT_CORAL};
                 border: 1px solid #fecaca;
@@ -683,8 +683,8 @@ class SalesDialog(BaseDialog):
                 font-weight: 700;
                 font-size: 14px;
                 min-height: 44px;
-            }
-            QPushButton#BtnDanger:hover { background-color: {C.ERROR_BG}; }
+            }}
+            QPushButton#BtnDanger:hover {{ background-color: {C.ERROR_BG}; }}
         """)
 
         # زر حفظ

@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -6,6 +5,7 @@ WebSocket Manager - مدير WebSockets
 إدارة الاتصالات WebSocket للـ Real-time Updates
 """
 
+import logging
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Optional, Set

@@ -25,11 +25,11 @@ class FormViewWrapper(QWidget):
 
         # --- 1. Top Header Bar (White/Light/Glass) ---
         self.header = QFrame()
-        self.header.setStyleSheet("""
-            QFrame {
-                background-color: C.BG_SURFACE; /* Dark Surface */
-                border-bottom: 1px solid C.BORDER_DEFAULT;
-            }
+        self.header.setStyleSheet(f"""
+            QFrame {{
+                background-color: {C.BG_SURFACE}; /* Dark Surface */
+                border-bottom: 1px solid {C.BORDER_DEFAULT};
+            }}
         """)
         self.header_layout = QVBoxLayout(self.header)
         self.header_layout.setContentsMargins(15, 10, 15, 10)
@@ -74,7 +74,7 @@ class FormViewWrapper(QWidget):
         self.content_layout.setContentsMargins(20, 20, 20, 20)
 
         # Background for content area
-        self.content_area.setStyleSheet("background-color: C.BG_PRIMARY;")
+        self.content_area.setStyleSheet(f"background-color: {C.BG_PRIMARY};")
         self.content_layout.addLayout(self.form_layout)
 
         self.main_layout.addWidget(self.content_area)
@@ -91,13 +91,13 @@ class FormViewWrapper(QWidget):
     def create_action_btn(self, text, variant="secondary"):
         btn = QPushButton(text)
         if variant == "primary":
-            bg = "C.ACCENT_GOLD"
-            fg = "C.BG_PRIMARY"
-            hover = "C.ACCENT_GOLD_LIGHT"
+            bg = C.ACCENT_GOLD
+            fg = C.BG_PRIMARY
+            hover = C.ACCENT_GOLD_LIGHT
         else:  # secondary
-            bg = "C.BG_RAISED"
-            fg = "C.TEXT_SECONDARY"
-            hover = "C.BG_HOVER"
+            bg = C.BG_RAISED
+            fg = C.TEXT_SECONDARY
+            hover = C.BG_HOVER
 
         btn.setStyleSheet(f"""
             QPushButton {{

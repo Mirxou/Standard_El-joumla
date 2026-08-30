@@ -40,7 +40,7 @@ class AppCard(QFrame):
         # Icon
         self.icon_lbl = QLabel(icon)
         self.icon_lbl.setAlignment(Qt.AlignCenter)
-        self.icon_lbl.setStyleSheet("""
+        self.icon_lbl.setStyleSheet(f"""
             color: {color};
             font-size: 48px;
             background: transparent;
@@ -104,7 +104,7 @@ class AppLauncher(QWidget):
             ("sales", "المبيعات", "💰", "#34d399"),
             ("inventory", "المخزون", "📦", "#f472b6"),
             ("purchases", "المشتريات", "🛒", "#a78bfa"),
-            ("payments", "الحسابات", "💳", "C.ACCENT_AMBER_LIGHT"),
+            ("payments", "الحسابات", "💳", C.ACCENT_AMBER_LIGHT),
             ("contacts", "الجهات", "👥", "#60a5fa"),
             ("reports", "التقارير", "📈", "#f87171"),
             ("settings", "الإعدادات", "⚙️", "#94a3b8"),

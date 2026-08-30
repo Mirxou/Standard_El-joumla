@@ -41,7 +41,7 @@ class FocusStyleManager:
         """
         color = FocusStyleManager.FOCUS_COLORS.get(color_name, FocusStyleManager.FOCUS_COLORS["default"])  # noqa: F841
 
-        return """
+        return f"""
             QPushButton:focus {{
                 outline: none;
                 border: {FocusStyleManager.FOCUS_WIDTH}px solid {color};
@@ -111,7 +111,7 @@ class FocusStyleManager:
         widget.setFocusPolicy(Qt.StrongFocus)
 
         # Install event filter for custom painting
-        widget.setStyleSheet("""
+        widget.setStyleSheet(f"""
             QWidget:focus {{
                 border: {FocusStyleManager.FOCUS_WIDTH}px solid {color};
             }}
@@ -171,18 +171,18 @@ class AccessibleColorScheme:
     SCHEMES = {
         "professional": {
             "name": "Professional",
-            "background": "C.TEXT_BRIGHT",
+            "background": C.TEXT_BRIGHT,
             "foreground": "#1F2937",  # 15.3:1 contrast
             "link": "#2563EB",
             "visited": "#7C3AED",
             "button_bg": "#1E3A5F",
-            "button_text": "C.TEXT_BRIGHT",  # 13.6:1 contrast
-            "input_bg": "C.TEXT_BRIGHT",
+            "button_text": C.TEXT_BRIGHT,  # 13.6:1 contrast
+            "input_bg": C.TEXT_BRIGHT,
             "input_border": "#D1D5DB",
             "input_focus_border": "#2563EB",
             "error": "#DC2626",
             "success": "#059669",
-            "warning": "C.ACCENT_AMBER_DARK",
+            "warning": C.ACCENT_AMBER_DARK,
         },
         "dark": {
             "name": "Dark Mode",
@@ -191,24 +191,24 @@ class AccessibleColorScheme:
             "link": "#60A5FA",
             "visited": "#A78BFA",
             "button_bg": "#3B82F6",
-            "button_text": "C.TEXT_BRIGHT",
+            "button_text": C.TEXT_BRIGHT,
             "input_bg": "#374151",
             "input_border": "#4B5563",
             "input_focus_border": "#60A5FA",
             "error": "#F87171",
             "success": "#34D399",
-            "warning": "C.ACCENT_AMBER_LIGHT",
+            "warning": C.ACCENT_AMBER_LIGHT,
         },
         "high_contrast": {
             "name": "High Contrast",
             "background": "#000000",
-            "foreground": "C.TEXT_BRIGHT",  # 21:1 contrast
+            "foreground": C.TEXT_BRIGHT,  # 21:1 contrast
             "link": "#00FFFF",
             "visited": "#FFFF00",
-            "button_bg": "C.TEXT_BRIGHT",
+            "button_bg": C.TEXT_BRIGHT,
             "button_text": "#000000",
             "input_bg": "#000000",
-            "input_border": "C.TEXT_BRIGHT",
+            "input_border": C.TEXT_BRIGHT,
             "input_focus_border": "#FFFF00",
             "error": "#FF0000",
             "success": "#00FF00",
@@ -224,9 +224,9 @@ class AccessibleColorScheme:
     @staticmethod
     def get_stylesheet(scheme_name="professional"):
         """Get complete stylesheet for scheme"""
-        AccessibleColorScheme.get_scheme(scheme_name)
+        scheme = AccessibleColorScheme.get_scheme(scheme_name)
 
-        return """
+        return f"""
             QWidget {{
                 background-color: {scheme['background']};
                 color: {scheme['foreground']};

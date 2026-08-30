@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -6,6 +5,7 @@ import logging
 إدارة سجلات التطبيق والأحداث
 """
 
+import logging
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path

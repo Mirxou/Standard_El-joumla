@@ -60,11 +60,13 @@ async def get_delta(
         # We can use a simpler approach: get column names first for the table.
         col_query = f"PRAGMA table_info({table})"
         col_info = db_manager.fetch_all(col_query)
-        col_names = [c[1] for c in col_info]  # index 1 is name
+        # fetch_all returns list of dicts, extract 'name' column
+        col_names = [c.get("name", c[1] if not isinstance(c, dict) else None) for c in col_info]
+        col_names = [c for c in col_names if c is not None]
 
         for row in rows:
-            # Map row values to column names
-            row_dict = dict(zip(col_names, row))
+            # fetch_all returns dicts already, no need to map
+            row_dict = row if isinstance(row, dict) else dict(zip(col_names, row))
             changes["items"].append({"table_name": table, "data": row_dict})
 
     return changes
@@ -89,7 +91,9 @@ async def push_changes(
     # Get column names for validation/construction
     col_query = f"PRAGMA table_info({table_name})"
     col_info = db_manager.fetch_all(col_query)
-    valid_columns = {c[1] for c in col_info}
+    # fetch_all returns list of dicts, extract 'name' column
+    valid_columns = {c.get("name", c[1] if not isinstance(c, dict) else None) for c in col_info}
+    valid_columns = {c for c in valid_columns if c is not None}
 
     acknowledged_ids = []
 

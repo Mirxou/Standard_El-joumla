@@ -39,35 +39,35 @@ class StatusBarStage(QWidget):
 
             # Styles mimicking Odoo's arrow shape via CSS is tricky without images/complex painter
             # We will use a clean modern pill/tab look instead for robustness
-            btn.setStyleSheet("""
-                QPushButton {
+            btn.setStyleSheet(f"""
+                QPushButton {{
                     padding: 5px 15px;
-                    border: 1px solid C.BORDER_DEFAULT;
-                    color: C.TEXT_SECONDARY;
-                    background-color: C.BG_RAISED;
+                    border: 1px solid {C.BORDER_DEFAULT};
+                    color: {C.TEXT_SECONDARY};
+                    background-color: {C.BG_RAISED};
                     font-weight: 600;
                     border-radius: 0px;
                     margin-left: -1px; /* collapse borders */
-                }
-                QPushButton:checked {
-                    background-color: C.ACCENT_GOLD;
-                    color: C.BG_PRIMARY;
-                    border-color: C.ACCENT_GOLD;
-                }
-                QPushButton:hover:!checked {
-                    background-color: C.BG_HOVER;
-                    color: C.TEXT_PRIMARY;
-                }
+                }}
+                QPushButton:checked {{
+                    background-color: {C.ACCENT_GOLD};
+                    color: {C.BG_PRIMARY};
+                    border-color: {C.ACCENT_GOLD};
+                }}
+                QPushButton:hover:!checked {{
+                    background-color: {C.BG_HOVER};
+                    color: {C.TEXT_PRIMARY};
+                }}
                 /* First Item Radius */
-                QPushButton:first-child {
+                QPushButton:first-child {{
                     border-top-left-radius: 15px;
                     border-bottom-left-radius: 15px;
-                }
+                }}
                 /* Last Item Radius */
-                QPushButton:last-child {
+                QPushButton:last-child {{
                     border-top-right-radius: 15px;
                     border-bottom-right-radius: 15px;
-                }
+                }}
             """)
 
             # Click logic (Change stage)

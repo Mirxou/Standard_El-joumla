@@ -103,9 +103,14 @@ class CategoryFormDialog(BaseDialog):
             result = self.db_manager.fetch_one(query, (self.category_id,))
 
             if result:
-                self.name_input.setText(result[0])
-                self.desc_input.setText(result[1] or "")
-                self.active_checkbox.setChecked(bool(result[2]))
+                if isinstance(result, dict):
+                    self.name_input.setText(result.get("name") or "")
+                    self.desc_input.setText(result.get("description") or "")
+                    self.active_checkbox.setChecked(bool(result.get("is_active")))
+                else:
+                    self.name_input.setText(result[0])
+                    self.desc_input.setText(result[1] or "")
+                    self.active_checkbox.setChecked(bool(result[2]))
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في تحميل الفئة: {str(e)}")

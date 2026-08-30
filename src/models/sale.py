@@ -1451,19 +1451,19 @@ class SaleManager:
         cursor.execute(query, params)
 
     def _update_sale_item(self, item: SaleItem):
+        # NOTE: discount و tax_amount غير موجودين في جدول sale_items
         query = """
         UPDATE sale_items SET
             quantity = ?, unit_price = ?,
-            total_price = ?, discount = ?,
-            tax_amount = ?
+            total_price = ?, cost_price = ?, profit = ?
         WHERE id = ?
         """
         params = (
             item.quantity,
             float(item.unit_price),
             float(item.total_price),
-            float(item.discount),
-            float(item.tax_amount),
+            float(item.cost_price),
+            float(item.profit),
             item.id,
         )
         self.db_manager.execute_non_query(query, params)

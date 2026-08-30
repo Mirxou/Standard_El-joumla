@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -6,6 +5,7 @@ Server Migration Manager
 مدير Migrations للخادم (Server-side)
 """
 
+import logging
 from pathlib import Path
 from typing import Any, Dict, List
 

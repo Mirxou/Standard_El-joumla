@@ -703,7 +703,7 @@ class NotificationWidget(QFrame):
 
         from src.ui.styles.design_tokens import C
         bg_color = colors.get(self.notification.type, C.BG_SURFACE)  # noqa: F841
-        self.setStyleSheet("""
+        self.setStyleSheet(f"""
             QFrame {{
                 background-color: {bg_color};
                 border-radius: 6px;

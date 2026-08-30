@@ -34,6 +34,7 @@ if os.name == 'nt':
     os.unlink = _patched_unlink
     if hasattr(os, 'remove'):
         os.remove = _patched_unlink
+import hashlib
 import hmac
 import pickle
 import random  # nosec B311

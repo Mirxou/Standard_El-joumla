@@ -554,7 +554,7 @@ class PurchaseOrderDialog(BaseDialog):
             product_combo = self.items_table.cellWidget(row, 0)
             for i in range(product_combo.count()):
                 data = product_combo.itemData(i)
-                if data and data[0] == item.product_id:
+                if data and data.get("id") == item.product_id:
                     product_combo.setCurrentIndex(i)
                     break
 
@@ -654,9 +654,9 @@ class PurchaseOrderDialog(BaseDialog):
             product_data = product_combo.currentData()
             if product_data:
                 item = PurchaseOrderItem(
-                    product_id=product_data[0],
-                    product_name=product_data[1],
-                    product_code=product_data[2],
+                    product_id=product_data.get("id"),
+                    product_name=product_data.get("name"),
+                    product_code=product_data.get("code"),
                     quantity_ordered=Decimal(str(self.items_table.cellWidget(row, 2).value())),
                     unit_price=Decimal(str(self.items_table.cellWidget(row, 3).value())),
                     discount_percent=Decimal(str(self.items_table.cellWidget(row, 4).value())),
@@ -675,18 +675,18 @@ class PurchaseOrderDialog(BaseDialog):
         for product_data in self.prefill_products:
             product_id = product_data.get("id")
             for product in self.products:
-                if product[0] == product_id:
+                if product.get("id") == product_id:
                     row = self.items_table.rowCount()
                     self.items_table.insertRow(row)
 
                     product_combo = QComboBox()
                     product_combo.addItem("-- اختر المنتج --", None)
                     for p in self.products:
-                        product_combo.addItem(f"{p[1]} ({p[2]})", p)
+                        product_combo.addItem(f"{p.get('name', '')} ({p.get('code', '')})", p)
 
                     for i in range(product_combo.count()):
                         data = product_combo.itemData(i)
-                        if data and data[0] == product_id:
+                        if data and data.get("id") == product_id:
                             product_combo.setCurrentIndex(i)
                             break
                     self.items_table.setCellWidget(row, 0, product_combo)

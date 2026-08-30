@@ -1,6 +1,6 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
 """
 Invoice Print Service - HTML Template Engine
 خدمة طباعة الفواتير باستخدام Jinja2 و HTML Templates

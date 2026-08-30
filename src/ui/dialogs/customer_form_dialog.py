@@ -132,7 +132,7 @@ class CustomerFormDialog(BaseDialog):
         try:
             # 🔥 التحقق من وجود عمود phone2 قبل استخدامه
             table_info = self.db_manager.fetch_all("PRAGMA table_info(customers)")
-            available_columns = [row[1] for row in table_info] if table_info else []
+            available_columns = [row.get("name", "") if isinstance(row, dict) else row[1] for row in table_info] if table_info else []
             has_phone2 = "phone2" in available_columns
 
             # بناء الاستعلام بناءً على الأعمدة المتاحة
@@ -150,13 +150,22 @@ class CustomerFormDialog(BaseDialog):
             result = self.db_manager.fetch_one(query, (self.customer_id,))
 
             if result:
-                self.name_input.setText(result[0] or "")
-                self.phone_input.setText(result[1] or "")
-                self.phone2_input.setText(result[2] or "" if has_phone2 else "")
-                self.email_input.setText(result[3] or "")
-                self.address_input.setText(result[4] or "")
-                self.credit_limit_input.setValue(float(result[5] or 0))
-                self.active_checkbox.setChecked(bool(result[6]))
+                if isinstance(result, dict):
+                    self.name_input.setText(result.get("name") or "")
+                    self.phone_input.setText(result.get("phone") or "")
+                    self.phone2_input.setText((result.get("phone2") or "") if has_phone2 else "")
+                    self.email_input.setText(result.get("email") or "")
+                    self.address_input.setText(result.get("address") or "")
+                    self.credit_limit_input.setValue(float(result.get("credit_limit") or 0))
+                    self.active_checkbox.setChecked(bool(result.get("is_active")))
+                else:
+                    self.name_input.setText(result[0] or "")
+                    self.phone_input.setText(result[1] or "")
+                    self.phone2_input.setText(result[2] or "" if has_phone2 else "")
+                    self.email_input.setText(result[3] or "")
+                    self.address_input.setText(result[4] or "")
+                    self.credit_limit_input.setValue(float(result[5] or 0))
+                    self.active_checkbox.setChecked(bool(result[6]))
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في تحميل العميل: {str(e)}")
@@ -188,7 +197,7 @@ class CustomerFormDialog(BaseDialog):
         try:
             # 🔥 التحقق من وجود عمود phone2 قبل استخدامه
             table_info = self.db_manager.fetch_all("PRAGMA table_info(customers)")
-            available_columns = [row[1] for row in table_info] if table_info else []
+            available_columns = [row.get("name", "") if isinstance(row, dict) else row[1] for row in table_info] if table_info else []
             has_phone2 = "phone2" in available_columns
 
             phone2_value = self.phone2_input.text().strip() if has_phone2 else None

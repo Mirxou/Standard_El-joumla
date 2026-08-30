@@ -36,6 +36,7 @@ class SyncStatusIndicator(QObject):
         self.hybrid_service = hybrid_service
         self.is_online = False
         self.pending_count = 0
+        self.is_syncing = False
         self.logger = setup_logger(__name__)
 
         # Timer لتحديث الحالة
@@ -199,8 +200,8 @@ class SyncStatusWidget(QLabel):
         self.setText(text)
 
         # تحديث اللون
-        self.sync_indicator.get_status_color()
-        self.setStyleSheet("""
+        color = self.sync_indicator.get_status_color()
+        self.setStyleSheet(f"""
             QLabel {{
                 padding: 2px 8px;
                 border-radius: 3px;

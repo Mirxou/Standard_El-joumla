@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QSplitter,
     QTableWidget,
     QTabWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )

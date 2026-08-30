@@ -1,6 +1,6 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
 """
 إدارة تشفير قاعدة البيانات - Database Encryption Manager
 استخدام SQLCipher لتشفير قاعدة البيانات المحلية

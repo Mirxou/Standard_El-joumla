@@ -622,12 +622,12 @@ class ReportExporter:
             gross_profit = self.db.execute_scalar(profit_query, tuple(date_params)) or 0
 
             sales_data = {
-                "total_sales": sales_result[0] or 0,
-                "sales_count": sales_result[1] or 0,
+                "total_sales": sales_result.get("total_sales", 0) or 0,
+                "sales_count": sales_result.get("sales_count", 0) or 0,
             }
             purchases_data = {
-                "total_purchases": purchases_result[0] or 0,
-                "purchases_count": purchases_result[1] or 0,
+                "total_purchases": purchases_result.get("total_purchases", 0) or 0,
+                "purchases_count": purchases_result.get("purchases_count", 0) or 0,
             }
 
             total_sales = sales_data["total_sales"]

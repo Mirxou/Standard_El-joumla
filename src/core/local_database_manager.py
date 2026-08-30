@@ -1261,7 +1261,33 @@ class LocalDatabaseManager:
         results = self.execute_query(query, params)
         return results[0] if results else None
 
-    # get_last_insert_id is already defined above — no duplicate
+    def get_last_insert_id(self) -> int:
+        """الحصول على آخر ID تم إدراجه - للتوافق مع DatabaseManager"""
+        if not self.connection:
+            raise DatabaseException("قاعدة البيانات غير مهيأة")
+        try:
+            cursor = self.connection.execute("SELECT last_insert_rowid()")
+            result = cursor.fetchone()
+            return result[0] if result else 0
+        except Exception as e:
+            self.logger.error(f"خطأ في الحصول على آخر ID: {str(e)}")
+            raise DatabaseException(f"خطأ في الحصول على آخر ID: {str(e)}")
+
+    def execute_insert(self, query: str, params: Tuple = ()) -> Optional[int]:
+        """
+        تنفيذ استعلام INSERT وإرجاع lastrowid.
+        للتوافق مع DatabaseManager.execute_insert().
+        """
+        if not self.connection:
+            raise DatabaseException("قاعدة البيانات غير مهيأة")
+        try:
+            cursor = self.connection.execute(query, params)
+            self.connection.commit()
+            lastrowid = cursor.lastrowid
+            return lastrowid if lastrowid is not None and lastrowid > 0 else None
+        except Exception as e:
+            self.logger.error(f"خطأ في تنفيذ INSERT: {query} - {str(e)}")
+            raise DatabaseException(f"خطأ في تنفيذ INSERT: {str(e)}")
 
     # ========== Compatibility Aliases ==========
     # هذه الدوال تضمن التوافق مع الخدمات التي تستدعي أسماء مختلفة
@@ -1280,8 +1306,6 @@ class LocalDatabaseManager:
         except Exception as e:
             self.logger.error(f"خطأ في تنفيذ الاستعلام: {query} - {str(e)}")
             raise DatabaseException(f"خطأ في تنفيذ الاستعلام: {str(e)}")
-
-    # execute_insert is already defined above — no duplicate
 
     def fetch_all(self, query: str, params: Tuple = ()) -> List[Dict[str, Any]]:
         """Alias لـ execute_query - للتوافق مع الخدمات القديمة"""

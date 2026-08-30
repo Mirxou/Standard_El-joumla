@@ -238,7 +238,7 @@ class DatabaseManager:
             if self.encrypted_backup_service is None:
                 backups_dir = str(self._backup_options.get("backup_dir", Path(self.db_path).parent / "backups"))
                 max_b = int(self._backup_options.get("max_backups", 30))
-                bool(self._backup_options.get("encrypted", True))
+                _encrypted = bool(self._backup_options.get("encrypted", True))
                 key_path = self._backup_options.get("encryption_key_path")
                 key_bytes = None
                 if key_path:
@@ -953,18 +953,19 @@ class DatabaseManager:
                 self._add_column_if_missing("products", column, definition)
 
             # تحديث القيم الافتراضية للصفوف الحالية لضمان الاتساق
+            # NOTE: Use conservative defaults — assume old sales have 0 paid (not full amount)
             self.connection.execute("""
                 UPDATE sales SET
                     status = COALESCE(status, 'مؤكدة'),
-                    paid_amount = COALESCE(paid_amount, total_amount),
-                    remaining_amount = COALESCE(remaining_amount, total_amount - COALESCE(paid_amount, total_amount))
+                    paid_amount = COALESCE(paid_amount, 0),
+                    remaining_amount = COALESCE(remaining_amount, total_amount)
             """)
             self.connection.execute("""
                 UPDATE purchases SET
                     status = COALESCE(status, 'معلقة'),
                     payment_status = COALESCE(payment_status, 'غير مدفوعة'),
                     paid_amount = COALESCE(paid_amount, 0),
-                    remaining_amount = COALESCE(remaining_amount, total_amount - COALESCE(paid_amount, 0))
+                    remaining_amount = COALESCE(remaining_amount, total_amount)
             """)
             self.connection.execute("""
                 UPDATE payments SET

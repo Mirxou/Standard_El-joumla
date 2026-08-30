@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -6,6 +5,7 @@ SQLite Backend Implementation
 تنفيذ DatabaseBackend لـ SQLite
 """
 
+import logging
 import sqlite3
 from contextlib import contextmanager
 from typing import Any, Dict, List, Optional, Tuple

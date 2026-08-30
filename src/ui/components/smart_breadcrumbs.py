@@ -18,31 +18,31 @@ class SmartBreadcrumbs(QWidget):
         self.layout.setSpacing(5)
 
         # Styles
-        self.setStyleSheet("""
-            QPushButton {
+        self.setStyleSheet(f"""
+            QPushButton {{
                 background: transparent;
                 border: none;
-                color: C.TEXT_MUTED;
+                color: {C.TEXT_MUTED};
                 font-size: 14px;
                 font-weight: 500;
-            }
-            QPushButton:hover {
-                color: C.ACCENT_GOLD_LIGHT;
+            }}
+            QPushButton:hover {{
+                color: {C.ACCENT_GOLD_LIGHT};
                 text-decoration: underline;
-            }
-            QLabel {
-                color: C.BORDER_DEFAULT;
+            }}
+            QLabel {{
+                color: {C.BORDER_DEFAULT};
                 font-weight: bold;
-            }
-            QPushButton#Active {
-                color: C.ACCENT_GOLD;
+            }}
+            QPushButton#Active {{
+                color: {C.ACCENT_GOLD};
                 font-weight: bold;
                 cursor: default;
-            }
-            QPushButton#Active:hover {
+            }}
+            QPushButton#Active:hover {{
                 text-decoration: none;
-                color: C.ACCENT_GOLD;
-            }
+                color: {C.ACCENT_GOLD};
+            }}
         """)
 
         self.set_path(["Home"])

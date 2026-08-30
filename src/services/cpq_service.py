@@ -246,7 +246,7 @@ class CPQService:
                 (str(year),),
             )
 
-            sequence = (result[0] if result else 0) + 1
+            sequence = (result.get("COUNT(*)", 0) if result else 0) + 1
 
             return f"Q{year}{sequence:04d}"
 

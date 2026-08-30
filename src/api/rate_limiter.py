@@ -180,7 +180,7 @@ class APIRateLimiter:
         with self._lock:
             if endpoint:
                 key = f"{identifier}:{endpoint}"
-                endpoint_requests = len(self._requests.get(key, []), timeout=10)
+                endpoint_requests = len(self._requests.get(key, []))
                 endpoints = {endpoint: endpoint_requests}
                 total_requests = endpoint_requests
             else:

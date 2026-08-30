@@ -703,9 +703,9 @@ class SalesPredictionService:
             data = self.db.execute_query(query, (product_id,), fetch_one=True)
 
             return {
-                "current_stock": data[0] if data else 0,
-                "min_stock": data[1] if data else 0,
-                "max_stock": data[2] if data else 0,
+                "current_stock": data.get("current_stock", 0) if data else 0,
+                "min_stock": data.get("min_stock", 0) if data else 0,
+                "max_stock": data.get("max_stock", 0) if data else 0,
                 "lead_time_days": 7,  # قيمة افتراضية، يمكن تخصيصها
             }
 

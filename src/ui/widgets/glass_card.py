@@ -120,7 +120,7 @@ class KPICard(GlassCard):
 
         # Value
         self.value_label = QLabel(self.value_text)
-        self.value_label.setStyleSheet("""
+        self.value_label.setStyleSheet(f"""
             font-size: 28px;
             font-weight: 800;
             color: {C.TEXT_BRIGHT};
@@ -137,7 +137,7 @@ class KPICard(GlassCard):
             trend_icon = "↑" if self.trend_positive else "↓"
 
             trend_label = QLabel(f"{trend_icon} {self.trend_text}")
-            trend_label.setStyleSheet("""
+            trend_label.setStyleSheet(f"""
                 font-size: 12px;
                 color: {trend_color};
                 font-weight: 600;

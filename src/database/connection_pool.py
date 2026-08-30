@@ -1,5 +1,10 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Connection Pool Manager
+مدير Connection Pool يدعم SQLite و PostgreSQL
+"""
+
 import logging
-# ... (Header remains)
 import sqlite3
 import threading
 import time

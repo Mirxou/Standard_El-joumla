@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -6,6 +5,7 @@ Base Repository - Repository Pattern
 الكلاس الأساسي لجميع Repositories
 """
 
+import logging
 from abc import ABC
 from typing import Any, Dict, List, Optional
 

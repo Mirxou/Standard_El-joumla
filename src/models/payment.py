@@ -256,10 +256,8 @@ class PaymentManager:
             available = {c[1] for c in cols_info}
             # Predefine value_map to avoid UnboundLocalError on partial failures
             value_map: Dict[str, Any] = {}
-            try:
-                print(f"[PaymentManager.create_payment] columns available: {sorted(list(available))[:6]} ...")
-            except Exception:
-                logging.getLogger(__name__).warning("Ignored exception in payment.py")
+            if self.logger:
+                self.logger.debug(f"columns available: {sorted(list(available))[:6]} ...")
 
             # Multi-Currency: حساب المبالغ
             base_amount = payment.base_amount if payment.base_amount is not None else payment.amount
@@ -380,10 +378,8 @@ class PaymentManager:
                 value_map["created_at"] = payment.created_at or now_iso
                 value_map["updated_at"] = payment.updated_at or now_iso
             except Exception as ve:
-                try:
-                    print(f"[PaymentManager.create_payment] value_map build error: {ve}")
-                except Exception:
-                    logging.getLogger(__name__).warning("Ignored exception in payment.py")
+                if self.logger:
+                    self.logger.warning(f"value_map build error: {ve}")
                 # Minimal fields to allow insert
                 value_map = {
                     "payment_number": payment.payment_number,
@@ -436,12 +432,8 @@ class PaymentManager:
                 cursor.execute(query, tuple(insert_vals))
                 conn.commit()
             except Exception as ex:
-                try:
-                    print(
-                        f"[PaymentManager.create_payment] execute error: {ex}\nQuery: {query}\nCols: {insert_cols}\nVals sample: {insert_vals[:6]}"  # noqa: E501
-                    )
-                except Exception:
-                    logging.getLogger(__name__).warning("Ignored exception in payment.py")
+                if self.logger:
+                    self.logger.error(f"execute error: {ex}\nQuery: {query}\nCols: {insert_cols}")
                 raise
             payment_id = cursor.lastrowid
             if not payment_id:
@@ -458,17 +450,11 @@ class PaymentManager:
                     row = cursor.fetchone()
                     if row:
                         payment_id = row[0]
-                        try:
-                            print(
-                                f"[PaymentManager.create_payment] Retrieved payment_id={payment_id} via payment_number lookup"  # noqa: E501
-                            )
-                        except Exception:
-                            logging.getLogger(__name__).warning("Ignored exception in payment.py")
+                        if self.logger:
+                            self.logger.debug(f"Retrieved payment_id={payment_id} via payment_number lookup")
                 except Exception as e:
-                    try:
-                        print(f"[PaymentManager.create_payment] payment_number lookup error: {e}")
-                    except Exception:
-                        logging.getLogger(__name__).warning("Ignored exception in payment.py")
+                    if self.logger:
+                        self.logger.warning(f"payment_number lookup error: {e}")
             if not payment_id:
                 # Direct max(id) fallback if column exists
                 try:
@@ -507,10 +493,7 @@ class PaymentManager:
                 # تسجيل الخطأ لكن عدم إيقاف العملية
                 if self.logger:
                     self.logger.warning(f"تحذير: فشل تحديث أرصدة الحسابات: {balance_err}")
-                try:
-                    print(f"[PaymentManager.create_payment] balance update failed: {balance_err}")
-                except Exception:
-                    logging.getLogger(__name__).warning("Ignored exception in payment.py")
+                pass  # logged above via self.logger.warning
 
             if self.logger:
                 self.logger.info(f"تم إنشاء دفعة جديدة برقم: {payment.payment_number} - ID: {payment_id}")
@@ -612,11 +595,11 @@ class PaymentManager:
         try:
             query = """
             SELECT * FROM payments
-            WHERE due_date < ? AND status != ?
+            WHERE due_date < ? AND status NOT IN (?, ?)
             ORDER BY due_date ASC
             """
             today = date.today().isoformat()
-            results = self.db_manager.fetch_all(query, (today, PaymentStatus.COMPLETED.value))
+            results = self.db_manager.fetch_all(query, (today, "completed", "مكتمل"))
             return [self._row_to_payment_dict(dict(row)) if isinstance(row, dict) else self._row_to_payment(row) for row in results]
 
         except Exception as e:

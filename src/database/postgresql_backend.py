@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -6,6 +5,7 @@ PostgreSQL Backend Implementation
 تنفيذ DatabaseBackend لـ PostgreSQL
 """
 
+import logging
 from contextlib import contextmanager
 from typing import Any, Dict, List, Optional, Tuple
 
