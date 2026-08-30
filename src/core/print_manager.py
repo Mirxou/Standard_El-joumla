@@ -807,12 +807,12 @@ table td {
 
         return templates
 
-    def render_template(self, template: PrintTemplate, data: Dict[str, Any]) -> str:
+    def render_template(self, template, data: Dict[str, Any]) -> str:
         """
         تصيير قالب مع البيانات
 
         Args:
-            template: القالب
+            template: القالب (PrintTemplate object or template_id int for backward compat)
             data: البيانات
 
         Returns:
@@ -821,21 +821,29 @@ table td {
         try:
             from jinja2 import Template
 
-            # تجميع HTML و CSS
-            full_html = """
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <style>
-    {template.css_content}
-    </style>
-</head>
-<body>
-    {template.html_content}
-</body>
-</html>
-"""
+            # Support both PrintTemplate objects and raw template_id ints (backward compat)
+            if isinstance(template, int):
+                template = self.get_template(template)
+                if not template:
+                    logger.log(logging.ERROR, f"Template not found for id: {template}")
+                    return ""
+
+            # Use string concatenation instead of f-string to avoid
+            # conflicts with Jinja2's {{ }} and {%% %%} syntax in template content.
+            full_html = (
+                "<!DOCTYPE html>\n"
+                "<html>\n"
+                "<head>\n"
+                "    <meta charset=\"UTF-8\">\n"
+                "    <style>\n"
+                + (template.css_content or "") + "\n"
+                "    </style>\n"
+                "</head>\n"
+                "<body>\n"
+                + (template.html_content or "") + "\n"
+                "</body>\n"
+                "</html>"
+            )
 
             # تصيير القالب
             jinja_template = Template(full_html)

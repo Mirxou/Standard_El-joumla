@@ -250,6 +250,23 @@ class SalesService:
             self.logger.warning(f"Error fetching sales by date range: {e}")
             return []
 
+    def update_sale(self, sale: Sale, user_id: Optional[int] = None) -> bool:
+        """تحديث فاتورة مبيعات موجودة مع إعادة حساب المخزون.
+
+        المعاملة ذرية: يتم إرجاع المخزون القديم ثم خصم الجديد.
+        """
+        try:
+            if not sale.id:
+                self.logger.warning("Cannot update sale without ID")
+                return False
+
+            sale.user_id = user_id
+            result = self.sale_manager.update_sale(sale)
+            return result
+        except Exception as e:
+            self.logger.error(f"Error in SalesService.update_sale: {e}")
+            return False
+
     def get_daily_sales_summary(self, target_date: Optional[date] = None) -> Dict[str, Any]:
         """ملخص مبيعات اليوم"""
         try:

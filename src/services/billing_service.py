@@ -94,20 +94,35 @@ class BillingService:
                     self.db.execute_query(q2, params2)
                 else:
                     raise
-            # تحديث حالة الفاتورة - تبسيط: اعتبار هذه الدفعة كافية إذا غطت مبلغ الفاتورة
+            # Update invoice status — handle partial payments properly
             try:
-                invoice_row = self.db.fetch_one("SELECT amount FROM invoices WHERE id = ?", (invoice_id,))
+                invoice_row = self.db.fetch_one("SELECT amount, paid_amount FROM invoices WHERE id = ?", (invoice_id,))
                 if invoice_row:
-                    invoice_amount = invoice_row.get("amount", invoice_row[0] if not isinstance(invoice_row, dict) else 0) or 0
-                else:
-                    invoice_amount = 0
-                if float(amount) >= float(invoice_amount):
-                    self.db.execute_query(
-                        "UPDATE invoices SET status = ?, paid_at = ? WHERE id = ?",
-                        ("paid", now, invoice_id),
-                    )
-                if self.logger:
-                    self.logger.info(f"تم تسجيل دفعة على الفاتورة {invoice_id} المبلغ: {amount}")
+                    invoice_amount = float(invoice_row.get("amount", invoice_row[0] if not isinstance(invoice_row, dict) else 0) or 0)
+                    current_paid = float(invoice_row.get("paid_amount", 0) or 0)
+                    new_paid = current_paid + float(amount)
+
+                    # Update paid_amount on the invoice
+                    try:
+                        self.db.execute_query(
+                            "UPDATE invoices SET paid_amount = ? WHERE id = ?",
+                            (new_paid, invoice_id),
+                        )
+                    except Exception:
+                        pass  # Column may not exist yet
+
+                    if new_paid >= invoice_amount:
+                        self.db.execute_query(
+                            "UPDATE invoices SET status = ?, paid_at = ? WHERE id = ?",
+                            ("paid", now, invoice_id),
+                        )
+                    elif new_paid > 0:
+                        self.db.execute_query(
+                            "UPDATE invoices SET status = ? WHERE id = ?",
+                            ("partially_paid", invoice_id),
+                        )
+                    if self.logger:
+                        self.logger.info(f"تم تسجيل دفعة على الفاتورة {invoice_id} المبلغ: {amount}")
             except Exception as e:
                 if self.logger:
                     self.logger.error(f"خطأ عند تحديث حالة الفاتورة بعد الدفع: {e}")

@@ -365,10 +365,16 @@ class CategoryManager:
         try:
             # التحقق من وجود فئات
             existing_count = self.db_manager.fetch_one("SELECT COUNT(*) FROM categories")
-            if existing_count and existing_count[0] > 0:
-                if self.logger:
-                    self.logger.info("توجد فئات بالفعل في قاعدة البيانات - تخطي إنشاء الفئات الافتراضية")
-                return True
+            # F3 FIX: handle both dict and tuple results safely
+            if existing_count:
+                if isinstance(existing_count, dict):
+                    count_val = existing_count.get("COUNT(*)", existing_count.get("count", 0))
+                else:
+                    count_val = existing_count[0] if len(existing_count) > 0 else 0
+                if count_val and count_val > 0:
+                    if self.logger:
+                        self.logger.info("توجد فئات بالفعل في قاعدة البيانات - تخطي إنشاء الفئات الافتراضية")
+                    return True
 
             # قائمة الفئات الافتراضية
             default_categories = [

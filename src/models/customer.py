@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -588,8 +587,36 @@ class CustomerManager:
             return False
 
     def delete_customer(self, customer_id: int) -> bool:
-        """حذف عميل (Soft Delete)"""
+        """حذف عميل (Soft Delete) — مع التحقق من السجلات المرتبطة"""
         try:
+            # التحقق من وجود عمليات بيع مرتبطة
+            try:
+                sales_row = self.db_manager.fetch_one(
+                    "SELECT COUNT(*) as cnt FROM sales WHERE customer_id = ?", (customer_id,)
+                )
+                if sales_row:
+                    sales_count = sales_row.get("cnt") if isinstance(sales_row, dict) else sales_row[0]
+                    if sales_count and int(sales_count) > 0:
+                        if self.logger:
+                            self.logger.warning(f"Cannot delete customer {customer_id}: has {sales_count} sales")
+                        return False
+            except Exception:
+                pass
+
+            # التحقق من وجود مدفوعات مرتبطة
+            try:
+                payments_row = self.db_manager.fetch_one(
+                    "SELECT COUNT(*) as cnt FROM payments WHERE customer_id = ?", (customer_id,)
+                )
+                if payments_row:
+                    payments_count = payments_row.get("cnt") if isinstance(payments_row, dict) else payments_row[0]
+                    if payments_count and int(payments_count) > 0:
+                        if self.logger:
+                            self.logger.warning(f"Cannot delete customer {customer_id}: has {payments_count} payments")
+                        return False
+            except Exception:
+                pass
+
             query = "UPDATE customers SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
             return self.db_manager.execute_non_query(query, (customer_id,)) > 0
         except Exception as e:
@@ -793,7 +820,7 @@ class CustomerManager:
             ws = WebhookService(self.db_manager, self.logger)
             ws.trigger_webhook(event, payload, entity_id)
         except Exception:
-            logging.getLogger(__name__).warning("Ignored exception in customer.py")
+            self.logger.warning("Ignored exception in customer.py")
 
     def _parse_datetime(self, val):
         if not val:

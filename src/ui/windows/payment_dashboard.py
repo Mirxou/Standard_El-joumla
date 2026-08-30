@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from src.models.payment import AccountType
 from src.services.payment_service import PaymentService
 from src.ui.styles.design_tokens import C as Colors
 from src.utils.logger import setup_logger
@@ -151,7 +152,7 @@ class DataUpdateWorker(QThread):
 
             # تقرير الأعمار (مع معالجة الأخطاء)
             try:
-                data["aging"] = self.payment_service.get_aging_report("receivables")
+                data["aging"] = self.payment_service.get_aging_report(AccountType.RECEIVABLE.value)
             except Exception:
                 data["aging"] = {}
 

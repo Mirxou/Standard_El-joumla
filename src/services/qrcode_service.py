@@ -1,6 +1,18 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+QR Code Service - Generates QR codes for documents and products
+"""
 import os
+import tempfile
 
-import qrcode
+try:
+    import qrcode
+
+    QRCODE_AVAILABLE = True
+except ImportError:
+    QRCODE_AVAILABLE = False
+    qrcode = None  # type: ignore[assignment]
 
 
 class QRCodeService:
@@ -8,16 +20,22 @@ class QRCodeService:
     The 'Digital Twin' Generator: Links physical objects to digital records.
     """
 
-    def __init__(self):
-        self.output_dir = "temp_qrcodes"
+    def __init__(self, output_dir: str = None):
+        self.output_dir = output_dir or os.path.join(tempfile.gettempdir(), "erp_qrcodes")
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
 
-    def generate_digital_twin(self, doc_type, doc_id):
+    def generate_digital_twin(self, doc_type: str, doc_id) -> tuple:
         """
         Generates a QR code containing a deep link to the object.
         Example: erp://product/55
+
+        Returns:
+            tuple: (file_path, deep_link) or (None, deep_link) if qrcode unavailable
         """
+        if not QRCODE_AVAILABLE:
+            return (None, f"erp://{doc_type}/{doc_id}")
+
         deep_link = f"erp://{doc_type}/{doc_id}"
 
         qr = qrcode.QRCode(
@@ -31,6 +49,6 @@ class QRCodeService:
 
         img = qr.make_image(fill_color="black", back_color="white")
 
-        filename = f"{self.output_dir}/{doc_type}_{doc_id}.png"
+        filename = os.path.join(self.output_dir, f"{doc_type}_{doc_id}.png")
         img.save(filename)
         return os.path.abspath(filename), deep_link

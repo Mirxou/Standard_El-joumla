@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
 """
 نموذج تعديل/إضافة العميل
@@ -81,6 +80,11 @@ class CustomerFormDialog(BaseDialog):
         self.email_input.setPlaceholderText(self.i18n.get_message("enter_email"))
         self.add_field(layout, self.i18n.get_message("email_label"), self.email_input)
 
+        # الرقم الضريبي
+        self.tax_number_input = QLineEdit()
+        self.tax_number_input.setPlaceholderText("الرقم الضريبي (اختياري)")
+        self.add_field(layout, "الرقم الضريبي", self.tax_number_input)
+
         # العنوان
         address_label = QLabel(self.i18n.get_message("address_label"))
         self.address_input = QTextEdit()
@@ -136,16 +140,14 @@ class CustomerFormDialog(BaseDialog):
             has_phone2 = "phone2" in available_columns
 
             # بناء الاستعلام بناءً على الأعمدة المتاحة
+            has_tax_number = "tax_number" in available_columns
+            select_cols = "name, phone"
             if has_phone2:
-                query = """
-                SELECT name, phone, phone2, email, address, credit_limit, is_active
-                FROM customers WHERE id = ?
-                """
-            else:
-                query = """
-                SELECT name, phone, NULL as phone2, email, address, credit_limit, is_active
-                FROM customers WHERE id = ?
-                """
+                select_cols += ", phone2"
+            select_cols += ", email, address, credit_limit, is_active"
+            if has_tax_number:
+                select_cols += ", tax_number"
+            query = f"SELECT {select_cols} FROM customers WHERE id = ?"
 
             result = self.db_manager.fetch_one(query, (self.customer_id,))
 
@@ -158,14 +160,20 @@ class CustomerFormDialog(BaseDialog):
                     self.address_input.setText(result.get("address") or "")
                     self.credit_limit_input.setValue(float(result.get("credit_limit") or 0))
                     self.active_checkbox.setChecked(bool(result.get("is_active")))
+                    if has_tax_number:
+                        self.tax_number_input.setText(result.get("tax_number") or "")
                 else:
-                    self.name_input.setText(result[0] or "")
-                    self.phone_input.setText(result[1] or "")
-                    self.phone2_input.setText(result[2] or "" if has_phone2 else "")
-                    self.email_input.setText(result[3] or "")
-                    self.address_input.setText(result[4] or "")
-                    self.credit_limit_input.setValue(float(result[5] or 0))
-                    self.active_checkbox.setChecked(bool(result[6]))
+                    idx = 0
+                    self.name_input.setText(result[idx] or ""); idx += 1
+                    self.phone_input.setText(result[idx] or ""); idx += 1
+                    if has_phone2:
+                        self.phone2_input.setText(result[idx] or ""); idx += 1
+                    self.email_input.setText(result[idx] or ""); idx += 1
+                    self.address_input.setText(result[idx] or ""); idx += 1
+                    self.credit_limit_input.setValue(float(result[idx] or 0)); idx += 1
+                    self.active_checkbox.setChecked(bool(result[idx])); idx += 1
+                    if has_tax_number:
+                        self.tax_number_input.setText(result[idx] or "")
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في تحميل العميل: {str(e)}")
@@ -194,13 +202,45 @@ class CustomerFormDialog(BaseDialog):
             )
             return
 
+        # التحقق من تكرار رقم الهاتف
         try:
-            # 🔥 التحقق من وجود عمود phone2 قبل استخدامه
+            dup_query = "SELECT id, name FROM customers WHERE phone = ? AND id != ?"
+            dup_params = (phone, self.customer_id or 0)
+            dup_result = self.db_manager.fetch_one(dup_query, dup_params)
+            if dup_result:
+                dup_name = dup_result.get("name") if isinstance(dup_result, dict) else dup_result[1]
+                self.notify.show_warning(
+                    self.i18n.get_message("warning"),
+                    f"رقم الهاتف مسجل مسبقاً للعميل: {dup_name}",
+                )
+                return
+        except Exception:
+            pass
+
+        # التحقق من تكرار البريد الإلكتروني
+        if email:
+            try:
+                dup_email_query = "SELECT id, name FROM customers WHERE email = ? AND id != ?"
+                dup_email_params = (email, self.customer_id or 0)
+                dup_email_result = self.db_manager.fetch_one(dup_email_query, dup_email_params)
+                if dup_email_result:
+                    dup_name = dup_email_result.get("name") if isinstance(dup_email_result, dict) else dup_email_result[1]
+                    self.notify.show_warning(
+                        self.i18n.get_message("warning"),
+                        f"البريد الإلكتروني مسجل مسبقاً للعميل: {dup_name}",
+                    )
+                    return
+            except Exception:
+                pass
+
+        try:
+            # التحقق من وجود عمود phone2 قبل استخدامه
             table_info = self.db_manager.fetch_all("PRAGMA table_info(customers)")
             available_columns = [row.get("name", "") if isinstance(row, dict) else row[1] for row in table_info] if table_info else []
             has_phone2 = "phone2" in available_columns
 
             phone2_value = self.phone2_input.text().strip() if has_phone2 else None
+            tax_number = self.tax_number_input.text().strip() or None
 
             if self.customer_id:
                 # تعديل
@@ -208,7 +248,7 @@ class CustomerFormDialog(BaseDialog):
                     query = """
                     UPDATE customers SET
                         name = ?, phone = ?, phone2 = ?, email = ?, address = ?,
-                        credit_limit = ?, is_active = ?, updated_at = datetime('now')
+                        credit_limit = ?, tax_number = ?, is_active = ?, updated_at = datetime('now')
                     WHERE id = ?
                     """
                     params = (
@@ -218,6 +258,7 @@ class CustomerFormDialog(BaseDialog):
                         email,
                         self.address_input.toPlainText().strip(),
                         self.credit_limit_input.value(),
+                        tax_number,
                         self.active_checkbox.isChecked(),
                         self.customer_id,
                     )
@@ -225,7 +266,7 @@ class CustomerFormDialog(BaseDialog):
                     query = """
                     UPDATE customers SET
                         name = ?, phone = ?, email = ?, address = ?,
-                        credit_limit = ?, is_active = ?, updated_at = datetime('now')
+                        credit_limit = ?, tax_number = ?, is_active = ?, updated_at = datetime('now')
                     WHERE id = ?
                     """
                     params = (
@@ -234,6 +275,7 @@ class CustomerFormDialog(BaseDialog):
                         email,
                         self.address_input.toPlainText().strip(),
                         self.credit_limit_input.value(),
+                        tax_number,
                         self.active_checkbox.isChecked(),
                         self.customer_id,
                     )
@@ -249,8 +291,8 @@ class CustomerFormDialog(BaseDialog):
                     query = """
                     INSERT INTO customers (
                         name, phone, phone2, email, address,
-                        credit_limit, current_balance, is_active, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, datetime('now'), datetime('now'))
+                        credit_limit, tax_number, current_balance, is_active, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, datetime('now'), datetime('now'))
                     """
                     params = (
                         name,
@@ -259,14 +301,15 @@ class CustomerFormDialog(BaseDialog):
                         email,
                         self.address_input.toPlainText().strip(),
                         self.credit_limit_input.value(),
+                        tax_number,
                         self.active_checkbox.isChecked(),
                     )
                 else:
                     query = """
                     INSERT INTO customers (
                         name, phone, email, address,
-                        credit_limit, current_balance, is_active, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, 0, ?, datetime('now'), datetime('now'))
+                        credit_limit, tax_number, current_balance, is_active, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, datetime('now'), datetime('now'))
                     """
                     params = (
                         name,
@@ -274,6 +317,7 @@ class CustomerFormDialog(BaseDialog):
                         email,
                         self.address_input.toPlainText().strip(),
                         self.credit_limit_input.value(),
+                        tax_number,
                         self.active_checkbox.isChecked(),
                     )
 

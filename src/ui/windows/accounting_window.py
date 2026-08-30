@@ -468,10 +468,12 @@ class AccountingWindow(QMainWindow):
 
             self.trial_table.setItem(idx, 1, QTableWidgetItem(account["account_name"]))
 
-            debit_item = QTableWidgetItem(f"{account.get('debit', account.get('total_debits', 0)):.2f}")
+            debit_val = account.get('total_debits', 0) or 0
+            credit_val = account.get('total_credits', 0) or 0
+            debit_item = QTableWidgetItem(f"{float(debit_val):.2f}")
             self.trial_table.setItem(idx, 2, debit_item)
 
-            credit_item = QTableWidgetItem(f"{account.get('credit', account.get('total_credits', 0)):.2f}")
+            credit_item = QTableWidgetItem(f"{float(credit_val):.2f}")
             self.trial_table.setItem(idx, 3, credit_item)
 
         # تحديث الملخص

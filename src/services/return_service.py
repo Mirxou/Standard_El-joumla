@@ -37,29 +37,31 @@ class ReturnService:
         """توليد رقم مرتجع جديد"""
         try:
             cursor = self.db.connection.cursor()
-            cursor.execute("""
+            today_str = date.today().strftime("%Y%m%d")
+            cursor.execute(
+                """
                 SELECT return_number FROM return_invoices
+                WHERE return_number LIKE ?
                 ORDER BY id DESC LIMIT 1
-            """)
+            """,
+                (f"RET-{today_str}%",),
+            )
             result = cursor.fetchone()
 
+            seq = 1
             if result:
                 last_number = result[0]
                 # استخراج الرقم من النمط RET-YYYYMMDD-XXX
                 if "-" in last_number:
                     parts = last_number.split("-")
                     if len(parts) == 3:
-                        seq = int(parts[2]) + 1
-                    else:
-                        seq = 1
-                else:
-                    seq = 1
-            else:
-                seq = 1
+                        try:
+                            seq = int(parts[2]) + 1
+                        except (ValueError, IndexError):
+                            seq = 1
 
             # توليد رقم جديد
-            today = date.today().strftime("%Y%m%d")
-            return_number = f"RET-{today}-{seq:03d}"
+            return_number = f"RET-{today_str}-{seq:03d}"
 
             return return_number
         except Exception as e:
@@ -535,7 +537,7 @@ class ReturnService:
         return None
 
     def _restock_item(self, product_id: int, quantity: Decimal) -> bool:
-        """إعادة المنتج للمخزون"""
+        """إعادة المنتج للمخزون (without commit — caller handles transaction)"""
         try:
             cursor = self.db.connection.cursor()
             cursor.execute(
@@ -546,12 +548,9 @@ class ReturnService:
             """,
                 (float(quantity), product_id),
             )
-
-            self.db.connection.commit()
-            logger.info(f"تم إعادة {quantity} من المنتج {product_id} للمخزون")
+            logger.info(f"تم إعادة {quantity} من المنتج {product_id} للمخزون (بانتظار الالتزام)")
             return True
         except Exception as e:
-            self.db.connection.rollback()
             logger.log(logging.ERROR, f"خطأ في إعادة المنتج للمخزون: {str(e)}")
             return False
 

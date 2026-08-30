@@ -1332,7 +1332,7 @@ class SalesDialog(BaseDialog):
 
         # استخدام نسبة الضريبة من الحقل القابل للتعديل
         tax_rate = self.tax_rate
-        tax = calculate_tax_amount(subtotal - global_discount, global_discount, tax_rate)
+        tax = calculate_tax_amount(subtotal, global_discount, tax_rate)
 
         # الإجمالي النهائي
         grand_total = calculate_grand_total(subtotal, global_discount, tax)
@@ -1427,7 +1427,7 @@ class SalesDialog(BaseDialog):
             global_discount = subtotal * (discount_percentage / Decimal("100.00"))
         else:
             global_discount = to_decimal(0)
-        tax = calculate_tax_amount(subtotal - global_discount, global_discount, self.tax_rate)
+        tax = calculate_tax_amount(subtotal, global_discount, self.tax_rate)
         return calculate_grand_total(subtotal, global_discount, tax)
 
     def apply_discount(self, discount_percentage) -> bool:
@@ -1457,7 +1457,7 @@ class SalesDialog(BaseDialog):
             global_discount = subtotal * (discount_percentage / Decimal("100.00"))
         else:
             global_discount = to_decimal(0)
-        tax = calculate_tax_amount(subtotal - global_discount, global_discount, self.tax_rate)
+        tax = calculate_tax_amount(subtotal, global_discount, self.tax_rate)
         grand_total = calculate_grand_total(subtotal, global_discount, tax)
 
         return {
@@ -1776,7 +1776,7 @@ class SalesDialog(BaseDialog):
                 global_discount = to_decimal(0)
 
             tax_rate = self.tax_rate
-            tax_amount = calculate_tax_amount(subtotal - global_discount, global_discount, tax_rate)
+            tax_amount = calculate_tax_amount(subtotal, global_discount, tax_rate)
             total_amount = calculate_grand_total(subtotal, global_discount, tax_amount)
 
             if not self.sale:

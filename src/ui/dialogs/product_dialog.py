@@ -1258,8 +1258,23 @@ class ProductDialog(BaseDialog):
                             self.i18n.get_message("update_failed"),
                         )
                 else:
-                    # legacy update
-                    success = self.product_manager.update_product(self.product.id, data)
+                    # F3 FIX: legacy update — build a Product object, not pass (id, dict)
+                    legacy_product = Product(
+                        id=self.product.id,
+                        name=data["name"],
+                        name_en=data.get("name_en"),
+                        barcode=data.get("barcode"),
+                        category_id=data.get("category_id"),
+                        unit=data.get("unit", "قطعة"),
+                        cost_price=data["cost_price"],
+                        selling_price=data["selling_price"],
+                        min_stock=data.get("min_stock_level", 0),
+                        current_stock=data.get("stock_quantity", 0),
+                        description=data.get("description"),
+                        image_path=data.get("image_path"),
+                        is_active=data.get("is_active", True),
+                    )
+                    success = self.product_manager.update_product(legacy_product)
                     if success:
                         updated_product = self.product_manager.get_product_by_id(self.product.id)
                         if updated_product:

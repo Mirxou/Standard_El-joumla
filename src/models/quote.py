@@ -1,6 +1,6 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
 """
 نموذج عروض الأسعار - Quote Model
 يحتوي على جميع العمليات المتعلقة بعروض الأسعار
@@ -274,8 +274,11 @@ class Quote:
 
     def calculate_totals(self):
         """حساب المجاميع"""
-        # حساب المجموع الفرعي من البنود
+        # حساب المجموع الفرعي من البنود (يتضمن ضريبة كل بند)
         self.subtotal = sum(item.total_amount for item in self.items)
+
+        # حساب إجمالي الضريبة من البنود
+        self.tax_amount = sum(item.tax_amount for item in self.items)
 
         # حساب الخصم الإجمالي
         if self.discount_percentage > 0 and self.discount_amount == 0:

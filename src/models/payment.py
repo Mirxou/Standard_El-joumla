@@ -672,12 +672,16 @@ class PaymentManager:
     def _update_account_balances(self, payment: Payment):
         """تحديث أرصدة الحسابات"""
         try:
-            # تحديث رصيد العميل أو المورد حسب نوع الدفعة
-            if payment.customer_id and payment.payment_type == PaymentType.CUSTOMER_PAYMENT.value:
+            # payment_type may be normalized to English in create_payment (e.g. 'customer_payment')
+            # or remain Arabic from PaymentType enum (e.g. 'دفعة عميل'). Check both.
+            customer_types = {PaymentType.CUSTOMER_PAYMENT.value, 'customer_payment'}
+            supplier_types = {PaymentType.SUPPLIER_PAYMENT.value, 'supplier_payment'}
+
+            if payment.customer_id and payment.payment_type in customer_types:
                 # دفعة من العميل - تقليل الذمة المدينة
                 self._update_customer_balance(payment.customer_id, -payment.amount_in_base_currency)
 
-            elif payment.supplier_id and payment.payment_type == PaymentType.SUPPLIER_PAYMENT.value:
+            elif payment.supplier_id and payment.payment_type in supplier_types:
                 # دفعة للمورد - تقليل الذمة الدائنة
                 self._update_supplier_balance(payment.supplier_id, -payment.amount_in_base_currency)
 

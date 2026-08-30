@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import logging
 """
 Invoice Print Service - HTML Template Engine
 خدمة طباعة الفواتير باستخدام Jinja2 و HTML Templates
 """
+import logging
 
 import base64
 import io
@@ -252,9 +252,10 @@ class InvoicePrintService:
         barcode_url = self._generate_barcode(invoice_id) if BARCODE_AVAILABLE else None
 
         # إضافة صور المنتجات إلى الأصناف
+        raw_items = data.get("items", [])
         for i, item in enumerate(formatted_items):
-            if "image" in data.get("items", [])[i]:
-                formatted_items[i]["image"] = data["items"][i]["image"]
+            if i < len(raw_items) and "image" in raw_items[i]:
+                formatted_items[i]["image"] = raw_items[i]["image"]
 
         return {
             "invoice_id": invoice_id,

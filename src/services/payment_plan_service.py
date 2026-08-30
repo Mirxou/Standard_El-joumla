@@ -339,7 +339,7 @@ class PaymentPlanService:
         ORDER BY pi.due_date
         """
 
-        params = (InstallmentStatus.PENDING.name, InstallmentStatus.PARTIALLY_PAID.name)
+        params = (InstallmentStatus.PENDING.value, InstallmentStatus.PARTIALLY_PAID.value)
         results = self.db.execute_query(query, params)
 
         overdue = []
@@ -364,7 +364,8 @@ class PaymentPlanService:
         amount: Decimal,
         payment_date: Optional[date] = None,
         payment_method: Optional[str] = None,
-        reference: Optional[str] = None,
+        payment_reference: Optional[str] = None,
+        notes: Optional[str] = None,
     ) -> bool:
         """تسجيل دفعة"""
         plan = self.get_payment_plan(plan_id)
@@ -376,9 +377,17 @@ class PaymentPlanService:
         if not installment:
             return False
 
-        # تسجيل الدفعة
-        if not installment.make_payment(amount, payment_date, payment_method, reference):
+        # التحقق من صحة المبلغ
+        if amount <= 0:
             return False
+
+        # تسجيل الدفعة
+        if not installment.make_payment(amount, payment_date, payment_method, payment_reference):
+            return False
+
+        # تحديث ملاحظات القسط
+        if notes:
+            installment.notes = notes
 
         # تحديث القسط
         self._update_installment(installment)
@@ -411,7 +420,7 @@ class PaymentPlanService:
     def apply_late_fees_to_all(self) -> int:
         """تطبيق غرامات التأخير على جميع الخطط النشطة"""
         query = "SELECT id FROM payment_plans WHERE status = ?"
-        results = self.db.execute_query(query, (PaymentPlanStatus.ACTIVE.name,))
+        results = self.db.execute_query(query, (PaymentPlanStatus.ACTIVE.value,))
 
         count = 0
         for row in results:
@@ -476,9 +485,13 @@ class PaymentPlanService:
         """
         overdue_result = self.db.execute_query(
             overdue_query,
-            (InstallmentStatus.PENDING.name, InstallmentStatus.PARTIALLY_PAID.name),
+            (InstallmentStatus.PENDING.value, InstallmentStatus.PARTIALLY_PAID.value),
         )
-        overdue_count = overdue_result[0].get("COUNT(*)", 0) if overdue_result else 0
+        if overdue_result:
+            row0 = overdue_result[0]
+            overdue_count = row0.get("COUNT(*)", 0) if isinstance(row0, dict) else (row0[0] if row0 else 0)
+        else:
+            overdue_count = 0
 
         return {
             "by_status": by_status,

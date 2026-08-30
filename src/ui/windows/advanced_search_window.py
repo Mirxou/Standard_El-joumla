@@ -69,8 +69,6 @@ class AdvancedSearchWindow(QMainWindow):
 
         self.service = AdvancedSearchService(self.db)
 
-        self.service = AdvancedSearchService(self.db)
-
         self.joumla_service = StandardJoumLaService(self.db)
 
         self.quote_service = WholesaleQuoteService(self.db)
@@ -697,10 +695,6 @@ class AdvancedSearchWindow(QMainWindow):
             if index >= 0:
 
                 self.entity_combo.setCurrentIndex(index)
-
-            if self.keyword_input.text():
-
-                self._execute_search()
 
             if self.keyword_input.text():
 

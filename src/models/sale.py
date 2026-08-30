@@ -1293,10 +1293,13 @@ class SaleManager:
             sale.calculate_totals()
 
             # جلب الفاتورة القديمة لتحديث المخزون
+            old_items = []
             try:
                 old_sale = self.get_sale_by_id(sale.id)
+                if old_sale and old_sale.items:
+                    old_items = old_sale.items
             except Exception:
-                old_sale = None
+                pass
 
             # محاولة استخدام get_cursor إذا متاح
             use_cursor = hasattr(
@@ -1306,11 +1309,17 @@ class SaleManager:
                 try:
                     with self.db_manager.get_cursor() as cur:
                         self._do_update_sale(cur, sale)
-                        # تحديث المخزون
-                        if old_sale and old_sale.items:
+                        # تحديث المخزون: إرجاع القديم أولاً
+                        if old_items:
                             self._update_stock_in_transaction(
-                                cur, old_sale.items, "return"
+                                cur, old_items, "return"
                             )
+                        # حذف عناصر الفاتورة القديمة
+                        cur.execute(
+                            "DELETE FROM sale_items WHERE sale_id = ?",
+                            (sale.id,)
+                        )
+                        # إدراج العناصر الجديدة
                         for item in sale.items:
                             item.sale_id = sale.id
                             self._create_sale_item_in_transaction(
@@ -1379,13 +1388,22 @@ class SaleManager:
                     query, params
                 )
 
+                # إرجاع المخزون القديم
+                if old_items:
+                    self._update_stock_for_sale(
+                        old_items, operation="return"
+                    )
+                # حذف العناصر القديمة وإدراج الجديدة
+                self.db_manager.execute_non_query(
+                    "DELETE FROM sale_items WHERE sale_id = ?",
+                    (sale.id,),
+                )
                 for item in sale.items:
-                    if item.id:
-                        self._update_sale_item(item)
-                    else:
-                        item.sale_id = sale.id
-                        self._create_sale_item(item)
+                    item.sale_id = sale.id
+                    self._create_sale_item(item)
 
+            # إرسال إشارات التحديث
+            self._emit_signals_update(sale.id)
             return True
         except Exception as e:
             if self.logger:

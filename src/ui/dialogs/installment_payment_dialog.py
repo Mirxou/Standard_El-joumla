@@ -197,6 +197,7 @@ class InstallmentPaymentDialog(BaseDialog):
         # مبلغ الدفعة
         layout.addWidget(QLabel("مبلغ الدفعة:"), 0, 2)
         self.payment_amount_spin = QDoubleSpinBox()
+        self.payment_amount_spin.setMinimum(0.01)
         self.payment_amount_spin.setMaximum(10000000)
         self.payment_amount_spin.setDecimals(2)
         self.payment_amount_spin.setSuffix(" دج")

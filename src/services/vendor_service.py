@@ -77,7 +77,7 @@ class VendorService:
             params = (
                 po_number,
                 vendor_id,
-                "pending",
+                "مسودة",
                 total,
                 now,
                 now,

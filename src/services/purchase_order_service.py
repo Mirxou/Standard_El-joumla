@@ -75,7 +75,7 @@ class PurchaseOrderService:
         return f"{prefix}-{sequence:04d}"
 
     def create_purchase_order(self, po: PurchaseOrder) -> int:
-        """إنشاء أمر شراء جديد"""
+        """إنشاء أمر شراء جديد (transactional)"""
         if not po.po_number:
             po.po_number = self.generate_po_number()
 
@@ -85,81 +85,97 @@ class PurchaseOrderService:
         po.created_at = datetime.now()
         po.updated_at = datetime.now()
 
-        # حفظ أمر الشراء
-        query = """
-        INSERT INTO purchase_orders (
-            po_number, supplier_id, supplier_name, supplier_contact,
-            order_date, required_date, delivery_date, expected_delivery_date,
-            status, priority, delivery_terms, payment_terms, currency,
-            subtotal, discount_amount, tax_amount, shipping_cost, total_amount,
-            notes, terms_conditions, shipping_address, billing_address,
-            approved_by, approval_date, sent_date, confirmed_date,
-            created_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """
+        # Use transaction for atomicity
+        try:
+            self.db.execute_query("BEGIN TRANSACTION")
+        except Exception:
+            pass  # May already be in a transaction or DB doesn't support it
 
-        params = (
-            po.po_number,
-            po.supplier_id,
-            po.supplier_name,
-            po.supplier_contact,
-            po.order_date.isoformat() if po.order_date else None,
-            po.required_date.isoformat() if po.required_date else None,
-            po.delivery_date.isoformat() if po.delivery_date else None,
-            (po.expected_delivery_date.isoformat() if po.expected_delivery_date else None),
-            po.status.name if isinstance(po.status, POStatus) else po.status,
-            po.priority.name if isinstance(po.priority, POPriority) else po.priority,
-            (po.delivery_terms.name if isinstance(po.delivery_terms, DeliveryTerms) else po.delivery_terms),
-            (po.payment_terms.name if isinstance(po.payment_terms, PaymentTerms) else po.payment_terms),
-            po.currency,
-            float(po.subtotal),
-            float(po.discount_amount),
-            float(po.tax_amount),
-            float(po.shipping_cost),
-            float(po.total_amount),
-            po.notes,
-            po.terms_and_conditions,
-            po.delivery_address,
-            None,
-            po.approved_by,
-            po.approved_date.isoformat() if po.approved_date else None,
-            po.sent_date.isoformat() if po.sent_date else None,
-            None,  # confirmed_date not in model
-            po.created_by,
-            po.created_at.isoformat() if po.created_at else None,
-            po.updated_at.isoformat() if po.updated_at else None,
-        )
+        try:
+            # حفظ أمر الشراء
+            query = """
+            INSERT INTO purchase_orders (
+                po_number, supplier_id, supplier_name, supplier_contact,
+                order_date, required_date, delivery_date, expected_delivery_date,
+                status, priority, delivery_terms, payment_terms, currency,
+                subtotal, discount_amount, tax_amount, shipping_cost, total_amount,
+                notes, terms_conditions, shipping_address, billing_address,
+                approved_by, approval_date, sent_date, confirmed_date,
+                created_by, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
 
-        po_id = self.db.execute_update(query, params)
+            params = (
+                po.po_number,
+                po.supplier_id,
+                po.supplier_name,
+                po.supplier_contact,
+                po.order_date.isoformat() if po.order_date else None,
+                po.required_date.isoformat() if po.required_date else None,
+                po.delivery_date.isoformat() if po.delivery_date else None,
+                (po.expected_delivery_date.isoformat() if po.expected_delivery_date else None),
+                po.status.name if isinstance(po.status, POStatus) else po.status,
+                po.priority.name if isinstance(po.priority, POPriority) else po.priority,
+                (po.delivery_terms.name if isinstance(po.delivery_terms, DeliveryTerms) else po.delivery_terms),
+                (po.payment_terms.name if isinstance(po.payment_terms, PaymentTerms) else po.payment_terms),
+                po.currency,
+                float(po.subtotal),
+                float(po.discount_amount),
+                float(po.tax_amount),
+                float(po.shipping_cost),
+                float(po.total_amount),
+                po.notes,
+                po.terms_and_conditions,
+                po.delivery_address,
+                None,
+                po.approved_by,
+                po.approved_date.isoformat() if po.approved_date else None,
+                po.sent_date.isoformat() if po.sent_date else None,
+                None,  # confirmed_date not in model
+                po.created_by,
+                po.created_at.isoformat() if po.created_at else None,
+                po.updated_at.isoformat() if po.updated_at else None,
+            )
 
-        # حفظ البنود
-        for item in po.items:
-            self._save_po_item(po_id, item)
+            po_id = self.db.execute_update(query, params)
 
-        # بدء سير العمل إذا كان متاحاً
-        if self.workflow_service and po.created_by:
+            # حفظ البنود
+            for item in po.items:
+                self._save_po_item(po_id, item)
+
             try:
-                # الحصول على company_id من PO (إذا كان متوفراً)
-                company_id = getattr(po, "company_id", None)
+                self.db.execute_query("COMMIT")
+            except Exception:
+                pass
 
-                instance_id = self.workflow_service.start_workflow_for_entity(
-                    entity_type="purchase_order",
-                    entity_id=po_id,
-                    initiated_by=po.created_by,
-                    workflow_id=None,  # استخدام الافتراضي
-                    company_id=company_id,
-                    notes=f"طلب شراء: {po.po_number}",
-                    metadata={"po_number": po.po_number, "supplier_id": po.supplier_id},
-                )
+            # بدء سير العمل إذا كان متاحاً
+            if self.workflow_service and po.created_by:
+                try:
+                    company_id = getattr(po, "company_id", None)
 
-                if instance_id and self.logger:
-                    self.logger.info(f"تم بدء سير العمل لأمر الشراء {po_id} (instance: {instance_id})")
-            except Exception as e:
-                if self.logger:
-                    self.logger.warning(f"فشل بدء سير العمل لأمر الشراء {po_id}: {e}")
-                # لا نوقف العملية إذا فشل بدء سير العمل
+                    instance_id = self.workflow_service.start_workflow_for_entity(
+                        entity_type="purchase_order",
+                        entity_id=po_id,
+                        initiated_by=po.created_by,
+                        workflow_id=None,
+                        company_id=company_id,
+                        notes=f"طلب شراء: {po.po_number}",
+                        metadata={"po_number": po.po_number, "supplier_id": po.supplier_id},
+                    )
 
-        return po_id
+                    if instance_id and self.logger:
+                        self.logger.info(f"تم بدء سير العمل لأمر الشراء {po_id} (instance: {instance_id})")
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"فشل بدء سير العمل لأمر الشراء {po_id}: {e}")
+
+            return po_id
+        except Exception:
+            try:
+                self.db.execute_query("ROLLBACK")
+            except Exception:
+                pass
+            raise
 
     def _save_po_item(self, po_id: int, item: PurchaseOrderItem) -> int:
         """حفظ بند أمر شراء"""
@@ -564,51 +580,103 @@ class PurchaseOrderService:
         return f"{prefix}-{sequence:04d}"
 
     def receive_shipment(self, po_id: int, receiving_note: ReceivingNote) -> bool:
-        """استلام شحنة مع تحديث المخزون"""
-        # إنشاء إشعار الاستلام
-        self.create_receiving_note(receiving_note)
-
-        # تحديث كميات أمر الشراء
-        po = self.get_purchase_order(po_id)
-        if not po:
-            return False
-
-        # تحويل بنود الاستلام إلى الصيغة المطلوبة: Dict[int, Decimal]
-        items_received = {}
-        for rn_item in receiving_note.items:
-            if rn_item.po_item_id and rn_item.quantity_accepted > 0:
-                items_received[rn_item.po_item_id] = rn_item.quantity_accepted
-                # تحديث المخزون مباشرة
-                try:
-                    self.db.execute_update(
-                        "UPDATE products SET current_stock = current_stock + ? WHERE id = ?",
-                        [float(rn_item.quantity_accepted), rn_item.product_id],
-                    )
-                except Exception:
-                    pass  # المخزون يُحدَّث كـ fallback
-
-        if items_received:
-            po.receive_shipment(items_received)
-            self.update_purchase_order(po)
-
-        # قيد محاسبي لأمر الشراء (غير معطل)
+        """استلام شحنة مع تحديث المخزون (transactional)"""
+        # Use transaction for atomicity
         try:
-            if self.accounting_service:
-                from decimal import Decimal
-                po_data = {
-                    'po_id': po_id,
-                    'supplier_name': getattr(po, 'supplier_name', '') if hasattr(po, 'supplier_name') else str(getattr(po, 'supplier_id', '')),
-                    'total': Decimal(str(getattr(po, 'total_amount', 0) or 0)),
-                    'tax': Decimal(str(getattr(po, 'tax_amount', 0) or 0)),
-                    'inventory_account': '4100',
-                    'payable_account': '2100',
-                }
-                self.accounting_service.create_purchase_journal_entry(po_data)
-        except Exception as e:
-            if self.logger:
-                self.logger.warning(f"خطأ في إنشاء قيد محاسبي للشراء: {e}")
+            self.db.execute_query("BEGIN TRANSACTION")
+        except Exception:
+            pass
 
-        return True
+        try:
+            # إنشاء إشعار الاستلام
+            self.create_receiving_note(receiving_note)
+
+            # تحديث كميات أمر الشراء
+            po = self.get_purchase_order(po_id)
+            if not po:
+                try:
+                    self.db.execute_query("ROLLBACK")
+                except Exception:
+                    pass
+                return False
+
+            # تحويل بنود الاستلام إلى الصيغة المطلوبة: Dict[int, Decimal]
+            items_received = {}
+            for rn_item in receiving_note.items:
+                if rn_item.po_item_id and rn_item.quantity_accepted > 0:
+                    items_received[rn_item.po_item_id] = rn_item.quantity_accepted
+                    # تحديث المخزون مباشرة
+                    try:
+                        self.db.execute_update(
+                            "UPDATE products SET current_stock = current_stock + ? WHERE id = ?",
+                            [float(rn_item.quantity_accepted), rn_item.product_id],
+                        )
+                    except Exception as e:
+                        if self.logger:
+                            self.logger.error(f"فشل تحديث المخزون للمنتج {rn_item.product_id}: {e}")
+                        try:
+                            self.db.execute_query("ROLLBACK")
+                        except Exception:
+                            pass
+                        return False
+
+                    # Create/update batch record if batch_number is provided
+                    if rn_item.batch_number:
+                        try:
+                            existing_batch = self.db.execute_query(
+                                "SELECT id FROM batches WHERE product_id = ? AND batch_number = ?",
+                                (rn_item.product_id, rn_item.batch_number),
+                            )
+                            if existing_batch:
+                                batch_id = existing_batch[0].get("id") if isinstance(existing_batch[0], dict) else existing_batch[0][0]
+                                self.db.execute_update(
+                                    "UPDATE batches SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                                    (float(rn_item.quantity_accepted), batch_id),
+                                )
+                            else:
+                                self.db.execute_update(
+                                    "INSERT INTO batches (product_id, batch_number, quantity, expiry_date, created_at, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                                    (rn_item.product_id, rn_item.batch_number, float(rn_item.quantity_accepted), rn_item.expiry_date),
+                                )
+                        except Exception as e:
+                            if self.logger:
+                                self.logger.warning(f"فشل تحديث الدفعة للمنتج {rn_item.product_id}: {e}")
+
+            if items_received:
+                po.receive_shipment(items_received)
+                self.update_purchase_order(po)
+
+            # قيد محاسبي لأمر الشراء (غير معطل)
+            try:
+                if self.accounting_service:
+                    from decimal import Decimal
+                    po_data = {
+                        'po_id': po_id,
+                        'supplier_name': getattr(po, 'supplier_name', '') if hasattr(po, 'supplier_name') else str(getattr(po, 'supplier_id', '')),
+                        'total': Decimal(str(getattr(po, 'total_amount', 0) or 0)),
+                        'tax': Decimal(str(getattr(po, 'tax_amount', 0) or 0)),
+                        'inventory_account': '4100',
+                        'payable_account': '2100',
+                    }
+                    self.accounting_service.create_purchase_journal_entry(po_data)
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"خطأ في إنشاء قيد محاسبي للشراء: {e}")
+
+            try:
+                self.db.execute_query("COMMIT")
+            except Exception:
+                pass
+
+            return True
+        except Exception:
+            try:
+                self.db.execute_query("ROLLBACK")
+            except Exception:
+                pass
+            if self.logger:
+                self.logger.error(f"فشل استلام الشحنة لأمر الشراء {po_id}")
+            return False
 
     # ===================== التقييم =====================
 

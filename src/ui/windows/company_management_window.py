@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
+import logging
 """
 نافذة إدارة الشركات - Company Management Window
 واجهة شاملة لإدارة الشركات

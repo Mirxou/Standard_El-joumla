@@ -296,7 +296,12 @@ class QuoteHistoryDialog(BaseDialog):
             db_row = self.quote_service.db.fetch_one(sql, [quote_id])
             if not db_row:
                 return
-            items = json.loads(db_row.get("items_json") if isinstance(db_row, dict) else db_row[0])
+
+            items_json_raw = db_row.get("items_json") if isinstance(db_row, dict) else (db_row[0] if db_row else None)
+            if not items_json_raw:
+                QMessageBox.critical(self, "خطأ", "لا توجد بيانات بنود للعرض")
+                return
+            items = json.loads(items_json_raw)
 
             filename, _ = QFileDialog.getSaveFileName(self, "حفظ ملف PDF", f"quote_{quote_id}.pdf", "PDF Files (*.pdf)")
 

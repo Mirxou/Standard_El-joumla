@@ -315,10 +315,21 @@ class ReceivingDialog(BaseDialog):
         accepted_spin = self.items_table.cellWidget(row, 6)
         rejected_spin = self.items_table.cellWidget(row, 7)
 
+        # Cap rejected to not exceed received
+        if rejected_spin.value() > value:
+            rejected_spin.setMaximum(value)
+            rejected_spin.setValue(value)
+        else:
+            rejected_spin.setMaximum(value)
+
         # إذا لم يكن هناك رفض، اجعل المقبولة = المستلمة
         if rejected_spin.value() == 0:
             accepted_spin.setMaximum(value)
             accepted_spin.setValue(value)
+        else:
+            accepted_spin.setMaximum(value - rejected_spin.value())
+            if accepted_spin.value() > value - rejected_spin.value():
+                accepted_spin.setValue(value - rejected_spin.value())
 
     def _save(self):
         """حفظ إشعار الاستلام"""
@@ -507,7 +518,7 @@ class ReceivingDialog(BaseDialog):
         return True
 
     def set_received_quantity(self, row, quantity):
-        """تعيين الكمية المستلمة لصف معين"""
+        """تعيين الكمية المستلمة لصف معين (برمجياً للاختبار)"""
         if row >= self.items_table.rowCount():
             self.items_table.setRowCount(row + 1)
             
@@ -543,9 +554,14 @@ class ReceivingDialog(BaseDialog):
             
         qty_spin = self.items_table.cellWidget(row, 5)
         if qty_spin:
+            # Respect existing maximum cap if set
+            max_val = max(float(quantity), qty_spin.maximum())
+            qty_spin.setMaximum(max_val)
             qty_spin.setValue(float(quantity))
         accepted_spin = self.items_table.cellWidget(row, 6)
         if accepted_spin:
+            max_acc = max(float(quantity), accepted_spin.maximum())
+            accepted_spin.setMaximum(max_acc)
             accepted_spin.setValue(float(quantity))
         return True
 

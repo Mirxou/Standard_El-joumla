@@ -450,20 +450,42 @@ class ProductService:
     def get_products_requiring_reorder(self) -> List[Product]:
         """الحصول على المنتجات التي تحتاج إلى إعادة طلب"""
         try:
-            query = """
-            SELECT id, name, name_en, sku, barcode, category_id, supplier_id,
-                   product_type, description, specifications, unit,
-                   cost_price, base_price, pricing_policy,
-                   current_stock, reserved_stock, min_stock, reorder_point, max_stock,
-                   image_path, images, tags,
-                   is_active, is_discontinued, is_featured,
-                   created_at, updated_at, discontinued_date,
-                   sales_count, total_sold, average_rating
-            FROM products
-            WHERE (current_stock - reserved_stock) <= reorder_point
-                  AND is_active = 1 AND is_discontinued = 0
-            ORDER BY (current_stock - reserved_stock), reorder_point DESC
-            """
+            # F3 FIX: check for reserved_stock column existence like get_low_stock_products does
+            cols_info = self.db_manager.fetch_all("PRAGMA table_info(products)")
+            available_cols = {row.get('name', '') for row in cols_info} if cols_info else set()
+
+            has_reserved = "reserved_stock" in available_cols
+
+            if has_reserved:
+                query = """
+                SELECT id, name, name_en, sku, barcode, category_id, supplier_id,
+                       product_type, description, specifications, unit,
+                       cost_price, base_price, pricing_policy,
+                       current_stock, reserved_stock, min_stock, reorder_point, max_stock,
+                       image_path, images, tags,
+                       is_active, is_discontinued, is_featured,
+                       created_at, updated_at, discontinued_date,
+                       sales_count, total_sold, average_rating
+                FROM products
+                WHERE (current_stock - reserved_stock) <= reorder_point
+                      AND is_active = 1 AND is_discontinued = 0
+                ORDER BY (current_stock - reserved_stock), reorder_point DESC
+                """
+            else:
+                query = """
+                SELECT id, name, name_en, sku, barcode, category_id, supplier_id,
+                       product_type, description, specifications, unit,
+                       cost_price, base_price, pricing_policy,
+                       current_stock, min_stock, reorder_point, max_stock,
+                       image_path, images, tags,
+                       is_active, is_discontinued, is_featured,
+                       created_at, updated_at, discontinued_date,
+                       sales_count, total_sold, average_rating
+                FROM products
+                WHERE current_stock <= reorder_point
+                      AND is_active = 1 AND is_discontinued = 0
+                ORDER BY current_stock, reorder_point DESC
+                """
 
             results = self.db_manager.fetch_all(query)
             return [self._row_to_product(row) for row in results]
@@ -566,6 +588,20 @@ class ProductService:
             for row in results:
                 valid_from_raw = get_value(row, 'valid_from')
                 valid_until_raw = get_value(row, 'valid_until')
+
+                # F3 FIX: handle non-string datetime values safely
+                def _parse_dt(val):
+                    if val is None:
+                        return None
+                    if isinstance(val, datetime):
+                        return val
+                    if isinstance(val, str):
+                        try:
+                            return datetime.fromisoformat(val)
+                        except Exception:
+                            return None
+                    return None
+
                 tier = PricingTier(
                     id=get_value(row, 'id'),
                     product_id=get_value(row, 'product_id'),
@@ -573,8 +609,8 @@ class ProductService:
                     max_quantity=get_value(row, 'max_quantity'),
                     price=Decimal(str(get_value(row, 'price') or 0)),
                     discount_percent=Decimal(str(get_value(row, 'discount_percent') or 0)),
-                    valid_from=datetime.fromisoformat(valid_from_raw) if valid_from_raw else None,
-                    valid_until=datetime.fromisoformat(valid_until_raw) if valid_until_raw else None,
+                    valid_from=_parse_dt(valid_from_raw),
+                    valid_until=_parse_dt(valid_until_raw),
                     description=get_value(row, 'description'),
                 )
                 tiers.append(tier)
@@ -604,6 +640,20 @@ class ProductService:
             for row in results:
                 start_raw = get_value(row, 'start_date')
                 end_raw = get_value(row, 'end_date')
+
+                # F3 FIX: handle non-string datetime values safely
+                def _parse_label_dt(val):
+                    if val is None:
+                        return None
+                    if isinstance(val, datetime):
+                        return val
+                    if isinstance(val, str):
+                        try:
+                            return datetime.fromisoformat(val)
+                        except Exception:
+                            return None
+                    return None
+
                 label = ProductLabel(
                     id=get_value(row, 'id'),
                     product_id=get_value(row, 'product_id'),
@@ -611,8 +661,8 @@ class ProductService:
                     label_text=get_value(row, 'label_text'),
                     label_color=get_value(row, 'label_color'),
                     priority=get_value(row, 'priority'),
-                    start_date=datetime.fromisoformat(start_raw) if start_raw else None,
-                    end_date=datetime.fromisoformat(end_raw) if end_raw else None,
+                    start_date=_parse_label_dt(start_raw),
+                    end_date=_parse_label_dt(end_raw),
                     is_active=bool(get_value(row, 'is_active')),
                 )
                 labels.append(label)
@@ -677,14 +727,28 @@ class ProductService:
     def get_inventory_value(self) -> Dict[str, Decimal]:
         """حساب قيمة المخزون الإجمالي"""
         try:
-            query = """
-            SELECT
-                SUM(current_stock * cost_price) as total_cost_value,
-                SUM((current_stock - reserved_stock) * base_price) as total_selling_value,
-                COUNT(*) as total_products
-            FROM products
-            WHERE is_active = 1
-            """
+            # F3 FIX: check for reserved_stock column existence
+            cols_info = self.db_manager.fetch_all("PRAGMA table_info(products)")
+            available_cols = {row.get('name', '') for row in cols_info} if cols_info else set()
+
+            if "reserved_stock" in available_cols:
+                query = """
+                SELECT
+                    SUM(current_stock * cost_price) as total_cost_value,
+                    SUM((current_stock - reserved_stock) * base_price) as total_selling_value,
+                    COUNT(*) as total_products
+                FROM products
+                WHERE is_active = 1
+                """
+            else:
+                query = """
+                SELECT
+                    SUM(current_stock * cost_price) as total_cost_value,
+                    SUM(current_stock * base_price) as total_selling_value,
+                    COUNT(*) as total_products
+                FROM products
+                WHERE is_active = 1
+                """
 
             result = self.db_manager.fetch_one(query)
             if result:
@@ -709,17 +773,36 @@ class ProductService:
     def get_products_statistics(self) -> Dict[str, Any]:
         """الحصول على إحصائيات المنتجات"""
         try:
-            query = """
-            SELECT
-                COUNT(*) as total_products,
-                COUNT(CASE WHEN is_active = 1 THEN 1 END) as active_products,
-                COUNT(CASE WHEN is_discontinued = 1 THEN 1 END) as discontinued_products,
-                COUNT(CASE WHEN (current_stock - reserved_stock) <= min_stock THEN 1 END) as low_stock_count,
-                AVG(CAST(current_stock as REAL)) as avg_stock,
-                MIN(current_stock) as min_stock_qty,
-                MAX(current_stock) as max_stock_qty
-            FROM products
-            """
+            # F3 FIX: check for reserved_stock column existence
+            cols_info = self.db_manager.fetch_all("PRAGMA table_info(products)")
+            available_cols = {row.get('name', '') for row in cols_info} if cols_info else set()
+
+            has_reserved = "reserved_stock" in available_cols
+
+            if has_reserved:
+                query = """
+                SELECT
+                    COUNT(*) as total_products,
+                    COUNT(CASE WHEN is_active = 1 THEN 1 END) as active_products,
+                    COUNT(CASE WHEN is_discontinued = 1 THEN 1 END) as discontinued_products,
+                    COUNT(CASE WHEN (current_stock - reserved_stock) <= min_stock THEN 1 END) as low_stock_count,
+                    AVG(CAST(current_stock as REAL)) as avg_stock,
+                    MIN(current_stock) as min_stock_qty,
+                    MAX(current_stock) as max_stock_qty
+                FROM products
+                """
+            else:
+                query = """
+                SELECT
+                    COUNT(*) as total_products,
+                    COUNT(CASE WHEN is_active = 1 THEN 1 END) as active_products,
+                    COUNT(CASE WHEN is_discontinued = 1 THEN 1 END) as discontinued_products,
+                    COUNT(CASE WHEN current_stock <= min_stock THEN 1 END) as low_stock_count,
+                    AVG(CAST(current_stock as REAL)) as avg_stock,
+                    MIN(current_stock) as min_stock_qty,
+                    MAX(current_stock) as max_stock_qty
+                FROM products
+                """
 
             result = self.db_manager.fetch_one(query)
             if result:
@@ -854,7 +937,10 @@ class ProductService:
         )
 
     def _generate_sku(self) -> str:
-        """توليد SKU فريد"""
+        """توليد SKU فريد مع التحقق من التفرد"""
         import time
-
-        return f"SKU-{int(time.time() * 1000)}"
+        import uuid
+        # F3 FIX: use UUID prefix for guaranteed uniqueness instead of pure timestamp
+        base = f"SKU-{int(time.time() * 1000)}"
+        suffix = uuid.uuid4().hex[:4].upper()
+        return f"{base}-{suffix}"

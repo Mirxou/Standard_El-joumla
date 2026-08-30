@@ -165,13 +165,8 @@ class ProductManager:
             if category_id:
                 res = self.db_manager.fetch_one("SELECT id FROM categories WHERE id = ?", (category_id,))
                 if not res:
-                    try:
-                        self.db_manager.execute_insert(
-                            "INSERT OR IGNORE INTO categories (id, name, name_en) VALUES (?, ?, ?)",
-                            (category_id, f"Category {category_id}", f"Category {category_id}")
-                        )
-                    except Exception:
-                        category_id = None
+                    # F3 FIX: Do NOT create ghost categories; just set to None
+                    category_id = None
 
             query = """
             INSERT INTO products (
@@ -284,9 +279,11 @@ class ProductManager:
             query, params = self._add_company_filter(query, params, company_id)
             query += " ORDER BY p.name"
             if limit:
-                query += f" LIMIT {limit}"
+                query += " LIMIT ?"
+                params.append(limit)
                 if offset:
-                    query += f" OFFSET {offset}"
+                    query += " OFFSET ?"
+                    params.append(offset)
 
             rows = self.db_manager.fetch_all(query, tuple(params))
             if rows is not None and type(rows).__name__ in ('Mock', 'MagicMock', 'NonCallableMock', 'CallableMock', 'AsyncMock'):
@@ -308,13 +305,8 @@ class ProductManager:
             if category_id:
                 res = self.db_manager.fetch_one("SELECT id FROM categories WHERE id = ?", (category_id,))
                 if not res:
-                    try:
-                        self.db_manager.execute_insert(
-                            "INSERT OR IGNORE INTO categories (id, name, name_en) VALUES (?, ?, ?)",
-                            (category_id, f"Category {category_id}", f"Category {category_id}")
-                        )
-                    except Exception:
-                        category_id = None
+                    # F3 FIX: Do NOT create ghost categories; just set to None
+                    category_id = None
 
             query = """
             UPDATE products SET

@@ -179,7 +179,8 @@ class InventoryService:
     def delete_product(self, product_id: int, hard_delete: bool = False) -> bool:
         """حذف منتج"""
         try:
-            return self.product_manager.delete_product(product_id, hard_delete)
+            # F3 FIX: invert hard_delete → soft_delete for ProductManager contract
+            return self.product_manager.delete_product(product_id, soft_delete=not hard_delete)
         except Exception as e:
             self.logger.warning(f"خطأ في حذف المنتج: {e}", exc_info=True)
             return False

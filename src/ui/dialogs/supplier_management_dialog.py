@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
 """
 نافذة إدارة الموردين
@@ -68,11 +67,11 @@ class SupplierManagementDialog(BaseDialog):
         # جدول الموردين
         self.table = QTableWidget()
         self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(["الاسم", "الهاتف", "البريد الإلكتروني", "الفئة", "الإجراءات"])
+        self.table.setHorizontalHeaderLabels(["الاسم", "الهاتف", "البريد الإلكتروني", "جهة الاتصال", "الإجراءات"])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.table.setColumnWidth(2, 150)
-        self.table.setColumnWidth(3, 100)
+        self.table.setColumnWidth(3, 120)
         self.table.setColumnWidth(4, 120)
         self.table.setStyleSheet(f"""
             QTableWidget {{
@@ -211,16 +210,26 @@ class SupplierManagementDialog(BaseDialog):
             self.load_suppliers()
 
     def delete_supplier(self, supplier_id):
-        """حذف مورد"""
-        # تحقق من عدد المنتجات المرتبطة
+        """حذف مورد (soft delete)"""
         try:
+            # تحقق من عدد المنتجات المرتبطة
             count_result = self.db_manager.fetch_one(
                 "SELECT COUNT(*) FROM products WHERE supplier_id = ?", (supplier_id,)
             )
-            count = (count_result.get("COUNT(*)", count_result.get("count", 0)) if isinstance(count_result, dict) else (count_result[0] if count_result else 0))
+            product_count = (count_result.get("COUNT(*)", count_result.get("count", 0)) if isinstance(count_result, dict) else (count_result[0] if count_result else 0))
 
-            if count > 0:
-                self.notify.show_warning("تحذير", f"لا يمكن حذف هذا المورد. هناك {count} منتج مرتبط به.")
+            # تحقق من وجود مشتريات مرتبطة
+            purchase_result = self.db_manager.fetch_one(
+                "SELECT COUNT(*) FROM purchases WHERE supplier_id = ? AND status != 'cancelled'", (supplier_id,)
+            )
+            purchase_count = (purchase_result.get("COUNT(*)", purchase_result.get("count", 0)) if isinstance(purchase_result, dict) else (purchase_result[0] if purchase_result else 0))
+
+            if product_count > 0:
+                self.notify.show_warning("تحذير", f"لا يمكن حذف هذا المورد. هناك {product_count} منتج مرتبط به.")
+                return
+
+            if purchase_count > 0:
+                self.notify.show_warning("تحذير", f"لا يمكن حذف هذا المورد. لديه {purchase_count} فاتورة شراء مرتبطة. يمكن تعطيله بدلاً من ذلك.")
                 return
 
             reply = QMessageBox.question(
@@ -231,7 +240,11 @@ class SupplierManagementDialog(BaseDialog):
             )
 
             if reply == QMessageBox.StandardButton.Yes:
-                self.db_manager.execute_query("DELETE FROM suppliers WHERE id = ?", (supplier_id,))
+                # Soft delete instead of hard delete
+                self.db_manager.execute_query(
+                    "UPDATE suppliers SET is_active = 0, updated_at = datetime('now') WHERE id = ?",
+                    (supplier_id,),
+                )
                 self.load_suppliers()
                 self.notify.show_success("نجاح", "تم حذف المورد بنجاح")
         except Exception as e:

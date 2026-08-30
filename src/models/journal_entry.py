@@ -111,8 +111,13 @@ class JournalEntry:
 
     def is_balanced(self) -> bool:
         """هل القيد متوازن (مدين = دائن)؟"""
+        # Zero-amount entries are not considered balanced
+        if not self.lines or len(self.lines) < 2:
+            return False
         debits = self.get_total_debits()
         credits = self.get_total_credits()
+        if debits <= 0 and credits <= 0:
+            return False
         # السماح بفرق صغير جداً بسبب التقريب
         return abs(debits - credits) < Decimal("0.01")
 

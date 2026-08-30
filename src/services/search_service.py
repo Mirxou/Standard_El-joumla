@@ -92,10 +92,14 @@ class SearchCriteria:
             params.append(self.value)
 
         elif self.operator == SearchOperator.BETWEEN:
+            if not isinstance(self.value, (list, tuple)) or len(self.value) != 2:
+                return "1=0", []
             sql = f"{self._get_column()} BETWEEN ? AND ?"
-            params.extend(self.value)  # Expect tuple/list of 2 values
+            params.extend(self.value)
 
         elif self.operator == SearchOperator.IN:
+            if not self.value or len(self.value) == 0:
+                return "1=0", []
             placeholders = ",".join(["?"] * len(self.value))
             sql = f"{self._get_column()} IN ({placeholders})"
             params.extend(self.value)

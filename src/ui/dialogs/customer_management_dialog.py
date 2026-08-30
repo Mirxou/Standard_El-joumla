@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
 """
 نافذة إدارة العملاء
@@ -107,12 +106,15 @@ class CustomerManagementDialog(BaseDialog):
 
             self.customers = []
             for row in results:
-                cust_id = row["id"]
-                name = row["name"]
-                phone = row["phone"]
-                email = row["email"]
-                balance = row["current_balance"]
-                is_active = row["is_active"]
+                if isinstance(row, dict):
+                    cust_id = row["id"]
+                    name = row["name"]
+                    phone = row["phone"]
+                    email = row["email"]
+                    balance = row["current_balance"]
+                    is_active = row["is_active"]
+                else:
+                    cust_id, name, phone, email, balance, is_active = row
                 self.customers.append(
                     {
                         "id": cust_id,
@@ -208,15 +210,33 @@ class CustomerManagementDialog(BaseDialog):
         """حذف عميل (soft-delete مع التحقق من السجلات المرتبطة)"""
         try:
             # التحقق من وجود عمليات بيع مرتبطة
-            sales_count = self.db_manager.fetch_one(
+            sales_result = self.db_manager.fetch_one(
                 "SELECT COUNT(*) FROM sales WHERE customer_id = ?", (customer_id,)
-            )[0] or 0
+            )
+            sales_count = 0
+            if sales_result:
+                if isinstance(sales_result, dict):
+                    sales_count = sales_result.get("COUNT(*)", 0) or 0
+                else:
+                    sales_count = sales_result[0] or 0
 
-            if sales_count > 0:
+            # التحقق من وجود مدفوعات مرتبطة
+            payments_result = self.db_manager.fetch_one(
+                "SELECT COUNT(*) FROM payments WHERE customer_id = ?", (customer_id,)
+            )
+            payments_count = 0
+            if payments_result:
+                if isinstance(payments_result, dict):
+                    payments_count = payments_result.get("COUNT(*)", 0) or 0
+                else:
+                    payments_count = payments_result[0] or 0
+
+            total_deps = sales_count + payments_count
+            if total_deps > 0:
                 reply = QMessageBox.warning(
                     self,
                     "تحذير",
-                    f"هذا العميل لديه {sales_count} عملية بيع مرتبطة. سيتم تعطيل العميل بدلاً من حذفه.",
+                    f"هذا العميل لديه {sales_count} عملية بيع و {payments_count} دفعة مرتبطة. سيتم تعطيل العميل بدلاً من حذفه.",
                     QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
                 )
                 if reply != QMessageBox.StandardButton.Ok:

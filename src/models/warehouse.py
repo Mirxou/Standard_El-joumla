@@ -727,11 +727,19 @@ class WarehouseInventoryManager:
 
             new_qty = Decimal(str(existing.quantity)) if existing else Decimal("0.0")
             new_qty += Decimal(str(quantity_diff))
-            
-            # Prevent going negative if result is negative
+
+            # F3 FIX: check allow_negative_stock on warehouse before blocking
             if new_qty < 0:
-                return False
-                
+                try:
+                    wh_row = _fetch_one_helper(self.db_manager, "SELECT allow_negative_stock FROM warehouses WHERE id = ?", (warehouse_id,))
+                    allow_neg = False
+                    if wh_row:
+                        allow_neg = (wh_row.get('allow_negative_stock') if isinstance(wh_row, dict) else wh_row[0]) or 0
+                    if not allow_neg:
+                        return False
+                except Exception:
+                    return False
+
             new_reserved = Decimal(str(existing.reserved_quantity)) if existing else Decimal("0.0")
             return self.update_quantity(warehouse_id, product_id, float(new_qty), float(new_reserved))
         except Exception as e:
@@ -790,7 +798,8 @@ class WarehouseTransferManager:
                         num = int(last_number.split("-")[1])
                         return f"TRF-{num + 1:06d}"
                     except Exception:
-                        logging.getLogger(__name__).warning("Ignored exception in warehouse.py")
+                        if self.logger:
+                            self.logger.warning("Ignored exception in warehouse.py - generate_transfer_number")
             return "TRF-000001"
         except Exception as e:
             _log_error(self.logger, f"Error generating transfer number: {e}")

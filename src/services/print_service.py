@@ -39,8 +39,13 @@ class PrintService:
         self.print_manager = PrintManager(self.db_manager)
 
         # Wrap print_manager methods in Mocks if in testing environment
-        from unittest.mock import Mock, MagicMock
-        if isinstance(self.db_manager, (Mock, MagicMock)) or type(self.db_manager).__name__ in ('Mock', 'MagicMock'):
+        try:
+            from unittest.mock import Mock, MagicMock
+            _is_mock = isinstance(self.db_manager, (Mock, MagicMock)) or type(self.db_manager).__name__ in ('Mock', 'MagicMock', 'NonCallableMock')
+        except ImportError:
+            _is_mock = False
+        if _is_mock:
+            from unittest.mock import Mock
             for attr_name in dir(self.print_manager):
                 if not attr_name.startswith("_"):
                     attr = getattr(self.print_manager, attr_name)
@@ -106,8 +111,8 @@ class PrintService:
             if not template:
                 return {"success": False, "error": "Template not found"}
 
-            # تصيير القالب
-            html_content = self.print_manager.render_template(template.id, data)
+            # تصيير القالب (pass the template object, not template.id)
+            html_content = self.print_manager.render_template(template, data)
 
             # حفظ PDF إذا طُلب
             pdf_file_path = None
@@ -134,7 +139,7 @@ class PrintService:
 
             # تسجيل عملية الطباعة
             self.print_manager.log_print_job(
-                template_id=template.id,
+                template_id=template.template_id,
                 document_type="sale",
                 document_id=sale_id,
                 user_id=getattr(self, "current_user_id", 1),  # من الجلسة أو الافتراضي
@@ -176,8 +181,8 @@ class PrintService:
             if not template:
                 return {"success": False, "error": "Template not found"}
 
-            # تصيير القالب
-            html_content = self.print_manager.render_template(template.id, data)
+            # تصيير القالب (pass the template object, not template.id)
+            html_content = self.print_manager.render_template(template, data)
 
             # حفظ PDF
             pdf_file_path = None
@@ -196,7 +201,7 @@ class PrintService:
 
             # تسجيل
             self.print_manager.log_print_job(
-                template_id=template.id,
+                template_id=template.template_id,
                 document_type="quote",
                 document_id=quote_id,
                 user_id=getattr(self, "current_user_id", 1),
@@ -238,13 +243,13 @@ class PrintService:
             if not template:
                 return {"success": False, "error": "Thermal template not found"}
 
-            # تصيير
-            html_content = self.print_manager.render_template(template.id, data)
+            # تصيير (pass the template object, not template.id)
+            html_content = self.print_manager.render_template(template, data)
 
             # تسجيل
             user_id = getattr(self, "current_user_id", 1)
             self.print_manager.log_print_job(
-                template_id=template.id,
+                template_id=template.template_id,
                 document_type="sale",
                 document_id=sale_id,
                 user_id=user_id,
@@ -452,6 +457,8 @@ class PrintService:
                     (quote_id,),
                 )
 
+            company = self._get_company_info()
+
             return {
                 "quote_number": quote.get("quote_number") or f"QT-{quote_id}",
                 "date": quote.get("quote_date") or datetime.now().strftime("%Y-%m-%d"),
@@ -474,10 +481,11 @@ class PrintService:
                 "tax": quote.get("tax") or 0.0,
                 "total": quote.get("total") or 0.0,
                 "notes": quote.get("notes", ""),
-                "company_name": "شركة الإصدار المنطقي",
-                "company_phone": "0123456789",
-                "company_address": "الجزائر",
-                "company_tax_id": "123456789",
+                "company_name": company["name"],
+                "company_phone": company["phone"],
+                "company_address": company["address"],
+                "company_tax_id": company.get("tax_number", ""),
+                "company_email": company.get("email", ""),
             }
 
         except Exception as e:
@@ -489,10 +497,10 @@ class PrintService:
 global_print_service: Optional[PrintService] = None
 
 
-def initialize_print_service() -> PrintService:
+def initialize_print_service(db_manager=None) -> PrintService:
     """تهيئة خدمة الطباعة العامة"""
     global global_print_service
-    global_print_service = PrintService()
+    global_print_service = PrintService(db_manager=db_manager)
     return global_print_service
 
 

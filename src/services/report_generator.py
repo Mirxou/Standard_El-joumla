@@ -434,8 +434,8 @@ class ReportGenerator:
             report_type=ReportType.FINANCIAL_TRIAL_BALANCE,
         )
 
-        sum(line.debit for line in report.financial_lines)
-        sum(line.credit for line in report.financial_lines)
+        summary.total_debit = sum(line.debit for line in report.financial_lines)
+        summary.total_credit = sum(line.credit for line in report.financial_lines)
 
         report.financial_summary = summary
 
@@ -643,9 +643,14 @@ class ReportGenerator:
         Returns:
             bool: نجاح العملية
         """
-        # سيتم التنفيذ لاحقاً
-        # يحتاج مكتبة reportlab أو مشابهة
-        return True
+        try:
+            exporter = PDFExportService()
+            html_content = report.to_html() if hasattr(report, 'to_html') else str(report)
+            return exporter.html_to_pdf(html_content, file_path)
+        except Exception as e:
+            from ..utils.logger import setup_logger
+            setup_logger(__name__).error(f"PDF export failed: {e}")
+            return False
 
     def export_report_to_excel(self, report: Report, file_path: str) -> bool:
         """
@@ -658,24 +663,57 @@ class ReportGenerator:
         Returns:
             bool: نجاح العملية
         """
-        # سيتم التنفيذ لاحقاً
-        # يحتاج مكتبة openpyxl أو مشابهة
-        return True
+        try:
+            if not hasattr(report, 'to_dataframe'):
+                return False
+            df = report.to_dataframe()
+            if df is None or df.empty:
+                return False
+            df.to_excel(file_path)
+            return True
+        except Exception as e:
+            from ..utils.logger import setup_logger
+            setup_logger(__name__).error(f"Excel export failed: {e}")
+            return False
 
     def generate_inventory_report(self, filters: ReportFilter) -> Report:
         """توليد تقرير المخزون"""
         report = Report(report_type=ReportType.INVENTORY, filters=filters)
-        
-        results = self.db.execute_query("dummy query") if hasattr(self.db, 'execute_query') else []
-        if not results:
+
+        query = """
+            SELECT
+                p.id as product_id, p.code as product_code, p.name as product_name,
+                c.name as category_name,
+                p.current_stock, p.min_stock,
+                p.cost_price as unit_cost,
+                (p.current_stock * p.cost_price) as total_value
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            WHERE 1=1
+        """
+        params = []
+
+        if hasattr(filters, 'category_ids') and filters.category_ids:
+            placeholders = ",".join("?" * len(filters.category_ids))
+            query += f" AND c.id IN ({placeholders})"
+            params.extend(filters.category_ids)
+
+        if hasattr(filters, 'low_stock_only') and filters.low_stock_only:
+            query += " AND p.current_stock <= p.min_stock"
+
+        query += " ORDER BY p.name"
+
+        try:
+            results = self.db.execute_query(query, params) if params else self.db.execute_query(query)
+        except Exception:
             results = []
 
         for row in results:
             current_stock = float(row.get("current_stock", 0))
             min_stock = float(row.get("min_stock", 0))
             is_low = current_stock <= min_stock
-            
-            if filters.low_stock_only and not is_low:
+
+            if hasattr(filters, 'low_stock_only') and filters.low_stock_only and not is_low:
                 continue
 
             line = InventoryReportLine(
@@ -689,23 +727,45 @@ class ReportGenerator:
                 is_low_stock=is_low,
             )
             report.inventory_lines.append(line)
-            
+
         return report
 
     def generate_financial_report(self, filters: ReportFilter) -> Report:
         """توليد التقرير المالي"""
         report = Report(report_type=ReportType.FINANCIAL, filters=filters)
-        
-        revenue_data = self.db.execute_query("revenue query")
-        expense_data = self.db.execute_query("expense query")
-        asset_data = self.db.execute_query("asset query")
-        liability_data = self.db.execute_query("liability query")
-        
-        total_revenue = sum(float(row.get("amount", 0)) for row in revenue_data) if revenue_data else 0.0
-        total_expenses = sum(float(row.get("amount", 0)) for row in expense_data) if expense_data else 0.0
-        total_assets = sum(float(row.get("amount", 0)) for row in asset_data) if asset_data else 0.0
-        total_liabilities = sum(float(row.get("amount", 0)) for row in liability_data) if liability_data else 0.0
-        
+
+        total_revenue = 0.0
+        total_expenses = 0.0
+        total_assets = 0.0
+        total_liabilities = 0.0
+
+        try:
+            # Revenue
+            q_rev = "SELECT COALESCE(SUM(current_balance), 0) as amount FROM chart_of_accounts WHERE account_type = 'Revenue' AND is_active = 1 AND is_header = 0"
+            rev_rows = self.db.execute_query(q_rev)
+            if rev_rows:
+                total_revenue = float(rev_rows[0].get("amount", 0))
+
+            # Expenses
+            q_exp = "SELECT COALESCE(SUM(current_balance), 0) as amount FROM chart_of_accounts WHERE account_type = 'Expense' AND is_active = 1 AND is_header = 0"
+            exp_rows = self.db.execute_query(q_exp)
+            if exp_rows:
+                total_expenses = float(exp_rows[0].get("amount", 0))
+
+            # Assets
+            q_ast = "SELECT COALESCE(SUM(current_balance), 0) as amount FROM chart_of_accounts WHERE account_type = 'Asset' AND is_active = 1 AND is_header = 0"
+            ast_rows = self.db.execute_query(q_ast)
+            if ast_rows:
+                total_assets = float(ast_rows[0].get("amount", 0))
+
+            # Liabilities
+            q_liab = "SELECT COALESCE(SUM(current_balance), 0) as amount FROM chart_of_accounts WHERE account_type = 'Liability' AND is_active = 1 AND is_header = 0"
+            liab_rows = self.db.execute_query(q_liab)
+            if liab_rows:
+                total_liabilities = float(liab_rows[0].get("amount", 0))
+        except Exception:
+            pass  # Return zeros if queries fail
+
         summary = FinancialReportSummary(
             period_start=filters.start_date or date.today(),
             period_end=filters.end_date or date.today(),
@@ -745,17 +805,29 @@ class ReportGenerator:
         """جدولة تقرير"""
         if frequency not in ["daily", "weekly", "monthly"]:
             return {"success": False, "error": "Invalid frequency"}
-        
+
         schedule_id = 1
-        if hasattr(self.db, 'execute'):
-            res = self.db.execute("INSERT INTO scheduled_reports ...")
-            if res:
-                schedule_id = res
+        try:
+            if hasattr(self.db, 'execute'):
+                cursor = self.db.execute(
+                    "INSERT INTO scheduled_reports (report_type, frequency, recipients, created_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+                    (report_type.value if hasattr(report_type, 'value') else str(report_type), frequency, ",".join(recipients or []))
+                )
+                if hasattr(cursor, 'lastrowid') and cursor.lastrowid:
+                    schedule_id = cursor.lastrowid
+        except Exception:
+            pass  # Table may not exist yet
         return {"success": True, "schedule_id": schedule_id}
 
     def get_report_history(self, limit: int = 10) -> Dict[str, Any]:
         """الحصول على سجل التقارير"""
-        results = self.db.execute_query("history query", [limit]) if hasattr(self.db, 'execute_query') else []
+        try:
+            results = self.db.execute_query(
+                "SELECT * FROM scheduled_reports ORDER BY created_at DESC LIMIT ?",
+                (limit,)
+            ) if hasattr(self.db, 'execute_query') else []
+        except Exception:
+            results = []
         if not results:
             results = []
         return {"success": True, "count": len(results), "reports": results}

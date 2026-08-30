@@ -1,10 +1,10 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Direct Print Service
 خدمة الطباعة المباشرة للطابعات الحرارية (ESC/POS) بدون حوار Windows
 """
+import logging
 
 from enum import Enum
 from typing import Any, Dict, List
@@ -135,7 +135,7 @@ class DirectPrintService:
             vendor_id = printer_config["vendor_id"]
             product_id = printer_config["product_id"]
 
-            printer = Usb(vendor_id, product_id, 0, timeout=0, in_ep=0x82, out_ep=0x01)
+            printer = Usb(vendor_id, product_id, 0, timeout=10000, in_ep=0x82, out_ep=0x01)
 
             # تنسيق وطباعة الفاتورة
             self._format_receipt(printer, receipt_data)
@@ -183,6 +183,8 @@ class DirectPrintService:
     def _format_receipt(self, printer, receipt_data: Dict[str, Any]):
         """
         تنسيق الفاتورة (ESC/POS)
+        Note: ESC/POS thermal printers generally do not support Arabic/RTL.
+        Text is sent as-is; Arabic legibility depends on printer firmware.
 
         Args:
             printer: كائن الطابعة (Usb أو Emulator)
@@ -190,7 +192,7 @@ class DirectPrintService:
         """
         # Initialize
         printer.set(align="center", text_type="B", width=2, height=2)
-        printer.text(f"{receipt_data.get('store_name', 'المتجر')}\n")
+        printer.text(f"{receipt_data.get('store_name', 'Store')}\n")
         printer.set(align="center", text_type="normal", width=1, height=1)
         printer.text(f"{receipt_data.get('store_address', '')}\n")
         printer.text(f"Tel: {receipt_data.get('store_phone', '')}\n")
@@ -250,8 +252,10 @@ class DirectPrintService:
 
         # Store name (Bold, Double size)
         commands.append(b"\x1b\x21\x30")  # ESC ! 0x30 = Bold + Double width + Double height
-        store_name = receipt_data.get("store_name", "المتجر").encode("utf-8")
-        commands.append(store_name)
+        store_name = receipt_data.get("store_name", "Store")
+        # Thermal printers typically don't support UTF-8/Arabic natively.
+        # Encode as latin-1 with replacement to avoid encoding errors.
+        commands.append(store_name.encode("utf-8", errors="replace"))
         commands.append(b"\n")
 
         # Reset formatting

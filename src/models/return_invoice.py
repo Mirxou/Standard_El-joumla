@@ -1,6 +1,6 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
 """
 نموذج المرتجعات - Return Invoice Model
 يحتوي على جميع العمليات المتعلقة بمرتجعات المبيعات والمشتريات

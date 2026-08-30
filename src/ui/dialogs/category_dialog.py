@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -202,28 +201,16 @@ class CategoryDialog(BaseDialog):
 
     def delete_category(self, category_id):
         """حذف فئة"""
-        # تحقق من عدد المنتجات المرتبطة
+        from src.models.category import CategoryManager
         try:
-            count_result = self.db_manager.fetch_one(
-                "SELECT COUNT(*) FROM products WHERE category_id = ?", (category_id,)
-            )
-            count = (count_result.get("COUNT(*)", count_result.get("count", 0)) if isinstance(count_result, dict) else (count_result[0] if count_result else 0))
-
-            if count > 0:
-                self.notify.show_warning("تحذير", f"لا يمكن حذف هذه الفئة. هناك {count} منتج مرتبط بها.")
+            cat_manager = CategoryManager(self.db_manager, self.logger)
+            # F3 FIX: Use CategoryManager which checks subcategories and uses soft delete
+            success = cat_manager.delete_category(category_id, soft_delete=True)
+            if not success:
+                self.notify.show_warning("تحذير", "لا يمكن حذف هذه الفئة. تحتوي على منتجات أو فئات فرعية.")
                 return
-
-            reply = QMessageBox.question(
-                self,
-                "تأكيد الحذف",
-                "هل تريد حذف هذه الفئة؟",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            )
-
-            if reply == QMessageBox.StandardButton.Yes:
-                self.db_manager.execute_query("DELETE FROM categories WHERE id = ?", (category_id,))
-                self.load_categories()
-                self.notify.show_success("نجاح", "تم حذف الفئة بنجاح")
+            self.load_categories()
+            self.notify.show_success("نجاح", "تم حذف الفئة بنجاح")
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في حذف الفئة: {str(e)}")

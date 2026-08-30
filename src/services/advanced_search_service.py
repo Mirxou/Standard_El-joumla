@@ -333,14 +333,27 @@ class AdvancedSearchService:
         suggestions = []
 
         # Build query for suggestions
-        config["display_name"]
-        sql = """
-            SELECT DISTINCT {display_field} as text
-            FROM {config['table']}
-            WHERE LOWER({display_field}) LIKE LOWER(?)
-            AND is_active = 1
-            LIMIT ?
-        """
+        display_field = config["display_name"]
+        table_name = config["table"]
+
+        # Check if table has is_active column
+        has_is_active = "is_active" in config["fields"]
+
+        if has_is_active:
+            sql = f"""
+                SELECT DISTINCT {display_field} as text
+                FROM {table_name}
+                WHERE LOWER({display_field}) LIKE LOWER(?)
+                AND is_active = 1
+                LIMIT ?
+            """
+        else:
+            sql = f"""
+                SELECT DISTINCT {display_field} as text
+                FROM {table_name}
+                WHERE LOWER({display_field}) LIKE LOWER(?)
+                LIMIT ?
+            """
 
         results = self.db.execute_query(sql, [f"{keyword}%", limit])
 

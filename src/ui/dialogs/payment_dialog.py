@@ -15,7 +15,6 @@ from PySide6.QtCore import QDate, QThread, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QApplication,
-    QCheckBox,
     QComboBox,
     QDateEdit,
     QDoubleSpinBox,
@@ -30,6 +29,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QRadioButton,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -201,8 +201,9 @@ class PaymentDialog(BaseDialog):
         type_group = QGroupBox(self.i18n.get_message("payment_type"))
         type_layout = QHBoxLayout(type_group)
 
-        self.customer_payment_radio = QCheckBox(self.i18n.get_message("customer_payment"))
-        self.supplier_payment_radio = QCheckBox(self.i18n.get_message("supplier_payment"))
+        self.customer_payment_radio = QRadioButton(self.i18n.get_message("customer_payment"))
+        self.customer_payment_radio.setChecked(True)
+        self.supplier_payment_radio = QRadioButton(self.i18n.get_message("supplier_payment"))
 
         type_layout.addWidget(self.customer_payment_radio)
         type_layout.addWidget(self.supplier_payment_radio)
@@ -493,11 +494,6 @@ class PaymentDialog(BaseDialog):
 
     def on_payment_type_changed(self):
         """معالج تغيير نوع المدفوعات"""
-        if self.customer_payment_radio.isChecked():
-            self.supplier_payment_radio.setChecked(False)
-        elif self.supplier_payment_radio.isChecked():
-            self.customer_payment_radio.setChecked(False)
-
         self.update_entity_combo()
 
     @prevent_double_click(wait_ms=1500)
@@ -561,12 +557,6 @@ class PaymentDialog(BaseDialog):
 
     def get_payment_data(self) -> Dict[str, Any]:
         """الحصول على بيانات المدفوعات من النموذج"""
-        if hasattr(self, "amount_input") and not hasattr(self, "amount_spinbox"):
-            return {
-                "amount": Decimal(self.amount_input.text() or "0.00"),
-                "payment_method": self.payment_method_combo.currentText() or PaymentMethod.CASH.value,
-            }
-
         entity_id = self.entity_combo.currentData()
 
         payment_method_map = {
@@ -581,15 +571,16 @@ class PaymentDialog(BaseDialog):
         return {
             ("customer_id" if self.customer_payment_radio.isChecked() else "supplier_id"): entity_id,
             "amount": Decimal(str(self.amount_spinbox.value())),
-            "payment_method": payment_method_map[self.payment_method_combo.currentText()],
+            "payment_method": payment_method_map.get(self.payment_method_combo.currentText(), self.payment_method_combo.currentText()),
             "reference_number": self.reference_edit.text().strip() or None,
             "notes": self.notes_edit.toPlainText().strip() or None,
         }
 
     def validate_amount(self, amount) -> bool:
+        """التحقق من صحة المبلغ - يجب أن يكون أكبر من صفر"""
         try:
             val = Decimal(amount)
-            return val >= 0
+            return val > 0
         except Exception:
             return False
 
@@ -778,17 +769,39 @@ class PaymentDialog(BaseDialog):
                 "+90 " + self.i18n.get_message("days"),
             ]
         else:
-            headers = list(data[0].keys()) if data else []
+            # Handle dict or list of dicts
+            if isinstance(data, dict):
+                headers = list(data.keys())
+            elif data and isinstance(data[0], dict):
+                headers = list(data[0].keys())
+            else:
+                headers = []
 
         self.report_table.setColumnCount(len(headers))
         self.report_table.setHorizontalHeaderLabels(headers)
-        self.report_table.setRowCount(len(data))
 
-        # ملء البيانات
-        for row, item in enumerate(data):
-            for col, key in enumerate(headers):
-                value = item.get(key, "")
-                self.report_table.setItem(row, col, QTableWidgetItem(str(value)))
+        # Handle dict data (e.g. aging/cash_flow reports)
+        if isinstance(data, dict):
+            row_items = []
+            for key, val in data.items():
+                if isinstance(val, dict):
+                    row_items.append(val)
+                elif isinstance(val, list):
+                    row_items.extend(val)
+            display_data = row_items
+        elif isinstance(data, list):
+            display_data = data
+        else:
+            display_data = []
+
+        self.report_table.setRowCount(len(display_data))
+
+        # Fill data
+        for row, item in enumerate(display_data):
+            if isinstance(item, dict):
+                for col, key in enumerate(headers):
+                    value = item.get(key, "")
+                    self.report_table.setItem(row, col, QTableWidgetItem(str(value)))
 
     def export_report(self):
         """تصدير التقرير"""

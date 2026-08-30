@@ -413,36 +413,36 @@ class PaymentPlansWindow(QMainWindow):
             overdue = self.service.get_overdue_installments()
             self.overdue_table.setRowCount(len(overdue))
 
-            for row, inst_data in enumerate(overdue):
+            for row, (plan, inst) in enumerate(overdue):
                 # رقم الخطة
-                self.overdue_table.setItem(row, 0, QTableWidgetItem(inst_data.get("plan_number", "")))
+                self.overdue_table.setItem(row, 0, QTableWidgetItem(plan.plan_number or ""))
 
                 # العميل
-                self.overdue_table.setItem(row, 1, QTableWidgetItem(inst_data.get("customer_name", "")))
+                self.overdue_table.setItem(row, 1, QTableWidgetItem(plan.customer_name or ""))
 
                 # رقم القسط
                 self.overdue_table.setItem(
                     row,
                     2,
-                    QTableWidgetItem(str(inst_data.get("installment_number", ""))),
+                    QTableWidgetItem(str(inst.installment_number)),
                 )
 
                 # تاريخ الاستحقاق
-                due_date = inst_data.get("due_date")
-                due_str = due_date.strftime("%Y-%m-%d") if isinstance(due_date, date) else str(due_date)
+                due_date = inst.due_date
+                due_str = due_date.strftime("%Y-%m-%d") if isinstance(due_date, date) else str(due_date or "")
                 self.overdue_table.setItem(row, 3, QTableWidgetItem(due_str))
 
                 # المبالغ
-                self.overdue_table.setItem(row, 4, QTableWidgetItem(f"{inst_data.get('total_amount', 0):,.2f}"))
+                self.overdue_table.setItem(row, 4, QTableWidgetItem(f"{inst.total_amount:,.2f}"))
                 self.overdue_table.setItem(
                     row,
                     5,
-                    QTableWidgetItem(f"{inst_data.get('remaining_amount', 0):,.2f}"),
+                    QTableWidgetItem(f"{inst.remaining_amount:,.2f}"),
                 )
-                self.overdue_table.setItem(row, 6, QTableWidgetItem(f"{inst_data.get('late_fee', 0):,.2f}"))
+                self.overdue_table.setItem(row, 6, QTableWidgetItem(f"{inst.late_fee:,.2f}"))
 
                 # أيام التأخير
-                days = inst_data.get("days_overdue", 0)
+                days = inst.days_overdue
                 days_item = QTableWidgetItem(f"{days} يوم")
                 if days > 30:
                     days_item.setBackground(QColor(255, 100, 100))
@@ -451,17 +451,17 @@ class PaymentPlansWindow(QMainWindow):
                 self.overdue_table.setItem(row, 7, days_item)
 
                 # الحالة
-                status = inst_data.get("status", "")
+                status = inst.status.value if hasattr(inst.status, 'value') else str(inst.status)
                 self.overdue_table.setItem(row, 8, QTableWidgetItem(status))
 
                 # زر الدفع
                 pay_btn = QPushButton("💰 دفع")
-                installment_id = inst_data.get("installment_id")
-                pay_btn.clicked.connect(lambda checked, iid=installment_id: self.quick_payment(iid))
+                pay_btn.clicked.connect(lambda checked, pid=plan.id, iid=inst.id: self.quick_payment(pid, iid))
                 self.overdue_table.setCellWidget(row, 9, pay_btn)
 
-        except Exception:
-            pass  # Error loading overdue installments
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Error loading overdue installments: {e}", exc_info=True)
 
     def update_statistics(self):
         """تحديث الإحصائيات"""
@@ -545,10 +545,21 @@ class PaymentPlansWindow(QMainWindow):
             self.load_payment_plans()
             self.plan_updated.emit()
 
-    def quick_payment(self, installment_id: int):
+    def quick_payment(self, plan_id: int, installment_id: int):
         """دفع سريع لقسط"""
-        # TODO: تنفيذ دفع سريع
-        QMessageBox.information(self, "دفع", f"تسجيل دفع للقسط #{installment_id}")
+        try:
+            plan = self.service.get_payment_plan(plan_id)
+            if not plan:
+                QMessageBox.warning(self, "خطأ", "لم يتم العثور على الخطة")
+                return
+            from ..dialogs.installment_payment_dialog import InstallmentPaymentDialog
+            inst = next((i for i in plan.installments if i.id == installment_id), None)
+            dialog = InstallmentPaymentDialog(plan, self.db_manager, installment=inst, parent=self)
+            if dialog.exec() == QDialog.Accepted:
+                self.load_payment_plans()
+                self.plan_updated.emit()
+        except Exception as e:
+            QMessageBox.critical(self, "خطأ", f"فشل تسجيل الدفع:\n{str(e)}")
 
     def cancel_plan(self):
         """إلغاء الخطة"""

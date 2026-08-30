@@ -344,6 +344,34 @@ class PDFExportService:
             writer = PdfWriter()
             for page in reader.pages:
                 writer.add_page(page)
+            # Apply watermark text to each page
+            if watermark_text:
+                try:
+                    from io import BytesIO
+                    from reportlab.pdfgen import canvas as pdf_canvas
+                    from reportlab.lib import colors
+
+                    for page in writer.pages:
+                        mediabox = getattr(page, 'mediabox', None)
+                        if not mediabox:
+                            continue
+                        w = float(mediabox.width)
+                        h = float(mediabox.height)
+                        buf = BytesIO()
+                        c = pdf_canvas.Canvas(buf, pagesize=(w, h))
+                        c.setFont("Helvetica", 50)
+                        c.setFillColor(colors.Color(0.5, 0.5, 0.5, alpha=opacity))
+                        c.saveState()
+                        c.translate(w / 2, h / 2)
+                        c.rotate(45)
+                        c.drawCentredString(0, 0, watermark_text)
+                        c.restoreState()
+                        c.save()
+                        buf.seek(0)
+                        watermark_reader = PdfReader(buf)
+                        page.merge_page(watermark_reader.pages[0])
+                except Exception as wm_err:
+                    logger.log(logging.WARNING, f"Watermark application skipped (reportlab may not be installed): {wm_err}")
             with open(output_path, "wb") as f:
                 writer.write(f)
             return True

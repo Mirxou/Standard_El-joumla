@@ -616,6 +616,44 @@ class PurchaseOrderDialog(BaseDialog):
                     self.i18n.get_message("select_product_for_item", item_number=row + 1),
                 )
                 return False
+
+            # Validate quantity > 0
+            qty_spin = self.items_table.cellWidget(row, 2)
+            if qty_spin and qty_spin.value() <= 0:
+                self.notify.show_warning(
+                    self.i18n.get_message("warning"),
+                    f"الصف {row + 1}: الكمية يجب أن تكون أكبر من صفر",
+                )
+                return False
+
+            # Validate price > 0
+            price_spin = self.items_table.cellWidget(row, 3)
+            if price_spin and price_spin.value() <= 0:
+                self.notify.show_warning(
+                    self.i18n.get_message("warning"),
+                    f"الصف {row + 1}: السعر يجب أن يكون أكبر من صفر",
+                )
+                return False
+
+        # Guard against discount exceeding total net
+        total_net = Decimal("0")
+        for row in range(self.items_table.rowCount()):
+            net_item = self.items_table.item(row, 7)
+            if net_item is not None:
+                net_text = net_item.text().replace(",", "")
+                try:
+                    total_net += Decimal(net_text)
+                except Exception:
+                    pass
+
+        discount = Decimal(str(self.discount_spin.value()))
+        if discount > total_net:
+            self.notify.show_warning(
+                self.i18n.get_message("warning"),
+                "الخصم الإجمالي يتجاوز صافي المبلغ",
+            )
+            return False
+
         return True
 
     def _collect_data(self):

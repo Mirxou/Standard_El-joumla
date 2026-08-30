@@ -1,5 +1,5 @@
-import logging
 #!/usr/bin/env python3
+import logging
 # -*- coding: utf-8 -*-
 """
 نموذج المشتريات - Purchase Model
@@ -465,9 +465,22 @@ class PurchaseManager:
         """توليد رقم فاتورة بصيغة PUR{N:06d}"""
         try:
             row = self.db_manager.fetch_one(
-                "SELECT COUNT(*) FROM purchases"
+                "SELECT invoice_number FROM purchases ORDER BY id DESC LIMIT 1"
             )
-            count = int(row.get("COUNT(*)", row.get("count", 0))) if row else 0
+            if row:
+                last_number = row.get("invoice_number") if isinstance(row, dict) else (row[1] if len(row) > 1 else None)
+                if last_number:
+                    # Extract numeric part from PUR000001 format
+                    import re
+                    match = re.search(r'\d+$', str(last_number))
+                    if match:
+                        count = int(match.group())
+                    else:
+                        count = int(row.get("id", 0) if isinstance(row, dict) else row[0])
+                else:
+                    count = int(row.get("id", 0) if isinstance(row, dict) else row[0])
+            else:
+                count = 0
         except Exception:
             count = 0
         return f"PUR{count + 1:06d}"
@@ -479,82 +492,107 @@ class PurchaseManager:
                     self.generate_invoice_number()
                 )
             purchase.calculate_totals()
-            query = """
-            INSERT INTO purchases (
-                invoice_number, supplier_invoice_number,
-                supplier_id,
-                purchase_date, expected_delivery_date,
-                received_date,
-                status, payment_status, payment_terms,
-                subtotal_amount, tax_amount,
-                shipping_cost, total_amount,
-                paid_amount, remaining_amount,
-                currency_id, exchange_rate,
-                base_amount, converted_amount,
-                notes, user_id,
-                created_at, updated_at
-            ) VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-            )
-            """
-            params = (
-                purchase.invoice_number,
-                purchase.supplier_invoice_number,
-                purchase.supplier_id,
-                purchase.purchase_date,
-                purchase.expected_delivery_date,
-                purchase.actual_delivery_date,
-                purchase.status,
-                purchase.payment_status,
-                purchase.payment_terms,
-                float(purchase.subtotal_amount),
-                float(purchase.tax_amount),
-                float(purchase.shipping_cost),
-                float(purchase.total_amount),
-                float(purchase.paid_amount),
-                float(purchase.remaining_amount),
-                purchase.currency_id,
-                float(purchase.exchange_rate),
-                float(purchase.base_amount),
-                float(purchase.converted_amount),
-                purchase.notes,
-                purchase.user_id,
-            )
 
-            # استخدام execute_query أولاً ثم execute_insert
-            purchase_id = None
+            # Use transaction for atomicity
             try:
-                result = self.db_manager.execute_query(
-                    query, params
+                self.db_manager.execute_non_query("BEGIN TRANSACTION")
+            except Exception:
+                pass
+
+            try:
+                query = """
+                INSERT INTO purchases (
+                    invoice_number, supplier_invoice_number,
+                    supplier_id,
+                    purchase_date, expected_delivery_date,
+                    received_date,
+                    status, payment_status, payment_terms,
+                    subtotal_amount, tax_amount,
+                    shipping_cost, total_amount,
+                    paid_amount, remaining_amount,
+                    currency_id, exchange_rate,
+                    base_amount, converted_amount,
+                    notes, user_id,
+                    created_at, updated_at
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                 )
-                if result and hasattr(result, 'lastrowid'):
-                    purchase_id = result.lastrowid
-            except (AttributeError, TypeError):
-                purchase_id = (
-                    self.db_manager.execute_insert(
+                """
+                params = (
+                    purchase.invoice_number,
+                    purchase.supplier_invoice_number,
+                    purchase.supplier_id,
+                    purchase.purchase_date,
+                    purchase.expected_delivery_date,
+                    purchase.actual_delivery_date,
+                    purchase.status,
+                    purchase.payment_status,
+                    purchase.payment_terms,
+                    float(purchase.subtotal_amount),
+                    float(purchase.tax_amount),
+                    float(purchase.shipping_cost),
+                    float(purchase.total_amount),
+                    float(purchase.paid_amount),
+                    float(purchase.remaining_amount),
+                    purchase.currency_id,
+                    float(purchase.exchange_rate),
+                    float(purchase.base_amount),
+                    float(purchase.converted_amount),
+                    purchase.notes,
+                    purchase.user_id,
+                )
+
+                # استخدام execute_query أولاً ثم execute_insert
+                purchase_id = None
+                try:
+                    result = self.db_manager.execute_query(
                         query, params
                     )
-                )
+                    if result and hasattr(result, 'lastrowid'):
+                        purchase_id = result.lastrowid
+                except (AttributeError, TypeError):
+                    purchase_id = (
+                        self.db_manager.execute_insert(
+                            query, params
+                        )
+                    )
 
-            if purchase_id:
-                purchase.id = purchase_id
-                for item in purchase.items:
-                    item.purchase_id = purchase_id
-                    self._create_purchase_item(item)
+                if purchase_id:
+                    purchase.id = purchase_id
+                    for item in purchase.items:
+                        item.purchase_id = purchase_id
+                        self._create_purchase_item(item)
 
-                # إرسال الإشارات
-                self._emit_signals(
-                    'purchase_created', purchase_id
-                )
-                # تشغيل الويب هوك
-                self._trigger_webhook(
-                    'purchase_created', purchase_id,
-                    purchase
-                )
+                    try:
+                        self.db_manager.execute_non_query("COMMIT")
+                    except Exception:
+                        pass
 
-                return purchase_id
+                    # إرسال الإشارات
+                    self._emit_signals(
+                        'purchase_created', purchase_id
+                    )
+                    # تشغيل الويب هوك
+                    self._trigger_webhook(
+                        'purchase_created', purchase_id,
+                        purchase
+                    )
+
+                    return purchase_id
+                else:
+                    try:
+                        self.db_manager.execute_non_query("ROLLBACK")
+                    except Exception:
+                        pass
+                    return None
+            except Exception:
+                try:
+                    self.db_manager.execute_non_query("ROLLBACK")
+                except Exception:
+                    pass
+                raise
         except Exception as e:
             if self.logger:
                 self.logger.warning(
@@ -1049,8 +1087,11 @@ class PurchaseManager:
         self,
         search_term: str = '',
         status: Optional[str] = None,
+        supplier_id: Optional[int] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
     ) -> List[Purchase]:
-        """بحث في المشتريات مع دعم فلترة الحالة"""
+        """بحث في المشتريات مع دعم فلترة الحالة والمورد والتاريخ"""
         try:
             query = """
                 SELECT p.*
@@ -1070,6 +1111,18 @@ class PurchaseManager:
             if status:
                 query += " AND p.status = ?"
                 params.append(status)
+
+            if supplier_id:
+                query += " AND p.supplier_id = ?"
+                params.append(supplier_id)
+
+            if start_date:
+                query += " AND p.purchase_date >= ?"
+                params.append(start_date.isoformat() if isinstance(start_date, date) else str(start_date))
+
+            if end_date:
+                query += " AND p.purchase_date <= ?"
+                params.append(end_date.isoformat() if isinstance(end_date, date) else str(end_date))
 
             rows = self.db_manager.fetch_all(
                 query, tuple(params)

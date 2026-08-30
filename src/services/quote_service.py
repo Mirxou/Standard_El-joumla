@@ -31,23 +31,24 @@ class QuoteService:
             cursor = self.db.connection.cursor()
             cursor.execute("""
                 SELECT quote_number FROM quotes
+                WHERE quote_number LIKE ?
                 ORDER BY id DESC LIMIT 1
-            """)
+            """,
+            (f"QT-{date.today().strftime('%Y%m%d')}%",),
+            )
             result = cursor.fetchone()
 
+            seq = 1
             if result:
                 last_number = result[0]
                 # استخراج الرقم من النمط QT-YYYYMMDD-XXX
                 if "-" in last_number:
                     parts = last_number.split("-")
                     if len(parts) == 3:
-                        seq = int(parts[2]) + 1
-                    else:
-                        seq = 1
-                else:
-                    seq = 1
-            else:
-                seq = 1
+                        try:
+                            seq = int(parts[2]) + 1
+                        except (ValueError, IndexError):
+                            seq = 1
 
             # توليد رقم جديد
             today = date.today().strftime("%Y%m%d")

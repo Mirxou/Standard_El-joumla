@@ -209,6 +209,17 @@ class PaymentService:
     ) -> Optional[Payment]:
         """إنشاء دفعة من العميل"""
         try:
+            # Validate amount
+            if not amount or amount <= 0:
+                if self.logger:
+                    self.logger.warning("تم رفض دفعة عميل: المبلغ غير صحيح")
+                return None
+
+            if not customer_id or customer_id <= 0:
+                if self.logger:
+                    self.logger.warning("تم رفض دفعة عميل: معرف العميل غير صحيح")
+                return None
+
             payment = Payment(
                 payment_type=PaymentType.CUSTOMER_PAYMENT.value,
                 payment_method=payment_method,
@@ -398,6 +409,17 @@ class PaymentService:
     ) -> Optional[Payment]:
         """إنشاء دفعة للمورد"""
         try:
+            # Validate amount
+            if not amount or amount <= 0:
+                if self.logger:
+                    self.logger.warning("تم رفض دفعة مورد: المبلغ غير صحيح")
+                return None
+
+            if not supplier_id or supplier_id <= 0:
+                if self.logger:
+                    self.logger.warning("تم رفض دفعة مورد: معرف المورد غير صحيح")
+                return None
+
             payment = Payment(
                 payment_type=PaymentType.SUPPLIER_PAYMENT.value,
                 payment_method=payment_method,
@@ -452,6 +474,20 @@ class PaymentService:
                 payment.exchange_rate = Decimal("1.0")
 
             payment_id = self.payment_manager.create_payment(payment)
+            if not payment_id:
+                try:
+                    # Fallback: lookup by unique payment_number
+                    cursor = self.db_manager.connection.cursor()
+                    cursor.execute(
+                        "SELECT id FROM payments WHERE payment_number = ? ORDER BY id DESC LIMIT 1",
+                        (payment.payment_number,),
+                    )
+                    r = cursor.fetchone()
+                    if r:
+                        payment_id = r[0]
+                except Exception:
+                    if self.logger:
+                        self.logger.warning("Ignored exception in payment_service.py supplier fallback")
             if payment_id:
                 payment_obj = self.payment_manager.get_payment_by_id(payment_id)
 

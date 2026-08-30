@@ -674,19 +674,27 @@ class AccountsWindow(QMainWindow):
 
             # فلتر العميل
             if customer_filter:
-                customer_name = self.receivables_table.item(row, 0).text().lower()
-                if customer_filter not in customer_name:
+                item = self.receivables_table.item(row, 0)
+                if item is None:
                     show_row = False
+                else:
+                    customer_name = item.text().lower()
+                    if customer_filter not in customer_name:
+                        show_row = False
 
             # فلتر المبلغ
             if show_row:
-                balance_text = self.receivables_table.item(row, 1).text().replace(" ج.م", "")
-                try:
-                    balance = float(balance_text)
-                    if not (amount_from <= balance <= amount_to):
-                        show_row = False
-                except ValueError:
+                item = self.receivables_table.item(row, 1)
+                if item is None:
                     show_row = False
+                else:
+                    balance_text = item.text().replace(" ج.م", "")
+                    try:
+                        balance = float(balance_text)
+                        if not (amount_from <= balance <= amount_to):
+                            show_row = False
+                    except ValueError:
+                        show_row = False
 
             self.receivables_table.setRowHidden(row, not show_row)
 
@@ -702,19 +710,27 @@ class AccountsWindow(QMainWindow):
 
             # فلتر المورد
             if supplier_filter:
-                supplier_name = self.payables_table.item(row, 0).text().lower()
-                if supplier_filter not in supplier_name:
+                item = self.payables_table.item(row, 0)
+                if item is None:
                     show_row = False
+                else:
+                    supplier_name = item.text().lower()
+                    if supplier_filter not in supplier_name:
+                        show_row = False
 
             # فلتر المبلغ
             if show_row:
-                balance_text = self.payables_table.item(row, 1).text().replace(" ج.م", "")
-                try:
-                    balance = float(balance_text)
-                    if not (amount_from <= balance <= amount_to):
-                        show_row = False
-                except ValueError:
+                item = self.payables_table.item(row, 1)
+                if item is None:
                     show_row = False
+                else:
+                    balance_text = item.text().replace(" ج.م", "")
+                    try:
+                        balance = float(balance_text)
+                        if not (amount_from <= balance <= amount_to):
+                            show_row = False
+                    except ValueError:
+                        show_row = False
 
             self.payables_table.setRowHidden(row, not show_row)
 
@@ -731,23 +747,31 @@ class AccountsWindow(QMainWindow):
 
             # فلتر النوع
             if type_filter != "الكل":
-                row_type = self.schedules_table.item(row, 0).text()
-                if type_filter != row_type:
+                item = self.schedules_table.item(row, 0)
+                if item is None:
+                    show_row = False
+                elif type_filter != item.text():
                     show_row = False
 
             # فلتر الحالة
             if show_row and status_filter != "الكل":
-                row_status = self.schedules_table.item(row, 4).text()
-                if status_filter != row_status:
+                item = self.schedules_table.item(row, 4)
+                if item is None:
+                    show_row = False
+                elif status_filter != item.text():
                     show_row = False
 
             # فلتر التاريخ
             if show_row:
                 try:
-                    due_date_str = self.schedules_table.item(row, 3).text()
-                    due_date = datetime.strptime(due_date_str, "%Y-%m-%d").date()
-                    if not (date_from <= due_date <= date_to):
+                    item = self.schedules_table.item(row, 3)
+                    if item is None:
                         show_row = False
+                    else:
+                        due_date_str = item.text()
+                        due_date = datetime.strptime(due_date_str, "%Y-%m-%d").date()
+                        if not (date_from <= due_date <= date_to):
+                            show_row = False
                 except (ValueError, AttributeError):
                     show_row = False
 

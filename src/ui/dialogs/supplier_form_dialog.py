@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
 """
 نموذج تعديل/إضافة المورد
@@ -170,6 +169,45 @@ class SupplierFormDialog(BaseDialog):
             self.notify.show_warning(
                 self.i18n.get_message("warning"),
                 self.i18n.get_message("phone_required"),
+            )
+            return
+
+        # التحقق من تكرار رقم الهاتف
+        try:
+            dup_query = "SELECT id, name FROM suppliers WHERE phone = ? AND id != ?"
+            dup_params = (phone, self.supplier_id or 0)
+            dup_result = self.db_manager.fetch_one(dup_query, dup_params)
+            if dup_result:
+                dup_name = dup_result.get("name") if isinstance(dup_result, dict) else dup_result[1]
+                self.notify.show_warning(
+                    self.i18n.get_message("warning"),
+                    f"رقم الهاتف مسجل مسبقاً للمورد: {dup_name}",
+                )
+                return
+        except Exception:
+            pass
+
+        # التحقق من تكرار البريد الإلكتروني
+        if email:
+            try:
+                dup_email_query = "SELECT id, name FROM suppliers WHERE email = ? AND id != ?"
+                dup_email_params = (email, self.supplier_id or 0)
+                dup_email_result = self.db_manager.fetch_one(dup_email_query, dup_email_params)
+                if dup_email_result:
+                    dup_name = dup_email_result.get("name") if isinstance(dup_email_result, dict) else dup_email_result[1]
+                    self.notify.show_warning(
+                        self.i18n.get_message("warning"),
+                        f"البريد الإلكتروني مسجل مسبقاً للمورد: {dup_name}",
+                    )
+                    return
+            except Exception:
+                pass
+
+        # Email format validation (optional field)
+        if email and '@' not in email:
+            self.notify.show_warning(
+                self.i18n.get_message("warning"),
+                "صيغة البريد الإلكتروني غير صحيحة",
             )
             return
 

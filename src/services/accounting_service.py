@@ -159,6 +159,12 @@ class AccountingService:
 
     def create_journal_entry(self, entry: JournalEntry) -> int:
         """إنشاء قيد يومي جديد بنمط آمن مع حماية من تكرار الرقم."""
+        # Validate: must have at least 2 lines with non-zero amounts
+        if not entry.lines or len(entry.lines) < 2:
+            raise ValueError("القيد يجب أن يحتوي على سطرين على الأقل")
+        has_non_zero = any(line.debit_amount > 0 or line.credit_amount > 0 for line in entry.lines)
+        if not has_non_zero:
+            raise ValueError("القيد يحتوي على مبالغ صفرية فقط — غير صالح")
         if not entry.is_balanced():
             raise ValueError("القيد غير متوازن")
         try:
@@ -184,8 +190,10 @@ class AccountingService:
                 entry.id = journal_id
                 for line in entry.lines:
                     self._insert_journal_line(journal_id, line)
-                # تحديث أرصدة الحسابات تلقائياً
-                self._update_account_balances(journal_id)
+                # Only update balances if the entry is already posted;
+                # otherwise balances update on post_journal_entry to avoid double-counting.
+                if entry.is_posted:
+                    self._update_account_balances(journal_id)
             return journal_id or 0
         except Exception as e:
             self.logger.warning(f"خطأ في إنشاء القيد: {e}")
@@ -220,6 +228,10 @@ class AccountingService:
             for line in lines:
                 is_dict = isinstance(line, dict)
                 aid = line.get("account_id") if is_dict else line[0]
+                # Guard: skip lines with no valid account_id
+                if not aid:
+                    self.logger.warning(f"سطر قيد بدون account_id صالح في journal_id={journal_id} — تم التخطي")
+                    continue
                 debit = Decimal(str(line.get("debit_amount", 0) if is_dict else line[1]))
                 credit = Decimal(str(line.get("credit_amount", 0) if is_dict else line[2]))
                 diff = debit - credit
@@ -458,7 +470,7 @@ class AccountingService:
             raise
 
     def post_journal_entry(self, journal_id: int) -> bool:
-        """ترحيل قيد يومي (تحديث حالة is_posted)"""
+        """ترحيل قيد يومي (تحديث حالة is_posted وتحديث الأرصدة)"""
         try:
             # التحقق من أن القيد غير مرحل مسبقاً
             entry = self.db.fetch_one(
@@ -475,6 +487,8 @@ class AccountingService:
                 "UPDATE general_journal SET is_posted = 1 WHERE id = ?",
                 (journal_id,),
             )
+            # Update account balances on posting to avoid double-counting
+            self._update_account_balances(journal_id)
             return True
         except Exception as e:
             self.logger.warning(f"خطأ في ترحيل القيد: {e}")

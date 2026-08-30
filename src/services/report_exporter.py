@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 """
 خدمة التقارير - Reports Service
@@ -6,6 +5,7 @@ import logging
 """
 
 import json
+import logging
 import os
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -29,7 +29,6 @@ try:
 except ImportError:
     EXCEL_AVAILABLE = False
 
-import os  # noqa: F811
 import warnings
 
 from jinja2 import Template

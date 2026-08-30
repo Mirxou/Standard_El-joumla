@@ -385,7 +385,12 @@ class ReturnsWindow(QMainWindow):
             return
 
         # الحصول على المعرف
-        return_id = self.returns_table.item(selected_rows[0].row(), 0).data(Qt.UserRole)
+        col0_item = self.returns_table.item(selected_rows[0].row(), 0)
+        if not col0_item:
+            self._clear_details()
+            self._update_buttons(None)
+            return
+        return_id = col0_item.data(Qt.UserRole)
 
         # تحميل التفاصيل
         ret = self.return_service.get_return(return_id)
@@ -747,18 +752,8 @@ class ReturnFormDialog(QDialog):
             r_date = self.return_date.date()
             ret.return_date = date(r_date.year(), r_date.month(), r_date.day())
 
-            # إضافة بند تجريبي
-            ret.add_item(
-                ReturnItem(
-                    product_id=1,
-                    product_name="منتج افتراضي",
-                    quantity_returned=Decimal("1"),
-                    quantity_original=Decimal("1"),
-                    unit_price=Decimal("100.00"),
-                    return_reason=self.return_reason.currentData(),
-                    restockable=True,
-                )
-            )
+            # Note: Items should be added after saving via the edit dialog
+            # (per the UI note in the form)
 
             if self.return_service.create_return(ret):
                 self.accept()
