@@ -182,6 +182,8 @@ class SalesService:
         """إلغاء فاتورة مع عكس كل العمليات المترتبة (ذري).
 
         يستخدم adjust_stock_relative لضمان ذرية إرجاع المخزون.
+        كل العمليات (إلغاء الحالة، إرجاع المخزون، عكس رصيد العميل) تتم
+        داخل معاملة واحدة لضمان الذرية.
         """
         try:
             sale = self.sale_manager.get_sale_by_id(sale_id)
@@ -194,13 +196,16 @@ class SalesService:
                 self.logger.warning(f"Sale {sale_id} is already cancelled")
                 return False
 
-            # 1. إلغاء في Manager
-            if self.sale_manager.cancel_sale(sale_id):
+            with self.db_manager.transaction() as _tx:
+                # 1. إلغاء في Manager
+                if not self.sale_manager.cancel_sale(sale_id):
+                    return False
+
                 # 2. إرجاع المخزون بشكل ذري (نسبي)
                 for item in sale.items:
                     self.inventory_service.adjust_stock_relative(
                         product_id=item.product_id,
-                        diff=+item.quantity,  # إرجاع الكمية
+                        diff=+item.quantity,
                         reason=f"cancel_sale:{sale_id}",
                         user_id=user_id,
                     )
@@ -222,7 +227,6 @@ class SalesService:
                             self.logger.warning(f"Customer balance reversal deferred: {e}")
 
                 return True
-            return False
         except Exception as e:
             self.logger.warning(f"Error cancelling sale {sale_id}: {e}")
             return False

@@ -398,15 +398,16 @@ class ReportGenerator:
 
         query = """
             SELECT
-                a.code, a.name, a.type,
-                COALESCE(SUM(CASE WHEN jel.type = 'debit' THEN jel.amount ELSE 0 END), 0) as total_debit,
-                COALESCE(SUM(CASE WHEN jel.type = 'credit' THEN jel.amount ELSE 0 END), 0) as total_credit
-            FROM accounts a
-            LEFT JOIN journal_entry_lines jel ON a.id = jel.account_id
-            LEFT JOIN journal_entries je ON jel.entry_id = je.id
-            WHERE je.date BETWEEN ? AND ?
+                a.account_code as code, a.account_name as name, a.account_type as type,
+                COALESCE(SUM(jel.debit_amount), 0) as total_debit,
+                COALESCE(SUM(jel.credit_amount), 0) as total_credit
+            FROM chart_of_accounts a
+            LEFT JOIN journal_lines jel ON a.id = jel.account_id
+            LEFT JOIN general_journal je ON jel.journal_id = je.id
+            WHERE je.entry_date BETWEEN ? AND ?
+              AND a.is_active = 1
             GROUP BY a.id
-            ORDER BY a.code
+            ORDER BY a.account_code
         """
 
         params = [filters.start_date, filters.end_date]

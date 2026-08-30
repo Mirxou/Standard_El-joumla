@@ -206,6 +206,7 @@ class PaymentService:
         currency_id: Optional[int] = None,
         bank_name: str = None,
         account_number: str = None,
+        sale_id: Optional[int] = None,
     ) -> Optional[Payment]:
         """إنشاء دفعة من العميل"""
         try:
@@ -220,6 +221,24 @@ class PaymentService:
                     self.logger.warning("تم رفض دفعة عميل: معرف العميل غير صحيح")
                 return None
 
+            # Guard: if linked to a specific sale, verify amount does not exceed remaining
+            if sale_id:
+                try:
+                    sale_row = self.db_manager.fetch_one(
+                        "SELECT total_amount, paid_amount, remaining_amount FROM sales WHERE id = ?",
+                        (sale_id,),
+                    )
+                    if sale_row:
+                        remaining = Decimal(str(sale_row["remaining_amount"] if isinstance(sale_row, dict) else sale_row[2]))
+                        if amount > remaining:
+                            if self.logger:
+                                self.logger.warning(
+                                    f"تم رفض دفعة عميل: المبلغ {amount} يتجاوز المبلغ المتبقي {remaining} للفاتورة {sale_id}"
+                                )
+                            return None
+                except Exception:
+                    pass  # non-blocking: if query fails, allow payment to proceed
+
             payment = Payment(
                 payment_type=PaymentType.CUSTOMER_PAYMENT.value,
                 payment_method=payment_method,
@@ -233,6 +252,7 @@ class PaymentService:
                 currency_id=currency_id,
                 bank_name=bank_name,
                 account_number=account_number,
+                sale_id=sale_id,
             )
 
             # Multi-Currency: حساب المبالغ بالعملة الأساسية
@@ -359,6 +379,19 @@ class PaymentService:
                     self.accounting_service.create_payment_journal_entry(payment_data)
                 except Exception as e:
                     self.logger.warning(f"خطأ في إنشاء قيد محاسبي للدفعة: {e}")
+
+                # Link payment to specific sale/invoice: update paid_amount & remaining_amount
+                if sale_id:
+                    try:
+                        self.db_manager.execute_non_query(
+                            "UPDATE sales SET paid_amount = paid_amount + ?, "
+                            "remaining_amount = total_amount - (paid_amount + ?) WHERE id = ?",
+                            (float(amount), float(amount), sale_id),
+                        )
+                        if self.logger:
+                            self.logger.info(f"تم ربط الدفعة {payment_id} بالفاتورة {sale_id} وتحديث الأرصدة")
+                    except Exception as e:
+                        self.logger.warning(f"خطأ في تحديث أرصدة الفاتورة {sale_id}: {e}")
 
                 return payment_obj
 

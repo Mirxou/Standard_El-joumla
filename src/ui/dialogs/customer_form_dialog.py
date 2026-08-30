@@ -164,14 +164,21 @@ class CustomerFormDialog(BaseDialog):
                         self.tax_number_input.setText(result.get("tax_number") or "")
                 else:
                     idx = 0
-                    self.name_input.setText(result[idx] or ""); idx += 1
-                    self.phone_input.setText(result[idx] or ""); idx += 1
+                    self.name_input.setText(result[idx] or "")
+                    idx += 1
+                    self.phone_input.setText(result[idx] or "")
+                    idx += 1
                     if has_phone2:
-                        self.phone2_input.setText(result[idx] or ""); idx += 1
-                    self.email_input.setText(result[idx] or ""); idx += 1
-                    self.address_input.setText(result[idx] or ""); idx += 1
-                    self.credit_limit_input.setValue(float(result[idx] or 0)); idx += 1
-                    self.active_checkbox.setChecked(bool(result[idx])); idx += 1
+                        self.phone2_input.setText(result[idx] or "")
+                        idx += 1
+                    self.email_input.setText(result[idx] or "")
+                    idx += 1
+                    self.address_input.setText(result[idx] or "")
+                    idx += 1
+                    self.credit_limit_input.setValue(float(result[idx] or 0))
+                    idx += 1
+                    self.active_checkbox.setChecked(bool(result[idx]))
+                    idx += 1
                     if has_tax_number:
                         self.tax_number_input.setText(result[idx] or "")
         except Exception as e:

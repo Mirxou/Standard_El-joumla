@@ -270,7 +270,7 @@ class InventoryService:
         user_id: Optional[int] = None,
         warehouse_id: Optional[int] = None,
     ) -> bool:
-        """تعديل كمية المخزون مع دعم المستودعات المتعددة"""
+        """تعديل كمية المخزون مع دعم المستودعات المتعددة (ذري)"""
         try:
             if self.is_multi_warehouse_enabled():
                 if warehouse_id is None:
@@ -278,24 +278,26 @@ class InventoryService:
                     warehouse_id = default_wh.id if default_wh else None
 
                 if warehouse_id is not None:
-                    inventory = self.warehouse_service.inventory_manager.get_inventory(warehouse_id, product_id)
-                    old_qty = inventory.quantity if inventory else 0.0
-                    diff = new_quantity - old_qty
+                    with self.db_manager.transaction() as _tx:
+                        inventory = self.warehouse_service.inventory_manager.get_inventory(warehouse_id, product_id)
+                        old_qty = inventory.quantity if inventory else 0.0
+                        diff = new_quantity - old_qty
 
-                    if self.warehouse_service.adjust_stock(warehouse_id, product_id, diff):
-                        self._record_stock_movement(
-                            product_id=product_id,
-                            movement_type="in" if diff > 0 else "out",
-                            quantity=abs(diff),
-                            reference_type="adjustment",
-                            notes=f"تعديل المخزون (مستودع {warehouse_id}): {reason}",
-                            created_by=user_id,
-                        )
-                        # تحديث المخزون الإجمالي للتوافق
-                        total_stock = self.warehouse_service.get_total_stock(product_id)
-                        self.product_manager.update_stock(product_id, round(total_stock, 2))
-                        self.logger.info(f"تم تعديل مخزون المنتج {product_id} إلى {new_quantity} في المستودع {warehouse_id}: {reason}")
-                        return True
+                        if self.warehouse_service.adjust_stock(warehouse_id, product_id, diff):
+                            self._record_stock_movement(
+                                product_id=product_id,
+                                movement_type="in" if diff > 0 else "out",
+                                quantity=abs(diff),
+                                reference_type="adjustment",
+                                notes=f"تعديل المخزون (مستودع {warehouse_id}): {reason}",
+                                created_by=user_id,
+                            )
+                            # تحديث المخزون الإجمالي للتوافق
+                            total_stock = self.warehouse_service.get_total_stock(product_id)
+                            self.product_manager.update_stock(product_id, round(total_stock, 2))
+                            self.logger.info(f"تم تعديل مخزون المنتج {product_id} إلى {new_quantity} في المستودع {warehouse_id}: {reason}")
+                            return True
+                        return False
 
             # الحالة الافتراضية (Single Warehouse)
             product = self.product_manager.get_product_by_id(product_id)
@@ -335,19 +337,21 @@ class InventoryService:
                     warehouse_id = default_wh.id if default_wh else None
 
                 if warehouse_id is not None:
-                    if self.warehouse_service.adjust_stock(warehouse_id, product_id, diff):
-                        self._record_stock_movement(
-                            product_id=product_id,
-                            movement_type="in" if diff > 0 else "out",
-                            quantity=abs(diff),
-                            reference_type="adjustment",
-                            notes=f"تعديل المخزون النسبي (مستودع {warehouse_id}): {reason}",
-                            created_by=user_id,
-                        )
-                        # تحديث المخزون الإجمالي للتوافق بشكل نسبي
-                        self.product_manager.adjust_stock_relative(product_id, diff)
-                        self.logger.info(f"تم تعديل مخزون المنتج {product_id} نسبياً بـ {diff:+.2f} في المستودع {warehouse_id}: {reason}")
-                        return True
+                    with self.db_manager.transaction() as _tx:
+                        if self.warehouse_service.adjust_stock(warehouse_id, product_id, diff):
+                            self._record_stock_movement(
+                                product_id=product_id,
+                                movement_type="in" if diff > 0 else "out",
+                                quantity=abs(diff),
+                                reference_type="adjustment",
+                                notes=f"تعديل المخزون النسبي (مستودع {warehouse_id}): {reason}",
+                                created_by=user_id,
+                            )
+                            # تحديث المخزون الإجمالي للتوافق بشكل نسبي
+                            self.product_manager.adjust_stock_relative(product_id, diff)
+                            self.logger.info(f"تم تعديل مخزون المنتج {product_id} نسبياً بـ {diff:+.2f} في المستودع {warehouse_id}: {reason}")
+                            return True
+                        return False
 
             # الحالة الافتراضية (Single Warehouse)
             if self.product_manager.adjust_stock_relative(product_id, diff):

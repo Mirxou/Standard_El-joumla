@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QMainWindow,
@@ -29,6 +30,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
+    QDoubleSpinBox,
 )
 
 from ...ui.styles.design_tokens import C
@@ -661,7 +663,9 @@ class ReturnFormDialog(QDialog):
         self.return_service = ReturnService(db_manager)
 
         self.setWindowTitle("مرتجع جديد")
-        self.setMinimumWidth(600)
+        self.setMinimumWidth(700)
+
+        self._items: list = []  # list of ReturnItem
 
         self._create_widgets()
 
@@ -722,16 +726,100 @@ class ReturnFormDialog(QDialog):
         return_group.setLayout(return_layout)
         layout.addWidget(return_group)
 
-        # ملاحظة
-        note = QLabel("ملاحظة: لإضافة بنود المرتجع، يرجى حفظ المرتجع أولاً ثم تعديله")
-        note.setStyleSheet("color: #666; font-style: italic;")
-        layout.addWidget(note)
+        # === بنود المرتجع ===
+        items_group = QGroupBox("بنود المرتجع")
+        items_layout = QVBoxLayout(items_group)
+
+        # صف الإضافة
+        add_row = QHBoxLayout()
+        self.product_search = QLineEdit()
+        self.product_search.setPlaceholderText("بحث بالاسم أو الباركود...")
+        self.add_item_btn = QPushButton("إضافة")
+        self.add_item_btn.clicked.connect(self._add_item)
+        add_row.addWidget(self.product_search, 1)
+        add_row.addWidget(self.add_item_btn)
+        items_layout.addLayout(add_row)
+
+        # جدول البنود
+        self.items_table = QTableWidget()
+        self.items_table.setColumnCount(5)
+        self.items_table.setHorizontalHeaderLabels(
+            ["المنتج", "الكمية", "سعر الوحدة", "الإجمالي", "حذف"]
+        )
+        self.items_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        for col in (1, 2, 3, 4):
+            self.items_table.horizontalHeader().setSectionResizeMode(
+                col, QHeaderView.ResizeToContents
+            )
+        self.items_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.items_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        items_layout.addWidget(self.items_table)
+
+        layout.addWidget(items_group)
 
         # أزرار
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def _search_product(self, text: str):
+        """البحث عن منتج بالاسم أو الباركود"""
+        try:
+            rows = self.db.fetch_all(
+                "SELECT id, name, barcode, selling_price FROM products "
+                "WHERE (name LIKE ? OR barcode LIKE ?) AND is_active = 1 LIMIT 10",
+                (f"%{text}%", f"%{text}%"),
+            )
+            return rows
+        except Exception:
+            return []
+
+    def _add_item(self):
+        """إضافة بند مرتجع من البحث"""
+        search_text = self.product_search.text().strip()
+        if not search_text:
+            return
+        products = self._search_product(search_text)
+        if not products:
+            QMessageBox.information(self, "معلومات", "لم يتم العثور على منتج")
+            return
+        # اختر أول نتيجة (يمكن توسيعه لاختيار متعدد لاحقاً)
+        p = products[0]
+        product_id = p["id"] if isinstance(p, dict) else p[0]
+        product_name = p["name"] if isinstance(p, dict) else p[1]
+        price = Decimal(str(p["selling_price"] if isinstance(p, dict) else p[3]))
+
+        item = ReturnItem(
+            product_id=product_id,
+            product_name=product_name,
+            quantity_returned=Decimal("1"),
+            unit_price=price,
+        )
+        item.calculate_totals()
+        self._items.append(item)
+        self._refresh_items_table()
+        self.product_search.clear()
+
+    def _remove_item(self, row: int):
+        """حذف بند من القائمة"""
+        if 0 <= row < len(self._items):
+            self._items.pop(row)
+            self._refresh_items_table()
+
+    def _refresh_items_table(self):
+        """تحديث جدول البنود"""
+        self.items_table.setRowCount(len(self._items))
+        for i, item in enumerate(self._items):
+            self.items_table.setItem(i, 0, QTableWidgetItem(item.product_name))
+            qty_item = QTableWidgetItem(str(item.quantity_returned))
+            qty_item.setFlags(qty_item.flags() & ~Qt.ItemIsEditable)
+            self.items_table.setItem(i, 1, qty_item)
+            self.items_table.setItem(i, 2, QTableWidgetItem(str(item.unit_price)))
+            self.items_table.setItem(i, 3, QTableWidgetItem(str(item.total_amount)))
+            del_btn = QPushButton("حذف")
+            del_btn.clicked.connect(lambda _, r=i: self._remove_item(r))
+            self.items_table.setCellWidget(i, 4, del_btn)
 
     def _save(self):
         """حفظ المرتجع"""
@@ -748,12 +836,10 @@ class ReturnFormDialog(QDialog):
                 return_reason=self.return_reason.currentData(),
                 refund_method=self.refund_method.currentData(),
             )
+            ret.items = list(self._items)
 
             r_date = self.return_date.date()
             ret.return_date = date(r_date.year(), r_date.month(), r_date.day())
-
-            # Note: Items should be added after saving via the edit dialog
-            # (per the UI note in the form)
 
             if self.return_service.create_return(ret):
                 self.accept()
@@ -762,3 +848,4 @@ class ReturnFormDialog(QDialog):
 
         except Exception as e:
             QMessageBox.critical(self, "خطأ", f"حدث خطأ:\n{str(e)}")
+

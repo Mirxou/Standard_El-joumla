@@ -735,13 +735,11 @@ class SaleManager:
 
             item.calculate_total()
 
-            # NOTE: discount و tax_amount غير موجودين في جدول sale_items
-            # تمت إزالتهما من INSERT لتجنب OperationalError
             query = """
             INSERT INTO sale_items (
                 sale_id, product_id, batch_id, quantity,
-                unit_price, total_price, cost_price, profit
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                unit_price, total_price, cost_price, profit, discount
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
             params = (
                 item.sale_id,
@@ -752,6 +750,7 @@ class SaleManager:
                 float(item.total_price),
                 float(item.cost_price),
                 float(item.profit),
+                float(item.discount),
             )
             return self.db_manager.execute_insert(query, params)
         except Exception as e:
@@ -796,12 +795,11 @@ class SaleManager:
 
             item.calculate_total()
 
-            # NOTE: discount و tax_amount غير موجودين في جدول sale_items
             cursor.execute(
                 "INSERT INTO sale_items "
                 "(sale_id, product_id, batch_id, quantity, "
-                "unit_price, total_price, cost_price, profit) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "unit_price, total_price, cost_price, profit, discount) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     item.sale_id,
                     item.product_id,
@@ -811,6 +809,7 @@ class SaleManager:
                     float(item.total_price),
                     float(item.cost_price),
                     float(item.profit),
+                    float(item.discount),
                 ),
             )
             return cursor.lastrowid
@@ -1469,11 +1468,10 @@ class SaleManager:
         cursor.execute(query, params)
 
     def _update_sale_item(self, item: SaleItem):
-        # NOTE: discount و tax_amount غير موجودين في جدول sale_items
         query = """
         UPDATE sale_items SET
             quantity = ?, unit_price = ?,
-            total_price = ?, cost_price = ?, profit = ?
+            total_price = ?, cost_price = ?, profit = ?, discount = ?
         WHERE id = ?
         """
         params = (
@@ -1482,6 +1480,7 @@ class SaleManager:
             float(item.total_price),
             float(item.cost_price),
             float(item.profit),
+            float(item.discount),
             item.id,
         )
         self.db_manager.execute_non_query(query, params)

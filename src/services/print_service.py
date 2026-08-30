@@ -11,11 +11,19 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 # Top level imports for testing patch checks
-from src.core.database_manager import DatabaseManager
-from src.core.config_manager import ConfigManager as DatabaseConfigManager
+try:
+    from src.core.database_manager import DatabaseManager
+    from src.core.config_manager import ConfigManager as DatabaseConfigManager
+except ImportError:
+    from ...core.database_manager import DatabaseManager
+    from ...core.config_manager import ConfigManager as DatabaseConfigManager
 
-from src.core.print_manager import PrintManager, TemplateType
-from src.services.pdf_export_service import PDFExportService
+try:
+    from src.core.print_manager import PrintManager, TemplateType
+    from src.services.pdf_export_service import PDFExportService
+except ImportError:
+    from ...core.print_manager import PrintManager, TemplateType
+    from ...services.pdf_export_service import PDFExportService
 
 logger = logging.getLogger(__name__)
 

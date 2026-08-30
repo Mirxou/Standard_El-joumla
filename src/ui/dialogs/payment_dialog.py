@@ -78,6 +78,7 @@ class PaymentWorker(QThread):
                     payment_method=self.payment_data["payment_method"],
                     reference_number=self.payment_data.get("reference_number"),
                     notes=self.payment_data.get("notes"),
+                    sale_id=self.payment_data.get("sale_id"),
                 )
                 self.payment_completed.emit(True, "تم إنشاء دفعة العميل بنجاح", {"payment_id": result})
 
@@ -218,7 +219,13 @@ class PaymentDialog(BaseDialog):
         # العميل/المورد
         self.entity_combo = QComboBox()
         self.entity_combo.setEditable(True)
+        self.entity_combo.currentIndexChanged.connect(self._on_entity_changed)
         form_layout.addRow(self.i18n.get_message("customer_supplier") + ":", self.entity_combo)
+
+        # ربط بفاتورة محددة (اختياري)
+        self.sale_combo = QComboBox()
+        self.sale_combo.setEnabled(False)
+        form_layout.addRow("الفاتورة (اختياري):", self.sale_combo)
 
         # المبلغ
         self.amount_spinbox = QDoubleSpinBox()
@@ -495,6 +502,38 @@ class PaymentDialog(BaseDialog):
     def on_payment_type_changed(self):
         """معالج تغيير نوع المدفوعات"""
         self.update_entity_combo()
+        self.sale_combo.clear()
+        self.sale_combo.setEnabled(False)
+
+    def _on_entity_changed(self, index: int):
+        """تحميل فواتير العميل غير المدفوعة عند اختياره"""
+        self.sale_combo.clear()
+        if not self.customer_payment_radio.isChecked() or index < 0:
+            self.sale_combo.setEnabled(False)
+            return
+        customer_id = self.entity_combo.currentData()
+        if not customer_id:
+            self.sale_combo.setEnabled(False)
+            return
+        try:
+            rows = self.db_manager.fetch_all(
+                "SELECT id, invoice_number, total_amount, remaining_amount "
+                "FROM sales WHERE customer_id = ? AND remaining_amount > 0 "
+                "AND status != 'cancelled' ORDER BY sale_date DESC",
+                (customer_id,),
+            )
+            if rows:
+                self.sale_combo.setEnabled(True)
+                self.sale_combo.addItem("-- بدون ربط بفاتورة --", None)
+                for r in rows:
+                    inv = r["invoice_number"] if isinstance(r, dict) else r[1]
+                    rem = r["remaining_amount"] if isinstance(r, dict) else r[3]
+                    sid = r["id"] if isinstance(r, dict) else r[0]
+                    self.sale_combo.addItem(f"{inv} (متبقي: {rem:.2f})", sid)
+            else:
+                self.sale_combo.setEnabled(False)
+        except Exception:
+            self.sale_combo.setEnabled(False)
 
     @prevent_double_click(wait_ms=1500)
     def save_payment(self):
@@ -574,6 +613,7 @@ class PaymentDialog(BaseDialog):
             "payment_method": payment_method_map.get(self.payment_method_combo.currentText(), self.payment_method_combo.currentText()),
             "reference_number": self.reference_edit.text().strip() or None,
             "notes": self.notes_edit.toPlainText().strip() or None,
+            "sale_id": self.sale_combo.currentData(),
         }
 
     def validate_amount(self, amount) -> bool:
@@ -615,6 +655,8 @@ class PaymentDialog(BaseDialog):
         self.reference_edit.clear()
         self.payment_date.setDate(QDate.currentDate())
         self.notes_edit.clear()
+        self.sale_combo.clear()
+        self.sale_combo.setEnabled(False)
 
     def load_recent_payments(self):
         """تحميل المدفوعات الأخيرة"""

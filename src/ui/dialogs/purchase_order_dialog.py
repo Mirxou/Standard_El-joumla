@@ -571,7 +571,7 @@ class PurchaseOrderDialog(BaseDialog):
 
         # الملاحظات
         self.notes_edit.setPlainText(self.po.notes or "")
-        self.terms_edit.setPlainText(self.po.terms_conditions or "")
+        self.terms_edit.setPlainText(self.po.terms_and_conditions or "")
 
     def _save(self):
         """حفظ أمر الشراء"""
@@ -585,6 +585,9 @@ class PurchaseOrderDialog(BaseDialog):
                     setattr(self.po, key, value)
             else:
                 self.po = PurchaseOrder(**po_data)
+            # حساب المجاميع قبل الحفظ
+            if hasattr(self.po, 'calculate_totals'):
+                self.po.calculate_totals()
             self.accept()
         except Exception as e:
             self.notify.show_error(
@@ -680,7 +683,7 @@ class PurchaseOrderDialog(BaseDialog):
             "delivery_terms": self.delivery_terms_combo.currentData(),
             "payment_terms": self.payment_terms_combo.currentData(),
             "notes": self.notes_edit.toPlainText(),
-            "terms_conditions": self.terms_edit.toPlainText(),
+            "terms_and_conditions": self.terms_edit.toPlainText(),
             "discount_amount": Decimal(str(self.discount_spin.value())),
             "tax_amount": Decimal(str(self.tax_spin.value())),
             "shipping_cost": Decimal(str(self.shipping_spin.value())),

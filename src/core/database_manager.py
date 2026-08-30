@@ -404,6 +404,7 @@ class DatabaseManager:
                 total_price DECIMAL(10,2) NOT NULL,
                 cost_price DECIMAL(10,2) NOT NULL,
                 profit DECIMAL(10,2) NOT NULL,
+                discount DECIMAL(10,2) DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (sale_id) REFERENCES sales(id),
                 FOREIGN KEY (product_id) REFERENCES products(id),
