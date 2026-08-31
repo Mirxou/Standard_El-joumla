@@ -38,7 +38,7 @@ class EncryptionService:
             return ""
         if enc.startswith("PLAINTEXT::"):
             return enc.split("PLAINTEXT::", 1)[1]
-        
+
         try:
             return self._fernet.decrypt(enc.encode()).decode()
         except Exception as e:

@@ -1,11 +1,12 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 Migration 001: Initial Schema
 الـ Migration الأولي - إنشاء الجداول الأساسية
 """
 
+
+import logging
 description = "إنشاء الجداول الأساسية للقاعدة المحلية"
 
 

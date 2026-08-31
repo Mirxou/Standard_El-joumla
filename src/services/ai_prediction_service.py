@@ -107,7 +107,7 @@ class AIPredictionService:
 
             df["sale_date"] = pd.to_datetime(df["sale_date"])
             avg_daily = df["daily_total"].mean()
-            std_daily = df["daily_total"].std()
+            df["daily_total"].std()
 
             # Simple trend using last 7 vs previous 7 days
             if len(df) >= 14:
@@ -117,7 +117,6 @@ class AIPredictionService:
             else:
                 trend_factor = 1.0
 
-            from datetime import datetime as _dt
             forecast = []
             last_date = df["sale_date"].max()
             total = 0.0
@@ -244,7 +243,13 @@ class AIPredictionService:
                     "total_spent": float(row['total_spent']),
                 })
 
-            predictions.sort(key=lambda x: (0 if x['risk_level'] == 'high' else (1 if x['risk_level'] == 'medium' else 2)))
+            def _risk_sort_key(x):
+                if x['risk_level'] == 'high':
+                    return 0
+                elif x['risk_level'] == 'medium':
+                    return 1
+                return 2
+            predictions.sort(key=_risk_sort_key)
 
             return {
                 "predictions": predictions,

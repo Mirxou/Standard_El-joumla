@@ -1,11 +1,12 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 Migration 003: إضافة أعمدة المزامنة والحذف المنطقي للجداول المتبقية
 """
 
 
+
+import logging
 def upgrade(db):
     """تطبيق التعديلات"""
     tables = ["reminders", "security_settings", "users", "audit_log"]

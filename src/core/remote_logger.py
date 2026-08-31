@@ -10,6 +10,8 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Optional
 
+from PySide6.QtCore import QObject, Signal
+
 from src.api.api_client import APIClient
 from src.api.thread_pool_manager import BaseRunnable, ThreadPoolManager
 from src.utils.logger import setup_logger
@@ -22,9 +24,6 @@ class LogLevel(Enum):
     WARNING = "WARNING"
     ERROR = "ERROR"
     CRITICAL = "CRITICAL"
-
-
-from PySide6.QtCore import QObject, Signal
 
 
 class RemoteLogSignals(QObject):

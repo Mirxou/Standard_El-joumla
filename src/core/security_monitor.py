@@ -1,11 +1,12 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 Security Monitor - مراقب الأمان
 مراقبة الأحداث الأمنية والتنبيهات
 """
 
+
+import logging
 import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta

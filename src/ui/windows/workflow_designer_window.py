@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
 """
 نافذة تصميم سير العمل - Workflow Designer Window
@@ -32,8 +31,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-project_root = Path(__file__).parent.parent.parent.parent
-
 from src.core.local_database_manager import LocalDatabaseManager
 from src.core.workflow_engine import (
     ApproverType,
@@ -45,6 +42,8 @@ from src.core.workflow_engine import (
 from src.services.workflow_service import WorkflowService
 from src.ui.styles.design_tokens import C
 from src.utils.logger import setup_logger
+
+project_root = Path(__file__).parent.parent.parent.parent
 
 
 class WorkflowDialog(QDialog):

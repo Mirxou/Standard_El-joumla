@@ -1,7 +1,4 @@
-import logging
-import json
-
-#!/usr/bin/env python3  # noqa: E265
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 WebSocket Client للـ Desktop Application
@@ -9,6 +6,8 @@ WebSocket Client للـ Desktop Application
 """
 
 import asyncio
+import json
+import logging
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 

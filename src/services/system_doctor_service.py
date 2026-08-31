@@ -115,10 +115,10 @@ class SystemDoctorService:
                 is_headless = QApplication.platformName() == "offscreen"
 
             before = self.check_resource_usage().get("memory_mb", 0)
-            
+
             if not is_headless:
                 gc.collect()
-                
+
             after = self.check_resource_usage().get("memory_mb", 0)
             freed = before - after
 

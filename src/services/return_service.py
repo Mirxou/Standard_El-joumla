@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
+
 """
 خدمة المرتجعات - Return Service
 تقديم خدمات إدارة مرتجعات المبيعات والمشتريات
 """
+
+import logging
+
 
 from datetime import date, datetime
 from decimal import Decimal
@@ -101,7 +104,11 @@ class ReturnService:
                     refund_reference, credit_note_number, credit_note_amount,
                     exchange_sale_id, notes, internal_notes, created_by, approved_by,
                     created_at, updated_at, approved_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)  # noqa: E501
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?
+                )
             """,
                 (
                     return_invoice.return_number,
@@ -587,7 +594,13 @@ class ReturnService:
                 FROM return_invoices
                 GROUP BY return_type
             """)
-            stats["by_type"] = {get_value(row, 'return_type'): {"count": get_value(row, 'cnt', 0), "total": get_value(row, 'total', 0) or 0} for row in cursor.fetchall()}
+            stats["by_type"] = {
+                get_value(row, 'return_type'): {
+                    "count": get_value(row, 'cnt', 0),
+                    "total": get_value(row, 'total', 0) or 0,
+                }
+                for row in cursor.fetchall()
+            }
 
             # العدد حسب الحالة
             cursor.execute("""
@@ -595,7 +608,13 @@ class ReturnService:
                 FROM return_invoices
                 GROUP BY status
             """)
-            stats["by_status"] = {get_value(row, 'status'): {"count": get_value(row, 'cnt', 0), "total": get_value(row, 'total', 0) or 0} for row in cursor.fetchall()}
+            stats["by_status"] = {
+                get_value(row, 'status'): {
+                    "count": get_value(row, 'cnt', 0),
+                    "total": get_value(row, 'total', 0) or 0,
+                }
+                for row in cursor.fetchall()
+            }
 
             # العدد حسب السبب
             cursor.execute("""
@@ -604,10 +623,18 @@ class ReturnService:
                 WHERE return_reason IS NOT NULL
                 GROUP BY return_reason
             """)
-            stats["by_reason"] = {get_value(row, 'return_reason'): get_value(row, 'cnt', 0) for row in cursor.fetchall()}
+            stats["by_reason"] = {
+                get_value(row, 'return_reason'): get_value(row, 'cnt', 0)
+                for row in cursor.fetchall()
+            }
 
             # إجمالي المرتجعات
-            cursor.execute("SELECT COUNT(*) AS total_count, SUM(total_amount) AS total_value, SUM(refund_amount) AS total_refunded FROM return_invoices")
+            cursor.execute(
+                "SELECT COUNT(*) AS total_count, "
+                "SUM(total_amount) AS total_value, "
+                "SUM(refund_amount) AS total_refunded "
+                "FROM return_invoices"
+            )
             row = cursor.fetchone()
             stats["total_count"] = get_value(row, 'total_count', 0) or 0
             stats["total_value"] = get_value(row, 'total_value', 0) or 0

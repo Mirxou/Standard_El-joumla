@@ -20,13 +20,11 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
-    QMainWindow,
     QMenu,
     QMessageBox,
     QPushButton,
     QTableView,
     QVBoxLayout,
-    QWidget,
 )
 
 from src.models.user import User, UserRole, UserManager

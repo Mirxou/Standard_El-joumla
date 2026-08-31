@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import logging
+
 """
 نموذج عروض الأسعار - Quote Model
 يحتوي على جميع العمليات المتعلقة بعروض الأسعار
 """
+
+import logging
+
 
 from dataclasses import dataclass
 from datetime import date, datetime

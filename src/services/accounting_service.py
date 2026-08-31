@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
+
 """
 خدمة إدارة المحاسبة - Accounting Service
 توفر خدمات المحاسبة مثل إنشاء القيود وتحديث الأرصدة والقوائم المالية
 محسنة لاستخدام DatabaseManager المطور مع معالجة مرنة للبيانات
 """
 
+import logging
+
+
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from ..models.account import Account, ChartOfAccounts
 from ..models.journal_entry import JournalEntry, JournalLine
@@ -295,17 +298,17 @@ class AccountingService:
             entry.reference_type = "purchase_order"
             entry.reference_id = str(purchase_data.get('po_id', ''))
             entry.entry_date = datetime.now()
-            
+
             total = Decimal(str(purchase_data.get('total', 0)))
             tax = Decimal(str(purchase_data.get('tax', 0)))
-            
+
             # H6 FIX: جلب account_id من دليل الحسابات
             inv_code = purchase_data.get('inventory_account', '4100')
             inv_account = self.get_account_by_code(inv_code)
             tax_account = self.get_account_by_code('2300')
             pay_code = purchase_data.get('payable_account', '2100')
             pay_account = self.get_account_by_code(pay_code)
-            
+
             # مدين: المخزون / المشتريات
             inventory_line = JournalLine()
             inventory_line.account_code = inv_code
@@ -314,7 +317,7 @@ class AccountingService:
             if inv_account:
                 inventory_line.account_id = inv_account.id
             entry.lines.append(inventory_line)
-            
+
             # مدين: الضريبة القابلة للاسترداد
             if tax > 0:
                 tax_line = JournalLine()
@@ -324,7 +327,7 @@ class AccountingService:
                 if tax_account:
                     tax_line.account_id = tax_account.id
                 entry.lines.append(tax_line)
-            
+
             # دائن: الدائنون (إجمالي المبلغ المستحق)
             payable_line = JournalLine()
             payable_line.account_code = pay_code
@@ -333,7 +336,7 @@ class AccountingService:
             if pay_account:
                 payable_line.account_id = pay_account.id
             entry.lines.append(payable_line)
-            
+
             return self.create_journal_entry(entry)
         except Exception as e:
             self.logger.warning(f"خطأ في إنشاء قيد الشراء: {e}")
@@ -348,10 +351,10 @@ class AccountingService:
             entry.reference_type = "payment"
             entry.reference_id = str(payment_data.get('payment_id', ''))
             entry.entry_date = datetime.now()
-            
+
             amount = Decimal(str(payment_data.get('amount', 0)))
             method = payment_data.get('method', 'cash')
-            
+
             if payment_data.get('payment_type') == 'received':
                 # تحصيل من عميل: مدين الصندوق، دائن الذمم
                 cash_line = JournalLine()
@@ -359,7 +362,7 @@ class AccountingService:
                 cash_line.account_name = 'الصندوق'
                 cash_line.debit_amount = amount
                 entry.lines.append(cash_line)
-                
+
                 receivable_line = JournalLine()
                 receivable_line.account_code = payment_data.get('receivable_account', '1300')
                 receivable_line.account_name = payment_data.get('receivable_account_name', 'العملاء')
@@ -372,20 +375,20 @@ class AccountingService:
                 payable_line.account_name = payment_data.get('payable_account_name', 'الموردون')
                 payable_line.debit_amount = amount
                 entry.lines.append(payable_line)
-                
+
                 if method == 'bank':
                     bank_code = '1200'
                     bank_name = 'البنك'
                 else:
                     bank_code = '1100'
                     bank_name = 'الصندوق'
-                
+
                 cash_line = JournalLine()
                 cash_line.account_code = bank_code
                 cash_line.account_name = bank_name
                 cash_line.credit_amount = amount
                 entry.lines.append(cash_line)
-            
+
             return self.create_journal_entry(entry)
         except Exception as e:
             self.logger.warning(f"خطأ في إنشاء قيد الدفعة: {e}")
@@ -429,10 +432,8 @@ class AccountingService:
             self.db.execute_query(query, params)
             # H3 FIX: إزالة الكود القديم من code_index قبل إضافة الجديد
             # (إذا تم تغيير account_code)
-            old_code = None
             for code, acc in list(self.coa.code_index.items()):
                 if acc.id == account.id and code != account.account_code:
-                    old_code = code
                     del self.coa.code_index[code]
                     break
             self.coa.accounts[account.id] = account

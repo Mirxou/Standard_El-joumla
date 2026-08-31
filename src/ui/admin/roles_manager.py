@@ -18,7 +18,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ...core.database_manager import DatabaseManager
 from ...services.rbac_service import RBACService
 
 

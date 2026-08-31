@@ -39,13 +39,13 @@ class SafetyStockDialog(BaseDialog):
     ):
         import os
         self.is_test_mode = "PYTEST_CURRENT_TEST" in os.environ or isinstance(parent, dict)
-        
+
         if self.is_test_mode:
             super().__init__(title="", parent=None)
             from PySide6.QtWidgets import QLabel, QSpinBox
             self.inventory_service = db_manager
             self.product = parent if isinstance(parent, dict) else {}
-            
+
             self.product_name_label = QLabel(self.product.get("name", ""))
             self.current_stock_label = QLabel(str(self.product.get("current_stock", 0)))
             self.safety_level_spin = QSpinBox(self)

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import logging
 """
 نافذة إدارة الحسابات المدينة والدائنة - Accounts Management Window
 واجهة شاملة لإدارة الحسابات المدينة والدائنة مع دعم اللغة العربية
@@ -171,7 +170,10 @@ class AccountsWindow(QMainWindow):
 
         # عنوان القسم
         title_label = QLabel("الحسابات المدينة (المستحقة من العملاء)")
-        title_label.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {Colors.TEXT_BRIGHT}; margin-bottom: 10px;")
+        title_label.setStyleSheet(
+            f"font-size: 16px; font-weight: bold; "
+            f"color: {Colors.TEXT_BRIGHT}; margin-bottom: 10px;"
+        )
         layout.addWidget(title_label)
 
         # فلاتر البحث
@@ -256,7 +258,10 @@ class AccountsWindow(QMainWindow):
 
         # عنوان القسم
         title_label = QLabel("الحسابات الدائنة (المستحقة للموردين)")
-        title_label.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {Colors.TEXT_BRIGHT}; margin-bottom: 10px;")
+        title_label.setStyleSheet(
+            f"font-size: 16px; font-weight: bold; "
+            f"color: {Colors.TEXT_BRIGHT}; margin-bottom: 10px;"
+        )
         layout.addWidget(title_label)
 
         # فلاتر البحث
@@ -341,7 +346,10 @@ class AccountsWindow(QMainWindow):
 
         # عنوان القسم
         title_label = QLabel("جدولة المدفوعات المستقبلية")
-        title_label.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {Colors.TEXT_BRIGHT}; margin-bottom: 10px;")
+        title_label.setStyleSheet(
+            f"font-size: 16px; font-weight: bold; "
+            f"color: {Colors.TEXT_BRIGHT}; margin-bottom: 10px;"
+        )
         layout.addWidget(title_label)
 
         # فلاتر البحث
@@ -417,7 +425,10 @@ class AccountsWindow(QMainWindow):
 
         # عنوان القسم
         title_label = QLabel("تقارير الحسابات والمدفوعات")
-        title_label.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {Colors.TEXT_BRIGHT}; margin-bottom: 10px;")
+        title_label.setStyleSheet(
+            f"font-size: 16px; font-weight: bold; "
+            f"color: {Colors.TEXT_BRIGHT}; margin-bottom: 10px;"
+        )
         layout.addWidget(title_label)
 
         # أزرار التقارير

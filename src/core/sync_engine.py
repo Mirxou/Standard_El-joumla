@@ -1,11 +1,12 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 Sync Engine - محرك المزامنة
 يدير عملية المزامنة بين النظام المحلي والسحابة
 """
 
+
+import logging
 import hashlib
 import json
 from dataclasses import dataclass

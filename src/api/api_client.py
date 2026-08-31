@@ -273,7 +273,9 @@ class APIClient:
 
         # فشل جميع المحاولات
         if self.enable_logging and last_exception:
-            self.logger.error(f"فشل الطلب نهائياً بعد {self.max_retries + 1} محاولات: " f"{method} {url} - {str(last_exception)}"
+            self.logger.error(
+                f"فشل الطلب نهائياً بعد {self.max_retries + 1} محاولات: "
+                f"{method} {url} - {str(last_exception)}"
             )
 
         return None

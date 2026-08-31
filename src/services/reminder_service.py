@@ -67,7 +67,9 @@ class ReminderService:
 
             self.db.execute_query(
                 """
-                INSERT INTO reminders (sale_id, customer_id, reminder_type, subject, message, due_at, recipient_email, created_by)  # noqa: E501
+                INSERT INTO reminders
+            (sale_id, customer_id, reminder_type, subject,
+             message, due_at, recipient_email, created_by)
                 VALUES (?, ?, 'payment', ?, ?, ?, ?, ?)
                 """,
                 (

@@ -1,11 +1,12 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 GDPR Handler - معالج GDPR
 معالجة متطلبات General Data Protection Regulation
 """
 
+
+import logging
 import hashlib
 import json
 from dataclasses import dataclass

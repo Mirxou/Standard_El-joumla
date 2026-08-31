@@ -167,7 +167,7 @@ class SearchService:
                 query = f"{base_query} WHERE {where_clause}"
             else:
                 query = base_query
-                
+
             if sort_by:
                 sort_col = "p.selling_price" if sort_by in ("price", "selling_price") else "p.name"
                 sort_order = sort_order.upper()
@@ -176,16 +176,16 @@ class SearchService:
                 query += f" ORDER BY {sort_col} {sort_order}"
             else:
                 query += " ORDER BY p.name"
-                
+
             query += " LIMIT ? OFFSET ?"
             params.extend([limit, offset])
             results = self.db.execute_query(query, params)
-            
+
         elif entity == "customers":
             results = self.search_customers(criteria_list, limit, offset)
         elif entity == "sales":
             results = self.search_sales(criteria_list, limit=limit, offset=offset)
-            
+
         return {
             "success": True,
             "results": results,

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import logging
 """
 خدمة المستخدمين - User Service
 تدير المستخدمين والمصادقة والصلاحيات

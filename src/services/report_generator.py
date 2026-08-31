@@ -54,7 +54,8 @@ class ReportGenerator:
 
         # Support unit tests where mock_db is configured with fetch_all instead of execute_query
         if hasattr(self.db, 'execute_query') and hasattr(self.db, 'fetch_all'):
-            if type(self.db.execute_query).__name__ in ('Mock', 'MagicMock', 'NonCallableMock', 'CallableMock', 'AsyncMock'):
+            _mock_names = ('Mock', 'MagicMock', 'NonCallableMock', 'CallableMock', 'AsyncMock')
+            if type(self.db.execute_query).__name__ in _mock_names:
                 self.db.execute_query.side_effect = self.db.fetch_all
 
     # ==================== تقارير المبيعات ====================
@@ -742,25 +743,41 @@ class ReportGenerator:
 
         try:
             # Revenue
-            q_rev = "SELECT COALESCE(SUM(current_balance), 0) as amount FROM chart_of_accounts WHERE account_type = 'Revenue' AND is_active = 1 AND is_header = 0"
+            q_rev = (
+                "SELECT COALESCE(SUM(current_balance), 0) as amount "
+                "FROM chart_of_accounts "
+                "WHERE account_type = 'Revenue' AND is_active = 1 AND is_header = 0"
+            )
             rev_rows = self.db.execute_query(q_rev)
             if rev_rows:
                 total_revenue = float(rev_rows[0].get("amount", 0))
 
             # Expenses
-            q_exp = "SELECT COALESCE(SUM(current_balance), 0) as amount FROM chart_of_accounts WHERE account_type = 'Expense' AND is_active = 1 AND is_header = 0"
+            q_exp = (
+                "SELECT COALESCE(SUM(current_balance), 0) as amount "
+                "FROM chart_of_accounts "
+                "WHERE account_type = 'Expense' AND is_active = 1 AND is_header = 0"
+            )
             exp_rows = self.db.execute_query(q_exp)
             if exp_rows:
                 total_expenses = float(exp_rows[0].get("amount", 0))
 
             # Assets
-            q_ast = "SELECT COALESCE(SUM(current_balance), 0) as amount FROM chart_of_accounts WHERE account_type = 'Asset' AND is_active = 1 AND is_header = 0"
+            q_ast = (
+                "SELECT COALESCE(SUM(current_balance), 0) as amount "
+                "FROM chart_of_accounts "
+                "WHERE account_type = 'Asset' AND is_active = 1 AND is_header = 0"
+            )
             ast_rows = self.db.execute_query(q_ast)
             if ast_rows:
                 total_assets = float(ast_rows[0].get("amount", 0))
 
             # Liabilities
-            q_liab = "SELECT COALESCE(SUM(current_balance), 0) as amount FROM chart_of_accounts WHERE account_type = 'Liability' AND is_active = 1 AND is_header = 0"
+            q_liab = (
+                "SELECT COALESCE(SUM(current_balance), 0) as amount "
+                "FROM chart_of_accounts "
+                "WHERE account_type = 'Liability' AND is_active = 1 AND is_header = 0"
+            )
             liab_rows = self.db.execute_query(q_liab)
             if liab_rows:
                 total_liabilities = float(liab_rows[0].get("amount", 0))
@@ -811,8 +828,13 @@ class ReportGenerator:
         try:
             if hasattr(self.db, 'execute'):
                 cursor = self.db.execute(
-                    "INSERT INTO scheduled_reports (report_type, frequency, recipients, created_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
-                    (report_type.value if hasattr(report_type, 'value') else str(report_type), frequency, ",".join(recipients or []))
+                    "INSERT INTO scheduled_reports "
+                    "(report_type, frequency, recipients, created_at) "
+                    "VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+                    (
+                        report_type.value if hasattr(report_type, 'value') else str(report_type),
+                        frequency, ",".join(recipients or []),
+                    )
                 )
                 if hasattr(cursor, 'lastrowid') and cursor.lastrowid:
                     schedule_id = cursor.lastrowid

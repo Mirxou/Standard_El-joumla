@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -331,7 +330,11 @@ class AIService:
                 # افتراض وجود حقل reorder_level في جدول products
                 q = "SELECT name, stock_quantity, reorder_level FROM products WHERE stock_quantity < reorder_level ORDER BY stock_quantity ASC LIMIT 5"  # noqa: E501
                 low_stock_products = self.db.fetch_all(q)
-                response["data"] = [{"name": r["name"], "quantity": r["stock_quantity"], "reorder_level": r["reorder_level"]} for r in low_stock_products]
+                response["data"] = [
+                    {"name": r["name"], "quantity": r["stock_quantity"],
+                     "reorder_level": r["reorder_level"]}
+                    for r in low_stock_products
+                ]
                 if not low_stock_products:
                     response["message"] = "لا توجد منتجات حالياً تحت مستوى إعادة الطلب."
                 else:

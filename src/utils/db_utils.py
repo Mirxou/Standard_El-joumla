@@ -29,7 +29,7 @@ class SafeDatabaseWrapper:
     def execute_query(self, query, *args, **kwargs):
         # التحقق مما إذا كانت قاعدة البيانات Mock في بيئة الاختبار
         is_mock_db = type(self._db).__name__ in ("Mock", "MagicMock") or hasattr(self._db, "_mock_name")
-        
+
         if not is_mock_db:
             try:
                 res = self._db.execute_query(query, *args, **kwargs)
@@ -53,7 +53,7 @@ class SafeDatabaseWrapper:
             from unittest.mock import Mock, MagicMock
             if ret is not None and not isinstance(ret, (Mock, MagicMock)):
                 return ret
-            
+
             # التحقق مما إذا تم تكوين side_effect
             side_eff = getattr(mock_execute, "side_effect", None)
             if side_eff is not None:

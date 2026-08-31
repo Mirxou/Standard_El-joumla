@@ -1,11 +1,12 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 SSO Service - خدمة Single Sign-On
 دعم SAML و OAuth2 للمصادقة الموحدة
 """
 
+
+import logging
 import json
 from dataclasses import dataclass
 from datetime import datetime

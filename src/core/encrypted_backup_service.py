@@ -309,7 +309,11 @@ class EncryptedBackupService:
             with open(restore_path, "wb") as f:
                 f.write(db_data)
 
-            logger.info(f"Backup restored: {backup_path.name}, date: {metadata['created_at']}, original size: {metadata['database_size']:,} bytes")
+            logger.info(
+    f"Backup restored: {backup_path.name}, "
+    f"date: {metadata['created_at']}, "
+    f"original size: {metadata['database_size']:,} bytes"
+)
 
             return True
 

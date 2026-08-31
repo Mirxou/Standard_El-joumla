@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
 """
 نموذج المشتريات - Purchase Model
@@ -124,13 +123,13 @@ class PurchaseItem:
     def __post_init__(self):
         self.product_id = int(self.product_id or 0)
         self.product_name = str(self.product_name or "")
-        
+
         self.quantity_ordered = Decimal(str(self.quantity_ordered or "0.00"))
         self.quantity_received = Decimal(str(self.quantity_received or "0.00"))
         self.unit_cost = Decimal(str(self.unit_cost or "0.00"))
         self.discount_percent = Decimal(str(self.discount_percent or "0.00"))
         self.tax_percent = Decimal(str(self.tax_percent or "15.00"))
-        
+
         self.subtotal = Decimal(str(self.subtotal or "0.00"))
         self.discount_amount = Decimal(str(self.discount_amount or "0.00"))
         self.tax_amount = Decimal(str(self.tax_amount or "0.00"))
@@ -299,7 +298,7 @@ class Purchase:
             return False
         if self.paid_amount >= self.total_amount and self.total_amount > 0:
             return False
-        
+
         target_date = self.expected_delivery_date
         if isinstance(target_date, str):
             try:
@@ -757,7 +756,7 @@ class PurchaseManager:
                 updated_at=self._parse_datetime(row[24]),
                 supplier_name=row[25],
             )
-        
+
         if len(row) >= 29:
             return Purchase(
                 id=row[0],
@@ -1213,7 +1212,10 @@ class PurchaseManager:
     # without going through receiving notes or quality checks.
     # New code should use the receiving notes workflow (ReceivingDialog / receiving_note service)
     # which includes quality inspection and proper audit trails.
-    def _update_product_stock(self, product_id: int, quantity: Decimal, unit_cost: Decimal, expiry_date=None, batch_number=None):
+    def _update_product_stock(
+        self, product_id: int, quantity: Decimal,
+        unit_cost: Decimal, expiry_date=None, batch_number=None,
+    ):
         try:
             query = "UPDATE products SET current_stock = current_stock + ? WHERE id = ?"
             self.db_manager.execute_non_query(query, (float(quantity), product_id))
@@ -1225,19 +1227,24 @@ class PurchaseManager:
                 )
                 if row:
                     self.db_manager.execute_non_query(
-                        "UPDATE batches SET quantity = quantity + ?, cost_price = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        "UPDATE batches SET quantity = quantity + ?, cost_price = ?, "
+                        "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                         (float(quantity), float(unit_cost), row.get("id") if isinstance(row, dict) else row[0])
                     )
                 else:
                     self.db_manager.execute_insert(
-                        """INSERT INTO batches (product_id, batch_number, quantity, cost_price, expiry_date, created_at, updated_at)
+                        """INSERT INTO batches
+                (product_id, batch_number, quantity,
+                 cost_price, expiry_date, created_at, updated_at)
                            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""",
                         (product_id, batch_number, float(quantity), float(unit_cost), expiry_date)
                     )
             else:
                 default_batch = f"PUR-{date.today().strftime('%Y%m%d')}"
                 self.db_manager.execute_insert(
-                    """INSERT INTO batches (product_id, batch_number, quantity, cost_price, expiry_date, created_at, updated_at)
+                    """INSERT INTO batches
+                (product_id, batch_number, quantity,
+                 cost_price, expiry_date, created_at, updated_at)
                        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""",
                     (product_id, default_batch, float(quantity), float(unit_cost), expiry_date)
                 )

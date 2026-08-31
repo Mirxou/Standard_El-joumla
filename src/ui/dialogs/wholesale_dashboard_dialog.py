@@ -80,7 +80,13 @@ class WholesaleDashboardDialog(BaseDialog):
         # Close Button
         close_btn = QPushButton("إغلاق")
         close_btn.setStyleSheet(f"""
-            QPushButton {{ background-color: {C.TEXT_SECONDARY}; color: {C.TEXT_BRIGHT}; padding: 10px; border-radius: 5px; font-size: 14px; }}
+            QPushButton {{
+                background-color: {C.TEXT_SECONDARY};
+                color: {C.TEXT_BRIGHT};
+                padding: 10px;
+                border-radius: 5px;
+                font-size: 14px;
+            }}
             QPushButton:hover {{ background-color: {C.TEXT_MUTED}; }}
         """)
         close_btn.clicked.connect(self.reject)

@@ -280,13 +280,31 @@ class CustomerManager:
             notes=data.get("notes"),
             is_active=parse_bool(data.get("is_active")),
             customer_type=data.get("customer_type"),
-            customer_group_id=parse_int(data.get("customer_group_id")) if data.get("customer_group_id") is not None else None,
+            customer_group_id=(
+                parse_int(data.get("customer_group_id"))
+                if data.get("customer_group_id") is not None else None
+            ),
             customer_segment=data.get("customer_segment"),
-            pricing_tier=parse_int(data.get("pricing_tier")) if data.get("pricing_tier") is not None else None,
-            price_list_id=parse_int(data.get("price_list_id")) if data.get("price_list_id") is not None else None,
-            contract_id=parse_int(data.get("contract_id")) if data.get("contract_id") is not None else None,
-            volume_discount_threshold=parse_decimal(data.get("volume_discount_threshold"), None) if data.get("volume_discount_threshold") is not None else None,
-            parent_account_id=parse_int(data.get("parent_account_id")) if data.get("parent_account_id") is not None else None,
+            pricing_tier=(
+                parse_int(data.get("pricing_tier"))
+                if data.get("pricing_tier") is not None else None
+            ),
+            price_list_id=(
+                parse_int(data.get("price_list_id"))
+                if data.get("price_list_id") is not None else None
+            ),
+            contract_id=(
+                parse_int(data.get("contract_id"))
+                if data.get("contract_id") is not None else None
+            ),
+            volume_discount_threshold=(
+                parse_decimal(data.get("volume_discount_threshold"), None)
+                if data.get("volume_discount_threshold") is not None else None
+            ),
+            parent_account_id=(
+                parse_int(data.get("parent_account_id"))
+                if data.get("parent_account_id") is not None else None
+            ),
             account_hierarchy_level=parse_int(data.get("account_hierarchy_level"), 0),
             is_headquarter=parse_bool(data.get("is_headquarter"), False),
             payment_terms=data.get("payment_terms"),
@@ -366,7 +384,10 @@ class CustomerManager:
                 "pricing_tier": customer.pricing_tier,
                 "price_list_id": customer.price_list_id,
                 "contract_id": customer.contract_id,
-                "volume_discount_threshold": float(customer.volume_discount_threshold) if customer.volume_discount_threshold is not None else None,
+                "volume_discount_threshold": (
+                    float(customer.volume_discount_threshold)
+                    if customer.volume_discount_threshold is not None else None
+                ),
                 "parent_account_id": customer.parent_account_id,
                 "account_hierarchy_level": customer.account_hierarchy_level,
                 "is_headquarter": 1 if customer.is_headquarter else 0,
@@ -407,7 +428,10 @@ class CustomerManager:
         """الحصول على عميل بالمعرف"""
         try:
             available_cols = self._get_select_columns()
-            select_cols_no_calculated = [col for col in available_cols if col not in ["last_purchase_date", "total_purchases", "purchases_count"]]
+            excluded = ["last_purchase_date", "total_purchases", "purchases_count"]
+            select_cols_no_calculated = [
+                col for col in available_cols if col not in excluded
+            ]
             columns_str = ", ".join([f"c.{col}" for col in select_cols_no_calculated])
 
             query = f"""
@@ -440,7 +464,7 @@ class CustomerManager:
             row = self.db_manager.fetch_one(query, (phone, phone))
             if not row:
                 return None
-            
+
             # Map row to Customer object
             if isinstance(row, dict):
                 row_dict = dict(row)
@@ -450,7 +474,7 @@ class CustomerManager:
                 for idx, col in enumerate(available_cols):
                     if idx < len(row):
                         row_dict[col] = row[idx]
-            
+
             self._enrich_with_sales_data(row_dict.get("id"), row_dict)
             return self._dict_to_object(row_dict)
         except Exception as e:
@@ -473,7 +497,11 @@ class CustomerManager:
             query += " ORDER BY name"
 
             rows = self.db_manager.fetch_all(query, tuple(params))
-            if rows is not None and type(rows).__name__ in ('Mock', 'MagicMock', 'NonCallableMock', 'CallableMock', 'AsyncMock'):
+            mock_types = (
+                'Mock', 'MagicMock', 'NonCallableMock',
+                'CallableMock', 'AsyncMock',
+            )
+            if rows is not None and type(rows).__name__ in mock_types:
                 rows = []
             customers = []
             for row in rows:
@@ -484,7 +512,7 @@ class CustomerManager:
                     for idx, col in enumerate(available_cols):
                         if idx < len(row):
                             row_dict[col] = row[idx]
-                
+
                 self._enrich_with_sales_data(row_dict.get("id"), row_dict)
                 customers.append(self._dict_to_object(row_dict))
             return [c for c in customers if c is not None]
@@ -630,7 +658,11 @@ class CustomerManager:
             available_cols = self._get_select_columns()
             query = "SELECT * FROM customers WHERE current_balance > 0 AND is_active = 1 ORDER BY current_balance DESC"
             rows = self.db_manager.fetch_all(query)
-            if rows is not None and type(rows).__name__ in ('Mock', 'MagicMock', 'NonCallableMock', 'CallableMock', 'AsyncMock'):
+            mock_types = (
+                'Mock', 'MagicMock', 'NonCallableMock',
+                'CallableMock', 'AsyncMock',
+            )
+            if rows is not None and type(rows).__name__ in mock_types:
                 rows = []
             customers = []
             for row in rows:
@@ -641,7 +673,7 @@ class CustomerManager:
                     for idx, col in enumerate(available_cols):
                         if idx < len(row):
                             row_dict[col] = row[idx]
-                
+
                 self._enrich_with_sales_data(row_dict.get("id"), row_dict)
                 customers.append(self._dict_to_object(row_dict))
             return [c for c in customers if c is not None]
@@ -662,7 +694,7 @@ class CustomerManager:
                    AVG(CASE WHEN is_active = 1 THEN credit_limit ELSE 0 END) as avg_credit
             FROM customers
             """
-            
+
             result = None
 
             # محاولة الجلب عبر fetch_one أولاً، ثم execute_query كبديل
@@ -679,7 +711,7 @@ class CustomerManager:
             if result:
                 is_list_of_customers = False
                 rows_to_process = []
-                
+
                 if isinstance(result, list):
                     rows_to_process = result
                     if len(result) > 0 and (isinstance(result[0], (list, tuple)) and len(result[0]) >= 7):
@@ -687,7 +719,7 @@ class CustomerManager:
                 elif isinstance(result, tuple) and len(result) >= 7:
                     rows_to_process = [result]
                     is_list_of_customers = True
-                
+
                 if is_list_of_customers:
                     total = len(rows_to_process)
                     active = 0
@@ -695,19 +727,19 @@ class CustomerManager:
                     over_limit = 0
                     total_balance = 0.0
                     credit_limits = []
-                    
+
                     for row in rows_to_process:
                         is_row_dict = isinstance(row, dict)
                         def grv(k, idx):
                             return row.get(k) if is_row_dict else row[idx]
-                        
+
                         r_limit = float(grv("credit_limit", 4) or 0.0)
                         r_balance = float(grv("current_balance", 5) or 0.0)
                         r_active = grv("is_active", 6)
                         if r_active is None:
                             r_active = 1
                         r_active = bool(int(r_active))
-                        
+
                         if r_active:
                             active += 1
                             if r_balance > 0:
@@ -716,7 +748,7 @@ class CustomerManager:
                                 over_limit += 1
                             total_balance += r_balance
                             credit_limits.append(r_limit)
-                    
+
                     avg_credit = sum(credit_limits) / len(credit_limits) if credit_limits else 0.0
                     return {
                         "total_customers": total,
@@ -730,7 +762,7 @@ class CustomerManager:
                     row = result
                     if isinstance(result, list) and len(result) == 1:
                         row = result[0]
-                        
+
                     is_dict = isinstance(row, dict)
                     def gv(k, i):
                         if is_dict:

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
 """
 نافذة إدارة الفئات
@@ -143,7 +142,11 @@ class CategoryDialog(BaseDialog):
                     "SELECT COUNT(*) FROM products WHERE category_id = ? AND is_active = 1",
                     (cat["id"],),
                 )
-                count = (count_result.get("COUNT(*)", count_result.get("count", 0)) if isinstance(count_result, dict) else (count_result[0] if count_result else 0))
+                count = (
+                    count_result.get("COUNT(*)", count_result.get("count", 0))
+                    if isinstance(count_result, dict)
+                    else (count_result[0] if count_result else 0)
+                )
             except Exception:
                 count = 0
 

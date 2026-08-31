@@ -1,10 +1,12 @@
-import logging
 #!/usr/bin/env python3
+
 """
 نظام الأتمتة الروبوتية - Robotic Process Automation System
 نظام RPA شامل لأتمتة العمليات التجارية
 """
 
+
+import logging
 import threading
 import time
 from dataclasses import dataclass

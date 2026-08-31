@@ -1,24 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import logging
+
 """
 مدير قاعدة البيانات - Database Manager
 إدارة الاتصال بقاعدة البيانات والعمليات الأساسية
 """
 
 import json
+import logging
 import os
 import re
 import shutil
 import sqlite3
 import threading
 import time
-from datetime import date, datetime, timedelta
-
-# Fix for Python 3.12 DeprecationWarning: The default date/datetime adapter is deprecated
-sqlite3.register_adapter(date, lambda val: val.isoformat())
-sqlite3.register_adapter(datetime, lambda val: val.isoformat())
 from contextlib import contextmanager
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -30,6 +27,10 @@ from src.utils.logger import setup_logger
 
 from .encryption_manager import EncryptionManager
 from .exceptions import DatabaseException
+
+# Fix for Python 3.12 DeprecationWarning: The default date/datetime adapter is deprecated
+sqlite3.register_adapter(date, lambda val: val.isoformat())
+sqlite3.register_adapter(datetime, lambda val: val.isoformat())
 
 
 # Intercept clean pytest runs on exit has been moved to tests/unit/conftest.py
@@ -573,12 +574,12 @@ class DatabaseManager:
             CREATE TABLE IF NOT EXISTS payments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 payment_type TEXT NOT NULL CHECK (
-                    payment_type IN ('customer_payment', 'supplier_payment', 'expense', 'other')
+                    payment_type IN ('customer_payment', 'supplier_payment', 'expense', 'other', 'income', 'refund')
                 ),
                 entity_id INTEGER NOT NULL,
                 amount DECIMAL(10,2) NOT NULL,
                 payment_method TEXT NOT NULL CHECK (
-                    payment_method IN ('cash', 'check', 'bank_transfer', 'credit_card', 'debit_card')
+                    payment_method IN ('cash', 'check', 'bank_transfer', 'credit_card', 'debit_card', 'online')
                 ),
                 reference_number TEXT,
                 payment_date DATE DEFAULT CURRENT_DATE,
@@ -954,12 +955,15 @@ class DatabaseManager:
                 self._add_column_if_missing("products", column, definition)
 
             # تحديث القيم الافتراضية للصفوف الحالية لضمان الاتساق
-            # NOTE: Use conservative defaults — assume old sales have 0 paid (not full amount)
+            # Cash sales are considered fully paid; others are considered unpaid
             self.connection.execute("""
                 UPDATE sales SET
                     status = COALESCE(status, 'مؤكدة'),
-                    paid_amount = COALESCE(paid_amount, 0),
-                    remaining_amount = COALESCE(remaining_amount, total_amount)
+                    paid_amount = COALESCE(paid_amount,
+                        CASE WHEN payment_method IN ('نقدي', 'cash') THEN total_amount ELSE 0 END),
+                    remaining_amount = COALESCE(remaining_amount,
+                        CASE WHEN payment_method IN ('نقدي', 'cash') THEN 0 ELSE total_amount END)
+                WHERE paid_amount IS NULL OR remaining_amount IS NULL
             """)
             self.connection.execute("""
                 UPDATE purchases SET

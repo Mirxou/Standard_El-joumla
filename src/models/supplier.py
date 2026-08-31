@@ -177,10 +177,16 @@ class SupplierManager:
 
     def get_supplier_products_count(self, supplier_id: int) -> int:
         try:
-            query = "SELECT COUNT(DISTINCT product_id) FROM purchase_items pi JOIN purchases p ON pi.purchase_id = p.id WHERE p.supplier_id = ? AND p.status != 'cancelled'"
+            query = (
+                "SELECT COUNT(DISTINCT product_id) FROM purchase_items pi "
+                "JOIN purchases p ON pi.purchase_id = p.id "
+                "WHERE p.supplier_id = ? AND p.status != 'cancelled'"
+            )
             row = self.db_manager.fetch_one(query, (supplier_id,))
             if row:
-                return row[0] if not isinstance(row, dict) else (row.get("COUNT(DISTINCT product_id)") or row.get("count") or 0)
+                return row[0] if not isinstance(row, dict) else (
+                    row.get("COUNT(DISTINCT product_id)") or row.get("count") or 0
+                )
             return 0
         except Exception as e:
             if self.logger:
@@ -272,8 +278,12 @@ class SupplierManager:
             query = """
             SELECT s.*,
                    (SELECT MAX(purchase_date) FROM purchases WHERE supplier_id = s.id) as last_purchase_date,
-                   (SELECT SUM(total_amount) FROM purchases WHERE supplier_id = s.id AND status != 'cancelled') as total_purchases,  # noqa: E501
-                   (SELECT COUNT(*) FROM purchases WHERE supplier_id = s.id AND status != 'cancelled') as purchases_count
+                   (SELECT SUM(total_amount) FROM purchases
+                    WHERE supplier_id = s.id AND status != 'cancelled'
+                   ) as total_purchases,
+                   (SELECT COUNT(*) FROM purchases
+                    WHERE supplier_id = s.id AND status != 'cancelled'
+                   ) as purchases_count
             FROM suppliers s
             WHERE s.id = ?
             """
@@ -292,8 +302,12 @@ class SupplierManager:
             query = """
             SELECT s.*,
                    (SELECT MAX(purchase_date) FROM purchases WHERE supplier_id = s.id) as last_purchase_date,
-                   (SELECT SUM(total_amount) FROM purchases WHERE supplier_id = s.id AND status != 'cancelled') as total_purchases,  # noqa: E501
-                   (SELECT COUNT(*) FROM purchases WHERE supplier_id = s.id AND status != 'cancelled') as purchases_count
+                   (SELECT SUM(total_amount) FROM purchases
+                    WHERE supplier_id = s.id AND status != 'cancelled'
+                   ) as total_purchases,
+                   (SELECT COUNT(*) FROM purchases
+                    WHERE supplier_id = s.id AND status != 'cancelled'
+                   ) as purchases_count
             FROM suppliers s
             WHERE s.name = ? OR s.name_en = ?
             """
@@ -317,8 +331,12 @@ class SupplierManager:
             query = """
             SELECT s.*,
                    (SELECT MAX(purchase_date) FROM purchases WHERE supplier_id = s.id) as last_purchase_date,
-                   (SELECT SUM(total_amount) FROM purchases WHERE supplier_id = s.id AND status != 'cancelled') as total_purchases,  # noqa: E501
-                   (SELECT COUNT(*) FROM purchases WHERE supplier_id = s.id AND status != 'cancelled') as purchases_count
+                   (SELECT SUM(total_amount) FROM purchases
+                    WHERE supplier_id = s.id AND status != 'cancelled'
+                   ) as total_purchases,
+                   (SELECT COUNT(*) FROM purchases
+                    WHERE supplier_id = s.id AND status != 'cancelled'
+                   ) as purchases_count
             FROM suppliers s
             WHERE 1=1
             """
@@ -420,8 +438,12 @@ class SupplierManager:
             query = """
             SELECT s.*,
                    (SELECT MAX(purchase_date) FROM purchases WHERE supplier_id = s.id) as last_purchase_date,
-                   (SELECT SUM(total_amount) FROM purchases WHERE supplier_id = s.id AND status != 'cancelled') as total_purchases,  # noqa: E501
-                   (SELECT COUNT(*) FROM purchases WHERE supplier_id = s.id AND status != 'cancelled') as purchases_count
+                   (SELECT SUM(total_amount) FROM purchases
+                    WHERE supplier_id = s.id AND status != 'cancelled'
+                   ) as total_purchases,
+                   (SELECT COUNT(*) FROM purchases
+                    WHERE supplier_id = s.id AND status != 'cancelled'
+                   ) as purchases_count
             FROM suppliers s
             WHERE s.current_balance > 0 AND s.is_active = 1
             ORDER BY s.current_balance DESC
@@ -439,8 +461,12 @@ class SupplierManager:
             query = """
             SELECT s.*,
                    (SELECT MAX(purchase_date) FROM purchases WHERE supplier_id = s.id) as last_purchase_date,
-                   (SELECT SUM(total_amount) FROM purchases WHERE supplier_id = s.id AND status != 'cancelled') as total_purchases,
-                   (SELECT COUNT(*) FROM purchases WHERE supplier_id = s.id AND status != 'cancelled') as purchases_count
+                   (SELECT SUM(total_amount) FROM purchases
+                    WHERE supplier_id = s.id AND status != 'cancelled'
+                   ) as total_purchases,
+                   (SELECT COUNT(*) FROM purchases
+                    WHERE supplier_id = s.id AND status != 'cancelled'
+                   ) as purchases_count
             FROM suppliers s
             WHERE s.is_active = 1
             """
@@ -460,8 +486,12 @@ class SupplierManager:
             query = """
             SELECT s.*,
                    (SELECT MAX(purchase_date) FROM purchases WHERE supplier_id = s.id) as last_purchase_date,
-                   (SELECT SUM(total_amount) FROM purchases WHERE supplier_id = s.id AND status != 'cancelled') as total_purchases,
-                   (SELECT COUNT(*) FROM purchases WHERE supplier_id = s.id AND status != 'cancelled') as purchases_count
+                   (SELECT SUM(total_amount) FROM purchases
+                    WHERE supplier_id = s.id AND status != 'cancelled'
+                   ) as total_purchases,
+                   (SELECT COUNT(*) FROM purchases
+                    WHERE supplier_id = s.id AND status != 'cancelled'
+                   ) as purchases_count
             FROM suppliers s
             WHERE s.payment_terms = ? AND s.is_active = 1
             """

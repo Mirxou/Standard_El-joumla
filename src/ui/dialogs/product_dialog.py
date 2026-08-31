@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import logging
 """
 نافذة إضافة/تعديل المنتجات - Product Dialog
 واجهة شاملة لإدارة المنتجات مع دعم اللغة العربية

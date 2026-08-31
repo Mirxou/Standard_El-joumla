@@ -236,7 +236,8 @@ class CustomerManagementDialog(BaseDialog):
                 reply = QMessageBox.warning(
                     self,
                     "تحذير",
-                    f"هذا العميل لديه {sales_count} عملية بيع و {payments_count} دفعة مرتبطة. سيتم تعطيل العميل بدلاً من حذفه.",
+                    f"هذا العميل لديه {sales_count} عملية بيع و {payments_count} "
+                    f"دفعة مرتبطة. سيتم تعطيل العميل بدلاً من حذفه.",
                     QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
                 )
                 if reply != QMessageBox.StandardButton.Ok:

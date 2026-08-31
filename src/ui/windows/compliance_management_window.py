@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
 """
 نافذة إدارة الامتثال - Compliance Management Window
@@ -38,8 +37,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-project_root = Path(__file__).parent.parent.parent.parent
-
 from src.core.database_manager import DatabaseManager
 from src.services.compliance_service import (
     ComplianceCheckStatus,
@@ -49,6 +46,8 @@ from src.services.compliance_service import (
 )
 from src.ui.styles.design_tokens import C
 from src.utils.logger import setup_logger
+
+project_root = Path(__file__).parent.parent.parent.parent
 
 
 class ComplianceRuleDialog(QDialog):

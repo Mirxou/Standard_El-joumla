@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
 """
 نافذة تقارير العملاء والموردين
@@ -363,7 +362,9 @@ class ContactsReportDialog(BaseDialog):
             customers_total = _count_val(self.db_manager.fetch_one("SELECT COUNT(*) FROM customers"))
             customers_active = _count_val(self.db_manager.fetch_one("SELECT COUNT(*) FROM customers WHERE is_active = 1"))  # noqa: F841,E501
             customers_balance = (  # noqa: F841
-                _count_val(self.db_manager.fetch_one("SELECT COALESCE(SUM(COALESCE(current_balance, 0)), 0) FROM customers"))
+                _count_val(self.db_manager.fetch_one(
+                    "SELECT COALESCE(SUM(COALESCE(current_balance, 0)), 0) FROM customers"
+                ))
             )
 
             # إحصائيات الموردين
@@ -389,6 +390,9 @@ class ContactsReportDialog(BaseDialog):
             except Exception:
                 purchases_total = 0
                 purchases_count = 0
+
+            sales_avg = float(sales_total) / max(sales_count, 1)
+            purchases_avg = float(purchases_total) / max(purchases_count, 1)
 
             # بناء التقرير
             report = f"""
@@ -416,7 +420,7 @@ class ContactsReportDialog(BaseDialog):
 {'-'*70}
 {'عدد العمليات':<30} {sales_count:>20} {purchases_count:>20}
 {'إجمالي المبلغ':<30} {float(sales_total):>20,.2f} {float(purchases_total):>20,.2f}
-{'متوسط العملية':<30} {float(sales_total)/max(sales_count, 1):>20,.2f} {float(purchases_total)/max(purchases_count, 1):>20,.2f}
+{'متوسط العملية':<30} {sales_avg:>20,.2f} {purchases_avg:>20,.2f}
 
 📋 التحليل:
 ─────────────────────────────────────────────────────────────────────────────

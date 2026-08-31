@@ -26,14 +26,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from src.core.encryption_manager import EncryptionManager
+from src.core.local_database_manager import LocalDatabaseManager
 from src.ui.styles.design_tokens import C
 from src.ui.widgets.base_dialog import BaseDialog
 from src.ui.widgets.quantum_notification import NotificationManager
 
 project_root = Path(__file__).parent.parent.parent.parent
-
-from src.core.encryption_manager import EncryptionManager
-from src.core.local_database_manager import LocalDatabaseManager
 
 
 class EncryptionWorker(QThread):

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
 """
 Super Admin Dashboard - لوحة تحكم المدير الخارق
@@ -31,8 +30,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-project_root = Path(__file__).parent.parent.parent.parent
-
 from src.core.database_manager import DatabaseManager
 from src.core.intrusion_detection import IntrusionDetectionSystem
 from src.core.security_monitor import SecurityMonitor
@@ -40,6 +37,8 @@ from src.services.cloud_sync_service import CloudSyncService
 from src.services.webhook_service import WebhookService
 from src.ui.styles.design_tokens import C
 from src.utils.logger import setup_logger
+
+project_root = Path(__file__).parent.parent.parent.parent
 
 
 class SuperAdminDashboard(QMainWindow):

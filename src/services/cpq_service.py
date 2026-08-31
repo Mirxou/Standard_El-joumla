@@ -1,11 +1,13 @@
-import logging
-
 #!/usr/bin/env python3  # noqa: E265
 # -*- coding: utf-8 -*-
+
 """
 خدمة CPQ - Configure Price Quote Service
 خدمة التكوين والتسعير والعروض للعملاء B2B
 """
+
+import logging
+
 
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta

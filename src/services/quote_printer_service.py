@@ -43,15 +43,18 @@ class QuotePrinterService:
         <head>
             <style>
                 body {{ font-family: 'Arial', sans-serif; padding: 20px; }}
-                .header {{ text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 10px; }}  # noqa: E501
+                .header {{ text-align: center; margin-bottom: 30px;
+                             border-bottom: 2px solid #333; padding-bottom: 10px; }}
                 .header h1 {{ margin: 0; color: #003366; }}
                 .info-table {{ width: 100%; margin-bottom: 20px; }}
                 .info-table td {{ padding: 5px; }}
                 .items-table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-                .items-table th {{ background-color: #f2f2f2; border: 1px solid #ddd; padding: 8px; text-align: center; font-weight: bold; }}  # noqa: E501
+                .items-table th {{ background-color: #f2f2f2; border: 1px solid #ddd;
+                                  padding: 8px; text-align: center; font-weight: bold; }}
                 .items-table td {{ border: 1px solid #ddd; padding: 8px; }}
                 .footer {{ margin-top: 30px; text-align: left; font-size: 18px; font-weight: bold; }}
-                .total-box {{ background-color: #f8f9fa; border: 1px solid #ddd; padding: 15px; display: inline-block; }}  # noqa: E501
+                .total-box {{ background-color: #f8f9fa; border: 1px solid #ddd;
+                               padding: 15px; display: inline-block; }}
             </style>
         </head>
         <body>

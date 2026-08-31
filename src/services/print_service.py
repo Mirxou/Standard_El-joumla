@@ -49,7 +49,8 @@ class PrintService:
         # Wrap print_manager methods in Mocks if in testing environment
         try:
             from unittest.mock import Mock, MagicMock
-            _is_mock = isinstance(self.db_manager, (Mock, MagicMock)) or type(self.db_manager).__name__ in ('Mock', 'MagicMock', 'NonCallableMock')
+            _mock_types = ('Mock', 'MagicMock', 'NonCallableMock')
+            _is_mock = isinstance(self.db_manager, (Mock, MagicMock)) or type(self.db_manager).__name__ in _mock_types
         except ImportError:
             _is_mock = False
         if _is_mock:
@@ -343,9 +344,15 @@ class PrintService:
             customer_address = sale.get("customer_address")
             if not customer_name:
                 if hasattr(self.db_manager, "fetch_one"):
-                    customer = self.db_manager.fetch_one("SELECT * FROM customers WHERE id = ?", (sale.get("customer_id"),))
+                    customer = self.db_manager.fetch_one(
+                        "SELECT * FROM customers WHERE id = ?",
+                        (sale.get("customer_id"),),
+                    )
                 else:
-                    customer = self.db_manager.execute_query("SELECT * FROM customers WHERE id = ?", (sale.get("customer_id"),))
+                    customer = self.db_manager.execute_query(
+                        "SELECT * FROM customers WHERE id = ?",
+                        (sale.get("customer_id"),),
+                    )
                     customer = customer[0] if customer else None
                 if customer:
                     customer_name = customer.get("name")
@@ -355,7 +362,9 @@ class PrintService:
             # جلب الأصناف
             if hasattr(self.db_manager, "fetch_all"):
                 items = self.db_manager.fetch_all(
-                    "SELECT si.*, p.name as product_name, p.barcode FROM sale_items si JOIN products p ON si.product_id = p.id WHERE si.sale_id = ?",
+                    "SELECT si.*, p.name as product_name, p.barcode "
+                    "FROM sale_items si JOIN products p ON si.product_id = p.id "
+                    "WHERE si.sale_id = ?",
                     (sale_id,),
                 )
             else:
@@ -436,9 +445,15 @@ class PrintService:
             customer_address = quote.get("customer_address")
             if not customer_name:
                 if hasattr(self.db_manager, "fetch_one"):
-                    customer = self.db_manager.fetch_one("SELECT * FROM customers WHERE id = ?", (quote.get("customer_id"),))
+                    customer = self.db_manager.fetch_one(
+                        "SELECT * FROM customers WHERE id = ?",
+                        (quote.get("customer_id"),),
+                    )
                 else:
-                    customer = self.db_manager.execute_query("SELECT * FROM customers WHERE id = ?", (quote.get("customer_id"),))
+                    customer = self.db_manager.execute_query(
+                        "SELECT * FROM customers WHERE id = ?",
+                        (quote.get("customer_id"),),
+                    )
                     customer = customer[0] if customer else None
                 if customer:
                     customer_name = customer.get("name")
@@ -447,7 +462,9 @@ class PrintService:
 
             if hasattr(self.db_manager, "fetch_all"):
                 items = self.db_manager.fetch_all(
-                    "SELECT qi.*, p.name as product_name, p.barcode FROM quote_items qi JOIN products p ON qi.product_id = p.id WHERE qi.quote_id = ?",
+                    "SELECT qi.*, p.name as product_name, p.barcode "
+                    "FROM quote_items qi JOIN products p ON qi.product_id = p.id "
+                    "WHERE qi.quote_id = ?",
                     (quote_id,),
                 )
             else:

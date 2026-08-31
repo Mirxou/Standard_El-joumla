@@ -136,7 +136,10 @@ class CustomerFormDialog(BaseDialog):
         try:
             # 🔥 التحقق من وجود عمود phone2 قبل استخدامه
             table_info = self.db_manager.fetch_all("PRAGMA table_info(customers)")
-            available_columns = [row.get("name", "") if isinstance(row, dict) else row[1] for row in table_info] if table_info else []
+            available_columns = [
+                row.get("name", "") if isinstance(row, dict) else row[1]
+                for row in table_info
+            ] if table_info else []
             has_phone2 = "phone2" in available_columns
 
             # بناء الاستعلام بناءً على الأعمدة المتاحة
@@ -231,7 +234,11 @@ class CustomerFormDialog(BaseDialog):
                 dup_email_params = (email, self.customer_id or 0)
                 dup_email_result = self.db_manager.fetch_one(dup_email_query, dup_email_params)
                 if dup_email_result:
-                    dup_name = dup_email_result.get("name") if isinstance(dup_email_result, dict) else dup_email_result[1]
+                    dup_name = (
+                        dup_email_result.get("name")
+                        if isinstance(dup_email_result, dict)
+                        else dup_email_result[1]
+                    )
                     self.notify.show_warning(
                         self.i18n.get_message("warning"),
                         f"البريد الإلكتروني مسجل مسبقاً للعميل: {dup_name}",
@@ -243,7 +250,10 @@ class CustomerFormDialog(BaseDialog):
         try:
             # التحقق من وجود عمود phone2 قبل استخدامه
             table_info = self.db_manager.fetch_all("PRAGMA table_info(customers)")
-            available_columns = [row.get("name", "") if isinstance(row, dict) else row[1] for row in table_info] if table_info else []
+            available_columns = [
+                row.get("name", "") if isinstance(row, dict) else row[1]
+                for row in table_info
+            ] if table_info else []
             has_phone2 = "phone2" in available_columns
 
             phone2_value = self.phone2_input.text().strip() if has_phone2 else None

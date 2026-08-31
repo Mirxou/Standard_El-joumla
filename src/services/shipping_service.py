@@ -1,11 +1,12 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 Shipping Service - خدمة الشحن
 تكامل مع FedEx, DHL, وغيرها
 """
 
+
+import logging
 import json
 from dataclasses import dataclass
 from datetime import date, datetime

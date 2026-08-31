@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
 """
 نافذة ملاحظات الاستلام
@@ -267,9 +266,15 @@ class ReceivingNotesWindow(QMainWindow):
         # أزرار
         btn_layout = QHBoxLayout()
         save_btn = QPushButton("حفظ")
-        save_btn.setStyleSheet(f"background-color: {Colors.ACCENT_SKY}; color: {Colors.TEXT_BRIGHT}; padding: 8px 24px;")
+        save_btn.setStyleSheet(
+            f"background-color: {Colors.ACCENT_SKY}; "
+            f"color: {Colors.TEXT_BRIGHT}; padding: 8px 24px;"
+        )
         cancel_btn = QPushButton("إلغاء")
-        cancel_btn.setStyleSheet(f"background-color: {Colors.TEXT_MUTED}; color: {Colors.TEXT_BRIGHT}; padding: 8px 24px;")
+        cancel_btn.setStyleSheet(
+            f"background-color: {Colors.TEXT_MUTED}; "
+            f"color: {Colors.TEXT_BRIGHT}; padding: 8px 24px;"
+        )
         btn_layout.addStretch()
         btn_layout.addWidget(save_btn)
         btn_layout.addWidget(cancel_btn)
@@ -396,7 +401,8 @@ class ReceivingNotesWindow(QMainWindow):
             note_id = self.notes_table.item(current_row, 0).text()
             with self.db.get_cursor() as cursor:
                 cursor.execute(
-                    "UPDATE receiving_notes SET status = ?, approved_by = ?, approved_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    "UPDATE receiving_notes SET status = ?, approved_by = ?, "
+                    "approved_at = CURRENT_TIMESTAMP WHERE id = ?",
                     ("approved", self.current_user_id, note_id),
                 )
                 cursor.connection.commit()

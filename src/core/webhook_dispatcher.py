@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -426,7 +425,10 @@ class WebhookDispatcher:
 
             except Exception as e:
                 last_error = f"Unexpected Error: {str(e)}"
-                self.logger.error(f"❌ خطأ غير متوقع في إرسال Webhook: {url} " f"(Attempt: {attempt}/{retry_count}): {e}",
+                self.logger.error(
+                    f"❌ خطأ غير متوقع في إرسال Webhook: {url} "
+                    f"(Attempt: {attempt}/{retry_count}): {e}",
+
                     exc_info=True,
                 )
 

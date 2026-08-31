@@ -1,17 +1,20 @@
-import logging
 #!/usr/bin/env python3
+
 """
 مدير أتمتة سير العمل - Workflow Automation Manager
 مدير شامل لأتمتة سير العمل التجارية
 """
 
+
+import logging
 import threading
 import time
+import uuid as _uuid
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import Enum
+from enum import Enum, Enum as _Enum
 from typing import Any, Callable, Dict, List, Optional
 
 
@@ -572,9 +575,6 @@ class WorkflowAutomationManager:
 
 
 # ==================== كلاسات وواجهات متوافقة مع الاختبارات ====================
-
-import uuid as _uuid
-from enum import Enum as _Enum
 
 
 class WorkflowState(_Enum):

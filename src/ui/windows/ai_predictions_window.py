@@ -30,12 +30,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-project_root = Path(__file__).parent.parent.parent.parent
-
 from src.core.database_manager import DatabaseManager
 from src.services.ai_prediction_service import AIPredictionService
 from src.ui.styles.design_tokens import C
 from src.utils.logger import setup_logger
+
+project_root = Path(__file__).parent.parent.parent.parent
 
 
 class PredictionWorker(QThread):

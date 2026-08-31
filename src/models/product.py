@@ -1,11 +1,12 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 نموذج المنتج - Product Model
 يحتوي على جميع العمليات المتعلقة بالمنتجات
 """
 
+
+import logging
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
@@ -286,7 +287,11 @@ class ProductManager:
                     params.append(offset)
 
             rows = self.db_manager.fetch_all(query, tuple(params))
-            if rows is not None and type(rows).__name__ in ('Mock', 'MagicMock', 'NonCallableMock', 'CallableMock', 'AsyncMock'):
+            _mock_types = (
+                'Mock', 'MagicMock', 'NonCallableMock',
+                'CallableMock', 'AsyncMock',
+            )
+            if rows is not None and type(rows).__name__ in _mock_types:
                 rows = []
             return [self._row_to_product(row) for row in rows]
         except Exception as e:
@@ -400,7 +405,9 @@ class ProductManager:
             SELECT COUNT(*) as total,
                    COUNT(CASE WHEN is_active = 1 THEN 1 END) as active,
                    COUNT(CASE WHEN current_stock <= min_stock AND is_active = 1 THEN 1 END) as low,
-                   SUM(CASE WHEN is_active = 1 THEN current_stock * COALESCE(cost_price, selling_price * 0.7) ELSE 0 END) as value
+                   SUM(CASE WHEN is_active = 1
+                       THEN current_stock * COALESCE(cost_price, selling_price * 0.7)
+                       ELSE 0 END) as value
             FROM products
             """
             row = self.db_manager.fetch_one(query)

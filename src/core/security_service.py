@@ -1,11 +1,12 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 خدمة الأمان المتقدمة
 توفر تشفير قوي، مصادقة ثنائية، وحماية متقدمة
 """
 
+
+import logging
 import base64
 import hashlib
 import os

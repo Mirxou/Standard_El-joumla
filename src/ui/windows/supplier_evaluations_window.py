@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
 """
 نافذة تقييم المورّدين
@@ -28,7 +27,6 @@ from PySide6.QtWidgets import (
 
 from src.core.database_manager import DatabaseManager
 from src.utils.logger import setup_logger
-from src.ui.styles.design_tokens import C
 
 
 class SupplierEvaluationsWindow(QMainWindow):
@@ -261,7 +259,10 @@ class SupplierEvaluationsWindow(QMainWindow):
 
         # تحديث التقييم العام تلقائياً
         def update_overall():
-            avg = (quality_spin.value() + delivery_spin.value() + communication_spin.value() + reliability_spin.value()) / 4
+            avg = (
+                quality_spin.value() + delivery_spin.value()
+                + communication_spin.value() + reliability_spin.value()
+            ) / 4
             overall_label.setText(f"{avg:.1f}")
 
         quality_spin.valueChanged.connect(update_overall)
@@ -346,7 +347,10 @@ class SupplierEvaluationsWindow(QMainWindow):
                                    delivery_score = ?, communication_score = ?, reliability_score = ?,
                                    overall_score = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
                                WHERE id = ?""",
-                            (supplier_id, eval_date, quality, delivery, communication, reliability, overall, notes, eval_id),
+                            (
+                                supplier_id, eval_date, quality, delivery,
+                                communication, reliability, overall, notes, eval_id,
+                            ),
                         )
                     cursor.connection.commit()
                 dialog.accept()

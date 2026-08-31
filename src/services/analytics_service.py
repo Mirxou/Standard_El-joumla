@@ -1,11 +1,12 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 Analytics Service - خدمة التحليلات المتقدمة
 تحليلات متقدمة، Data Visualization، Custom Dashboards
 """
 
+
+import logging
 import json
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional

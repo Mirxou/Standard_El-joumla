@@ -33,9 +33,14 @@ class CycleCountService:
     Cycle Count business logic over the migration 012 tables.
 
     Tables expected (from migration 012):
-      - cycle_count_plans(id, name, frequency, strategy, locations, start_date, enabled, created_at, updated_at)
-      - cycle_count_sessions(id, plan_id, location_id, started_at, closed_at, counted_by, status, accuracy, variance_qty, variance_value)  # noqa: E501
-      - cycle_count_items(id, session_id, product_id, location_id, expected_qty, counted_qty, variance_qty, unit_cost, variance_value, reason_id, notes)  # noqa: E501
+      - cycle_count_plans(id, name, frequency, strategy, locations,
+        start_date, enabled, created_at, updated_at)
+      - cycle_count_sessions(id, plan_id, location_id, started_at,
+        closed_at, counted_by, status, accuracy,
+        variance_qty, variance_value)
+      - cycle_count_items(id, session_id, product_id, location_id,
+        expected_qty, counted_qty, variance_qty, unit_cost,
+        variance_value, reason_id, notes)
       - variance_reasons(id, code, name, description, is_active)
     """
 
@@ -77,7 +82,9 @@ class CycleCountService:
         with self._conn() as cx:
             cur = cx.execute(
                 """
-                INSERT INTO cycle_count_plans(name, frequency, strategy, locations, start_date, enabled, created_at, updated_at)  # noqa: E501
+                INSERT INTO cycle_count_plans
+                (name, frequency, strategy, locations,
+                 start_date, enabled, created_at, updated_at)
                 VALUES(?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
                 """,
                 (name, frequency, strategy, locations, start_date, 1 if enabled else 0),

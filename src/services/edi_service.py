@@ -1,11 +1,12 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 EDI Service - خدمة EDI
 إدارة مستندات EDI والشركاء والـ Mapping
 """
 
+
+import logging
 import json
 from dataclasses import dataclass
 from datetime import datetime

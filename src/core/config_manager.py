@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import logging
+
 """
 مدير الإعدادات - Configuration Manager
 إدارة إعدادات التطبيق وتكوينه
 """
+
+import logging
+
 
 import base64
 import json

@@ -5,7 +5,6 @@ Thread Pool Manager
 مدير Thread Pool لاستخدام QThreadPool بدلاً من QThread
 """
 
-import logging
 from typing import Any, Callable, Optional
 
 from PySide6.QtCore import QRunnable, QThreadPool

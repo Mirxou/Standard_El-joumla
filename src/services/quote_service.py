@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
+
 """
 خدمة عروض الأسعار - Quote Service
 تقديم خدمات إدارة عروض الأسعار
 """
+
+import logging
+
 
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
@@ -478,7 +481,13 @@ class QuoteService:
                 FROM quotes
                 GROUP BY status
             """)
-            stats["by_status"] = {get_value(row, 'status'): {"count": get_value(row, 'cnt', 0), "total": get_value(row, 'total', 0) or 0} for row in cursor.fetchall()}
+            stats["by_status"] = {
+                get_value(row, 'status'): {
+                    "count": get_value(row, 'cnt', 0),
+                    "total": get_value(row, 'total', 0) or 0,
+                }
+                for row in cursor.fetchall()
+            }
 
             # إجمالي العروض
             cursor.execute("SELECT COUNT(*) AS total_count, SUM(total_amount) AS total_value FROM quotes")

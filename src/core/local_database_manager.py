@@ -5,7 +5,6 @@
 إدارة قاعدة البيانات المحلية (Local Cache) للتطبيق المكتبي
 """
 
-import logging
 import os
 import platform
 import re
@@ -15,6 +14,11 @@ from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+from src.core.database_encryption import DatabaseEncryption
+from src.core.exceptions import DatabaseException
+from src.core.keyring_manager import KeyringManager
+from src.utils.logger import setup_logger
 
 # Register Decimal adapters for SQLite
 sqlite3.register_adapter(Decimal, lambda d: str(d))
@@ -37,12 +41,6 @@ def parse_timestamp(b):
 
 sqlite3.register_converter("DATE", parse_date)
 sqlite3.register_converter("TIMESTAMP", parse_timestamp)
-
-
-from src.core.database_encryption import DatabaseEncryption
-from src.core.exceptions import DatabaseException
-from src.core.keyring_manager import KeyringManager
-from src.utils.logger import setup_logger
 
 
 class LocalDatabaseManager:
@@ -872,7 +870,9 @@ class LocalDatabaseManager:
                 account_id INTEGER NOT NULL,
                 account_code TEXT NOT NULL,
                 account_name TEXT NOT NULL,
-                account_type TEXT NOT NULL CHECK (account_type IN ('Asset', 'Liability', 'Equity', 'Revenue', 'Expense', 'receivable', 'payable')),
+                account_type TEXT NOT NULL CHECK (account_type IN (
+                    'Asset', 'Liability', 'Equity', 'Revenue', 'Expense', 'receivable', 'payable'
+                )),
                 entity_id INTEGER,
                 balance DECIMAL(15,2) NOT NULL DEFAULT 0,
                 last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -884,13 +884,20 @@ class LocalDatabaseManager:
         self.connection.execute("""
             CREATE TABLE IF NOT EXISTS payments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                payment_type TEXT NOT NULL CHECK (payment_type IN ('customer_payment', 'supplier_payment', 'expense', 'other')),
+                payment_type TEXT NOT NULL CHECK (payment_type IN (
+                    'customer_payment', 'supplier_payment', 'expense', 'other'
+                )),
                 entity_id INTEGER NOT NULL,
                 amount DECIMAL(10,2) NOT NULL,
-                payment_method TEXT NOT NULL CHECK (payment_method IN ('cash', 'check', 'bank_transfer', 'credit_card', 'debit_card')),
+                payment_method TEXT NOT NULL CHECK (payment_method IN (
+                    'cash', 'check', 'bank_transfer',
+                    'credit_card', 'debit_card'
+                )),
                 reference_number TEXT,
                 payment_date DATE DEFAULT CURRENT_DATE,
-                status TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('pending', 'completed', 'cancelled', 'failed')),
+                status TEXT NOT NULL DEFAULT 'completed' CHECK (status IN (
+                    'pending', 'completed', 'cancelled', 'failed'
+                )),
                 notes TEXT,
                 user_id INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

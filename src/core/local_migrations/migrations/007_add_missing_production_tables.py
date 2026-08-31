@@ -1,6 +1,9 @@
+"""إضافة جداول الإنتاج المفقودة (أوامر الشراء، خطط الدفع، وتوسيع المنتجات)"""
+
 import logging
+
+
 def upgrade(db_manager) -> bool:
-    """إضافة جداول الإنتاج المفقودة (أوامر الشراء، خطط الدفع، وتوسيع المنتجات)"""
     queries = [
         """
         CREATE TABLE IF NOT EXISTS user_permissions (

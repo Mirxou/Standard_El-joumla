@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
 """
 لوحة تحكم المدفوعات - Payment Dashboard
@@ -85,7 +84,10 @@ class ChartWidget(QFrame):
 
         # العنوان
         title_label = QLabel(title)
-        title_label.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {Colors.TEXT_BRIGHT}; margin-bottom: 10px;")
+        title_label.setStyleSheet(
+            f"font-size: 14px; font-weight: bold; color: {Colors.TEXT_BRIGHT}; "
+            f"margin-bottom: 10px;"
+        )
         title_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(title_label)
 
@@ -638,17 +640,27 @@ class PaymentDashboard(QMainWindow):
 
             # التدفق النقدي الصافي (المدفوعات الواردة - المدفوعات الصادرة)
             result_in = self.db_manager.fetch_one(
-                "SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE status = 'completed' AND payment_type = 'customer_payment'"
+                "SELECT COALESCE(SUM(amount), 0) as total FROM payments "
+                "WHERE status = 'completed' AND payment_type = 'customer_payment'"
             )
             result_out = self.db_manager.fetch_one(
-                "SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE status = 'completed' AND payment_type = 'supplier_payment'"
+                "SELECT COALESCE(SUM(amount), 0) as total FROM payments "
+                "WHERE status = 'completed' AND payment_type = 'supplier_payment'"
             )
             inflow = 0.0
             outflow = 0.0
             if result_in:
-                inflow = float(result_in.get("total", 0) if isinstance(result_in, dict) else (result_in[0] if result_in else 0) or 0)
+                inflow = float(
+                    result_in.get("total", 0)
+                    if isinstance(result_in, dict)
+                    else (result_in[0] if result_in else 0) or 0
+                )
             if result_out:
-                outflow = float(result_out.get("total", 0) if isinstance(result_out, dict) else (result_out[0] if result_out else 0) or 0)
+                outflow = float(
+                    result_out.get("total", 0)
+                    if isinstance(result_out, dict)
+                    else (result_out[0] if result_out else 0) or 0
+                )
             kpis["net_cash_flow"] = inflow - outflow
 
         except Exception as e:
@@ -811,11 +823,26 @@ class PaymentDashboard(QMainWindow):
             self.top_customers_table.setRowCount(len(receivables))
             for row, r in enumerate(receivables):
                 if isinstance(r, dict):
-                    self.top_customers_table.setItem(row, 0, QTableWidgetItem(str(r.get('customer_name', r.get('name', '')))))
-                    self.top_customers_table.setItem(row, 1, QTableWidgetItem(str(r.get('payments_count', r.get('txn_count', 0)))))
-                    self.top_customers_table.setItem(row, 2, QTableWidgetItem(f"{r.get('total', r.get('balance', 0)):,.2f}"))
-                    self.top_customers_table.setItem(row, 3, QTableWidgetItem(f"{r.get('average', r.get('avg_amt', 0)):,.2f}"))
-                    self.top_customers_table.setItem(row, 4, QTableWidgetItem(str(r.get('last_payment_date', r.get('last_date', '')) or '')))
+                    self.top_customers_table.setItem(
+                        row, 0,
+                        QTableWidgetItem(str(r.get('customer_name', r.get('name', ''))))
+                    )
+                    self.top_customers_table.setItem(
+                        row, 1,
+                        QTableWidgetItem(str(r.get('payments_count', r.get('txn_count', 0))))
+                    )
+                    self.top_customers_table.setItem(
+                        row, 2,
+                        QTableWidgetItem(f"{r.get('total', r.get('balance', 0)):,.2f}")
+                    )
+                    self.top_customers_table.setItem(
+                        row, 3,
+                        QTableWidgetItem(f"{r.get('average', r.get('avg_amt', 0)):,.2f}")
+                    )
+                    self.top_customers_table.setItem(
+                        row, 4,
+                        QTableWidgetItem(str(r.get('last_payment_date', r.get('last_date', '')) or ''))
+                    )
                 else:
                     # tuple row from raw query
                     for col in range(min(len(r), 5)):

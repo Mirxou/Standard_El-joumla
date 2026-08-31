@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -519,7 +518,7 @@ class UserManager:
             user.failed_login_attempts = new_attempts
             if locked:
                 user.is_locked = True
-            
+
             if self.logger:
                 self.logger.warning(f"Failed login attempt for user {user.username} (Attempts: {new_attempts})")
 

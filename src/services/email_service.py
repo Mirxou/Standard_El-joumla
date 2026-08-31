@@ -21,7 +21,6 @@ from typing import Any, Dict, List, Optional
 from jinja2 import BaseLoader, Environment, select_autoescape
 
 from src.services.print_service import PrintService
-from src.services.pdf_export_service import PDFExportService
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +42,9 @@ class EmailService:
         cfg = config or {}
         self.config = cfg
         cfg_lower = {k.lower(): v for k, v in cfg.items()}
-        
+
         self.smtp_host = cfg_lower.get("smtp_host", os.getenv("SMTP_HOST", "localhost"))
-        
+
         port_val = cfg_lower.get("smtp_port")
         if port_val is None:
             port_val = os.getenv("SMTP_PORT", "587")
@@ -53,17 +52,17 @@ class EmailService:
             self.smtp_port = int(port_val)
         except (ValueError, TypeError):
             self.smtp_port = 587
-            
+
         self.smtp_user = cfg_lower.get("smtp_user", os.getenv("SMTP_USER", ""))
         self.smtp_password = cfg_lower.get("smtp_password", os.getenv("SMTP_PASSWORD", ""))
-        
+
         tls_val = cfg_lower.get("smtp_tls")
         if tls_val is None:
             tls_val = cfg_lower.get("use_tls")
             if tls_val is None:
                 tls_val = os.getenv("SMTP_TLS", "true")
         self.smtp_tls = str(tls_val).lower() in ("1", "true", "yes", "on")
-        
+
         self.smtp_from = cfg_lower.get("smtp_from", os.getenv("SMTP_FROM", self.smtp_user or "no-reply@example.com"))
 
         self._jinja = Environment(loader=BaseLoader(), autoescape=select_autoescape(["html", "xml"]))

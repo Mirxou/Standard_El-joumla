@@ -16,7 +16,8 @@ class GTKNotFoundError(OSError):
     """استثناء مخصص يشرح للمستخدم كيفية تحميل وتثبيت حزمة GTK+ لتمكين الطباعة"""
     def __init__(self, original_error=None):
         message = (
-            "تعذر توليد ملف PDF بسبب غياب مكتبات النظام الثنائية GTK+ / gobject المطلوبة من WeasyPrint على نظام Windows.\n"
+            "تعذر توليد ملف PDF بسبب غياب مكتبات النظام الثنائية "
+            "GTK+ / gobject المطلوبة من WeasyPrint على نظام Windows.\n"
             "لحل هذه المشكلة وتفعيل ميزة فواتير PDF، يرجى:\n"
             "1. تحميل وتثبيت GTK3 Runtime من الرابط التالي:\n"
             "   https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer/releases\n"
@@ -35,7 +36,7 @@ class PDFService:
         # تحديد المسار المطلق لمجلد القوالب لضمان عدم حدوث أخطاء أثناء النشر
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         self.template_path = os.path.join(base_dir, templates_dir)
-        
+
         self.env = Environment(
             loader=FileSystemLoader(self.template_path),
             autoescape=True,
@@ -62,12 +63,12 @@ class PDFService:
         try:
             # توليد PDF
             pdf_bytes = HTML(string=html_out, base_url=self.template_path).write_pdf()
-            
+
             # حفظ الملف محلياً إذا تم طلب ذلك
             if output_path:
                 with open(output_path, 'wb') as f:
                     f.write(pdf_bytes)
-                    
+
             return pdf_bytes
 
         except Exception as e:

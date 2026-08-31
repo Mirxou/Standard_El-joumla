@@ -1001,7 +1001,10 @@ class PurchaseOrdersWindow(QMainWindow):
         # أزرار
         btn_layout = QHBoxLayout()
         ok_btn = QPushButton("✅ تنفيذ المطابقة")
-        ok_btn.setStyleSheet(f"background-color: {C.ACCENT_TEAL}; color: white; padding: 8px 20px; font-weight: bold; border-radius: 4px;")
+        ok_btn.setStyleSheet(
+            f"background-color: {C.ACCENT_TEAL}; color: white; "
+            f"padding: 8px 20px; font-weight: bold; border-radius: 4px;"
+        )
         cancel_btn = QPushButton("إلغاء")
         cancel_btn.clicked.connect(match_dialog.reject)
         btn_layout.addStretch()

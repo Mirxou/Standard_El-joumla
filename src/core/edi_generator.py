@@ -1,11 +1,12 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 EDI Generator - مولد مستندات EDI
 يدعم EDIFACT و X12
 """
 
+
+import logging
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional

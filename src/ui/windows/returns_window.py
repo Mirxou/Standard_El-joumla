@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
 """
 نافذة إدارة المرتجعات
@@ -30,7 +29,6 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
-    QDoubleSpinBox,
 )
 
 from ...ui.styles.design_tokens import C
@@ -503,7 +501,10 @@ class ReturnsWindow(QMainWindow):
                 total_value_str = "0.00"
 
             try:
-                total_refunded_str = f"{float(total_refunded):,.2f}" if not hasattr(total_refunded, '__dict__') else "0.00"
+                total_refunded_str = (
+                    f"{float(total_refunded):,.2f}"
+                    if not hasattr(total_refunded, '__dict__') else "0.00"
+                )
             except (ValueError, TypeError):
                 total_refunded_str = "0.00"
 

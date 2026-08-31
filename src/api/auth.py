@@ -5,7 +5,6 @@ JWT Authentication للـ REST API
 JWT Authentication for REST API
 """
 
-import logging
 import os
 import secrets
 from datetime import datetime, timedelta, timezone

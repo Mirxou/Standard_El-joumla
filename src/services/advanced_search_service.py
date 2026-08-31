@@ -366,7 +366,10 @@ class AdvancedSearchService:
     def save_filter(self, saved_filter: SavedFilter) -> int:
         """حفظ فلتر"""
         sql = """
-            INSERT INTO saved_filters (name, description, entity, query_data, is_default, is_shared, created_by, created_at, updated_at)  # noqa: E501
+            INSERT INTO saved_filters
+            (name, description, entity, query_data,
+             is_default, is_shared, created_by,
+             created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         now = datetime.now()

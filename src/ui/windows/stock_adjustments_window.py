@@ -550,9 +550,15 @@ class StockAdjustmentsWindow(QMainWindow):
         # الأزرار
         btn_layout = QHBoxLayout()
         ok_btn = QPushButton("✅ إنشاء")
-        ok_btn.setStyleSheet(f"background-color: {Colors.ACCENT_TEAL}; color: {Colors.TEXT_BRIGHT}; padding: 8px 16px; font-weight: bold; border-radius: 5px;")
+        ok_btn.setStyleSheet(
+            f"background-color: {Colors.ACCENT_TEAL}; color: {Colors.TEXT_BRIGHT}; "
+            f"padding: 8px 16px; font-weight: bold; border-radius: 5px;"
+        )
         cancel_btn = QPushButton("❌ إلغاء")
-        cancel_btn.setStyleSheet(f"background-color: {Colors.ACCENT_CORAL}; color: {Colors.TEXT_BRIGHT}; padding: 8px 16px; font-weight: bold; border-radius: 5px;")
+        cancel_btn.setStyleSheet(
+            f"background-color: {Colors.ACCENT_CORAL}; color: {Colors.TEXT_BRIGHT}; "
+            f"padding: 8px 16px; font-weight: bold; border-radius: 5px;"
+        )
         btn_layout.addStretch()
         btn_layout.addWidget(ok_btn)
         btn_layout.addWidget(cancel_btn)

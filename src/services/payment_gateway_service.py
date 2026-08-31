@@ -1,11 +1,12 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 Payment Gateway Service - خدمة بوابات الدفع
 تكامل مع Stripe, PayPal, وغيرها
 """
 
+
+import logging
 import json
 from dataclasses import dataclass
 from datetime import datetime

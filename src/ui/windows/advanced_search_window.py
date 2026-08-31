@@ -355,7 +355,9 @@ class AdvancedSearchWindow(QMainWindow):
 
         self.quote_panel.setVisible(False)
 
-        self.quote_panel.setStyleSheet(f"background-color: #FFFBEB; border: 1px solid {C.ACCENT_AMBER};")  # Light Yellow
+        self.quote_panel.setStyleSheet(
+            f"background-color: #FFFBEB; border: 1px solid {C.ACCENT_AMBER};"
+        )  # Light Yellow
 
         qp_layout = QVBoxLayout(self.quote_panel)
 

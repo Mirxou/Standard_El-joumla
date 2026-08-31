@@ -27,7 +27,6 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QWidget
 
 from src.utils.logger import setup_logger
-from src.ui.styles.design_tokens import C
 
 
 class AnimationType(Enum):

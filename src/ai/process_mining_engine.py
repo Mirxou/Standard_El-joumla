@@ -1,10 +1,12 @@
-import logging
 #!/usr/bin/env python3
+
 """
 محرك استخراج العمليات - Process Mining Engine
 محرك لاستخراج وتحليل العمليات التجارية من البيانات
 """
 
+
+import logging
 import statistics
 from collections import Counter, defaultdict
 from dataclasses import dataclass

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import logging
 """
 نافذة إدارة الشركات - Company Management Window
 واجهة شاملة لإدارة الشركات
@@ -33,13 +32,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-project_root = Path(__file__).parent.parent.parent.parent
-
 from src.core.local_database_manager import LocalDatabaseManager
 from src.models.company import Company, CompanyManager
 from src.models.currency import CurrencyManager
 from src.ui.styles.design_tokens import C
 from src.utils.logger import setup_logger
+
+project_root = Path(__file__).parent.parent.parent.parent
 
 
 class CompanyDialog(QDialog):

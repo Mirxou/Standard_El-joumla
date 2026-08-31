@@ -32,7 +32,9 @@ class AuditLogService:
 
     def _detect_audit_schema(self) -> dict:
         """Detects whether audit_log or audit_logs is present and maps columns.
-        Canonical fields: id, user_id, username, action, module, entity_type, entity_id, old_values, new_values, changes_summary, ip_address, user_agent, session_id, status, error_message, timestamp  # noqa: E501
+        Canonical fields: id, user_id, username, action, module, entity_type, entity_id,
+        old_values, new_values, changes_summary, ip_address, user_agent, session_id,
+        status, error_message, timestamp
         """
         res = {
             "table": None,
@@ -556,7 +558,10 @@ class AuditLogService:
             f"""SELECT username, COUNT(*) as count FROM {tbl} WHERE {mod} = ? AND {ts} >= ? GROUP BY user_id ORDER BY count DESC LIMIT 5""",  # noqa: E501
             (module, start_date),
         )
-        stats["top_users"] = [{"username": get_value(row, 'username'), "count": get_value(row, 'count', 0)} for row in cursor.fetchall()]
+        stats["top_users"] = [
+            {"username": get_value(row, 'username'), "count": get_value(row, 'count', 0)}
+            for row in cursor.fetchall()
+        ]
 
         # Actions breakdown
         cursor.execute(
@@ -668,8 +673,10 @@ class AuditLogService:
             if user_id:
                 cursor.execute(
                     """
-                    SELECT s.session_id, s.user_id, u.username, u.full_name, s.login_time, s.last_activity, s.ip_address, s.user_agent,  # noqa: E501
-                           ROUND((JULIANDAY('now') - JULIANDAY(COALESCE(s.last_activity, s.login_time))) * 24 * 60, 2) AS idle_minutes  # noqa: E501
+                    SELECT s.session_id, s.user_id, u.username, u.full_name,
+                           s.login_time, s.last_activity, s.ip_address, s.user_agent,
+                           ROUND((JULIANDAY('now') - JULIANDAY(COALESCE(s.last_activity, s.login_time))) * 24 * 60, 2)
+                           AS idle_minutes
                     FROM user_sessions s
                     INNER JOIN users u ON s.user_id = u.id
                     WHERE s.is_active = 1 AND s.logout_time IS NULL AND s.user_id = ?
@@ -678,8 +685,10 @@ class AuditLogService:
                 )
             else:
                 cursor.execute("""
-                    SELECT s.session_id, s.user_id, u.username, u.full_name, s.login_time, s.last_activity, s.ip_address, s.user_agent,  # noqa: E501
-                           ROUND((JULIANDAY('now') - JULIANDAY(COALESCE(s.last_activity, s.login_time))) * 24 * 60, 2) AS idle_minutes  # noqa: E501
+                    SELECT s.session_id, s.user_id, u.username, u.full_name,
+                           s.login_time, s.last_activity, s.ip_address, s.user_agent,
+                           ROUND((JULIANDAY('now') - JULIANDAY(COALESCE(s.last_activity, s.login_time))) * 24 * 60, 2)
+                           AS idle_minutes
                     FROM user_sessions s
                     INNER JOIN users u ON s.user_id = u.id
                     WHERE s.is_active = 1 AND s.logout_time IS NULL

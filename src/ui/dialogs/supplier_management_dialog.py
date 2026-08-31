@@ -216,20 +216,32 @@ class SupplierManagementDialog(BaseDialog):
             count_result = self.db_manager.fetch_one(
                 "SELECT COUNT(*) FROM products WHERE supplier_id = ?", (supplier_id,)
             )
-            product_count = (count_result.get("COUNT(*)", count_result.get("count", 0)) if isinstance(count_result, dict) else (count_result[0] if count_result else 0))
+            product_count = (
+                count_result.get("COUNT(*)", count_result.get("count", 0))
+                if isinstance(count_result, dict)
+                else (count_result[0] if count_result else 0)
+            )
 
             # تحقق من وجود مشتريات مرتبطة
             purchase_result = self.db_manager.fetch_one(
                 "SELECT COUNT(*) FROM purchases WHERE supplier_id = ? AND status != 'cancelled'", (supplier_id,)
             )
-            purchase_count = (purchase_result.get("COUNT(*)", purchase_result.get("count", 0)) if isinstance(purchase_result, dict) else (purchase_result[0] if purchase_result else 0))
+            purchase_count = (
+                purchase_result.get("COUNT(*)", purchase_result.get("count", 0))
+                if isinstance(purchase_result, dict)
+                else (purchase_result[0] if purchase_result else 0)
+            )
 
             if product_count > 0:
                 self.notify.show_warning("تحذير", f"لا يمكن حذف هذا المورد. هناك {product_count} منتج مرتبط به.")
                 return
 
             if purchase_count > 0:
-                self.notify.show_warning("تحذير", f"لا يمكن حذف هذا المورد. لديه {purchase_count} فاتورة شراء مرتبطة. يمكن تعطيله بدلاً من ذلك.")
+                self.notify.show_warning(
+                    "تحذير",
+                    f"لا يمكن حذف هذا المورد. لديه {purchase_count} فاتورة شراء مرتبطة. "
+                    f"يمكن تعطيله بدلاً من ذلك.",
+                )
                 return
 
             reply = QMessageBox.question(

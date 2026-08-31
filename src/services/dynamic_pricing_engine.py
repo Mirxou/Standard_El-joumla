@@ -1,11 +1,12 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 محرك التسعير الديناميكي المتقدم - Advanced Dynamic Pricing Engine
 يعدل الأسعار في الوقت الفعلي بناءً على المخزون والطلب والمنافسة والعوامل الأخرى
 """
 
+
+import logging
 import random  # nosec B311
 from dataclasses import dataclass
 from datetime import datetime, timedelta

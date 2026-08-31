@@ -1,11 +1,12 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 خدمة التخزين المؤقت (Caching Service)
 نظام caching متقدم لتحسين الأداء
 """
 
+
+import logging
 import hashlib
 import hmac
 import json
@@ -462,7 +463,10 @@ class AdvancedCachingService:
             expected_signature = hmac.new(secret, serialized_data, hashlib.sha256).digest()
 
             if not hmac.compare_digest(signature, expected_signature):
-                logging.getLogger(__name__).error(f"تنبيه أمني: فشل التحقق من توقيع ملف الكاش {safe_key}.cache! تم تجاهل الملف.")
+                logging.getLogger(__name__).error(
+                    f"تنبيه أمني: فشل التحقق من توقيع ملف الكاش "
+                    f"{safe_key}.cache! تم تجاهل الملف."
+                )
                 return None
 
             return pickle.loads(serialized_data)

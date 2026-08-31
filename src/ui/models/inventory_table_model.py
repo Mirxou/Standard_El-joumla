@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
+
 """
 Inventory Table Model - High-Performance Model for QTableView
 نماذج جدول المخزون عالية الأداء
 """
+
+import logging
+
 
 from typing import Any, Dict, Optional
 

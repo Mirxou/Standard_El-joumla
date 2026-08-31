@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from .multi_agent_coordinator import AgentResult, AgentTask, AgentType, BaseAgent
+
 
 @dataclass
 class UIComponent:
@@ -35,9 +37,6 @@ class GeneratedUI:
     description: str = ""
     theme: str = "light"
     metadata: Dict[str, Any] = field(default_factory=dict)
-
-
-from .multi_agent_coordinator import AgentResult, AgentTask, AgentType, BaseAgent
 
 
 class GenerativeUIAgent(BaseAgent):

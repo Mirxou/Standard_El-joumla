@@ -1,11 +1,12 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 Scheduled Reports Service - خدمة التقارير المجدولة
 جدولة التقارير التلقائية وإرسالها
 """
 
+
+import logging
 import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta

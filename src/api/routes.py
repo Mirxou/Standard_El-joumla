@@ -1207,7 +1207,7 @@ async def get_products(
         )
 
     except Exception as e:
-        logger.log(logging.ERROR, 
+        logger.log(logging.ERROR,
             f"خطأ في جلب المنتجات: {e}",
             exc_info=True,
             extra={
@@ -1805,7 +1805,11 @@ async def download_invoice_pdf(
                 "id": str(sale.id),
                 "reference": sale.invoice_number,
                 "created_at": sale_date_str,
-                "payment_method": sale.payment_method.value if hasattr(sale.payment_method, "value") else str(sale.payment_method),
+                "payment_method": (
+                    sale.payment_method.value
+                    if hasattr(sale.payment_method, "value")
+                    else str(sale.payment_method)
+                ),
                 "subtotal": str(sale.subtotal),
                 "discount_amount": str(sale.discount_amount),
                 "final_amount": str(sale.final_amount),

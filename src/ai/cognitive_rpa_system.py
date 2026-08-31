@@ -1,10 +1,12 @@
-import logging
 #!/usr/bin/env python3
+
 """
 نظام الأتمتة الروبوتية المعرفية - Cognitive RPA System
 النظام الرئيسي الذي يجمع جميع مكونات الأتمتة الذكية
 """
 
+
+import logging
 import threading
 from dataclasses import dataclass
 from datetime import datetime

@@ -1,11 +1,12 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 نماذج نظام الدفع الجزئي والتقسيط
 Payment Installment & Schedule Models
 """
 
+
+import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from decimal import Decimal

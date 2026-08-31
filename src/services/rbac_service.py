@@ -21,7 +21,8 @@ class RBACService:
 
     def _detect_roles_schema(self) -> dict:
         """Detect roles table schema and return column name mapping.
-        Maps to a canonical interface: role_id, role_name, display_name, description, is_active, is_system, created_at, updated_at  # noqa: E501
+        Maps to a canonical interface: role_id, role_name, display_name,
+        description, is_active, is_system, created_at, updated_at
         """
         try:
             cursor = self.db.conn.cursor()

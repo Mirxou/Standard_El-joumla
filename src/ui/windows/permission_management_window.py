@@ -83,7 +83,10 @@ class PermissionManagementWindow(QMainWindow):
         header_layout.setContentsMargins(0, 0, 0, 10)
 
         title = QLabel("🔐 إدارة الصلاحيات والتدقيق المتقدمة")
-        title.setStyleSheet(f"font-size: 22px; font-weight: bold; color: {Colors.ACCENT_TEAL_LIGHT}; background: transparent;")
+        title.setStyleSheet(
+            f"font-size: 22px; font-weight: bold; "
+            f"color: {Colors.ACCENT_TEAL_LIGHT}; background: transparent;"
+        )
         header_layout.addWidget(title)
 
         desc = QLabel("إدارة أدوار المستخدمين، منح الصلاحيات، وتتبع النشاطات الحساسة في النظام")

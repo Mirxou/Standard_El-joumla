@@ -5,7 +5,6 @@ Middleware للـ REST API
 Middleware for REST API
 """
 
-import logging
 import time
 from typing import Callable, Optional
 
@@ -295,7 +294,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         "X-XSS-Protection": "1; mode=block",
         "Referrer-Policy": "strict-origin-when-cross-origin",
         "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
-        "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'",
+        "Content-Security-Policy": (
+            "default-src 'self'; script-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; font-src 'self'"
+        ),
     }
 
     async def dispatch(self, request: Request, call_next: Callable):

@@ -1,10 +1,10 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 خدمة السجلات المتقدمة (Advanced Logging Service)
 نظام تسجيل احترافي مع Rotation، مستويات متعددة، وتنسيق منظم
 """
+
 
 import json
 import logging.handlers

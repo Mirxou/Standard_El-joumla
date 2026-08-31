@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-import logging
+
 """
 نافذة فاتورة المبيعات - Sales Dialog
 واجهة شاملة لإنشاء وإدارة فواتير المبيعات مع دعم اللغة العربية
 التصميم الجديد: 3-Zone Enterprise Layout
 """
+
+import logging
+
 
 import sys
 from datetime import date, datetime

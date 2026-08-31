@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
 """
 نافذة نقل المخزون بين المستودعات - Warehouse Transfer Window
@@ -34,13 +33,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-project_root = Path(__file__).parent.parent.parent.parent
-
 from src.core.database_manager import DatabaseManager
 from src.models.warehouse import WarehouseTransfer
 from src.services.warehouse_service import WarehouseService
 from src.ui.styles.design_tokens import C
 from src.utils.logger import setup_logger
+
+project_root = Path(__file__).parent.parent.parent.parent
 
 
 class TransferDialog(QDialog):
@@ -460,7 +459,7 @@ class WarehouseTransferWindow(QMainWindow):
         """إكمال التحويل"""
         if transfer_id is None or isinstance(transfer_id, bool):
             transfer_id = self.get_selected_transfer_id()
-            
+
         if not transfer_id:
             QMessageBox.warning(self, "تحذير", "يرجى اختيار تحويل لإكماله")
             return
@@ -547,8 +546,10 @@ class WarehouseTransferWindow(QMainWindow):
         <p><b>المنتج:</b> {transfer.product_name}</p>
         <p><b>الكمية:</b> {transfer.quantity}</p>
         <p><b>الحالة:</b> {self.get_status_text(transfer.status)}</p>
-        <p><b>تاريخ التحويل:</b> {transfer.transfer_date.strftime('%Y-%m-%d %H:%M') if transfer.transfer_date else ''}</p>
-        <p><b>تاريخ الاستلام:</b> {transfer.received_date.strftime('%Y-%m-%d %H:%M') if transfer.received_date else 'لم يتم الاستلام'}</p>
+        <p><b>تاريخ التحويل:</b>
+        {transfer.transfer_date.strftime('%Y-%m-%d %H:%M') if transfer.transfer_date else ''}</p>
+        <p><b>تاريخ الاستلام:</b>
+        {transfer.received_date.strftime('%Y-%m-%d %H:%M') if transfer.received_date else 'لم يتم الاستلام'}</p>
         <p><b>ملاحظات:</b> {transfer.notes or 'لا توجد ملاحظات'}</p>
         """
 

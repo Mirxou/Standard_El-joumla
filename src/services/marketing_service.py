@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 """
 خدمة التسويق - Marketing Service

@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
-    QVBoxLayout,
 )
 
 from src.ui.styles.design_tokens import C
@@ -62,7 +61,7 @@ class QuoteHistoryDialog(BaseDialog):
         """)
 
         self._setup_ui()
-        
+
         # Define compatibility widgets
         self.quotes_table = self.table
         self.search_input = QLineEdit(self)
@@ -174,7 +173,11 @@ class QuoteHistoryDialog(BaseDialog):
             self.table.setItem(row, 2, QTableWidgetItem(str(quote.get("created_at", quote.get("date", "")))))
 
             # Count
-            item_count = QTableWidgetItem(str(quote.get("item_count", len(quote.get("items", [])) if "items" in quote else 0)))
+            items_in_quote = (
+                len(quote.get("items", []))
+                if "items" in quote else 0
+            )
+            item_count = QTableWidgetItem(str(quote.get("item_count", items_in_quote)))
             item_count.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.table.setItem(row, 3, item_count)
 

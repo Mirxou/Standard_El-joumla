@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import logging
 """
 Database Cleanup Service
 خدمة تنظيف قاعدة البيانات والأرشفة الدورية

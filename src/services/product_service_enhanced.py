@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
+
 """
 خدمة المنتجات المحسّنة - Enhanced Product Service
 توفر عمليات متقدمة لإدارة المنتجات مع المتغيرات والحزم والتسعير
 """
+
+import logging
+
 
 import json
 from datetime import datetime
@@ -756,7 +759,8 @@ class ProductService:
                     "total_cost_value": Decimal(str(result.get("total_cost_value", 0) or 0)),
                     "total_selling_value": Decimal(str(result.get("total_selling_value", 0) or 0)),
                     "total_products": result.get("total_products", 0) or 0,
-                    "potential_profit": Decimal(str(result.get("total_selling_value", 0) or 0)) - Decimal(str(result.get("total_cost_value", 0) or 0)),
+                    "potential_profit": Decimal(str(result.get("total_selling_value", 0) or 0))
+                    - Decimal(str(result.get("total_cost_value", 0) or 0)),
                 }
 
         except Exception as e:

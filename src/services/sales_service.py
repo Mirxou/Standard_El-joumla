@@ -125,7 +125,7 @@ class SalesService:
                             item.cost_price = prod_cost
 
             # 2-5. C4 FIX: تنفيذ جميع العمليات داخل معاملة واحدة (ذري)
-            with self.db_manager.transaction() as tx_cursor:
+            with self.db_manager.transaction():
                 # 2. إنشاء الفاتورة عبر SaleManager
                 sale.user_id = user_id
                 sale_id = self.sale_manager.create_sale(sale)
@@ -157,11 +157,11 @@ class SalesService:
                 if customer_id:
                     total_amount = getattr(sale, "total_amount", Decimal("0.00"))
                     paid_amount = getattr(sale, "paid_amount", Decimal("0.00"))
-                    
+
                     remaining_amount = getattr(sale, "remaining_amount", None)
                     if remaining_amount is None:
                         remaining_amount = Decimal(str(total_amount)) - Decimal(str(paid_amount))
-                    
+
                     if remaining_amount > 0:
                         try:
                             self.customer_manager.update_balance(customer_id, remaining_amount, "increase")
@@ -190,7 +190,7 @@ class SalesService:
             if not sale:
                 self.logger.warning(f"Sale {sale_id} not found for cancellation")
                 return False
-            
+
             status = getattr(sale, "status", None)
             if status == SaleStatus.CANCELLED.value or status == "cancelled":
                 self.logger.warning(f"Sale {sale_id} is already cancelled")
@@ -199,7 +199,7 @@ class SalesService:
             with self.db_manager.transaction() as _tx:
                 # 1. إلغاء في Manager
                 if not self.sale_manager.cancel_sale(sale_id):
-                    return False
+                    raise RuntimeError(f"Failed to cancel sale {sale_id}")
 
                 # 2. إرجاع المخزون بشكل ذري (نسبي)
                 for item in sale.items:
@@ -215,11 +215,11 @@ class SalesService:
                 if customer_id:
                     total_amount = getattr(sale, "total_amount", Decimal("0.00"))
                     paid_amount = getattr(sale, "paid_amount", Decimal("0.00"))
-                    
+
                     remaining_amount = getattr(sale, "remaining_amount", None)
                     if remaining_amount is None:
                         remaining_amount = Decimal(str(total_amount)) - Decimal(str(paid_amount))
-                    
+
                     if remaining_amount > 0:
                         try:
                             self.customer_manager.update_balance(customer_id, remaining_amount, "decrease")
@@ -516,10 +516,10 @@ class SalesService:
             query = f"""
                 SELECT
                     COUNT(*) as total_sales,
-                    COALESCE(SUM(total_amount), 0) as total_revenue,
-                    COALESCE(SUM(CASE WHEN payment_status = 'paid' THEN total_amount ELSE 0 END), 0) as paid_amount,
-                    COALESCE(SUM(CASE WHEN payment_status IN ('partial', 'unpaid') THEN total_amount - COALESCE(paid_amount, 0) ELSE 0 END), 0) as outstanding,
-                    AVG(total_amount) as avg_sale
+                    COALESCE(SUM(COALESCE(final_amount, total_amount)), 0) as total_revenue,
+                    COALESCE(SUM(CASE WHEN payment_status = 'paid' THEN COALESCE(final_amount, total_amount) ELSE 0 END), 0) as paid_amount,
+                    COALESCE(SUM(CASE WHEN payment_status IN ('partial', 'unpaid') THEN COALESCE(final_amount, total_amount) - COALESCE(paid_amount, 0) ELSE 0 END), 0) as outstanding,
+                    AVG(COALESCE(final_amount, total_amount)) as avg_sale
                 FROM sales WHERE {date_filter}
                   AND status NOT IN ('cancelled', 'draft')
                   AND COALESCE(is_deleted, 0) = 0
@@ -572,7 +572,11 @@ class SalesService:
         """أفضل العملاء"""
         try:
             date_filter = "1=1"
-            if period == 'month':
+            if period == 'today':
+                date_filter = "DATE(s.sale_date) = DATE('now')"
+            elif period == 'week':
+                date_filter = "s.sale_date >= DATE('now', '-7 days')"
+            elif period == 'month':
                 date_filter = "s.sale_date >= DATE('now', '-30 days')"
             elif period == 'year':
                 date_filter = "s.sale_date >= DATE('now', '-365 days')"
@@ -704,15 +708,17 @@ class SalesService:
             target_date = date.today()
 
         query = """
-            SELECT 
-                COUNT(*) as total_sales, 
+            SELECT
+                COUNT(*) as total_sales,
                 COALESCE(SUM(final_amount), 0) as total_revenue,
                 COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN final_amount ELSE 0 END), 0) as cash_total,
                 COALESCE(SUM(CASE WHEN payment_method = 'card' THEN final_amount ELSE 0 END), 0) as card_total,
                 COALESCE(SUM(CASE WHEN payment_method = 'credit' THEN final_amount ELSE 0 END), 0) as credit_total,
                 COALESCE(SUM(CASE WHEN status = 'returned' THEN final_amount ELSE 0 END), 0) as returns_total
-            FROM sales 
+            FROM sales
             WHERE sale_date = ?
+              AND status != 'cancelled'
+              AND status != 'ملغية'
         """
         row = self.db_manager.fetch_one(query, (target_date.isoformat(),))
 
@@ -749,7 +755,6 @@ class SalesService:
         else:
             price = product.selling_price
 
-        from src.models.sale import SaleItem
         item = SaleItem(
             product_id=product_id,
             quantity=quantity,

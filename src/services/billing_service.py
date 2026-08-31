@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import logging
 """
 خدمة الفوترة والدفع - Billing & Payments Service
 توليد الفواتير، تسجيل المدفوعات، وإدارة الفواتير الدورية (Subscriptions)
@@ -73,12 +72,17 @@ class BillingService:
                 q = "INSERT INTO payments (invoice_id, amount, method, reference, paid_at) VALUES (?, ?, ?, ?, ?)"
                 self.db.execute_query(q, (invoice_id, float(amount), method, reference, now))
             except Exception as e:
-                # Fallback to core payments schema (payment_type, entity_id, amount, payment_method, reference_number, payment_date, status, notes, user_id, created_at, updated_at)  # noqa: E501
+                # Fallback to core payments schema (payment_type, entity_id,
+                # amount, payment_method, reference_number, payment_date, status,
+                # notes, user_id, created_at, updated_at)
                 msg = str(e)
                 # Check for various "column missing" error messages
                 if "no column" in msg or "no such column" in msg:
                     # Use core payment schema - simpler insertion
-                    q2 = """INSERT INTO payments (payment_type, entity_id, amount, payment_method, reference_number, payment_date, status, created_at, updated_at)  # noqa: E501
+                    q2 = """INSERT INTO payments
+                            (payment_type, entity_id, amount, payment_method,
+                             reference_number, payment_date, status,
+                             created_at, updated_at)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"""
                     params2 = (
                         "customer_payment",
@@ -98,7 +102,12 @@ class BillingService:
             try:
                 invoice_row = self.db.fetch_one("SELECT amount, paid_amount FROM invoices WHERE id = ?", (invoice_id,))
                 if invoice_row:
-                    invoice_amount = float(invoice_row.get("amount", invoice_row[0] if not isinstance(invoice_row, dict) else 0) or 0)
+                    invoice_amount = float(
+                        invoice_row.get(
+                            "amount",
+                            invoice_row[0] if not isinstance(invoice_row, dict) else 0,
+                        ) or 0
+                    )
                     current_paid = float(invoice_row.get("paid_amount", 0) or 0)
                     new_paid = current_paid + float(amount)
 
@@ -160,7 +169,10 @@ class BillingService:
             # sub_row: dict with keys (id, customer_id, amount, frequency_days)
             now = datetime.now()
             q = "INSERT INTO invoices (sale_id, customer_id, amount, status, issued_at) VALUES (?, ?, ?, ?, ?)"
-            res = self.db.execute_query(q, (None, sub_row.get('customer_id'), float(sub_row.get('amount', 0)), "unpaid", now))
+            res = self.db.execute_query(
+                q, (None, sub_row.get('customer_id'),
+                    float(sub_row.get('amount', 0)), "unpaid", now)
+            )
             if res and hasattr(res, "lastrowid"):
                 return res.lastrowid
         except Exception as e:

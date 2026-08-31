@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
+
 """
 Sales Chart Widget - Interactive Dashboard Chart
 ويدجت الرسم البياني التفاعلي للمبيعات
 """
+
+import logging
+
 
 try:
     import pyqtgraph as pg

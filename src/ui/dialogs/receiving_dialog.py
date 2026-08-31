@@ -26,7 +26,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from src.models.purchase_order import PurchaseOrder
 from src.models.receiving_note import (
     InspectionStatus,
     QualityRating,
@@ -105,7 +104,11 @@ class ReceivingDialog(BaseDialog):
 
         # أمر الشراء
         po_num = self.po.get("po_number", "") if isinstance(self.po, dict) else getattr(self.po, "po_number", "")
-        supplier_name = self.po.get("supplier_name", "") if isinstance(self.po, dict) else getattr(self.po, "supplier_name", "")
+        supplier_name = (
+            self.po.get("supplier_name", "")
+            if isinstance(self.po, dict)
+            else getattr(self.po, "supplier_name", "")
+        )
         self.po_number_label = QLabel(f"<b>{po_num}</b> - {supplier_name}")
         layout.addRow("أمر الشراء:", self.po_number_label)
 
@@ -151,7 +154,10 @@ class ReceivingDialog(BaseDialog):
 
         # زر استلام الكل
         receive_all_btn = QPushButton("✅ استلام الكل")
-        receive_all_btn.setStyleSheet(f"background-color: {C.ACCENT_TEAL}; color: {C.TEXT_BRIGHT}; padding: 8px 16px; font-weight: bold;")
+        receive_all_btn.setStyleSheet(
+            f"background-color: {C.ACCENT_TEAL}; color: {C.TEXT_BRIGHT}; "
+            f"padding: 8px 16px; font-weight: bold;"
+        )
         receive_all_btn.clicked.connect(self._receive_all)
         layout.addWidget(receive_all_btn)
 
@@ -206,14 +212,16 @@ class ReceivingDialog(BaseDialog):
 
         self.receive_button = QPushButton("💾 حفظ الاستلام")
         self.receive_button.setStyleSheet(
-            f"background-color: {C.ACCENT_SKY}; color: {C.TEXT_BRIGHT}; padding: 10px 30px; font-weight: bold; font-size: 14px;"
+            f"background-color: {C.ACCENT_SKY}; color: {C.TEXT_BRIGHT}; "
+            f"padding: 10px 30px; font-weight: bold; font-size: 14px;"
         )
         self.receive_button.clicked.connect(self._save)
         layout.addWidget(self.receive_button)
 
         cancel_btn = QPushButton("✖️ إلغاء")
         cancel_btn.setStyleSheet(
-            f"background-color: {C.TEXT_SECONDARY}; color: {C.TEXT_BRIGHT}; padding: 10px 30px; font-weight: bold; font-size: 14px;"
+            f"background-color: {C.TEXT_SECONDARY}; color: {C.TEXT_BRIGHT}; "
+            f"padding: 10px 30px; font-weight: bold; font-size: 14px;"
         )
         cancel_btn.clicked.connect(self.reject)
         layout.addWidget(cancel_btn)
@@ -243,20 +251,32 @@ class ReceivingDialog(BaseDialog):
             self.items_table.setItem(row, 1, QTableWidgetItem(prod_code or ""))
 
             # المطلوب
-            qty_ordered = item.get("quantity_ordered", 0.0) if isinstance(item, dict) else getattr(item, "quantity_ordered", 0.0)
+            qty_ordered = (
+                item.get("quantity_ordered", 0.0)
+                if isinstance(item, dict)
+                else getattr(item, "quantity_ordered", 0.0)
+            )
             ordered_item = QTableWidgetItem(f"{qty_ordered:,.3f}")
             ordered_item.setTextAlignment(Qt.AlignCenter)
             self.items_table.setItem(row, 2, ordered_item)
 
             # تم استلامه
-            qty_received = item.get("quantity_received", 0.0) if isinstance(item, dict) else getattr(item, "quantity_received", 0.0)
+            qty_received = (
+                item.get("quantity_received", 0.0)
+                if isinstance(item, dict)
+                else getattr(item, "quantity_received", 0.0)
+            )
             received_item = QTableWidgetItem(f"{qty_received:,.3f}")
             received_item.setTextAlignment(Qt.AlignCenter)
             received_item.setForeground(Qt.darkGreen)
             self.items_table.setItem(row, 3, received_item)
 
             # المتبقي
-            qty_pending = item.get("quantity_pending", 0.0) if isinstance(item, dict) else getattr(item, "quantity_pending", 0.0)
+            qty_pending = (
+                item.get("quantity_pending", 0.0)
+                if isinstance(item, dict)
+                else getattr(item, "quantity_pending", 0.0)
+            )
             pending_item = QTableWidgetItem(f"{qty_pending:,.3f}")
             pending_item.setTextAlignment(Qt.AlignCenter)
             pending_item.setForeground(Qt.darkRed)
@@ -380,8 +400,12 @@ class ReceivingDialog(BaseDialog):
         po_id = self.po.get("id") if isinstance(self.po, dict) else getattr(self.po, "id", None)
         po_number = self.po.get("po_number") if isinstance(self.po, dict) else getattr(self.po, "po_number", "")
         supplier_id = self.po.get("supplier_id") if isinstance(self.po, dict) else getattr(self.po, "supplier_id", None)
-        supplier_name = self.po.get("supplier_name") if isinstance(self.po, dict) else getattr(self.po, "supplier_name", "")
-        
+        supplier_name = (
+            self.po.get("supplier_name")
+            if isinstance(self.po, dict)
+            else getattr(self.po, "supplier_name", "")
+        )
+
         data = {
             "purchase_order_id": po_id,
             "po_number": po_number,
@@ -420,10 +444,26 @@ class ReceivingDialog(BaseDialog):
             if not po_item:
                 continue
 
-            product_id = po_item.get("product_id") if isinstance(po_item, dict) else getattr(po_item, "product_id", None)
-            product_name = po_item.get("product_name") if isinstance(po_item, dict) else getattr(po_item, "product_name", "")
-            product_code = po_item.get("product_code") if isinstance(po_item, dict) else getattr(po_item, "product_code", "")
-            qty_ordered = po_item.get("quantity_ordered") if isinstance(po_item, dict) else getattr(po_item, "quantity_ordered", 0.0)
+            product_id = (
+                po_item.get("product_id")
+                if isinstance(po_item, dict)
+                else getattr(po_item, "product_id", None)
+            )
+            product_name = (
+                po_item.get("product_name")
+                if isinstance(po_item, dict)
+                else getattr(po_item, "product_name", "")
+            )
+            product_code = (
+                po_item.get("product_code")
+                if isinstance(po_item, dict)
+                else getattr(po_item, "product_code", "")
+            )
+            qty_ordered = (
+                po_item.get("quantity_ordered")
+                if isinstance(po_item, dict)
+                else getattr(po_item, "quantity_ordered", 0.0)
+            )
 
             item = ReceivingItem(
                 po_item_id=po_item_id,
@@ -521,37 +561,37 @@ class ReceivingDialog(BaseDialog):
         """تعيين الكمية المستلمة لصف معين (برمجياً للاختبار)"""
         if row >= self.items_table.rowCount():
             self.items_table.setRowCount(row + 1)
-            
+
             qty_spin = QDoubleSpinBox()
             qty_spin.setMinimum(0.000)
             qty_spin.setMaximum(999999.0)
             qty_spin.setValue(float(quantity))
             self.items_table.setCellWidget(row, 5, qty_spin)
-            
+
             accepted_spin = QDoubleSpinBox()
             accepted_spin.setMinimum(0.000)
             accepted_spin.setMaximum(999999.0)
             accepted_spin.setValue(float(quantity))
             self.items_table.setCellWidget(row, 6, accepted_spin)
-            
+
             rejected_spin = QDoubleSpinBox()
             rejected_spin.setMinimum(0.000)
             rejected_spin.setMaximum(999999.0)
             rejected_spin.setValue(0.0)
             self.items_table.setCellWidget(row, 7, rejected_spin)
-            
+
             quality_combo = QComboBox()
             for rating in QualityRating:
                 quality_combo.addItem(rating.value, rating)
             quality_combo.setCurrentIndex(1)
             self.items_table.setCellWidget(row, 8, quality_combo)
-            
+
             self.items_table.setItem(row, 0, QTableWidgetItem("Product"))
             self.items_table.setItem(row, 1, QTableWidgetItem(""))
             self.items_table.setItem(row, 2, QTableWidgetItem("0"))
             self.items_table.setItem(row, 3, QTableWidgetItem("0"))
             self.items_table.setItem(row, 4, QTableWidgetItem("0"))
-            
+
         qty_spin = self.items_table.cellWidget(row, 5)
         if qty_spin:
             # Respect existing maximum cap if set

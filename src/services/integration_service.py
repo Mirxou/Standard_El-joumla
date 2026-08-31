@@ -1,11 +1,12 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 Integration Service - خدمة التكامل الرئيسية
 إدارة جميع التكاملات مع الأنظمة الخارجية
 """
 
+
+import logging
 import json
 from dataclasses import dataclass
 from datetime import datetime

@@ -3,7 +3,6 @@
 """
 import logging
 
-import sqlite3
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
@@ -309,6 +308,7 @@ class PaymentManager:
                 "credit_card": "credit_card",
                 "بطاقة خصم": "debit_card",
                 "debit_card": "debit_card",
+                "دفع إلكتروني": "bank_transfer",
             }
             try:
                 norm_method = method_map.get(str(payment.payment_method).strip())
@@ -508,21 +508,11 @@ class PaymentManager:
     def get_payment_by_id(self, payment_id: int) -> Optional[Payment]:
         """الحصول على دفعة بالمعرف"""
         try:
-            # استخدام اتصال مباشر مع row_factory للحصول على dict
-            conn = (
-                self.db_manager.connection
-                if hasattr(self.db_manager, "connection") and self.db_manager.connection
-                else self.db_manager.get_connection()
-            )
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-
             query = "SELECT * FROM payments WHERE id = ?"
-            cursor.execute(query, (payment_id,))
-            result = cursor.fetchone()
+            result = self.db_manager.fetch_one(query, (payment_id,))
 
             if result:
-                payment_obj = self._row_to_payment_dict(dict(result))
+                payment_obj = self._row_to_payment_dict(result)
                 return payment_obj
 
             return None
@@ -535,26 +525,13 @@ class PaymentManager:
     def get_customer_payments(self, customer_id: int) -> List[Payment]:
         """الحصول على دفعات العميل"""
         try:
-            conn = (
-                self.db_manager.connection
-                if hasattr(self.db_manager, "connection") and self.db_manager.connection
-                else None
-            )
-            if conn is None:
-                if self.logger:
-                    self.logger.error("خطأ: لا يمكن الوصول لاتصال قاعدة البيانات")
-                return []
-            conn.row_factory = sqlite3.Row
-            cursor = conn.execute(
-                """
+            query = """
                 SELECT * FROM payments
                 WHERE entity_id = ? AND payment_type = 'customer_payment'
                 ORDER BY payment_date DESC, created_at DESC
-            """,
-                (customer_id,),
-            )
-            rows = cursor.fetchall()
-            return [self._row_to_payment_dict(dict(row)) for row in rows]
+            """
+            rows = self.db_manager.fetch_all(query, (customer_id,))
+            return [self._row_to_payment_dict(row) for row in rows]
 
         except Exception as e:
             if self.logger:
@@ -564,26 +541,13 @@ class PaymentManager:
     def get_supplier_payments(self, supplier_id: int) -> List[Payment]:
         """الحصول على دفعات المورد"""
         try:
-            conn = (
-                self.db_manager.connection
-                if hasattr(self.db_manager, "connection") and self.db_manager.connection
-                else None
-            )
-            if conn is None:
-                if self.logger:
-                    self.logger.error("خطأ: لا يمكن الوصول لاتصال قاعدة البيانات")
-                return []
-            conn.row_factory = sqlite3.Row
-            cursor = conn.execute(
-                """
+            query = """
                 SELECT * FROM payments
                 WHERE entity_id = ? AND payment_type = 'supplier_payment'
                 ORDER BY payment_date DESC, created_at DESC
-            """,
-                (supplier_id,),
-            )
-            rows = cursor.fetchall()
-            return [self._row_to_payment_dict(dict(row)) for row in rows]
+            """
+            rows = self.db_manager.fetch_all(query, (supplier_id,))
+            return [self._row_to_payment_dict(row) for row in rows]
 
         except Exception as e:
             if self.logger:
@@ -600,7 +564,12 @@ class PaymentManager:
             """
             today = date.today().isoformat()
             results = self.db_manager.fetch_all(query, (today, "completed", "مكتمل"))
-            return [self._row_to_payment_dict(dict(row)) if isinstance(row, dict) else self._row_to_payment(row) for row in results]
+            return [
+                self._row_to_payment_dict(dict(row))
+                if isinstance(row, dict)
+                else self._row_to_payment(row)
+                for row in results
+            ]
 
         except Exception as e:
             if self.logger:
@@ -628,7 +597,7 @@ class PaymentManager:
                         PaymentType.CUSTOMER_PAYMENT.value,
                         account_id,
                         PaymentType.CUSTOMER_PAYMENT.value,
-                        PaymentStatus.COMPLETED.value,
+                        "completed",
                     ),
                 )
 
@@ -650,7 +619,7 @@ class PaymentManager:
                         PaymentType.SUPPLIER_PAYMENT.value,
                         account_id,
                         PaymentType.SUPPLIER_PAYMENT.value,
-                        PaymentStatus.COMPLETED.value,
+                        "completed",
                     ),
                 )
 

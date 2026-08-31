@@ -5,7 +5,6 @@ Delta Sync Service
 خدمة المزامنة الجزئية - مزامنة فقط البيانات المتغيرة
 """
 
-import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 

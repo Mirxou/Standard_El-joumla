@@ -46,7 +46,9 @@ class RecurringInvoiceService:
     ) -> int:
         start = start_date or datetime.now().strftime("%Y-%m-%d")
         q = """
-        INSERT INTO recurring_invoices (customer_id, start_date, end_date, frequency, amount, description, next_invoice_date)  # noqa: E501
+        INSERT INTO recurring_invoices
+            (customer_id, start_date, end_date, frequency,
+             amount, description, next_invoice_date)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """
         next_date = start
@@ -124,7 +126,9 @@ class RecurringInvoiceService:
                 self.db.execute_query(uq, (today, new_next, sub["id"]))
                 if self.logger:
                     self.logger.info(
-                        f'تم إنشاء فاتورة دورية {invoice_number} للعميل {sub["customer_id"]} بمبلغ {sub["amount"]} ليوم {today}'
+                        f'تم إنشاء فاتورة دورية {invoice_number}'
+                        f' للعميل {sub["customer_id"]}'
+                        f' بمبلغ {sub["amount"]} ليوم {today}'
                     )
 
     def _calc_next_date(self, last, freq: str) -> str:

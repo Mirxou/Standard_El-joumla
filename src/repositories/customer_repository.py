@@ -5,7 +5,6 @@ Customer Repository
 Repository للعملاء
 """
 
-import logging
 from typing import Any, Dict, List, Optional
 
 from src.core.local_database_manager import LocalDatabaseManager

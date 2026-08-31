@@ -200,7 +200,9 @@ class InventoryService:
 
             # H4 FIX: تنفيذ النقل داخل معاملة ذرية
             with self.db_manager.transaction() as _tx:
-                if not self.product_manager.update_stock(from_product_id, round(from_product.current_stock - quantity, 2)):
+                if not self.product_manager.update_stock(
+                    from_product_id, round(from_product.current_stock - quantity, 2)
+                ):
                     raise RuntimeError("فشل خصم مخزون المصدر")
                 if not self.product_manager.update_stock(to_product_id, round(to_product.current_stock + quantity, 2)):
                     raise RuntimeError("فشل إضافة مخزون الهدف")
@@ -295,7 +297,10 @@ class InventoryService:
                             # تحديث المخزون الإجمالي للتوافق
                             total_stock = self.warehouse_service.get_total_stock(product_id)
                             self.product_manager.update_stock(product_id, round(total_stock, 2))
-                            self.logger.info(f"تم تعديل مخزون المنتج {product_id} إلى {new_quantity} في المستودع {warehouse_id}: {reason}")
+                            self.logger.info(
+                                f"تم تعديل مخزون المنتج {product_id} إلى {new_quantity} "
+                                f"في المستودع {warehouse_id}: {reason}"
+                            )
                             return True
                         return False
 
@@ -349,7 +354,10 @@ class InventoryService:
                             )
                             # تحديث المخزون الإجمالي للتوافق بشكل نسبي
                             self.product_manager.adjust_stock_relative(product_id, diff)
-                            self.logger.info(f"تم تعديل مخزون المنتج {product_id} نسبياً بـ {diff:+.2f} في المستودع {warehouse_id}: {reason}")
+                            self.logger.info(
+                                f"تم تعديل مخزون المنتج {product_id} نسبياً بـ {diff:+.2f} "
+                                f"في المستودع {warehouse_id}: {reason}"
+                            )
                             return True
                         return False
 

@@ -170,11 +170,14 @@ class MultiAgentCoordinator:
             return True
         return False
 
-    def create_task(self, task_type: str, parameters: Dict[str, Any], assigned_agent: Optional[str] = None, **kwargs) -> AgentTask:
+    def create_task(
+        self, task_type: str, parameters: Dict[str, Any],
+        assigned_agent: Optional[str] = None, **kwargs,
+    ) -> AgentTask:
         """إنشاء مهمة جديدة وإضافتها لصف الانتظار"""
         task_id = f"task_{uuid.uuid4().hex[:6]}"
         priority = kwargs.get("priority", "medium")
-        
+
         task = AgentTask(
             task_id=task_id,
             task_type=task_type,
@@ -197,14 +200,14 @@ class MultiAgentCoordinator:
                 "status": getattr(res, "status", "completed"),
                 "result": res,
             }
-        
+
         task = next((t for t in self.task_queue if t.task_id == task_id), None)
         if task:
             return {
                 "task_id": task_id,
                 "status": task.status,
             }
-        
+
         return None
 
     def get_task_queue(self) -> List[AgentTask]:
@@ -215,7 +218,11 @@ class MultiAgentCoordinator:
         """البحث عن وكلاء لديهم القدرة المحددة"""
         matched = []
         for agent_id, agent in self.agents.items():
-            caps = agent.get_capabilities() if hasattr(agent, "get_capabilities") else getattr(agent, "capabilities", [])
+            caps = (
+                agent.get_capabilities()
+                if hasattr(agent, "get_capabilities")
+                else getattr(agent, "capabilities", [])
+            )
             if capability in caps:
                 matched.append(agent_id)
         return matched

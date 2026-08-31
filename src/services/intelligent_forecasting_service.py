@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
 """
 خدمة التنبؤات الذكية - Intelligent Forecasting Service
@@ -18,13 +17,13 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
-warnings.filterwarnings("ignore")
-
 from src.core.database_manager import DatabaseManager
 from src.services.advanced_analytics_service import AdvancedAnalyticsService
 from src.services.cognitive_ai_service import CognitiveAIService
 from src.utils.db_helpers import get_value
 from src.utils.logger import setup_logger
+
+warnings.filterwarnings("ignore")
 
 
 @dataclass
@@ -969,7 +968,11 @@ class IntelligentForecastingService:
 
                 financial_data = []
                 for row in cursor.fetchall():
-                    financial_data.append({"month": get_value(row, 'month'), "revenue": get_value(row, 'revenue', 0) or 0, "costs": get_value(row, 'costs', 0) or 0})
+                    financial_data.append({
+                        "month": get_value(row, 'month'),
+                        "revenue": get_value(row, 'revenue', 0) or 0,
+                        "costs": get_value(row, 'costs', 0) or 0,
+                    })
 
                 return financial_data
 

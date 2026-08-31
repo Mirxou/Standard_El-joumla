@@ -229,11 +229,16 @@ class PaymentService:
                         (sale_id,),
                     )
                     if sale_row:
-                        remaining = Decimal(str(sale_row["remaining_amount"] if isinstance(sale_row, dict) else sale_row[2]))
+                        remaining = Decimal(str(
+                            sale_row["remaining_amount"]
+                            if isinstance(sale_row, dict)
+                            else sale_row[2]
+                        ))
                         if amount > remaining:
                             if self.logger:
                                 self.logger.warning(
-                                    f"تم رفض دفعة عميل: المبلغ {amount} يتجاوز المبلغ المتبقي {remaining} للفاتورة {sale_id}"
+                                    f"تم رفض دفعة عميل: المبلغ {amount} "
+                                    f"يتجاوز المبلغ المتبقي {remaining} للفاتورة {sale_id}"
                                 )
                             return None
                 except Exception:
@@ -595,7 +600,7 @@ class PaymentService:
             query += " ORDER BY payment_date DESC, created_at DESC"
 
             results = self.db_manager.fetch_all(query, params)
-            return [self.payment_manager._row_to_payment(row) for row in results]
+            return [self.payment_manager._row_to_payment_dict(row) for row in results]
 
         except Exception as e:
             if self.logger:
@@ -615,11 +620,16 @@ class PaymentService:
                 c.current_balance,
                 c.credit_limit,
                 (c.credit_limit - c.current_balance) as available_credit,
-                (SELECT COUNT(*) FROM payments WHERE entity_id = c.id AND payment_type = 'customer_payment') as payments_count,
-            (SELECT MAX(payment_date) FROM payments WHERE entity_id = c.id AND payment_type = 'customer_payment') as last_payment_date,
-            (SELECT COUNT(*) FROM payment_schedules ps
-             JOIN payments p ON ps.payment_id = p.id
-             WHERE p.customer_id = c.id AND ps.due_date < ? AND ps.status != ?) as overdue_payments
+                (SELECT COUNT(*) FROM payments
+                 WHERE entity_id = c.id AND payment_type = 'customer_payment'
+                ) as payments_count,
+                (SELECT MAX(payment_date) FROM payments
+                 WHERE entity_id = c.id AND payment_type = 'customer_payment'
+                ) as last_payment_date,
+                (SELECT COUNT(*) FROM payment_schedules ps
+                 JOIN payments p ON ps.payment_id = p.id
+                 WHERE p.customer_id = c.id AND ps.due_date < ? AND ps.status != ?
+                ) as overdue_payments
             FROM customers c
             WHERE c.current_balance > 0 AND c.is_active = 1
             ORDER BY c.current_balance DESC
@@ -635,11 +645,15 @@ class PaymentService:
                         "customer_id": row.get("id"),
                         "customer_name": row.get("name"),
                         "phone": row.get("phone"),
-                        "balance": Decimal(str(row.get("current_balance"))),
-                        "credit_limit": Decimal(str(row.get("credit_limit"))),
+                        "balance": Decimal(str(row.get("current_balance") or 0)),
+                        "credit_limit": Decimal(str(row.get("credit_limit") or 0)),
                         "available_credit": Decimal(str(row.get("available_credit"))),
                         "payments_count": row.get("payments_count"),
-                        "last_payment_date": (date.fromisoformat(row.get("last_payment_date")) if row.get("last_payment_date") else None),
+                        "last_payment_date": (
+                            date.fromisoformat(row.get("last_payment_date"))
+                            if row.get("last_payment_date")
+                            else None
+                        ),
                         "overdue_payments": row.get("overdue_payments"),
                     }
                 )
@@ -662,11 +676,16 @@ class PaymentService:
                 s.current_balance,
                 s.credit_limit,
                 (s.credit_limit - s.current_balance) as available_credit,
-                (SELECT COUNT(*) FROM payments WHERE entity_id = s.id AND payment_type = 'supplier_payment') as payments_count,
-            (SELECT MAX(payment_date) FROM payments WHERE entity_id = s.id AND payment_type = 'supplier_payment') as last_payment_date,
-            (SELECT COUNT(*) FROM payment_schedules ps
-             JOIN payments p ON ps.payment_id = p.id
-             WHERE p.supplier_id = s.id AND ps.due_date < ? AND ps.status != ?) as overdue_payments
+                (SELECT COUNT(*) FROM payments
+                 WHERE entity_id = s.id AND payment_type = 'supplier_payment'
+                ) as payments_count,
+                (SELECT MAX(payment_date) FROM payments
+                 WHERE entity_id = s.id AND payment_type = 'supplier_payment'
+                ) as last_payment_date,
+                (SELECT COUNT(*) FROM payment_schedules ps
+                 JOIN payments p ON ps.payment_id = p.id
+                 WHERE p.supplier_id = s.id AND ps.due_date < ? AND ps.status != ?
+                ) as overdue_payments
             FROM suppliers s
             WHERE s.current_balance > 0 AND s.is_active = 1
             ORDER BY s.current_balance DESC
@@ -682,11 +701,15 @@ class PaymentService:
                         "supplier_id": row.get("id"),
                         "supplier_name": row.get("name"),
                         "phone": row.get("phone"),
-                        "balance": Decimal(str(row.get("current_balance"))),
-                        "credit_limit": Decimal(str(row.get("credit_limit"))),
+                        "balance": Decimal(str(row.get("current_balance") or 0)),
+                        "credit_limit": Decimal(str(row.get("credit_limit") or 0)),
                         "available_credit": Decimal(str(row.get("available_credit"))),
                         "payments_count": row.get("payments_count"),
-                        "last_payment_date": (date.fromisoformat(row.get("last_payment_date")) if row.get("last_payment_date") else None),
+                        "last_payment_date": (
+                            date.fromisoformat(row.get("last_payment_date"))
+                            if row.get("last_payment_date")
+                            else None
+                        ),
                         "overdue_payments": row.get("overdue_payments"),
                     }
                 )
@@ -796,7 +819,11 @@ class PaymentService:
             today = date.today()
             for r in rows:
                 due = date.fromisoformat(r.get("due_date")) if r.get("due_date") else None
-                remaining = Decimal(str(r.get("remaining_amount"))) if r.get("remaining_amount") is not None else Decimal("0.00")
+                remaining = (
+                    Decimal(str(r.get("remaining_amount")))
+                    if r.get("remaining_amount") is not None
+                    else Decimal("0.00")
+                )
                 days_to_due = (due - today).days if due else None
                 schedules.append(
                     {
@@ -1606,7 +1633,9 @@ class PaymentService:
             # متوسط وقت التحصيل
             if collection_time_result and collection_time_result.get("avg_collection_days"):
                 # C3 FIX: استخدام اسم العمود
-                kpis["collection_metrics"]["avg_collection_days"] = round(float(collection_time_result["avg_collection_days"]), 1)
+                kpis["collection_metrics"]["avg_collection_days"] = round(
+                    float(collection_time_result["avg_collection_days"]), 1
+                )
 
             # مقاييس الكفاءة
             period_days = (end_date - start_date).days + 1

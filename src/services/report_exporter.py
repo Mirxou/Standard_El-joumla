@@ -5,7 +5,6 @@
 """
 
 import json
-import logging
 import os
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -425,7 +424,10 @@ class ReportExporter:
 
             return ReportData(
                 title="تقرير ملخص المبيعات",
-                subtitle=f"من {filters.start_date.strftime('%Y-%m-%d') if filters.start_date else 'البداية'} إلى {filters.end_date.strftime('%Y-%m-%d') if filters.end_date else 'النهاية'}",  # noqa: E501
+                subtitle=(
+                    f"من {filters.start_date.strftime('%Y-%m-%d') if filters.start_date else 'البداية'} "
+                    f"إلى {filters.end_date.strftime('%Y-%m-%d') if filters.end_date else 'النهاية'}"
+                ),  # noqa: E501
                 generated_at=datetime.now(),
                 filters=filters,
                 data=sales_data,
@@ -483,7 +485,9 @@ class ReportExporter:
                     {supplier_select}
                     CASE
                         WHEN p.current_stock <= 0 THEN 'نفد المخزون'
-                        WHEN COALESCE(p.min_stock, 0) > 0 AND p.current_stock <= COALESCE(p.min_stock, 0) THEN 'مخزون منخفض'  # noqa: E501
+                        WHEN COALESCE(p.min_stock, 0) > 0
+                             AND p.current_stock <= COALESCE(p.min_stock, 0)
+                             THEN 'مخزون منخفض'
                         WHEN {max_stock_col} > 0 AND p.current_stock >= {max_stock_col} THEN 'مخزون مرتفع'
                         ELSE 'طبيعي'
                     END as stock_status
@@ -676,7 +680,10 @@ class ReportExporter:
 
             return ReportData(
                 title="تقرير الملخص المالي",
-                subtitle=f"من {filters.start_date.strftime('%Y-%m-%d') if filters.start_date else 'البداية'} إلى {filters.end_date.strftime('%Y-%m-%d') if filters.end_date else 'النهاية'}",  # noqa: E501
+                subtitle=(
+                    f"من {filters.start_date.strftime('%Y-%m-%d') if filters.start_date else 'البداية'} "
+                    f"إلى {filters.end_date.strftime('%Y-%m-%d') if filters.end_date else 'النهاية'}"
+                ),  # noqa: E501
                 generated_at=datetime.now(),
                 filters=filters,
                 data=detailed_data,
@@ -1053,7 +1060,9 @@ class ReportExporter:
                 strftime('%Y-%m', sale_date) as month,
                 SUM(final_amount) as monthly_sales
             FROM sales
-            WHERE status != 'cancelled' {start_date_str.replace("s.sale_date", "sale_date")} {end_date_str.replace("s.sale_date", "sale_date")}  # noqa: E501
+            WHERE status != 'cancelled'
+            {start_date_str.replace("s.sale_date", "sale_date")}
+            {end_date_str.replace("s.sale_date", "sale_date")}
             GROUP BY strftime('%Y-%m', sale_date) ORDER BY month
         """
 
@@ -1385,7 +1394,10 @@ class ReportExporter:
 
             return ReportData(
                 title="تقرير تحليل العملاء",
-                subtitle=f"من {filters.start_date.strftime('%Y-%m-%d') if filters.start_date else 'البداية'} إلى {filters.end_date.strftime('%Y-%m-%d') if filters.end_date else 'النهاية'}",
+                subtitle=(
+                    f"من {filters.start_date.strftime('%Y-%m-%d') if filters.start_date else 'البداية'} "
+                    f"إلى {filters.end_date.strftime('%Y-%m-%d') if filters.end_date else 'النهاية'}"
+                ),
                 generated_at=datetime.now(),
                 filters=filters,
                 data=data,
@@ -1464,7 +1476,10 @@ class ReportExporter:
 
             return ReportData(
                 title="تقرير تحليل الموردين",
-                subtitle=f"من {filters.start_date.strftime('%Y-%m-%d') if filters.start_date else 'البداية'} إلى {filters.end_date.strftime('%Y-%m-%d') if filters.end_date else 'النهاية'}",
+                subtitle=(
+                    f"من {filters.start_date.strftime('%Y-%m-%d') if filters.start_date else 'البداية'} "
+                    f"إلى {filters.end_date.strftime('%Y-%m-%d') if filters.end_date else 'النهاية'}"
+                ),
                 generated_at=datetime.now(),
                 filters=filters,
                 data=data,
@@ -1572,7 +1587,10 @@ class ReportExporter:
 
             return ReportData(
                 title="تقرير أداء المنتجات",
-                subtitle=f"من {filters.start_date.strftime('%Y-%m-%d') if filters.start_date else 'البداية'} إلى {filters.end_date.strftime('%Y-%m-%d') if filters.end_date else 'النهاية'}",
+                subtitle=(
+                    f"من {filters.start_date.strftime('%Y-%m-%d') if filters.start_date else 'البداية'} "
+                    f"إلى {filters.end_date.strftime('%Y-%m-%d') if filters.end_date else 'النهاية'}"
+                ),
                 generated_at=datetime.now(),
                 filters=filters,
                 data=data,
@@ -1677,7 +1695,10 @@ class ReportExporter:
 
             return ReportData(
                 title="تقرير حركة المخزون",
-                subtitle=f"من {filters.start_date.strftime('%Y-%m-%d') if filters.start_date else 'البداية'} إلى {filters.end_date.strftime('%Y-%m-%d') if filters.end_date else 'النهاية'}",
+                subtitle=(
+                    f"من {filters.start_date.strftime('%Y-%m-%d') if filters.start_date else 'البداية'} "
+                    f"إلى {filters.end_date.strftime('%Y-%m-%d') if filters.end_date else 'النهاية'}"
+                ),
                 generated_at=datetime.now(),
                 filters=filters,
                 data=data,
@@ -1737,13 +1758,11 @@ class ReportExporter:
                     "s.sale_date,",
                     "s.sale_date, COALESCE(s.due_date, s.sale_date) as ref_date,",
                 )
-                use_due_date = True
             except Exception:
                 query = query.replace(
                     "s.sale_date,",
                     "s.sale_date, s.sale_date as ref_date,",
                 )
-                use_due_date = False
 
             rows = self.db.execute_query(query, tuple(params))
 
@@ -2432,7 +2451,10 @@ class ReportExporter:
 
             return ReportData(
                 title="تقرير حركات النقل بين المستودعات",
-                subtitle=f"من {filters.start_date.strftime('%Y-%m-%d') if filters.start_date else 'البداية'} إلى {filters.end_date.strftime('%Y-%m-%d') if filters.end_date else 'النهاية'}",  # noqa: E501
+                subtitle=(
+                    f"من {filters.start_date.strftime('%Y-%m-%d') if filters.start_date else 'البداية'} "
+                    f"إلى {filters.end_date.strftime('%Y-%m-%d') if filters.end_date else 'النهاية'}"
+                ),  # noqa: E501
                 generated_at=datetime.now(),
                 filters=filters,
                 data=data,

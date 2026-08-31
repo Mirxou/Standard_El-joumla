@@ -133,7 +133,10 @@ class CountDetailsDialog(BaseDialog):
                 )
             else:
                 # تحميل جميع المنتجات
-                rows = self.db.fetch_all("SELECT id, name, code, current_stock, 0 as counted_quantity, '' as notes FROM products LIMIT 50")
+                rows = self.db.fetch_all(
+                "SELECT id, name, code, current_stock, "
+                "0 as counted_quantity, '' as notes FROM products LIMIT 50"
+            )
 
             self.products_table.setRowCount(len(rows))
 

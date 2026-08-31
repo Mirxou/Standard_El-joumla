@@ -9,12 +9,13 @@ Author: Unified Commerce AI Team
 Date: February 2026
 Version: 1.0.0
 """
-import logging
-
 import json
+import logging
+import uuid as _uuid
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, dataclass as _dataclass
 from datetime import datetime, timedelta
+from enum import Enum as _Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -805,10 +806,6 @@ class PredictiveAnalyticsPlatform:
 
 
 # ==================== كلاسات متوافقة مع الاختبارات ====================
-
-import uuid as _uuid
-from dataclasses import dataclass as _dataclass
-from enum import Enum as _Enum
 
 
 class ModelType(_Enum):

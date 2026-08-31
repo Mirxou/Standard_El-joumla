@@ -1,10 +1,12 @@
-import logging
 #!/usr/bin/env python3
+
 """
 محرك الأتمتة الذكية - Cognitive Automation Engine
 محرك أتمتة ذكي يجمع بين الذكاء الاصطناعي والأتمتة الروبوتية
 """
 
+
+import logging
 import threading
 import time
 from dataclasses import dataclass

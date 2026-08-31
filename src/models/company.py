@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -258,7 +257,11 @@ class CompanyManager:
                     is_active, is_default, timezone, locale, date_format, time_format,
                     logo_path, notes, metadata,
                     created_at, updated_at, created_by, updated_by
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)  # noqa: E501
+                ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?
+            )
             """
             params = (
                 company.code,
@@ -313,7 +316,8 @@ class CompanyManager:
             query = """
                 UPDATE companies SET
                     code = ?, name = ?, name_en = ?, legal_name = ?, tax_id = ?, registration_number = ?,
-                    address = ?, city = ?, state = ?, country = ?, postal_code = ?, phone = ?, phone2 = ?, email = ?, website = ?,  # noqa: E501
+                    address = ?, city = ?, state = ?, country = ?, postal_code = ?,
+                    phone = ?, phone2 = ?, email = ?, website = ?,
                     base_currency_id = ?, fiscal_year_start = ?, fiscal_year_end = ?, tax_rate = ?,
                     is_active = ?, is_default = ?, timezone = ?, locale = ?, date_format = ?, time_format = ?,
                     logo_path = ?, notes = ?, metadata = ?,

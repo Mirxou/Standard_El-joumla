@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
 """
 خدمة إدارة المخزون المتقدمة - Advanced Inventory Management Service
@@ -460,7 +459,10 @@ class AdvancedInventoryManagementService:
                         "expiry_date": expiry_raw,
                         "warehouse_id": get_value(row, 'warehouse_id'),
                         "warehouse_name": get_value(row, 'warehouse_name'),
-                        "days_until_expiry": (datetime.fromisoformat(expiry_raw) - datetime.now()).days if expiry_raw else None,
+                        "days_until_expiry": (
+                            (datetime.fromisoformat(expiry_raw) - datetime.now()).days
+                            if expiry_raw else None
+                        ),
                     }
                 )
 

@@ -1,11 +1,12 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 معالج الأخطاء العام (Global Exception Handler)
 يوفر معالجة موحدة وآمنة للأخطاء غير المتوقعة
 """
 
+
+import logging
 import sys
 import traceback
 from datetime import datetime
@@ -407,7 +408,11 @@ class ErrorRecoveryService:
             result = self.db.fetch_one("PRAGMA integrity_check")
 
             if result:
-                integrity_val = result.get("integrity_check") if isinstance(result, dict) else (result[0] if result else None)
+                integrity_val = (
+                    result.get("integrity_check")
+                    if isinstance(result, dict)
+                    else (result[0] if result else None)
+                )
                 if integrity_val != "ok":
                     self.logger.warning(f"مشكلة في السلامة: {result}")
                     return False

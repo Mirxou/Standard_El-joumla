@@ -350,14 +350,14 @@ class ConnectionPool:
                 pool_ref = self_weak()
                 if pool_ref is None or pool_ref.is_closed:
                     break
-                
+
                 interval = pool_ref.config.health_check_interval
                 time.sleep(min(5, interval))
-                
+
                 pool_ref = self_weak()
                 if pool_ref is None or pool_ref.is_closed:
                     break
-                
+
                 try:
                     pool_ref._perform_maintenance()
                 except Exception:

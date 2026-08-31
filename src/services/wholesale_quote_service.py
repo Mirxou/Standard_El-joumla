@@ -243,7 +243,9 @@ class WholesaleQuoteService:
 
                 # Add Sale Item
                 sql_item = """
-                    INSERT INTO sale_items (sale_id, product_id, batch_id, quantity, unit_price, total_price, cost_price, profit)  # noqa: E501
+                    INSERT INTO sale_items
+            (sale_id, product_id, batch_id, quantity,
+             unit_price, total_price, cost_price, profit)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """
                 self.db.execute_update(sql_item, [sale_id, p_id, batch_id, qty, price, total, cost, profit])

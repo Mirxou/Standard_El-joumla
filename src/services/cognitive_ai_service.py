@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -955,7 +954,10 @@ class CognitiveAIService:
 
                 summary = {}
                 for row in cursor.fetchall():
-                    summary[get_value(row, 'insight_type')] = {"count": get_value(row, 'count', 0), "avg_confidence": get_value(row, 'avg_confidence')}
+                    summary[get_value(row, 'insight_type')] = {
+                        "count": get_value(row, 'count', 0),
+                        "avg_confidence": get_value(row, 'avg_confidence'),
+                    }
 
                 return summary
 
@@ -978,7 +980,10 @@ class CognitiveAIService:
 
                 overview = {}
                 for row in cursor.fetchall():
-                    overview[get_value(row, 'model_type')] = {"avg_accuracy": get_value(row, 'avg_accuracy'), "model_count": get_value(row, 'model_count', 0)}
+                    overview[get_value(row, 'model_type')] = {
+                        "avg_accuracy": get_value(row, 'avg_accuracy'),
+                        "model_count": get_value(row, 'model_count', 0),
+                    }
 
                 return overview
 

@@ -1,11 +1,12 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 Security Reports Service - خدمة تقارير الأمان
 توليد تقارير الأمان المتقدمة
 """
 
+
+import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 

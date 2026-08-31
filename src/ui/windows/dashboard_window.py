@@ -289,7 +289,8 @@ class DashboardWindow(QMainWindow):
         # إذا كانت البطاقة كبيرة، كبر الخط
         val_size = "32px" if is_large else "24px"
         v.setStyleSheet(
-            f"color: {C.TEXT_BRIGHT}; font-size: {val_size}; font-weight: 800; background: transparent; letter-spacing: -0.5px;"
+            f"color: {C.TEXT_BRIGHT}; font-size: {val_size}; "
+            f"font-weight: 800; background: transparent; letter-spacing: -0.5px;"
         )
         v.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         lay.addWidget(v)

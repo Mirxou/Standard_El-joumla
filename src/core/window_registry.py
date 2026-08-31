@@ -1,6 +1,5 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 Window Registry - نظام التسجيل التلقائي للنوافذ
 Auto-Registration System for Windows
@@ -9,6 +8,8 @@ Auto-Registration System for Windows
 وتسجيلها تلقائياً في WindowManager
 """
 
+
+import logging
 import importlib
 import inspect
 from pathlib import Path

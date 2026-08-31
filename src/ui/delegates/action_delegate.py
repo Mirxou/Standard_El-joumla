@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
+
 """
 Action Delegate - High-Performance Icon Rendering
 رسم الأيقونات والأزرار بدون استخدام Widgets
 """
+
+import logging
+
 
 from typing import Optional
 

@@ -103,7 +103,7 @@ class TransferStockDialog(BaseDialog):
         from_product = self.from_combo.currentData()
         to_product = self.to_combo.currentData()
         quantity = self.quantity_spin.value()
-        reason = self.reason_input.text().strip()
+        self.reason_input.text().strip()
 
         if not from_product or not to_product:
             self.notify.show_warning(

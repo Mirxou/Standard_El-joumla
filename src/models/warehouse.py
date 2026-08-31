@@ -1,12 +1,13 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 نموذج المستودعات - Warehouse Model (Unified)
 إدارة المستودعات والمخزون متعدد المستودعات
 تم دمج ميزات Standard (الأنواع والسعة) مع ميزات Trae (التحويلات والجرد)
 """
 
+
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -70,7 +71,7 @@ def _execute_insert(db_manager, query, params=()) -> Optional[int]:
                 db_manager.execute_query(query, params)
             elif hasattr(db_manager, "execute_non_query"):
                 db_manager.execute_non_query(query, params)
-            
+
             res_id = db_manager.get_last_insert_id()
             return res_id
         except Exception as e:
@@ -731,7 +732,11 @@ class WarehouseInventoryManager:
             # F3 FIX: check allow_negative_stock on warehouse before blocking
             if new_qty < 0:
                 try:
-                    wh_row = _fetch_one_helper(self.db_manager, "SELECT allow_negative_stock FROM warehouses WHERE id = ?", (warehouse_id,))
+                    wh_row = _fetch_one_helper(
+                        self.db_manager,
+                        "SELECT allow_negative_stock FROM warehouses WHERE id = ?",
+                        (warehouse_id,),
+                    )
                     allow_neg = False
                     if wh_row:
                         allow_neg = (wh_row.get('allow_negative_stock') if isinstance(wh_row, dict) else wh_row[0]) or 0
@@ -752,11 +757,11 @@ class WarehouseInventoryManager:
             existing = self.get_inventory(warehouse_id, product_id)
             if not existing:
                 return False
-                
+
             # Prevent reserving more than available stock
             if existing.quantity < existing.reserved_quantity + quantity:
                 return False
-                
+
             new_reserved = existing.reserved_quantity + quantity
             query = "UPDATE warehouse_inventory SET reserved_quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
             return _execute_non_query(self.db_manager, query, (new_reserved, existing.id)) > 0
@@ -853,36 +858,69 @@ class WarehouseTransferManager:
                 return False
 
             success = True
-            
-            # Check if database manager has get_cursor method to use transaction (for tests/real DB with transaction requirements)
+
+            # Check if database manager has get_cursor method to use transaction
+            # (for tests/real DB with transaction requirements)
             if hasattr(self.db_manager, "get_cursor"):
                 try:
                     with self.db_manager.get_cursor() as cursor:
                         # 1. Release reserve
-                        q_release = "UPDATE warehouse_inventory SET reserved_quantity = reserved_quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE warehouse_id = ? AND product_id = ?"
-                        cursor.execute(q_release, (transfer.quantity, transfer.from_warehouse_id, transfer.product_id))
-                        
+                        q_release = (
+                            "UPDATE warehouse_inventory SET "
+                            "reserved_quantity = reserved_quantity - ?, "
+                            "updated_at = CURRENT_TIMESTAMP "
+                            "WHERE warehouse_id = ? AND product_id = ?"
+                        )
+                        cursor.execute(
+                            q_release,
+                            (transfer.quantity, transfer.from_warehouse_id, transfer.product_id),
+                        )
+
                         # 2. Subtract from source
-                        q_sub = "UPDATE warehouse_inventory SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE warehouse_id = ? AND product_id = ?"
-                        cursor.execute(q_sub, (transfer.quantity, transfer.from_warehouse_id, transfer.product_id))
-                        
+                        q_sub = (
+                            "UPDATE warehouse_inventory SET quantity = quantity - ?, "
+                            "updated_at = CURRENT_TIMESTAMP "
+                            "WHERE warehouse_id = ? AND product_id = ?"
+                        )
+                        cursor.execute(
+                            q_sub,
+                            (transfer.quantity, transfer.from_warehouse_id, transfer.product_id),
+                        )
+
                         # 3. Add to target - check first
-                        q_check = "SELECT id FROM warehouse_inventory WHERE warehouse_id = ? AND product_id = ?"
+                        q_check = (
+                            "SELECT id FROM warehouse_inventory "
+                            "WHERE warehouse_id = ? AND product_id = ?"
+                        )
                         cursor.execute(q_check, (transfer.to_warehouse_id, transfer.product_id))
                         row = cursor.fetchone()
-                        
+
                         if row:
                             target_id = row.get("id") if isinstance(row, dict) else row[0]
-                            q_add = "UPDATE warehouse_inventory SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+                            q_add = (
+                                "UPDATE warehouse_inventory SET quantity = quantity + ?, "
+                                "updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+                            )
                             cursor.execute(q_add, (transfer.quantity, target_id))
                         else:
-                            q_insert = "INSERT INTO warehouse_inventory (warehouse_id, product_id, quantity, created_at, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
-                            cursor.execute(q_insert, (transfer.to_warehouse_id, transfer.product_id, transfer.quantity))
-                        
+                            q_insert = (
+                                "INSERT INTO warehouse_inventory "
+                                "(warehouse_id, product_id, quantity, created_at, updated_at) "
+                                "VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                            )
+                            cursor.execute(
+                                q_insert,
+                                (transfer.to_warehouse_id, transfer.product_id, transfer.quantity),
+                            )
+
                         # 5. Update status
-                        q_status = "UPDATE warehouse_transfers SET status = 'completed', received_date = CURRENT_TIMESTAMP, received_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+                        q_status = (
+                            "UPDATE warehouse_transfers SET status = 'completed', "
+                            "received_date = CURRENT_TIMESTAMP, received_by = ?, "
+                            "updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+                        )
                         cursor.execute(q_status, (received_by, transfer_id))
-                        
+
                         if hasattr(cursor, "connection") and cursor.connection:
                             try:
                                 cursor.connection.commit()
@@ -892,26 +930,50 @@ class WarehouseTransferManager:
                 except Exception as tx_err:
                     _log_error(self.logger, f"Transaction failed in complete_transfer, falling back: {tx_err}")
                     # Fallback to direct execution if transaction block fails
-            
+
             # Non-transactional execution fallback
             # 1. Release reserve
-            q_release = "UPDATE warehouse_inventory SET reserved_quantity = reserved_quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE warehouse_id = ? AND product_id = ?"
-            if _execute_non_query(self.db_manager, q_release, (transfer.quantity, transfer.from_warehouse_id, transfer.product_id)) <= 0:
+            q_release = (
+                "UPDATE warehouse_inventory SET "
+                "reserved_quantity = reserved_quantity - ?, "
+                "updated_at = CURRENT_TIMESTAMP "
+                "WHERE warehouse_id = ? AND product_id = ?"
+            )
+            if _execute_non_query(
+                self.db_manager, q_release,
+                (transfer.quantity, transfer.from_warehouse_id, transfer.product_id),
+            ) <= 0:
                 success = False
 
             # 2. Subtract from source
-            q_sub = "UPDATE warehouse_inventory SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE warehouse_id = ? AND product_id = ?"
-            if _execute_non_query(self.db_manager, q_sub, (transfer.quantity, transfer.from_warehouse_id, transfer.product_id)) <= 0:
+            q_sub = (
+                "UPDATE warehouse_inventory SET quantity = quantity - ?, "
+                "updated_at = CURRENT_TIMESTAMP "
+                "WHERE warehouse_id = ? AND product_id = ?"
+            )
+            if _execute_non_query(
+                self.db_manager, q_sub,
+                (transfer.quantity, transfer.from_warehouse_id, transfer.product_id),
+            ) <= 0:
                 success = False
 
             # 3. Add to target
             existing_target = self.inventory_manager.get_inventory(transfer.to_warehouse_id, transfer.product_id)
             if existing_target:
-                q_add = "UPDATE warehouse_inventory SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-                if _execute_non_query(self.db_manager, q_add, (transfer.quantity, existing_target.id)) <= 0:
+                q_add = (
+                    "UPDATE warehouse_inventory SET quantity = quantity + ?, "
+                    "updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+                )
+                if _execute_non_query(
+                    self.db_manager, q_add, (transfer.quantity, existing_target.id),
+                ) <= 0:
                     success = False
             else:
-                q_insert = "INSERT INTO warehouse_inventory (warehouse_id, product_id, quantity, created_at, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                q_insert = (
+                    "INSERT INTO warehouse_inventory "
+                    "(warehouse_id, product_id, quantity, created_at, updated_at) "
+                    "VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                )
                 if not _execute_insert(
                     self.db_manager,
                     q_insert,
@@ -921,7 +983,11 @@ class WarehouseTransferManager:
 
             # 4. Update status
             if success:
-                q_status = "UPDATE warehouse_transfers SET status = 'completed', received_date = CURRENT_TIMESTAMP, received_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+                q_status = (
+                    "UPDATE warehouse_transfers SET status = 'completed', "
+                    "received_date = CURRENT_TIMESTAMP, received_by = ?, "
+                    "updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+                )
                 _execute_non_query(self.db_manager, q_status, (received_by, transfer_id))
                 return True
             return False

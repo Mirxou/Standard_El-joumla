@@ -112,7 +112,9 @@ class AuditViewer(QMainWindow):
                 border-radius: 8px;
             }}
             QPushButton:hover {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {C.ACCENT_TEAL_LIGHT}, stop:1 {C.ACCENT_SKY});
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 {C.ACCENT_TEAL_LIGHT},
+                    stop:1 {C.ACCENT_SKY});
             }}
         """)
 

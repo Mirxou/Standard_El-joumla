@@ -2,7 +2,6 @@
 نافذة الجرد الدوري
 Physical Counts Window
 """
-import logging
 
 from datetime import date
 from typing import List, Optional

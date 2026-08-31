@@ -471,8 +471,14 @@ class PaymentPlansWindow(QMainWindow):
             by_status = stats.get("by_status", {})
             total_plans = sum(v.get("count", 0) for v in by_status.values())
             self.stats_labels["total_plans"].setText(str(total_plans))
-            self.stats_labels["active_plans"].setText(str(by_status.get(PaymentPlanStatus.ACTIVE.value, {}).get("count", 0)))
-            self.stats_labels["completed_plans"].setText(str(by_status.get(PaymentPlanStatus.COMPLETED.value, {}).get("count", 0)))
+            active_count = by_status.get(
+                PaymentPlanStatus.ACTIVE.value, {}
+            ).get("count", 0)
+            self.stats_labels["active_plans"].setText(str(active_count))
+            completed_count = by_status.get(
+                PaymentPlanStatus.COMPLETED.value, {}
+            ).get("count", 0)
+            self.stats_labels["completed_plans"].setText(str(completed_count))
 
             # TODO: إضافة إحصائيات مالية
 

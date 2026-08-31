@@ -1,12 +1,13 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 import cv2  # noqa: F821
 خدمة الذكاء الاصطناعي المتقدمة - Advanced AI Service
 المرحلة 7: الذكاء الاصطناعي المعرفي وتحليلات البيانات المتقدمة
 """
 
+
+import logging
 import json
 import os
 import tempfile
@@ -100,7 +101,6 @@ from src.utils.db_helpers import get_value
 from src.utils.logger import setup_logger
 
 
-@dataclass
 @dataclass
 class AIModel:
     """فئة تمثل نموذج الذكاء الاصطناعي"""
@@ -892,7 +892,11 @@ class AdvancedAIService:
                 training_data = []
                 for row in cursor.fetchall():
                     sales = get_value(row, 'sales')
-                    data_content = [sales, get_value(row, 'transaction_count'), get_value(row, 'avg_transaction')]  # sales, count, avg
+                    data_content = [
+                        sales,
+                        get_value(row, 'transaction_count'),
+                        get_value(row, 'avg_transaction'),
+                    ]  # sales, count, avg
                     labels = sales  # sales as target
 
                     training_data.append(
@@ -921,13 +925,13 @@ class AdvancedAIService:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
-                    SELECT c.customer_id, COUNT(o.order_id) as order_count,
-                           SUM(o.total_amount) as total_spent, AVG(o.total_amount) as avg_order,
-                           MAX(o.order_date) as last_order_date
+                    SELECT c.id as customer_id, COUNT(s.id) as order_count,
+                           SUM(s.total_amount) as total_spent, AVG(s.total_amount) as avg_order,
+                           MAX(s.sale_date) as last_order_date
                     FROM customers c
-                    LEFT JOIN orders o ON c.customer_id = o.customer_id
-                    WHERE o.order_date >= ?
-                    GROUP BY c.customer_id
+                    LEFT JOIN sales s ON c.id = s.customer_id
+                    WHERE s.sale_date >= ?
+                    GROUP BY c.id
                 """,
                     (datetime.now() - timedelta(days=365),),
                 )
@@ -935,7 +939,11 @@ class AdvancedAIService:
                 training_data = []
                 for row in cursor.fetchall():
                     order_count = get_value(row, 'order_count')
-                    data_content = [order_count, get_value(row, 'total_spent'), get_value(row, 'avg_order')]  # count, total, avg
+                    data_content = [
+                        order_count,
+                        get_value(row, 'total_spent'),
+                        get_value(row, 'avg_order'),
+                    ]  # count, total, avg
                     labels = 1 if order_count and order_count > 5 else 0  # high vs low value customer
 
                     training_data.append(
@@ -948,7 +956,10 @@ class AdvancedAIService:
                             quality_score=0.85,
                             collected_at=datetime.now(),
                             used_in_training=False,
-                            metadata={"customer_id": get_value(row, 'customer_id'), "last_order": get_value(row, 'last_order_date')},
+                            metadata={
+                                "customer_id": get_value(row, 'customer_id'),
+                                "last_order": get_value(row, 'last_order_date'),
+                            },
                         )
                     )
 
@@ -964,12 +975,13 @@ class AdvancedAIService:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
-                    SELECT p.product_id, SUM(si.quantity) as total_sold,
+                    SELECT p.id as product_id, SUM(si.quantity) as total_sold,
                            AVG(si.unit_price) as avg_price, COUNT(si.sale_id) as sale_count
                     FROM products p
-                    JOIN sale_items si ON p.product_id = si.product_id
-                    WHERE si.sale_date >= ?
-                    GROUP BY p.product_id
+                    JOIN sale_items si ON p.id = si.product_id
+                    JOIN sales s ON si.sale_id = s.id
+                    WHERE s.sale_date >= ?
+                    GROUP BY p.id
                 """,
                     (datetime.now() - timedelta(days=180),),
                 )
@@ -977,7 +989,11 @@ class AdvancedAIService:
                 training_data = []
                 for row in cursor.fetchall():
                     total_sold = get_value(row, 'total_sold')
-                    data_content = [total_sold, get_value(row, 'avg_price'), get_value(row, 'sale_count')]  # sold, price, count
+                    data_content = [
+                        total_sold,
+                        get_value(row, 'avg_price'),
+                        get_value(row, 'sale_count'),
+                    ]  # sold, price, count
                     labels = 1 if total_sold and total_sold > 100 else 0  # high vs low selling product
 
                     training_data.append(
@@ -1449,7 +1465,10 @@ class AdvancedAIService:
             expected_signature = hmac.new(secret, serialized_data, hashlib.sha256).digest()
 
             if not hmac.compare_digest(signature, expected_signature):
-                self.logger.critical(f"تنبيه أمني: فشل التحقق من توقيع ملف نموذج الذكاء الاصطناعي {model.model_path}! تم إلغاء القراءة لتفادي RCE.")
+                self.logger.critical(
+                    f"تنبيه أمني: فشل التحقق من توقيع ملف نموذج الذكاء الاصطناعي "
+                    f"{model.model_path}! تم إلغاء القراءة لتفادي RCE."
+                )
                 return None
 
             return pickle.loads(serialized_data)
@@ -1463,7 +1482,7 @@ class AdvancedAIService:
         try:
             model_path = self.models_dir / f"{model_id}.pkl"
             serialized_data = pickle.dumps(model)
-            
+
             secret = os.environ.get("APP_ENCRYPTION_KEY", "StandardElJoumlaERPSecureHMACDefaultKey").encode()
             signature = hmac.new(secret, serialized_data, hashlib.sha256).digest()
 
@@ -1773,9 +1792,10 @@ class AdvancedAIService:
         try:
             with self.db.get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute(  # noqa: E501
+                cursor.execute(
                     """
-                    SELECT experiment_id, target_column, features, status, best_model, best_score, created_at, completed_at
+                    SELECT experiment_id, target_column, features, status,
+                           best_model, best_score, created_at, completed_at
                     FROM ml_experiments
                     WHERE experiment_id = ?
                     """,
@@ -2077,7 +2097,11 @@ class AdvancedAIService:
 
                 history = []
                 for row in cursor.fetchall():
-                    history.append({"type": get_value(row, 'message_type'), "content": get_value(row, 'message_content'), "timestamp": get_value(row, 'created_at')})
+                    history.append({
+                        "type": get_value(row, 'message_type'),
+                        "content": get_value(row, 'message_content'),
+                        "timestamp": get_value(row, 'created_at'),
+                    })
 
                 return history[::-1]  # عكس الترتيب ليكون الأقدم أولاً
 

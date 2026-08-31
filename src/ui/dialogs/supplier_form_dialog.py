@@ -194,7 +194,11 @@ class SupplierFormDialog(BaseDialog):
                 dup_email_params = (email, self.supplier_id or 0)
                 dup_email_result = self.db_manager.fetch_one(dup_email_query, dup_email_params)
                 if dup_email_result:
-                    dup_name = dup_email_result.get("name") if isinstance(dup_email_result, dict) else dup_email_result[1]
+                    dup_name = (
+                        dup_email_result.get("name")
+                        if isinstance(dup_email_result, dict)
+                        else dup_email_result[1]
+                    )
                     self.notify.show_warning(
                         self.i18n.get_message("warning"),
                         f"البريد الإلكتروني مسجل مسبقاً للمورد: {dup_name}",

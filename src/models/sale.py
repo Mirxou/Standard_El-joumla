@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -414,7 +413,9 @@ class SaleManager:
                     res = self.db_manager.fetch_one("SELECT id FROM users WHERE id = ?", (user_id,))
                     if not res:
                         self.db_manager.execute_insert(
-                            "INSERT OR IGNORE INTO users (id, username, full_name, password_hash, salt) VALUES (?, ?, ?, ?, ?)",
+                            "INSERT OR IGNORE INTO users "
+                            "(id, username, full_name, password_hash, salt) "
+                            "VALUES (?, ?, ?, ?, ?)",
                             (user_id, f"user_{user_id}", f"User {user_id}", "hash", "salt")
                         )
                 except Exception:
@@ -825,18 +826,18 @@ class SaleManager:
         """
         # 1. التحقق من وجود منتج أب (كرتون) ومعامل التحويل
         cursor.execute("""
-            SELECT parent_product_id, conversion_factor 
-            FROM products 
+            SELECT parent_product_id, conversion_factor
+            FROM products
             WHERE id = ?
         """, (product_id,))
         product_data = cursor.fetchone()
-        
+
         if not product_data or product_data[0] is None:
             raise ValueError(f"الرصيد غير كافٍ للمنتج ({product_id}) ولا يوجد كرتون مسجل لفكّه تلقائياً.")
-            
+
         parent_id = product_data[0]
         conversion_factor = product_data[1]
-        
+
         if not conversion_factor or conversion_factor <= 0:
             raise ValueError("معامل التحويل غير صالح في إعدادات المنتج.")
 
@@ -847,39 +848,39 @@ class SaleManager:
 
         # 3. سحب الكراتين بنظام FEFO (الأقرب لانتهاء الصلاحية أولاً)
         cursor.execute("""
-            SELECT id, quantity, expiry_date 
-            FROM batches 
-            WHERE product_id = ? AND quantity > 0 AND is_active = 1 
+            SELECT id, quantity, expiry_date
+            FROM batches
+            WHERE product_id = ? AND quantity > 0 AND is_active = 1
             ORDER BY expiry_date ASC, id ASC
         """, (parent_id,))
-        
+
         parent_batches = cursor.fetchall()
         cartons_to_deduct = cartons_needed
         last_expiry = None
-        
+
         for batch in parent_batches:
             if cartons_to_deduct <= 0:
                 break
-                
+
             batch_id = batch[0]
             available_in_batch = batch[1]
             last_expiry = batch[2]
-            
+
             deduct_qty = min(available_in_batch, cartons_to_deduct)
-            
+
             # خصم رصيد الكرتون من الدفعة
             cursor.execute("""
-                UPDATE batches 
-                SET quantity = quantity - ? 
+                UPDATE batches
+                SET quantity = quantity - ?
                 WHERE id = ?
             """, (deduct_qty, batch_id))
-            
+
             # تسجيل حركة المخزون للكرتون المخصوم
             cursor.execute("""
                 INSERT INTO stock_movements (product_id, movement_type, quantity, reference_type, notes)
                 VALUES (?, 'out', ?, 'adjustment', 'فك تلقائي إلى وحدات صغرى')
             """, (parent_id, -deduct_qty))
-            
+
             cartons_to_deduct -= deduct_qty
 
         if cartons_to_deduct > 0:
@@ -887,31 +888,33 @@ class SaleManager:
 
         # تحديث المخزون الإجمالي للكرتون الأب في جدول المنتجات
         cursor.execute("""
-            UPDATE products 
-            SET current_stock = current_stock - ? 
+            UPDATE products
+            SET current_stock = current_stock - ?
             WHERE id = ?
         """, (cartons_needed, parent_id))
 
         # 4. إيداع القطع الناتجة في مخزون الحبات
         # البحث عن دفعة حبات نشطة لإضافة الرصيد إليها
         cursor.execute("""
-            SELECT id FROM batches 
-            WHERE product_id = ? AND is_active = 1 
+            SELECT id FROM batches
+            WHERE product_id = ? AND is_active = 1
             ORDER BY expiry_date ASC, id ASC LIMIT 1
         """, (product_id,))
         unit_batch = cursor.fetchone()
-        
+
         if unit_batch:
             unit_batch_id = unit_batch[0]
             cursor.execute("""
-                UPDATE batches 
-                SET quantity = quantity + ? 
+                UPDATE batches
+                SET quantity = quantity + ?
                 WHERE id = ?
             """, (generated_units, unit_batch_id))
         else:
             # إنشاء دفعة حبات جديدة تأخذ نفس تاريخ صلاحية الكرتون الذي تم فكّه
             cursor.execute("""
-                INSERT INTO batches (product_id, batch_number, quantity, cost_price, selling_price, expiry_date, is_active)
+                INSERT INTO batches
+                (product_id, batch_number, quantity, cost_price,
+                 selling_price, expiry_date, is_active)
                 VALUES (?, 'AUTO_CONV', ?, 0.00, 0.00, ?, 1)
             """, (product_id, generated_units, last_expiry))
             unit_batch_id = cursor.lastrowid
@@ -924,8 +927,8 @@ class SaleManager:
 
         # تحديث المخزون الإجمالي للقطع في جدول المنتجات
         cursor.execute("""
-            UPDATE products 
-            SET current_stock = current_stock + ? 
+            UPDATE products
+            SET current_stock = current_stock + ?
             WHERE id = ?
         """, (generated_units, product_id))
 
@@ -950,58 +953,58 @@ class SaleManager:
 
         for item in items:
             qty_needed = float(item.quantity)
-            
+
             # 1. حساب الرصيد الإجمالي المتاح للقطعة الحالية
             cursor.execute("""
-                SELECT SUM(quantity) 
-                FROM batches 
+                SELECT SUM(quantity)
+                FROM batches
                 WHERE product_id = ? AND is_active = 1
             """, (item.product_id,))
             result = cursor.fetchone()
             total_available = float(result[0]) if result and result[0] is not None else 0.0
-            
+
             # 2. إذا كان هناك عجز، استدعاء التفكيك التلقائي للكرتون
             if total_available < qty_needed:
                 deficit = qty_needed - total_available
                 # ستقوم هذه الدالة بتعويض العجز وتحديث الجدول، أو ستطلق خطأ يوقف المعاملة
                 self._handle_auto_conversion_in_transaction(cursor, item.product_id, deficit)
-                
+
             # 3. بعد ضمان وجود رصيد كافٍ، نقوم بصرف الحبات المطلوبة للبيع بنظام FEFO
             cursor.execute("""
-                SELECT id, quantity 
-                FROM batches 
-                WHERE product_id = ? AND quantity > 0 AND is_active = 1 
+                SELECT id, quantity
+                FROM batches
+                WHERE product_id = ? AND quantity > 0 AND is_active = 1
                 ORDER BY expiry_date ASC, id ASC
             """, (item.product_id,))
-            
+
             batches = cursor.fetchall()
             remaining_to_deduct = qty_needed
-            
+
             for batch in batches:
                 if remaining_to_deduct <= 0:
                     break
-                    
+
                 batch_id = batch[0]
                 available = float(batch[1])
                 deduct = min(available, remaining_to_deduct)
-                
+
                 cursor.execute("""
-                    UPDATE batches 
-                    SET quantity = quantity - ? 
+                    UPDATE batches
+                    SET quantity = quantity - ?
                     WHERE id = ?
                 """, (deduct, batch_id))
-                
+
                 cursor.execute("""
                     INSERT INTO stock_movements (product_id, movement_type, quantity, reference_type, notes)
                     VALUES (?, 'out', ?, 'sale', 'بيع')
                 """, (item.product_id, -deduct))
-                
+
                 remaining_to_deduct -= deduct
 
             # 4. تحديث المخزون الإجمالي للقطع في جدول المنتجات
             cursor.execute("""
-                UPDATE products 
-                SET current_stock = current_stock - ? 
+                UPDATE products
+                SET current_stock = current_stock - ?
                 WHERE id = ?
             """, (qty_needed, item.product_id))
 
@@ -1324,6 +1327,11 @@ class SaleManager:
                             self._create_sale_item_in_transaction(
                                 cur, item
                             )
+                        # خصم المخزون للعناصر الجديدة
+                        if sale.items:
+                            self._update_stock_in_transaction(
+                                cur, sale.items, operation="sale"
+                            )
                     return True
                 except Exception:
                     use_cursor = False
@@ -1400,6 +1408,11 @@ class SaleManager:
                 for item in sale.items:
                     item.sale_id = sale.id
                     self._create_sale_item(item)
+                # خصم المخزون للعناصر الجديدة
+                if sale.items:
+                    self._update_stock_for_sale(
+                        sale.items, operation="sale"
+                    )
 
             # إرسال إشارات التحديث
             self._emit_signals_update(sale.id)
@@ -1855,6 +1868,13 @@ class SaleManager:
                     "current_stock + ? WHERE id = ?",
                     (item.get("quantity", item.get("qty", 0)), item["product_id"]),
                 )
+                # Update batch quantity if batch_id is available
+                batch_id = item.get('batch_id')
+                if batch_id:
+                    cursor.execute(
+                        "UPDATE batches SET quantity = quantity + ? WHERE id = ?",
+                        (item.get('quantity', item.get('qty', 0)), batch_id),
+                    )
 
             conn.commit()
             return (True, return_id)

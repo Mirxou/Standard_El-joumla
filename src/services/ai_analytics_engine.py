@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -306,7 +305,11 @@ class AIAnalyticsEngine:
 
             data = self.db.execute_query(query, (product_id, start_date), fetch_all=True)
 
-            return [{"date": row["sale_date"], "quantity": row["quantity"], "revenue": float(row["revenue"])} for row in data]
+            return [
+                {"date": row["sale_date"], "quantity": row["quantity"],
+                 "revenue": float(row["revenue"])}
+                for row in data
+            ]
 
         except Exception as e:
             self.logger.error(f"Error getting sales history: {e}")
@@ -491,7 +494,9 @@ class AIAnalyticsEngine:
 
             # فترة الخمول
             days_since_last_order = (
-                (datetime.now() - purchase_data["last_order_date"]).days if purchase_data and purchase_data.get("last_order_date") else 999
+                (datetime.now() - purchase_data["last_order_date"]).days
+                if purchase_data and purchase_data.get("last_order_date")
+                else 999
             )
 
             # تنوع المنتجات المشتراة

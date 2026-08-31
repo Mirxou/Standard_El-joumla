@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -18,12 +17,12 @@ import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 
-warnings.filterwarnings("ignore")
-
 from src.core.database_manager import DatabaseManager
 from src.services.advanced_analytics_service import AdvancedAnalyticsService
 from src.services.cognitive_ai_service import CognitiveAIService
 from src.utils.logger import setup_logger
+
+warnings.filterwarnings("ignore")
 
 
 @dataclass

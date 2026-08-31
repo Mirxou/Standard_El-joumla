@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import logging
 """
 خدمة أوامر الشراء
 Purchase Order Service
@@ -628,15 +627,24 @@ class PurchaseOrderService:
                                 (rn_item.product_id, rn_item.batch_number),
                             )
                             if existing_batch:
-                                batch_id = existing_batch[0].get("id") if isinstance(existing_batch[0], dict) else existing_batch[0][0]
+                                batch_id = (
+                                    existing_batch[0].get("id")
+                                    if isinstance(existing_batch[0], dict)
+                                    else existing_batch[0][0]
+                                )
                                 self.db.execute_update(
-                                    "UPDATE batches SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                                    "UPDATE batches SET quantity = quantity + ?, "
+                                    "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                                     (float(rn_item.quantity_accepted), batch_id),
                                 )
                             else:
                                 self.db.execute_update(
-                                    "INSERT INTO batches (product_id, batch_number, quantity, expiry_date, created_at, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
-                                    (rn_item.product_id, rn_item.batch_number, float(rn_item.quantity_accepted), rn_item.expiry_date),
+                                    "INSERT INTO batches "
+                                    "(product_id, batch_number, quantity, "
+                                    "expiry_date, created_at, updated_at) "
+                                    "VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                                    (rn_item.product_id, rn_item.batch_number,
+                                     float(rn_item.quantity_accepted), rn_item.expiry_date),
                                 )
                         except Exception as e:
                             if self.logger:
@@ -652,7 +660,11 @@ class PurchaseOrderService:
                     from decimal import Decimal
                     po_data = {
                         'po_id': po_id,
-                        'supplier_name': getattr(po, 'supplier_name', '') if hasattr(po, 'supplier_name') else str(getattr(po, 'supplier_id', '')),
+                        'supplier_name': (
+                            getattr(po, 'supplier_name', '')
+                            if hasattr(po, 'supplier_name')
+                            else str(getattr(po, 'supplier_id', ''))
+                        ),
                         'total': Decimal(str(getattr(po, 'total_amount', 0) or 0)),
                         'tax': Decimal(str(getattr(po, 'tax_amount', 0) or 0)),
                         'inventory_account': '4100',

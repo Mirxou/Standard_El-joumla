@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
+
 """
 Sales Table Model - High-Performance Model for QTableView
 نموذج جدول المبيعات عالي الأداء
 """
+
+import logging
+
 
 from typing import Optional
 

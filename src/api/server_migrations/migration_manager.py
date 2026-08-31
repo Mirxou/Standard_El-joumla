@@ -5,7 +5,6 @@ Server Migration Manager
 مدير Migrations للخادم (Server-side)
 """
 
-import logging
 from pathlib import Path
 from typing import Any, Dict, List
 

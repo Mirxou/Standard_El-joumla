@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
 """
 نافذة تقارير الأمان - Security Reports Window
@@ -29,13 +28,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-project_root = Path(__file__).parent.parent.parent.parent
-
 from src.core.database_manager import DatabaseManager
 from src.services.analytics_service import AnalyticsService
 from src.services.security_reports_service import SecurityReportsService
 from src.ui.styles.design_tokens import C
 from src.utils.logger import setup_logger
+
+project_root = Path(__file__).parent.parent.parent.parent
 
 
 class SecurityReportsWindow(QMainWindow):

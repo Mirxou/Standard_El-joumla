@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -794,7 +793,7 @@ class SupplyChainIntegrationService:
             for row in data:
                 po_id = row["po_id"]
                 supplier_id = row["supplier_id"]
-                expected_delivery = row["expected_delivery"]
+                row["expected_delivery"]
                 supplier_name = self.suppliers.get(supplier_id, {}).get("name", "Unknown")
 
                 alerts.append(
@@ -976,7 +975,11 @@ class SupplyChainIntegrationService:
 
             data = self.db.execute_query(query, fetch_all=True)
 
-            return [{"product_id": row["id"], "name": row["name"], "supplier_count": row["supplier_count"]} for row in data]
+            return [
+                {"product_id": row["id"], "name": row["name"],
+                     "supplier_count": row["supplier_count"]}
+                for row in data
+            ]
 
         except Exception as e:
             self.logger.error(f"Error getting single supplier products: {e}", exc_info=True)

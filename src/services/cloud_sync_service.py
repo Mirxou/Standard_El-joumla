@@ -1,11 +1,12 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 Cloud Sync Service - خدمة المزامنة السحابية
 مزامنة البيانات مع Cloud Storage (AWS S3, Google Cloud, Azure)
 """
 
+
+import logging
 import json
 from dataclasses import dataclass
 from datetime import datetime

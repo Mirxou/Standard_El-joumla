@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
+
 """
 نافذة حوار إنشاء/تحرير أمر الشراء
 Purchase Order Create/Edit Dialog
 """
+
+import logging
+
 
 from datetime import date
 from decimal import Decimal
@@ -47,7 +50,6 @@ class PurchaseOrderDialog(BaseDialog):
 
     def __init__(self, db_manager, po=None, parent=None, prefill_products=None):
         self.is_edit_mode = po is not None
-        from pathlib import Path
         self.i18n = I18n(locales_dir=str(Path(__file__).parent.parent.parent.parent / "locales"))
         self.title_text = self.i18n.get_message("po_edit_title") if self.is_edit_mode else self.i18n.get_message("po_new_title")
 
@@ -343,7 +345,7 @@ class PurchaseOrderDialog(BaseDialog):
             try:
                 query = "SELECT contact_person FROM suppliers WHERE id = ?"
                 result = self.db.execute_query(query, (supplier_id,))
-                
+
                 if result:
                     self.contact_edit.setText(result[0]["contact_person"] or "")
             except Exception:
@@ -373,7 +375,7 @@ class PurchaseOrderDialog(BaseDialog):
         qty_spin.setMaximum(999999.999)
         qty_spin.setDecimals(3)
         qty_spin.setValue(1.000)
-        qty_spin.valueChanged.connect(lambda r=row: self._update_item_row(r))
+        qty_spin.valueChanged.connect(lambda val, r=row: self._update_item_row(r))
         self.items_table.setCellWidget(row, 2, qty_spin)
 
         # السعر
@@ -381,7 +383,7 @@ class PurchaseOrderDialog(BaseDialog):
         price_spin.setMinimum(0.00)
         price_spin.setMaximum(999999.99)
         price_spin.setDecimals(2)
-        price_spin.valueChanged.connect(lambda r=row: self._update_item_row(r))
+        price_spin.valueChanged.connect(lambda val, r=row: self._update_item_row(r))
         self.items_table.setCellWidget(row, 3, price_spin)
 
         # الخصم%
@@ -390,7 +392,7 @@ class PurchaseOrderDialog(BaseDialog):
         discount_spin.setMaximum(100.00)
         discount_spin.setDecimals(2)
         discount_spin.setSuffix("%")
-        discount_spin.valueChanged.connect(lambda r=row: self._update_item_row(r))
+        discount_spin.valueChanged.connect(lambda val, r=row: self._update_item_row(r))
         self.items_table.setCellWidget(row, 4, discount_spin)
 
         # الضريبة% (للعرض فقط - الضريبة تُطبق على مستوى الأمر)
@@ -430,7 +432,7 @@ class PurchaseOrderDialog(BaseDialog):
             qty_spin = self.items_table.cellWidget(row, 2)
             price_spin = self.items_table.cellWidget(row, 3)
             discount_spin = self.items_table.cellWidget(row, 4)
-            tax_spin = self.items_table.cellWidget(row, 5)
+            self.items_table.cellWidget(row, 5)
 
             qty = Decimal(str(qty_spin.value()))
             price = Decimal(str(price_spin.value()))
@@ -474,7 +476,7 @@ class PurchaseOrderDialog(BaseDialog):
                     continue
                 sub_text = sub_item.text().replace(",", "")
                 subtotal += Decimal(sub_text)
-                
+
                 # Sum of row net amounts (column 7)
                 net_item = self.items_table.item(row, 7)
                 if net_item is None:
@@ -742,7 +744,7 @@ class PurchaseOrderDialog(BaseDialog):
                     qty_spin.setMaximum(999999.999)
                     qty_spin.setDecimals(3)
                     qty_spin.setValue(suggested_qty)
-                    qty_spin.valueChanged.connect(lambda r=row: self._update_item_row(r))
+                    qty_spin.valueChanged.connect(lambda val, r=row: self._update_item_row(r))
                     self.items_table.setCellWidget(row, 2, qty_spin)
 
                     cost_price = float(product_data.get("cost_price", 0))
@@ -751,7 +753,7 @@ class PurchaseOrderDialog(BaseDialog):
                     price_spin.setMaximum(999999.99)
                     price_spin.setDecimals(2)
                     price_spin.setValue(cost_price)
-                    price_spin.valueChanged.connect(lambda r=row: self._update_item_row(r))
+                    price_spin.valueChanged.connect(lambda val, r=row: self._update_item_row(r))
                     self.items_table.setCellWidget(row, 3, price_spin)
 
                     discount_spin = QDoubleSpinBox()
@@ -759,7 +761,7 @@ class PurchaseOrderDialog(BaseDialog):
                     discount_spin.setMaximum(100.00)
                     discount_spin.setDecimals(2)
                     discount_spin.setSuffix("%")
-                    discount_spin.valueChanged.connect(lambda r=row: self._update_item_row(r))
+                    discount_spin.valueChanged.connect(lambda val, r=row: self._update_item_row(r))
                     self.items_table.setCellWidget(row, 4, discount_spin)
 
                     tax_spin = QDoubleSpinBox()

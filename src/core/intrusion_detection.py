@@ -1,11 +1,12 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 Intrusion Detection System - نظام كشف التسلل
 كشف محاولات التسلل والهجمات الأمنية
 """
 
+
+import logging
 import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta

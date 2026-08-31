@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
 """
 النافذة الرئيسية - Main Window
 النافذة الرئيسية للتطبيق مع جميع الوحدات
 """
 
+import logging
 import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -24,7 +24,16 @@ from PySide6.QtCharts import (
     QValueAxis,
 )
 from PySide6.QtCore import QDate, QModelIndex, Qt, QThread, QTimer, QUrl, Signal
-from PySide6.QtGui import QAction, QColor, QDesktopServices, QFont, QIcon, QPainter
+from PySide6.QtGui import (
+    QAction,
+    QColor,
+    QDesktopServices,
+    QFont,
+    QIcon,
+    QKeySequence,
+    QPainter,
+    QShortcut,
+)
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -55,10 +64,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-
-project_root = Path(__file__).parent.parent.parent
-
-from PySide6.QtGui import QKeySequence, QShortcut  # For Zen Mode Shortcut
 
 from src.core.local_database_manager import LocalDatabaseManager
 from src.core.window_manager import WindowManager
@@ -109,7 +114,8 @@ try:
     PANDAS_AVAILABLE = True
 except ImportError:
     PANDAS_AVAILABLE = False
-    pd = None
+
+project_root = Path(__file__).parent.parent.parent
 
 
 class DataLoaderWorker(QThread):
@@ -1556,27 +1562,27 @@ class MainWindow(QMainWindow):
         self.dashboard_period_combo.addItems(["اليوم", "أسبوع", "شهر", "3 أشهر", "سنة", "الكل"])
         self.dashboard_period_combo.setCurrentText("أسبوع")
         self.dashboard_period_combo.setMinimumWidth(120)
-        self.dashboard_period_combo.setStyleSheet(f"""
-            QComboBox {{
-                background-color: {{Colors.BG_ELEVATED}};
-                color: {{Colors.TEXT_BRIGHT}};
-                border: 1px solid {{Colors.BORDER_DEFAULT}};
+        self.dashboard_period_combo.setStyleSheet("""
+            QComboBox {
+                background-color: {Colors.BG_ELEVATED};
+                color: {Colors.TEXT_BRIGHT};
+                border: 1px solid {Colors.BORDER_DEFAULT};
                 border-radius: 6px;
                 padding: 5px 10px;
                 font-family: 'Cairo';
                 font-size: 13px;
                 min-width: 120px;
-            }}
-            QComboBox::drop-down {{
+            }
+            QComboBox::drop-down {
                 border: none;
                 width: 30px;
-            }}
-            QComboBox QAbstractItemView {{
-                background-color: {{Colors.BG_DEEP}};
-                color: {{Colors.TEXT_BRIGHT}};
-                selection-background-color: {{Colors.ACCENT_GOLD}};
-                border: 1px solid {{Colors.BORDER_DEFAULT}};
-            }}
+            }
+            QComboBox QAbstractItemView {
+                background-color: {Colors.BG_DEEP};
+                color: {Colors.TEXT_BRIGHT};
+                selection-background-color: {Colors.ACCENT_GOLD};
+                border: 1px solid {Colors.BORDER_DEFAULT};
+            }
         """)
         self.dashboard_period_combo.currentTextChanged.connect(self.refresh_dashboard_data)
         header_layout.addWidget(self.dashboard_period_combo)
@@ -1591,20 +1597,20 @@ class MainWindow(QMainWindow):
         refresh_btn = QPushButton(self.i18n.get_message("refresh"))
         refresh_btn.setMinimumHeight(35)
         refresh_btn.setMinimumWidth(100)
-        refresh_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {{Colors.ACCENT_GOLD}};
-                color: {{Colors.TEXT_INVERSE}};
+        refresh_btn.setStyleSheet("""
+            QPushButton {
+                background-color: {Colors.ACCENT_GOLD};
+                color: {Colors.TEXT_INVERSE};
                 border: none;
                 border-radius: 6px;
                 padding: 6px 16px;
                 font-weight: bold;
                 font-family: 'Cairo';
                 font-size: 13px;
-            }}
-            QPushButton:hover {{
-                background-color: {{Colors.ACCENT_GOLD_DARK}};
-            }}
+            }
+            QPushButton:hover {
+                background-color: {Colors.ACCENT_GOLD_DARK};
+            }
         """)
         refresh_btn.clicked.connect(self.refresh_dashboard_data)
         header_layout.addWidget(refresh_btn)
@@ -1840,22 +1846,22 @@ class MainWindow(QMainWindow):
 
         # الرسوم البيانية المتقدمة
         charts_group = QGroupBox("📈 التحليلات والرسوم البيانية")
-        charts_group.setStyleSheet(f"""
-    QGroupBox {{
-        border: 1px solid {{Colors.BORDER_DEFAULT}};
+        charts_group.setStyleSheet("""
+    QGroupBox {
+        border: 1px solid {Colors.BORDER_DEFAULT};
         border-radius: 8px;
         margin-top: 12px;
         padding: 15px 10px 10px 10px;
         font-weight: bold;
-        color: {{Colors.TEXT_BRIGHT}};
+        color: {Colors.TEXT_BRIGHT};
         font-family: Cairo;
-    }}
-    QGroupBox::title {{
+    }
+    QGroupBox::title {
         subcontrol-origin: margin;
         left: 15px;
         padding: 0 8px;
-        color: {{Colors.ACCENT_GOLD}};
-    }}
+        color: {Colors.ACCENT_GOLD};
+    }
     """)
         charts_main_layout = QVBoxLayout(charts_group)
         charts_main_layout.setContentsMargins(10, 15, 10, 10)
@@ -1869,7 +1875,7 @@ class MainWindow(QMainWindow):
         sales_line_chart_view = QChartView()
         sales_line_chart_view.setRenderHint(QPainter.Antialiasing)
         sales_line_chart_view.setMinimumHeight(300)
-        sales_line_chart_view.setStyleSheet(f'background: transparent; border: none;')
+        sales_line_chart_view.setStyleSheet('background: transparent; border: none;')
         self.dashboard_sales_line_chart = sales_line_chart_view
         charts_row1.addWidget(sales_line_chart_view, 2)
 
@@ -1877,7 +1883,7 @@ class MainWindow(QMainWindow):
         revenue_expense_chart_view = QChartView()
         revenue_expense_chart_view.setRenderHint(QPainter.Antialiasing)
         revenue_expense_chart_view.setMinimumHeight(300)
-        revenue_expense_chart_view.setStyleSheet(f'background: transparent; border: none;')
+        revenue_expense_chart_view.setStyleSheet('background: transparent; border: none;')
         self.dashboard_revenue_expense_chart = revenue_expense_chart_view
         charts_row1.addWidget(revenue_expense_chart_view, 2)
 
@@ -1891,7 +1897,7 @@ class MainWindow(QMainWindow):
         stock_chart_view = QChartView()
         stock_chart_view.setRenderHint(QPainter.Antialiasing)
         stock_chart_view.setMinimumHeight(300)
-        stock_chart_view.setStyleSheet(f'background: transparent; border: none;')
+        stock_chart_view.setStyleSheet('background: transparent; border: none;')
         self.dashboard_stock_chart = stock_chart_view
         charts_row2.addWidget(stock_chart_view, 1)
 
@@ -1899,7 +1905,7 @@ class MainWindow(QMainWindow):
         top_products_chart_view = QChartView()
         top_products_chart_view.setRenderHint(QPainter.Antialiasing)
         top_products_chart_view.setMinimumHeight(300)
-        top_products_chart_view.setStyleSheet(f'background: transparent; border: none;')
+        top_products_chart_view.setStyleSheet('background: transparent; border: none;')
         self.dashboard_top_products_chart = top_products_chart_view
         charts_row2.addWidget(top_products_chart_view, 1)
 
@@ -1916,22 +1922,22 @@ class MainWindow(QMainWindow):
 
         # تنبيهات المخزون
         alerts_group = QGroupBox("تنبيهات المخزون")
-        alerts_group.setStyleSheet(f"""
-    QGroupBox {{
-        border: 1px solid {{Colors.BORDER_DEFAULT}};
+        alerts_group.setStyleSheet("""
+    QGroupBox {
+        border: 1px solid {Colors.BORDER_DEFAULT};
         border-radius: 8px;
         margin-top: 12px;
         padding: 15px 10px 10px 10px;
         font-weight: bold;
-        color: {{Colors.TEXT_BRIGHT}};
+        color: {Colors.TEXT_BRIGHT};
         font-family: Cairo;
-    }}
-    QGroupBox::title {{
+    }
+    QGroupBox::title {
         subcontrol-origin: margin;
         left: 15px;
         padding: 0 8px;
-        color: {{Colors.ACCENT_GOLD}};
-    }}
+        color: {Colors.ACCENT_GOLD};
+    }
     """)
         alerts_layout = QVBoxLayout(alerts_group)
         alerts_layout.setContentsMargins(10, 15, 10, 10)
@@ -1955,22 +1961,22 @@ class MainWindow(QMainWindow):
 
         # آخر العمليات
         activities_group = QGroupBox("آخر العمليات")
-        activities_group.setStyleSheet(f"""
-    QGroupBox {{
-        border: 1px solid {{Colors.BORDER_DEFAULT}};
+        activities_group.setStyleSheet("""
+    QGroupBox {
+        border: 1px solid {Colors.BORDER_DEFAULT};
         border-radius: 8px;
         margin-top: 12px;
         padding: 15px 10px 10px 10px;
         font-weight: bold;
-        color: {{Colors.TEXT_BRIGHT}};
+        color: {Colors.TEXT_BRIGHT};
         font-family: Cairo;
-    }}
-    QGroupBox::title {{
+    }
+    QGroupBox::title {
         subcontrol-origin: margin;
         left: 15px;
         padding: 0 8px;
-        color: {{Colors.ACCENT_GOLD}};
-    }}
+        color: {Colors.ACCENT_GOLD};
+    }
     """)
         activities_layout = QVBoxLayout(activities_group)
         activities_layout.setContentsMargins(10, 15, 10, 10)
@@ -2018,22 +2024,22 @@ class MainWindow(QMainWindow):
 
         # أفضل العملاء
         top_customers_group = QGroupBox("🏆 أفضل العملاء")
-        top_customers_group.setStyleSheet(f"""
-    QGroupBox {{
-        border: 1px solid {{Colors.BORDER_DEFAULT}};
+        top_customers_group.setStyleSheet("""
+    QGroupBox {
+        border: 1px solid {Colors.BORDER_DEFAULT};
         border-radius: 8px;
         margin-top: 12px;
         padding: 15px 10px 10px 10px;
         font-weight: bold;
-        color: {{Colors.TEXT_BRIGHT}};
+        color: {Colors.TEXT_BRIGHT};
         font-family: Cairo;
-    }}
-    QGroupBox::title {{
+    }
+    QGroupBox::title {
         subcontrol-origin: margin;
         left: 15px;
         padding: 0 8px;
-        color: {{Colors.ACCENT_GOLD}};
-    }}
+        color: {Colors.ACCENT_GOLD};
+    }
     """)
         top_customers_layout = QVBoxLayout(top_customers_group)
         top_customers_layout.setContentsMargins(10, 15, 10, 10)
@@ -2058,22 +2064,22 @@ class MainWindow(QMainWindow):
 
         # أفضل المنتجات
         top_products_group = QGroupBox("⭐ أفضل المنتجات مبيعاً")
-        top_products_group.setStyleSheet(f"""
-    QGroupBox {{
-        border: 1px solid {{Colors.BORDER_DEFAULT}};
+        top_products_group.setStyleSheet("""
+    QGroupBox {
+        border: 1px solid {Colors.BORDER_DEFAULT};
         border-radius: 8px;
         margin-top: 12px;
         padding: 15px 10px 10px 10px;
         font-weight: bold;
-        color: {{Colors.TEXT_BRIGHT}};
+        color: {Colors.TEXT_BRIGHT};
         font-family: Cairo;
-    }}
-    QGroupBox::title {{
+    }
+    QGroupBox::title {
         subcontrol-origin: margin;
         left: 15px;
         padding: 0 8px;
-        color: {{Colors.ACCENT_GOLD}};
-    }}
+        color: {Colors.ACCENT_GOLD};
+    }
     """)
         top_products_layout = QVBoxLayout(top_products_group)
         top_products_layout.setContentsMargins(10, 15, 10, 10)
@@ -2100,22 +2106,22 @@ class MainWindow(QMainWindow):
 
         # إحصائيات إضافية متقدمة
         advanced_stats_group = QGroupBox("📈 إحصائيات متقدمة")
-        advanced_stats_group.setStyleSheet(f"""
-    QGroupBox {{
-        border: 1px solid {{Colors.BORDER_DEFAULT}};
+        advanced_stats_group.setStyleSheet("""
+    QGroupBox {
+        border: 1px solid {Colors.BORDER_DEFAULT};
         border-radius: 8px;
         margin-top: 12px;
         padding: 15px 10px 10px 10px;
         font-weight: bold;
-        color: {{Colors.TEXT_BRIGHT}};
+        color: {Colors.TEXT_BRIGHT};
         font-family: Cairo;
-    }}
-    QGroupBox::title {{
+    }
+    QGroupBox::title {
         subcontrol-origin: margin;
         left: 15px;
         padding: 0 8px;
-        color: {{Colors.ACCENT_GOLD}};
-    }}
+        color: {Colors.ACCENT_GOLD};
+    }
     """)
         advanced_stats_layout = QHBoxLayout(advanced_stats_group)
         advanced_stats_layout.setContentsMargins(15, 15, 15, 15)
@@ -3284,7 +3290,7 @@ class MainWindow(QMainWindow):
                 table.clearSpans()
                 table.setRowCount(len(customers))
                 for row, customer_row in enumerate(customers):
-                    customer_id = customer_row["id"]
+                    customer_row["id"]
                     name = customer_row["name"]
                     count = customer_row["purchase_count"]
                     total = customer_row["total_spent"]
@@ -3318,7 +3324,7 @@ class MainWindow(QMainWindow):
                 table.clearSpans()
                 table.setRowCount(len(products))
                 for row, product_row in enumerate(products):
-                    product_id = product_row["id"]
+                    product_row["id"]
                     name = product_row["name"]
                     quantity = product_row["total_quantity"]
                     sales = product_row["total_sales"]

@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import logging
+
 """
 مدير Keyring - Keyring Manager
 إدارة تخزين المفاتيح بشكل آمن باستخدام Keyring
 """
+
+import logging
+
 
 from typing import Optional
 

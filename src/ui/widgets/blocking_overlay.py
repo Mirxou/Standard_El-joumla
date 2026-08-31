@@ -68,7 +68,11 @@ class BlockingOverlay(QWidget):
                 height: 30px;
             }}
             QProgressBar::chunk {{
-                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {C.ACCENT_GOLD_DARK}, stop:1 {C.ACCENT_GOLD_LIGHT});
+                background-color: qlineargradient(
+                    x1:0, y1:0, x2:1, y2:0,
+                    stop:0 {C.ACCENT_GOLD_DARK},
+                    stop:1 {C.ACCENT_GOLD_LIGHT}
+                );
                 border-radius: 3px;
             }}
         """)

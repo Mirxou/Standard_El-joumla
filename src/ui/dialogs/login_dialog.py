@@ -12,9 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 from PySide6.QtCore import (
-    QPropertyAnimation,
     QRectF,
-    QSize,
     Qt,
     QThread,
     QTimer,
@@ -23,15 +21,11 @@ from PySide6.QtCore import (
 from PySide6.QtGui import (
     QBrush,
     QColor,
-    QConicalGradient,
     QFont,
-    QLinearGradient,
     QPainter,
-    QPainterPath,
     QPen,
     QPixmap,
     QShowEvent,
-    QRadialGradient,
 )
 from PySide6.QtWidgets import (
     QApplication,

@@ -45,7 +45,7 @@ class InstallmentPaymentDialog(BaseDialog):
         parent=None,
     ):
         super().__init__(title="", parent=parent)
-        
+
         if db_manager is None:
             QMessageBox.critical(self, "خطأ", "قاعدة البيانات غير متوفرة")
             self.plan = plan
@@ -55,7 +55,7 @@ class InstallmentPaymentDialog(BaseDialog):
             self.plan = plan
             self.db_manager = db_manager
             self.service = PaymentPlanService(db_manager)
-            
+
         self.selected_installment = installment
 
         # self.setWindowTitle("تسجيل دفعة على القسط")

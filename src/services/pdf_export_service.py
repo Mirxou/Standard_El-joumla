@@ -78,9 +78,12 @@ class PDFExportService:
     def apply_styles(self, html_content: str) -> str:
         """تطبيق التنسيقات على محتوى HTML"""
         style_rules = []
-        style_rules.append(f"@page {{ size: {self.styles.get('page_size', 'A4')}; margin: {self.styles.get('margin', '20mm')}; }}")
+        style_rules.append(
+            f"@page {{ size: {self.styles.get('page_size', 'A4')}; "
+            f"margin: {self.styles.get('margin', '20mm')}; }}"
+        )
         style_rules.append(f"body {{ font-family: {self.styles.get('font_family', 'Arial')}; }}")
-        
+
         style_tag = f"<style>{chr(10).join(style_rules)}</style>"
         if "<html>" in html_content:
             if "<head>" in html_content:
@@ -101,24 +104,24 @@ class PDFExportService:
         header_div = f"<div class='header'>{header_text}</div>" if header_text else ""
         footer_div = f"<div class='footer'>{footer_text}</div>" if footer_text else ""
         page_num_style = "<style>@page { @bottom-right { content: counter(page); } }</style>" if page_numbers else ""
-        
+
         result = html_content
         if page_num_style:
             if "<head>" in result:
                 result = result.replace("<head>", f"<head>{page_num_style}", 1)
             else:
                 result = f"<head>{page_num_style}</head>{result}"
-                
+
         if "<body>" in result:
             result = result.replace("<body>", f"<body>{header_div}", 1)
         else:
             result = f"{header_div}{result}"
-            
+
         if "</body>" in result:
             result = result.replace("</body>", f"{footer_div}</body>", 1)
         else:
             result = f"{result}{footer_div}"
-            
+
         return result
 
     def html_to_pdf(
@@ -189,7 +192,7 @@ class PDFExportService:
         if HTML is None or (CSS is None and not is_mock):
             logger.debug("WeasyPrint not available")
             return False
-            
+
         try:
             # إعداد الخطوط
             font_config = FontConfiguration() if (FontConfiguration and not is_mock) else None
@@ -208,13 +211,13 @@ class PDFExportService:
             # تحويل إلى PDF
             html = HTML(filename=html_path)
             css = CSS(string=page_css, font_config=font_config) if (CSS and not is_mock) else None
-            
+
             kwargs = {}
             if css is not None:
                 kwargs["stylesheets"] = [css]
             if font_config is not None:
                 kwargs["font_config"] = font_config
-                
+
             html.write_pdf(output_path, **kwargs)
 
             logger.info(f"PDF created with WeasyPrint: {output_path}")
@@ -288,11 +291,11 @@ class PDFExportService:
         parent_dir = pdf_path.parent
         if not parent_dir.exists():
             parent_dir.mkdir(parents=True, exist_ok=True)
-            
+
         if HTML is None:
             logger.debug("WeasyPrint HTML not available for url_to_pdf")
             return False
-            
+
         try:
             html = HTML(url=url)
             html.write_pdf(output_path)
@@ -371,7 +374,11 @@ class PDFExportService:
                         watermark_reader = PdfReader(buf)
                         page.merge_page(watermark_reader.pages[0])
                 except Exception as wm_err:
-                    logger.log(logging.WARNING, f"Watermark application skipped (reportlab may not be installed): {wm_err}")
+                    logger.log(
+                        logging.WARNING,
+                        f"Watermark application skipped "
+                        f"(reportlab may not be installed): {wm_err}",
+                    )
             with open(output_path, "wb") as f:
                 writer.write(f)
             return True

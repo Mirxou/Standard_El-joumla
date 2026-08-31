@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import logging
+
 """
 Database Lock Handler - معالج قفل قاعدة البيانات
 معالجة أخطاء القفل وإعادة المحاولة
 """
+
+import logging
+
 
 import sqlite3
 import time
@@ -113,7 +116,11 @@ def retry_on_lock_error(
                             )
                             time.sleep(delay)
                         else:
-                            logger.log(logging.ERROR, f"فشل {func.__name__} بعد {max_retries} محاولات. " f"الخطأ الأخير: {e}")
+                            logger.log(
+                                logging.ERROR,
+                                f"فشل {func.__name__} بعد {max_retries} محاولات. "
+                                f"الخطأ الأخير: {e}"
+                            )
                     else:
                         # خطأ آخر غير قفل - إعادة رفعه مباشرة
                         raise

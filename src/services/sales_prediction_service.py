@@ -1,4 +1,3 @@
-import logging
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -318,7 +317,11 @@ class SalesPredictionService:
 
             data = self.db.execute_query(query, (product_id, start_date), fetch_all=True)
 
-            return [{"date": row.get('sale_date'), "quantity": row.get('quantity', 0), "order_count": row.get('order_count', 0)} for row in data]
+            return [
+                {"date": row.get('sale_date'), "quantity": row.get('quantity', 0),
+                 "order_count": row.get('order_count', 0)}
+                for row in data
+            ]
 
         except Exception as e:
             self.logger.error(f"Error getting demand history: {e}")

@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import logging
+
 """
 نموذج المرتجعات - Return Invoice Model
 يحتوي على جميع العمليات المتعلقة بمرتجعات المبيعات والمشتريات
 """
+
+import logging
+
 
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -466,45 +469,27 @@ class ReturnManager:
 
             query = """
             INSERT INTO return_invoices (
-                return_number, return_type, original_sale_id, original_purchase_id,
-                customer_id, supplier_id, return_date, status, return_reason,
-                total_amount, refund_method, notes, created_by, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                original_invoice_id, return_date, reason,
+                total_refund_amount, status
+            ) VALUES (?, ?, ?, ?, ?)
             """
 
-            now = datetime.now()
             params = (
-                return_invoice.return_number,
+                return_invoice.original_sale_id
+                or return_invoice.original_purchase_id,
+                return_invoice.return_date
+                or date.today(),
                 (
-                    return_invoice.return_type.name
-                    if isinstance(return_invoice.return_type, ReturnType)
-                    else return_invoice.return_type
-                ),
-                return_invoice.original_sale_id,
-                return_invoice.original_purchase_id,
-                return_invoice.customer_id,
-                return_invoice.supplier_id,
-                return_invoice.return_date,
-                (
-                    return_invoice.status.name
-                    if isinstance(return_invoice.status, ReturnStatus)
-                    else return_invoice.status
-                ),
-                (
-                    return_invoice.return_reason.name
+                    return_invoice.return_reason.value
                     if isinstance(return_invoice.return_reason, ReturnReason)
-                    else return_invoice.return_reason
+                    else str(return_invoice.return_reason or "")
                 ),
                 float(return_invoice.total_amount),
                 (
-                    return_invoice.refund_method.name
-                    if isinstance(return_invoice.refund_method, RefundMethod) and return_invoice.refund_method
-                    else None
+                    return_invoice.status.value
+                    if isinstance(return_invoice.status, ReturnStatus)
+                    else str(return_invoice.status or "approved")
                 ),
-                return_invoice.notes,
-                return_invoice.created_by,
-                now.isoformat(),
-                now.isoformat(),
             )
 
             result = self.db_manager.execute_query(query, params)
@@ -527,16 +512,14 @@ class ReturnManager:
         try:
             query = """
             INSERT INTO return_items (
-                return_id, product_id, quantity_returned, unit_price, total_amount, return_reason
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                return_id, product_id, quantity, refund_price
+            ) VALUES (?, ?, ?, ?)
             """
             params = (
                 item.return_id,
                 item.product_id,
                 float(item.quantity_returned),
                 float(item.unit_price),
-                float(item.total_amount),
-                (item.return_reason.name if isinstance(item.return_reason, ReturnReason) else item.return_reason),
             )
             self.db_manager.execute_query(query, params)
         except Exception as e:

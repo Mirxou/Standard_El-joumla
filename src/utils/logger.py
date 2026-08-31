@@ -63,7 +63,7 @@ def setup_logger(
                             formatted_msg = msg
                         import pytest
                         pytest.fail(f"Application logged a CRITICAL in {self.name}: {formatted_msg}")
-                    
+
                     logging.Logger.critical = corrected_fail_on_critical
     except Exception:
         pass
@@ -273,7 +273,7 @@ try:
                     formatted_msg = msg
                 import pytest
                 pytest.fail(f"Application logged a CRITICAL in {self.name}: {formatted_msg}")
-            
+
             logging.Logger.critical = corrected_fail_on_critical
 except Exception:
     pass

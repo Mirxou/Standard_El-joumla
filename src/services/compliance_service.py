@@ -1,11 +1,12 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 Compliance Service - خدمة الامتثال والتدقيق
 إدارة قواعد الامتثال، سجلات التدقيق، والتحقق من الامتثال
 """
 
+
+import logging
 import json
 from dataclasses import dataclass
 from datetime import datetime

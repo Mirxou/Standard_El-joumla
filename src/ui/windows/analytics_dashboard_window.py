@@ -1,6 +1,4 @@
-from PySide6.QtGui import QColor
-
-#!/usr/bin/env python3  # noqa: E265
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 نافذة لوحة التحليلات المتقدمة - Advanced Analytics Dashboard Window
@@ -11,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QDate
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QColor
 from PySide6.QtWidgets import (
     QDateEdit,
     QFileDialog,
@@ -29,8 +27,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-project_root = Path(__file__).parent.parent.parent.parent
-
 from src.core.database_manager import DatabaseManager
 from src.services.analytics_service import AnalyticsService
 from src.ui.styles.design_tokens import C as Colors
@@ -40,6 +36,8 @@ from src.ui.widgets.advanced_charts import (
     PieChartWidget,
 )
 from src.utils.logger import setup_logger
+
+project_root = Path(__file__).parent.parent.parent.parent
 
 
 class AnalyticsDashboardWindow(QMainWindow):
@@ -258,7 +256,11 @@ class AnalyticsDashboardWindow(QMainWindow):
 
                 status = "نفد" if alert.get("current_stock", 0) <= 0 else "منخفض"
                 status_item = QTableWidgetItem(status)
-                status_item.setForeground(QColor(Colors.ACCENT_CORAL) if status == "نفد" else QColor(Colors.ACCENT_AMBER))
+                status_color = (
+                    QColor(Colors.ACCENT_CORAL)
+                    if status == "نفد" else QColor(Colors.ACCENT_AMBER)
+                )
+                status_item.setForeground(status_color)
                 self.stock_alerts_table.setItem(row, 3, status_item)
 
     def load_financial_analytics(self, start_date: datetime, end_date: datetime):

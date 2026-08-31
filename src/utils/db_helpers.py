@@ -4,7 +4,7 @@ Provides ``get_value`` to safely extract a value from a row that may be a
 ``dict`` (returned by ``fetch_one``/``fetch_all``), a ``sqlite3.Row`` (returned
 by raw cursors), or a ``tuple``/``list``.
 """
-from typing import Any, Optional
+from typing import Any
 
 
 def get_value(row: Any, key: str, default: Any = None) -> Any:

@@ -1,11 +1,12 @@
-import logging
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 نموذج التقارير - Reports Model
 يحتوي على منطق تجميع البيانات للتقارير المالية والمخزون
 """
 
+
+import logging
 from datetime import date, timedelta
 from typing import Any, Dict, List, Optional
 

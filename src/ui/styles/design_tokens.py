@@ -96,7 +96,10 @@ class Colors:
     GRADIENT_CORAL: str = "qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #DC4444,stop:1 #F59B9B)"
     GRADIENT_DARK: str = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #181D2E,stop:1 #111520)"
     GRADIENT_SURFACE: str = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #202640,stop:0.5 #181D2E,stop:1 #111520)"
-    GRADIENT_HERO: str = "qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #C8A54E,stop:0.25 #D4B65A,stop:0.5 #E8C96A,stop:0.75 #F0D87A,stop:1 #FFF1C1)"
+    GRADIENT_HERO: str = (
+        "qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #C8A54E,"
+        "stop:0.25 #D4B65A,stop:0.5 #E8C96A,stop:0.75 #F0D87A,stop:1 #FFF1C1)"
+    )
     GRADIENT_SIDEBAR: str = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #111520,stop:0.5 #0C0E16,stop:1 #080A12)"
     GRADIENT_AMBER: str = "qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #D97706,stop:1 #FBBF24)"
     GRADIENT_SKY: str = "qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #0EA5E9,stop:1 #7DD3FC)"

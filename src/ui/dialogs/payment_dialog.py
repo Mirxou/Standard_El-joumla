@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import logging
 """
 نافذة إدارة المدفوعات - Payment Dialog
 واجهة شاملة لإدارة المدفوعات والحسابات المدينة والدائنة
@@ -237,7 +236,6 @@ class PaymentDialog(BaseDialog):
 
         # طريقة الدفع - استخدام الـ Enum المركزي لضمان التوافق
         self.payment_method_combo = QComboBox()
-        from ...models.payment import PaymentMethod
         self._payment_method_map = {pm.value: pm for pm in PaymentMethod}
         payment_methods = [pm.value for pm in PaymentMethod]
         self.payment_method_combo.addItems(payment_methods)
@@ -599,18 +597,21 @@ class PaymentDialog(BaseDialog):
         entity_id = self.entity_combo.currentData()
 
         payment_method_map = {
-            "نقدي": PaymentMethod.CASH.value,
-            "شيك": PaymentMethod.CHECK.value,
-            "تحويل بنكي": PaymentMethod.BANK_TRANSFER.value,
-            "بطاقة ائتمان": PaymentMethod.CREDIT_CARD.value,
-            "بطاقة خصم": PaymentMethod.DEBIT_CARD.value,
-            "دفع إلكتروني": PaymentMethod.ONLINE.value,
+            "نقدي": "cash",
+            "شيك": "check",
+            "تحويل بنكي": "bank_transfer",
+            "بطاقة ائتمان": "credit_card",
+            "بطاقة خصم": "debit_card",
+            "دفع إلكتروني": "bank_transfer",
         }
 
         return {
             ("customer_id" if self.customer_payment_radio.isChecked() else "supplier_id"): entity_id,
             "amount": Decimal(str(self.amount_spinbox.value())),
-            "payment_method": payment_method_map.get(self.payment_method_combo.currentText(), self.payment_method_combo.currentText()),
+            "payment_method": payment_method_map.get(
+                self.payment_method_combo.currentText(),
+                self.payment_method_combo.currentText(),
+            ),
             "reference_number": self.reference_edit.text().strip() or None,
             "notes": self.notes_edit.toPlainText().strip() or None,
             "sale_id": self.sale_combo.currentData(),
@@ -675,7 +676,7 @@ class PaymentDialog(BaseDialog):
 
                 # اسم العميل/المورد
                 entity_name = "غير معروف"
-                if payment.payment_type == PaymentType.CUSTOMER_PAYMENT:
+                if payment.payment_type == PaymentType.CUSTOMER_PAYMENT.value:
                     customer = next((c for c in self.customers if c.id == payment.entity_id), None)
                     if customer:
                         entity_name = customer.name
@@ -686,9 +687,9 @@ class PaymentDialog(BaseDialog):
 
                 self.recent_payments_table.setItem(row, 1, QTableWidgetItem(entity_name))
                 self.recent_payments_table.setItem(row, 2, QTableWidgetItem(f"{payment.amount:.2f} دج"))
-                self.recent_payments_table.setItem(row, 3, QTableWidgetItem(payment.payment_method.value))
+                self.recent_payments_table.setItem(row, 3, QTableWidgetItem(payment.payment_method))
                 self.recent_payments_table.setItem(row, 4, QTableWidgetItem(payment.reference_number or ""))
-                self.recent_payments_table.setItem(row, 5, QTableWidgetItem(payment.status.value))
+                self.recent_payments_table.setItem(row, 5, QTableWidgetItem(payment.status))
 
         except Exception as e:
             self.logger.error(f"خطأ في تحميل المدفوعات الأخيرة: {str(e)}")

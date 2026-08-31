@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-import logging
 # -*- coding: utf-8 -*-
+
 """
 Modern Action Delegate - Icon-Based Actions with Precise Click Detection
 Delegate حديث لأيقونات الإجراءات مع كشف دقيق للنقرات
 """
+
+import logging
+
 
 from pathlib import Path
 
@@ -244,7 +247,9 @@ class ModernActionDelegate(QStyledItemDelegate):
                                 try:
                                     product_id = int(product_id_str)
                                 except (ValueError, TypeError):
-                                    logging.getLogger(__name__).warning("Ignored exception in modern_action_delegate.py")
+                                    logging.getLogger(__name__).warning(
+                                        "Ignored exception in modern_action_delegate.py"
+                                    )
                 except Exception:
                     logging.getLogger(__name__).warning("Ignored exception in modern_action_delegate.py")
 

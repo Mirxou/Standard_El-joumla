@@ -5,7 +5,6 @@ Base Repository - Repository Pattern
 الكلاس الأساسي لجميع Repositories
 """
 
-import logging
 from abc import ABC
 from typing import Any, Dict, List, Optional
 
