@@ -367,14 +367,19 @@ class SaleManager:
         today = date.today().strftime("%Y%m%d")
         try:
             row = self.db_manager.fetch_one(
-                "SELECT COUNT(*) FROM sales "
-                "WHERE invoice_number LIKE ?",
+                "SELECT invoice_number FROM sales WHERE invoice_number LIKE ? ORDER BY id DESC LIMIT 1",
                 (f"INV-{today}-%",)
             )
-            count = int(row.get("COUNT(*)", row.get("count", 0))) if row else 0
+            if row and row.get("invoice_number"):
+                try:
+                    seq = int(row["invoice_number"].split("-")[-1]) + 1
+                except (ValueError, IndexError):
+                    seq = 1
+            else:
+                seq = 1
         except Exception:
-            count = 0
-        return f"INV-{today}-{count+1:04d}"
+            seq = 1
+        return f"INV-{today}-{seq:04d}"
 
     def create_sale(self, sale: Sale) -> Optional[int]:
         # التحقق من صحة الحالة قبل الإنشاء
@@ -476,12 +481,9 @@ class SaleManager:
                         item.sale_id = sale_id
                         self._create_sale_item_in_transaction(cursor, item)
                     # تحديث المخزون
-                    try:
-                        self._update_stock_in_transaction(
-                            cursor, sale.items, operation="sale"
-                        )
-                    except Exception:
-                        pass
+                    self._update_stock_in_transaction(
+                        cursor, sale.items, operation="sale"
+                    )
 
                 connection.commit()
 
@@ -576,12 +578,9 @@ class SaleManager:
             for item in sale.items:
                 item.sale_id = sale_id
                 self._create_sale_item(item)
-            try:
-                self._update_stock_for_sale(
-                    sale.items, operation="sale"
-                )
-            except Exception:
-                pass
+            self._update_stock_for_sale(
+                sale.items, operation="sale"
+            )
             self._emit_signals_create(sale_id)
             self._trigger_webhook(
                 "sale_created", {"sale_id": sale_id}
@@ -1338,81 +1337,82 @@ class SaleManager:
 
             if not use_cursor:
                 # مسار بديل بدون get_cursor
-                query = """
-                UPDATE sales SET
-                    invoice_number = ?, customer_id = ?,
-                    customer_name = ?, customer_phone = ?,
-                    due_date = ?, total_amount = ?,
-                    discount_amount = ?,
-                    discount_percentage = ?,
-                    tax_amount = ?, tax_percentage = ?,
-                    final_amount = ?, paid_amount = ?,
-                    remaining_amount = ?, status = ?,
-                    payment_method = ?, sale_date = ?,
-                    notes = ?, user_id = ?,
-                    currency_id = ?, exchange_rate = ?,
-                    subtotal = ?,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """
-                params = (
-                    sale.invoice_number,
-                    sale.customer_id,
-                    sale.customer_name,
-                    sale.customer_phone,
-                    sale.due_date,
-                    float(sale.total_amount),
-                    float(sale.discount_amount),
-                    float(sale.discount_percentage),
-                    float(sale.tax_amount),
-                    float(sale.tax_percentage),
-                    float(sale.final_amount),
-                    float(sale.paid_amount),
-                    float(sale.remaining_amount),
-                    (
-                        sale.status.value
-                        if isinstance(sale.status, Enum)
-                        else sale.status
-                    ),
-                    (
-                        sale.payment_method.value
-                        if isinstance(sale.payment_method, Enum)
-                        else sale.payment_method
-                    ),
-                    sale.sale_date,
-                    sale.notes,
-                    sale.user_id,
-                    sale.currency_id,
-                    float(sale.exchange_rate),
-                    (
-                        float(sale.subtotal)
-                        if sale.subtotal is not None
-                        else None
-                    ),
-                    sale.id,
-                )
-                self.db_manager.execute_non_query(
-                    query, params
-                )
+                with self.db_manager.transaction():
+                    query = """
+                    UPDATE sales SET
+                        invoice_number = ?, customer_id = ?,
+                        customer_name = ?, customer_phone = ?,
+                        due_date = ?, total_amount = ?,
+                        discount_amount = ?,
+                        discount_percentage = ?,
+                        tax_amount = ?, tax_percentage = ?,
+                        final_amount = ?, paid_amount = ?,
+                        remaining_amount = ?, status = ?,
+                        payment_method = ?, sale_date = ?,
+                        notes = ?, user_id = ?,
+                        currency_id = ?, exchange_rate = ?,
+                        subtotal = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """
+                    params = (
+                        sale.invoice_number,
+                        sale.customer_id,
+                        sale.customer_name,
+                        sale.customer_phone,
+                        sale.due_date,
+                        float(sale.total_amount),
+                        float(sale.discount_amount),
+                        float(sale.discount_percentage),
+                        float(sale.tax_amount),
+                        float(sale.tax_percentage),
+                        float(sale.final_amount),
+                        float(sale.paid_amount),
+                        float(sale.remaining_amount),
+                        (
+                            sale.status.value
+                            if isinstance(sale.status, Enum)
+                            else sale.status
+                        ),
+                        (
+                            sale.payment_method.value
+                            if isinstance(sale.payment_method, Enum)
+                            else sale.payment_method
+                        ),
+                        sale.sale_date,
+                        sale.notes,
+                        sale.user_id,
+                        sale.currency_id,
+                        float(sale.exchange_rate),
+                        (
+                            float(sale.subtotal)
+                            if sale.subtotal is not None
+                            else None
+                        ),
+                        sale.id,
+                    )
+                    self.db_manager.execute_non_query(
+                        query, params
+                    )
 
-                # إرجاع المخزون القديم
-                if old_items:
-                    self._update_stock_for_sale(
-                        old_items, operation="return"
+                    # إرجاع المخزون القديم
+                    if old_items:
+                        self._update_stock_for_sale(
+                            old_items, operation="return"
+                        )
+                    # حذف العناصر القديمة وإدراج الجديدة
+                    self.db_manager.execute_non_query(
+                        "DELETE FROM sale_items WHERE sale_id = ?",
+                        (sale.id,),
                     )
-                # حذف العناصر القديمة وإدراج الجديدة
-                self.db_manager.execute_non_query(
-                    "DELETE FROM sale_items WHERE sale_id = ?",
-                    (sale.id,),
-                )
-                for item in sale.items:
-                    item.sale_id = sale.id
-                    self._create_sale_item(item)
-                # خصم المخزون للعناصر الجديدة
-                if sale.items:
-                    self._update_stock_for_sale(
-                        sale.items, operation="sale"
-                    )
+                    for item in sale.items:
+                        item.sale_id = sale.id
+                        self._create_sale_item(item)
+                    # خصم المخزون للعناصر الجديدة
+                    if sale.items:
+                        self._update_stock_for_sale(
+                            sale.items, operation="sale"
+                        )
 
             # إرسال إشارات التحديث
             self._emit_signals_update(sale.id)

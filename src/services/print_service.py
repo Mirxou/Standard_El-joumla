@@ -151,9 +151,8 @@ class PrintService:
                 template_id=template.template_id,
                 document_type="sale",
                 document_id=sale_id,
-                user_id=getattr(self, "current_user_id", 1),  # من الجلسة أو الافتراضي
-                status="success",
-                output_format="pdf" if save_pdf else "html",
+                user_id=getattr(self, "current_user_id", 1),
+                output_type="pdf" if save_pdf else "html",
             )
 
             return {
@@ -214,8 +213,7 @@ class PrintService:
                 document_type="quote",
                 document_id=quote_id,
                 user_id=getattr(self, "current_user_id", 1),
-                status="success",
-                output_format="pdf" if save_pdf else "html",
+                output_type="pdf" if save_pdf else "html",
             )
 
             return {
@@ -262,8 +260,7 @@ class PrintService:
                 document_type="sale",
                 document_id=sale_id,
                 user_id=user_id,
-                status="success",
-                output_format="thermal",
+                output_type="thermal",
             )
 
             return {
@@ -395,16 +392,16 @@ class PrintService:
 
             return {
                 "invoice_number": invoice_num,
-                "date": sale_date,
+                "sale_date": sale_date,
                 "customer_name": customer_name or "",
                 "customer_phone": customer_phone or "",
                 "customer_address": customer_address or "",
                 "items": [
                     {
-                        "name": item.get("product_name") or "",
+                        "product_name": item.get("product_name") or "",
                         "barcode": item.get("barcode", ""),
                         "quantity": item.get("quantity") or 0,
-                        "price": item.get("unit_price") or 0.0,
+                        "unit_price": item.get("unit_price") or 0.0,
                         "total": item.get("total_price") or 0.0,
                     }
                     for item in items
@@ -413,8 +410,8 @@ class PrintService:
                 "discount": discount,
                 "tax": tax,
                 "total": total,
-                "paid": paid,
-                "remaining": remaining,
+                "paid_amount": paid,
+                "remaining_amount": remaining,
                 "payment_method": sale.get("payment_method", ""),
                 "notes": sale.get("notes", ""),
                 "company_name": company["name"],
@@ -486,17 +483,17 @@ class PrintService:
 
             return {
                 "quote_number": quote.get("quote_number") or f"QT-{quote_id}",
-                "date": quote.get("quote_date") or datetime.now().strftime("%Y-%m-%d"),
+                "sale_date": quote.get("quote_date") or datetime.now().strftime("%Y-%m-%d"),
                 "valid_until": quote.get("valid_until") or "",
                 "customer_name": customer_name or "",
                 "customer_phone": customer_phone or "",
                 "customer_address": customer_address or "",
                 "items": [
                     {
-                        "name": item.get("product_name") or "",
+                        "product_name": item.get("product_name") or "",
                         "barcode": item.get("barcode", ""),
                         "quantity": item.get("quantity") or 0,
-                        "price": item.get("unit_price") or 0.0,
+                        "unit_price": item.get("unit_price") or 0.0,
                         "total": item.get("total_price") or 0.0,
                     }
                     for item in items

@@ -101,10 +101,10 @@ class SaleOperationWorker(QObject):
 
             elif self.operation_type == "cancel":
                 sale_id = self.kwargs.get("sale_id")
-                self.kwargs.get("reason")
+                reason = self.kwargs.get("reason", "")
                 user_id = self.kwargs.get("user_id")
                 # SalesService uses cancel_sale(sale_id, user_id)
-                success = self.manager.cancel_sale(sale_id=sale_id, user_id=user_id)
+                success = self.manager.cancel_sale(sale_id=sale_id, user_id=user_id, reason=reason)
                 if not success:
                     error_msg = "حدث خطأ أثناء إلغاء الفاتورة."
 

@@ -36,7 +36,7 @@ class SecurityService:
                 CREATE TABLE IF NOT EXISTS login_attempts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username TEXT,
-                    ip TEXT,
+                    ip_address TEXT,
                     user_agent TEXT,
                     success INTEGER NOT NULL,
                     created_at TEXT NOT NULL
@@ -180,7 +180,8 @@ class SecurityService:
     ) -> None:
         try:
             self.db.execute_query(
-                "INSERT INTO login_attempts (username, ip, user_agent, success, created_at) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO login_attempts (username, ip_address, user_agent, "
+                "success, created_at) VALUES (?, ?, ?, ?, ?)",
                 (
                     username,
                     ip,
@@ -205,7 +206,7 @@ class SecurityService:
             params: List[Any] = [cutoff, username]  # type: ignore
             where = "created_at >= ? AND username = ? AND success = 0"
             if ip:
-                where += " AND ip = ?"
+                where += " AND ip_address = ?"
                 params.append(ip)
             rows = self.db.execute_query(
                 f"SELECT COUNT(*) as cnt FROM login_attempts WHERE {where}",

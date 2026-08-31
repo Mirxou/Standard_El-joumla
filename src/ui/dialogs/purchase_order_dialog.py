@@ -86,7 +86,7 @@ class PurchaseOrderDialog(BaseDialog):
 
         # تحميل المنتجات
         try:
-            query = "SELECT id, name, code, unit_price FROM products ORDER BY name"
+            query = "SELECT id, name, barcode as code, cost_price as unit_price FROM products WHERE is_deleted = 0 ORDER BY name"
             self.products = self.db.execute_query(query)
         except Exception:
             self.products = []
@@ -563,8 +563,8 @@ class PurchaseOrderDialog(BaseDialog):
             # الكمية والسعر
             self.items_table.cellWidget(row, 2).setValue(float(item.quantity_ordered))
             self.items_table.cellWidget(row, 3).setValue(float(item.unit_price))
-            self.items_table.cellWidget(row, 4).setValue(float(item.discount_percent))
-            self.items_table.cellWidget(row, 5).setValue(float(item.tax_percent))
+            self.items_table.cellWidget(row, 4).setValue(float(item.discount_percentage))
+            self.items_table.cellWidget(row, 5).setValue(float(item.tax_percentage))
 
         # المبالغ
         self.discount_spin.setValue(float(self.po.discount_amount))
@@ -702,8 +702,8 @@ class PurchaseOrderDialog(BaseDialog):
                     product_code=product_data.get("code"),
                     quantity_ordered=Decimal(str(self.items_table.cellWidget(row, 2).value())),
                     unit_price=Decimal(str(self.items_table.cellWidget(row, 3).value())),
-                    discount_percent=Decimal(str(self.items_table.cellWidget(row, 4).value())),
-                    tax_percent=Decimal("0.00"),  # الضريبة على مستوى الأمر فقط، ليس على مستوى البند
+                    discount_percentage=Decimal(str(self.items_table.cellWidget(row, 4).value())),
+                    tax_percentage=Decimal("0.00"),  # الضريبة على مستوى الأمر فقط، ليس على مستوى البند
                 )
                 item.calculate_totals()
                 items.append(item)

@@ -101,6 +101,11 @@ class PurchaseService:
                 end_date=kwargs.get("end_date"),
             )
 
+            # Post-filter by payment_status if provided (search_purchases doesn't support it)
+            payment_status = kwargs.get("payment_status")
+            if payment_status:
+                purchases = [p for p in purchases if p.payment_status == payment_status]
+
             results = [p.to_dict() for p in purchases]
             self._purchase_cache["filters"] = kwargs
             self._purchase_cache["data"] = results

@@ -265,6 +265,7 @@ class PurchaseOrder:
     subtotal: Decimal = Decimal("0.00")
     discount_amount: Decimal = Decimal("0.00")
     discount_percentage: Decimal = Decimal("0.00")
+    tax_percentage: Decimal = Decimal("0.00")
     tax_amount: Decimal = Decimal("0.00")
     shipping_cost: Decimal = Decimal("0.00")
     other_charges: Decimal = Decimal("0.00")
@@ -312,6 +313,7 @@ class PurchaseOrder:
             "subtotal",
             "discount_amount",
             "discount_percentage",
+            "tax_percentage",
             "tax_amount",
             "shipping_cost",
             "other_charges",
@@ -492,8 +494,15 @@ class PurchaseOrder:
         if self.discount_percentage > 0 and self.discount_amount == 0:
             self.discount_amount = (self.subtotal * self.discount_percentage) / 100
 
+        # حساب الضريبة
+        if self.tax_percentage > 0:
+            self.tax_amount = (self.subtotal - self.discount_amount) * self.tax_percentage / 100
+
         # المجموع النهائي
-        self.total_amount = self.subtotal - self.discount_amount + self.shipping_cost + self.other_charges
+        self.total_amount = (
+            self.subtotal - self.discount_amount
+            + self.tax_amount + self.shipping_cost + self.other_charges
+        )
 
         # حساب الرصيد المستحق
         self.balance_due = self.total_amount - self.paid_amount

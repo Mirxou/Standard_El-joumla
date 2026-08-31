@@ -707,7 +707,11 @@ class ReportExporter:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"report_{timestamp}.{format_type.value}"
 
-            filepath = os.path.join(self.reports_dir, filename)
+            # Use filename directly if it's already a full path
+            if os.sep in filename or filename.startswith("/"):
+                filepath = filename
+            else:
+                filepath = os.path.join(self.reports_dir, filename)
 
             if format_type == ExportFormat.JSON:
                 return self._export_to_json(report_data, filepath)

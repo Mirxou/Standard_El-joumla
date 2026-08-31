@@ -823,9 +823,10 @@ table td {
 
             # Support both PrintTemplate objects and raw template_id ints (backward compat)
             if isinstance(template, int):
+                template_id = template
                 template = self.get_template(template)
                 if not template:
-                    logger.log(logging.ERROR, f"Template not found for id: {template}")
+                    logger.log(logging.ERROR, f"Template not found for id: {template_id}")
                     return ""
 
             # Use string concatenation instead of f-string to avoid

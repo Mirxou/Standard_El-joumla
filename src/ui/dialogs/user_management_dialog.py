@@ -210,7 +210,7 @@ class UserFormDialog(QDialog):
 
                 pwd = self.password_input.text()
                 if pwd:
-                    manager.change_password(self.editing_user.id, pwd, pwd)  # admin bypass
+                    manager.reset_password(self.editing_user.id, pwd)  # admin reset, no old password needed
 
                 ok = manager.update_user(self.editing_user)
                 if ok:

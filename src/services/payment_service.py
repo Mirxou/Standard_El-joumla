@@ -728,7 +728,7 @@ class PaymentService:
             receivables = []
 
             for payment in overdue_payments:
-                if payment.customer_id and payment.payment_type == PaymentType.CUSTOMER_PAYMENT.value:
+                if payment.customer_id and payment.payment_type == "customer_payment":
                     customer = self.customer_manager.get_customer_by_id(payment.customer_id)
                     if customer:
                         # M1 FIX: فحص due_date قبل الطرح

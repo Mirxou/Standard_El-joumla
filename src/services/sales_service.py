@@ -178,7 +178,7 @@ class SalesService:
         sale = self.sale_manager.get_sale_by_id(sale_id)
         return sale.to_dict() if sale else None
 
-    def cancel_sale(self, sale_id: int, user_id: Optional[int] = None) -> bool:
+    def cancel_sale(self, sale_id: int, user_id: Optional[int] = None, reason: str = "") -> bool:
         """إلغاء فاتورة مع عكس كل العمليات المترتبة (ذري).
 
         يستخدم adjust_stock_relative لضمان ذرية إرجاع المخزون.
@@ -197,20 +197,20 @@ class SalesService:
                 return False
 
             with self.db_manager.transaction() as _tx:
-                # 1. إلغاء في Manager
+                # 0. Append cancellation reason to notes if provided
+                if reason:
+                    existing_notes = getattr(sale, "notes", "") or ""
+                    new_notes = f"{existing_notes}\n[سبب الإلغاء: {reason}]".strip()
+                    self.db_manager.execute_non_query(
+                        "UPDATE sales SET notes = ? WHERE id = ?",
+                        (new_notes, sale_id),
+                    )
+
+                # 1. إلغاء في Manager (restores stock internally)
                 if not self.sale_manager.cancel_sale(sale_id):
                     raise RuntimeError(f"Failed to cancel sale {sale_id}")
 
-                # 2. إرجاع المخزون بشكل ذري (نسبي)
-                for item in sale.items:
-                    self.inventory_service.adjust_stock_relative(
-                        product_id=item.product_id,
-                        diff=+item.quantity,
-                        reason=f"cancel_sale:{sale_id}",
-                        user_id=user_id,
-                    )
-
-                # 3. عكس رصيد العميل
+                # 2. عكس رصيد العميل
                 customer_id = getattr(sale, "customer_id", None)
                 if customer_id:
                     total_amount = getattr(sale, "total_amount", Decimal("0.00"))
@@ -285,7 +285,7 @@ class SalesService:
                     COALESCE(SUM(remaining_amount), 0) as total_outstanding,
                     COALESCE(SUM(discount_amount), 0) as total_discounts
                 FROM sales
-                WHERE sale_date = ? AND status != 'cancelled'
+                WHERE sale_date = ? AND status NOT IN ('cancelled', 'ملغية')
             """
             row = self.db_manager.fetch_one(query, (target_date.isoformat(),))
 

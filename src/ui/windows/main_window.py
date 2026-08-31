@@ -1682,9 +1682,6 @@ class MainWindow(QMainWindow):
             3,
         )
 
-        layout.addWidget(insights_frame)
-        # --------------------------------------
-
         # --- Glass KPI Cards ---
         layout.addWidget(kpi_container)
 
@@ -2661,7 +2658,7 @@ class MainWindow(QMainWindow):
                 sales_query = """
                 SELECT COALESCE(SUM(total_amount), 0) as total_sales, COUNT(*) as sales_count
                 FROM sales
-                WHERE DATE(sale_date) BETWEEN ? AND ? AND status = 'مكتمل'
+                WHERE DATE(sale_date) BETWEEN ? AND ? AND status NOT IN ('ملغية', 'cancelled', 'مسودة', 'مرتجعة')
                 """
                 sales_result = self.db_manager.fetch_one(sales_query, (start_date.isoformat(), end_date.isoformat()))
                 if sales_result and isinstance(sales_result, dict):
@@ -2696,7 +2693,7 @@ class MainWindow(QMainWindow):
                 FROM sale_items si
                 JOIN sales s ON si.sale_id = s.id
                 JOIN products p ON si.product_id = p.id
-                WHERE DATE(s.sale_date) BETWEEN ? AND ? AND s.status = 'مكتمل'
+                WHERE DATE(s.sale_date) BETWEEN ? AND ? AND s.status NOT IN ('ملغية', 'cancelled', 'مسودة', 'مرتجعة')
                 """
                 profit_result = self.db_manager.fetch_one(profit_query, (start_date.isoformat(), end_date.isoformat()))
                 if profit_result and isinstance(profit_result, dict):
@@ -2969,7 +2966,7 @@ class MainWindow(QMainWindow):
                         COALESCE(SUM(s.total_amount), 0) as total_spent
                     FROM customers c
                     LEFT JOIN sales s ON c.id = s.customer_id
-                    WHERE DATE(s.sale_date) BETWEEN ? AND ? AND s.status = 'مكتمل'
+                    WHERE DATE(s.sale_date) BETWEEN ? AND ? AND s.status NOT IN ('ملغية', 'cancelled', 'مسودة', 'مرتجعة')
                     GROUP BY c.id, c.name
                     HAVING purchase_count > 0
                     ORDER BY total_spent DESC
@@ -2988,7 +2985,7 @@ class MainWindow(QMainWindow):
                     FROM products p
                     JOIN sale_items si ON p.id = si.product_id
                     JOIN sales s ON si.sale_id = s.id
-                    WHERE DATE(s.sale_date) BETWEEN ? AND ? AND s.status = 'مكتمل'
+                    WHERE DATE(s.sale_date) BETWEEN ? AND ? AND s.status NOT IN ('ملغية', 'cancelled', 'مسودة', 'مرتجعة')
                     GROUP BY p.id, p.name
                     ORDER BY total_sales DESC
                     LIMIT 10
@@ -3000,7 +2997,7 @@ class MainWindow(QMainWindow):
                     sales_query = """
                     SELECT COALESCE(SUM(total_amount), 0) as total_sales, COUNT(*) as sales_count
                     FROM sales
-                    WHERE DATE(sale_date) BETWEEN ? AND ? AND status = 'مكتمل'
+                    WHERE DATE(sale_date) BETWEEN ? AND ? AND status NOT IN ('ملغية', 'cancelled', 'مسودة', 'مرتجعة')
                     """
                     sales_result = self.db_manager.fetch_one(
                         sales_query, (start_date.isoformat(), end_date.isoformat())
@@ -3019,7 +3016,7 @@ class MainWindow(QMainWindow):
                     customers_query_stats = """
                     SELECT COUNT(DISTINCT customer_id) as active_customers
                     FROM sales
-                    WHERE DATE(sale_date) BETWEEN ? AND ? AND status = 'مكتمل'
+                    WHERE DATE(sale_date) BETWEEN ? AND ? AND status NOT IN ('ملغية', 'cancelled', 'مسودة', 'مرتجعة')
                     """
                     customers_result = self.db_manager.fetch_one(
                         customers_query_stats,
@@ -3095,7 +3092,7 @@ class MainWindow(QMainWindow):
             sales_query = """
             SELECT COALESCE(SUM(total_amount), 0) as total_sales, COUNT(*) as sales_count
             FROM sales
-            WHERE DATE(sale_date) BETWEEN ? AND ? AND status = 'مكتمل'
+            WHERE DATE(sale_date) BETWEEN ? AND ? AND status NOT IN ('ملغية', 'cancelled', 'مسودة', 'مرتجعة')
             """
             sales_result = self.db_manager.fetch_one(sales_query, (start_date.isoformat(), end_date.isoformat()))
             if sales_result and isinstance(sales_result, dict):
@@ -3127,7 +3124,7 @@ class MainWindow(QMainWindow):
             FROM sale_items si
             JOIN sales s ON si.sale_id = s.id
             JOIN products p ON si.product_id = p.id
-            WHERE DATE(s.sale_date) BETWEEN ? AND ? AND s.status = 'مكتمل'
+            WHERE DATE(s.sale_date) BETWEEN ? AND ? AND s.status NOT IN ('ملغية', 'cancelled', 'مسودة', 'مرتجعة')
             """
             profit_result = self.db_manager.fetch_one(profit_query, (start_date.isoformat(), end_date.isoformat()))
             if profit_result and isinstance(profit_result, dict):
@@ -3496,22 +3493,6 @@ class MainWindow(QMainWindow):
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في تحديث جدول العمليات: {e}")
-
-                for idx, item in enumerate(items):
-                    if idx in [0, 1, 4, 5]:
-                        item.setTextAlignment(Qt.AlignCenter)
-                    else:
-                        item.setTextAlignment(Qt.AlignVCenter | Qt.AlignRight)
-
-                    # تلوين حسب النوع
-                    if activity["type"] == "مبيعات":
-                        item.setForeground(QColor("#27ae60"))
-                    elif activity["type"] == "مشتريات":
-                        item.setForeground(QColor("#3498db"))
-                    elif activity["type"] == "حركة مخزون":
-                        item.setForeground(QColor("#e67e22"))
-
-                    table.setItem(row, idx, item)
 
         except (KeyError, ValueError, TypeError, AttributeError) as e:
             self.logger.warning(f"Activities table update failed: {e}")
@@ -11159,6 +11140,11 @@ class MainWindow(QMainWindow):
         val.setObjectName(f"kpi_{id}")
         val.setStyleSheet(f"color: {Colors.TEXT_BRIGHT}; font-size: 28px; font-weight: 800; background: transparent;")
         l.addWidget(val)
+
+        # Store in dashboard_summary_labels so refresh methods can find it
+        if not hasattr(self, 'dashboard_summary_labels'):
+            self.dashboard_summary_labels = {}
+        self.dashboard_summary_labels[id] = val
 
         return card
 

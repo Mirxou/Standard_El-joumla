@@ -148,8 +148,8 @@ class UserService:
             settings = self.db.execute_query("SELECT setting_key, setting_value FROM security_settings")
 
             for setting in settings:
-                name = setting["setting_key"]
-                value = setting["setting_value"]
+                name = setting.get("setting_key", "")
+                value = setting.get("setting_value", "")
 
                 if hasattr(self.security_settings, name):
                     # تحويل القيمة إلى النوع المناسب
@@ -236,7 +236,7 @@ class UserService:
             session_id=session_id,
             user_id=user.id,
             username=user.username,
-            role=user.role,
+            role=UserRole(user.role),
             login_time=now,
             last_activity=now,
             ip_address=ip_address,
@@ -373,7 +373,7 @@ class UserService:
                 return False
 
             # الحصول على المستخدم
-            user = self.user_manager.get_by_id(session.user_id)
+            user = self.user_manager.get_user_by_id(session.user_id)
             if not user:
                 return False
 
@@ -470,11 +470,11 @@ class UserService:
         """تغيير كلمة المرور"""
         try:
             # التحقق من كلمة المرور الحالية
-            user = self.user_manager.get_by_id(user_id)
+            user = self.user_manager.get_user_by_id(user_id)
             if not user:
                 return False, "المستخدم غير موجود"
 
-            if not self.user_manager.verify_password(old_password, user.password_hash):
+            if not self.user_manager._verify_password(old_password, user.password_hash, user.salt):
                 return False, "كلمة المرور الحالية غير صحيحة"
 
             # التحقق من قوة كلمة المرور الجديدة
@@ -483,7 +483,7 @@ class UserService:
                 return False, message
 
             # تغيير كلمة المرور
-            success = self.user_manager.change_password(user_id, new_password)
+            success = self.user_manager.change_password(user_id, old_password, new_password)
 
             if success:
                 self.db_logger.log_operation("password_change", "users", user_id)
@@ -591,7 +591,7 @@ class UserService:
             query += " ORDER BY timestamp DESC LIMIT ?"
             params.append(limit)
 
-            results = self.db.execute_query(query, params)
+            results = self.db.execute_query(query, tuple(params))
 
             attempts = []
             for row in results:
@@ -651,7 +651,7 @@ class UserService:
                     setattr(self.security_settings, setting_name, setting_value)
                 # حفظ في قاعدة البيانات
                 if hasattr(self, "db") and self.db:
-                    self.db.execute_update(
+                    self.db.execute_query(
                         """
                         INSERT OR REPLACE INTO security_settings (setting_key, setting_value, updated_at)
                         VALUES (?, ?, ?)

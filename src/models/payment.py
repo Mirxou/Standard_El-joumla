@@ -594,9 +594,9 @@ class PaymentManager:
                 result = self.db_manager.fetch_one(
                     query,
                     (
-                        PaymentType.CUSTOMER_PAYMENT.value,
+                        "customer_payment",
                         account_id,
-                        PaymentType.CUSTOMER_PAYMENT.value,
+                        "customer_payment",
                         "completed",
                     ),
                 )
@@ -616,9 +616,9 @@ class PaymentManager:
                 result = self.db_manager.fetch_one(
                     query,
                     (
-                        PaymentType.SUPPLIER_PAYMENT.value,
+                        "supplier_payment",
                         account_id,
-                        PaymentType.SUPPLIER_PAYMENT.value,
+                        "supplier_payment",
                         "completed",
                     ),
                 )
