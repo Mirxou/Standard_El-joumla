@@ -229,9 +229,9 @@ class PaymentService:
                     )
                     if sale_row:
                         remaining = Decimal(str(
-                            sale_row["remaining_amount"]
-                            if isinstance(sale_row, dict)
-                            else sale_row[2]
+                            (sale_row["remaining_amount"]
+                             if isinstance(sale_row, dict)
+                             else sale_row[2]) or 0
                         ))
                         if amount > remaining:
                             if self.logger:
@@ -646,7 +646,7 @@ class PaymentService:
                         "phone": row.get("phone"),
                         "balance": Decimal(str(row.get("current_balance") or 0)),
                         "credit_limit": Decimal(str(row.get("credit_limit") or 0)),
-                        "available_credit": Decimal(str(row.get("available_credit"))),
+                        "available_credit": Decimal(str(row.get("available_credit") or 0)),
                         "payments_count": row.get("payments_count"),
                         "last_payment_date": (
                             date.fromisoformat(row.get("last_payment_date"))
@@ -702,7 +702,7 @@ class PaymentService:
                         "phone": row.get("phone"),
                         "balance": Decimal(str(row.get("current_balance") or 0)),
                         "credit_limit": Decimal(str(row.get("credit_limit") or 0)),
-                        "available_credit": Decimal(str(row.get("available_credit"))),
+                        "available_credit": Decimal(str(row.get("available_credit") or 0)),
                         "payments_count": row.get("payments_count"),
                         "last_payment_date": (
                             date.fromisoformat(row.get("last_payment_date"))
@@ -830,8 +830,8 @@ class PaymentService:
                         "payment_id": r.get("payment_id"),
                         "installment_number": r.get("installment_number"),
                         "due_date": due,
-                        "amount": Decimal(str(r.get("amount"))),
-                        "paid_amount": Decimal(str(r.get("paid_amount"))),
+                        "amount": Decimal(str(r.get("amount") or 0)),
+                        "paid_amount": Decimal(str(r.get("paid_amount") or 0)),
                         "remaining_amount": remaining,
                         "status": r.get("status"),
                         "notes": r.get("notes"),
@@ -887,7 +887,7 @@ class PaymentService:
                 payment_type = row.get("payment_type")
                 payment_method = row.get("payment_method")
                 count = row.get("count")
-                amount = Decimal(str(row.get("total_amount")))
+                amount = Decimal(str(row.get("total_amount") or 0))
 
                 summary["by_type_and_method"].append(
                     {
@@ -1084,7 +1084,7 @@ class PaymentService:
             for row in results:
                 payment_date = row["payment_date"]
                 payment_type = row["payment_type"]
-                amount = Decimal(str(row["daily_amount"]))
+                amount = Decimal(str(row["daily_amount"] or 0))
 
                 if payment_date not in cash_flow["daily_flow"]:
                     cash_flow["daily_flow"][payment_date] = {
@@ -1177,10 +1177,10 @@ class PaymentService:
 
                 trends["trends_data"][period][payment_type] = {
                     "transaction_count": row["transaction_count"],
-                    "total_amount": Decimal(str(row["total_amount"])),
-                    "avg_amount": Decimal(str(row["avg_amount"])),
-                    "min_amount": Decimal(str(row["min_amount"])),
-                    "max_amount": Decimal(str(row["max_amount"])),
+                    "total_amount": Decimal(str(row["total_amount"] or 0)),
+                    "avg_amount": Decimal(str(row["avg_amount"] or 0)),
+                    "min_amount": Decimal(str(row["min_amount"] or 0)),
+                    "max_amount": Decimal(str(row["max_amount"] or 0)),
                 }
 
             # حساب معدلات النمو والتقلبات
@@ -1250,7 +1250,7 @@ class PaymentService:
             for row in results:
                 month = row["month"]
                 payment_type = row["payment_type"]
-                amount = Decimal(str(row["monthly_amount"]))
+                amount = Decimal(str(row["monthly_amount"] or 0))
 
                 if payment_type not in historical_data:
                     historical_data[payment_type] = []
@@ -1361,8 +1361,8 @@ class PaymentService:
                     # C3 FIX: استخدام أسماء الأعمدة بدلاً من الفهرس
                     payment_type = row.get("payment_type")
                     transaction_count = int(row.get("transaction_count", 0))
-                    total_amount = Decimal(str(row.get("total_amount", 0)))
-                    avg_amount = Decimal(str(row.get("avg_amount", 0)))
+                    total_amount = Decimal(str(row.get("total_amount") or 0))
+                    avg_amount = Decimal(str(row.get("avg_amount") or 0))
                     payment_method = row.get("payment_method")
 
                     period_data["total_transactions"] += transaction_count
@@ -1590,10 +1590,10 @@ class PaymentService:
                 # C3 FIX: استخدام أسماء الأعمدة بدلاً من الفهرس
                 payment_type = row.get("payment_type")
                 transaction_count = int(row.get("transaction_count", 0))
-                total_amount = Decimal(str(row.get("total_amount", 0)))
-                avg_amount = Decimal(str(row.get("avg_amount", 0)))
-                min_amount = Decimal(str(row.get("min_amount", 0)))
-                max_amount = Decimal(str(row.get("max_amount", 0)))
+                total_amount = Decimal(str(row.get("total_amount") or 0))
+                avg_amount = Decimal(str(row.get("avg_amount") or 0))
+                min_amount = Decimal(str(row.get("min_amount") or 0))
+                max_amount = Decimal(str(row.get("max_amount") or 0))
 
                 kpis["summary"]["total_transactions"] += transaction_count
                 kpis["summary"]["total_amount"] += total_amount

@@ -609,7 +609,8 @@ class MainWindow(QMainWindow):
             self._status_timer.timeout.connect(self.update_statusbar_metrics)
             self._status_timer.start()
         except (AttributeError, RuntimeError) as e:
-            self.logger.debug(f"Status timer initialization skipped: {e}")
+            if self.logger:
+                self.logger.debug(f"Status timer initialization skipped: {e}")
 
         # تهيئة WebSocket Client للتحديثات الفورية (Disabling to fix crash)
         # self.init_websocket_client()
@@ -622,7 +623,8 @@ class MainWindow(QMainWindow):
             if hasattr(self, "notifications_manager") and self.notifications_manager:
                 self.notifications_manager.start()
         except (AttributeError, RuntimeError) as e:
-            self.logger.debug(f"Notification system init skipped: {e}")
+            if self.logger:
+                self.logger.debug(f"Notification system init skipped: {e}")
 
     def init_services(self):
         """تهيئة الخدمات المطلوبة"""
@@ -2741,66 +2743,71 @@ class MainWindow(QMainWindow):
 
         try:
             # --- تحديث رؤى Vision 2030 AI ---
+            insights = []
             try:
                 if hasattr(self, "ai_insight_label"):
                     from src.services.ai_prediction_service import AIPredictionService
 
                     ai_service = AIPredictionService(self.db_manager)
                     insights = ai_service.get_proactive_insights()
+            except Exception:
+                # AI service failure must not kill the dashboard
+                insights = []
 
-                    if insights:
-                        # عرض أهم رؤية (الأولى)
-                        top_insight = insights[0]
-                        self.current_ai_insight = top_insight
-                        self.ai_insight_label.setText(top_insight["message"])
+            try:
+                if insights:
+                    # عرض أهم رؤية (الأولى)
+                    top_insight = insights[0]
+                    self.current_ai_insight = top_insight
+                    self.ai_insight_label.setText(top_insight.get("message", ""))
 
-                        if top_insight.get("type") == "CRITICAL":
-                            self.ai_insight_label.setStyleSheet("color: #f87171; font-weight: bold; font-size: 14px;")
-                            # Agentic UI: تفعيل زر الإجراء الفوري
-                            self.ai_action_btn.setText("⚡ معالجة فورية (Agentic)")
-                            self.ai_action_btn.setStyleSheet("""
-                                QPushButton {
-                                    background-color: rgba(239, 68, 68, 0.2);
-                                    border: 1px solid rgba(248, 113, 113, 0.5);
-                                    color: #fecaca;
-                                    border-radius: 6px;
-                                    padding: 5px 15px;
-                                    font-weight: bold;
-                                }
-                                QPushButton:hover {
-                                    background-color: rgba(239, 68, 68, 0.4);
-                                }
-                            """)
-                        else:
-                            self.ai_insight_label.setStyleSheet("color: #e2e8f0; font-style: italic; font-size: 14px;")
-                            self.ai_action_btn.setText("تحليلات مفصلة")
-                            self.ai_action_btn.setStyleSheet("""
-                                QPushButton {
-                                    background-color: rgba(255, 255, 255, 0.1);
-                                    border: 1px solid rgba(255, 255, 255, 0.2);
-                                    color: white;
-                                    border-radius: 6px;
-                                    padding: 5px 15px;
-                                }
-                                QPushButton:hover {
-                                    background-color: rgba(255, 255, 255, 0.2);
-                                }
-                            """)
-                    else:
-                        self.current_ai_insight = None
-                        self.ai_insight_label.setText("✅ Vision 2030 AI: جميع المؤشرات طبيعية. النظام يعمل بكفاءة.")
-                        self.ai_action_btn.setText("Scan")
+                    if top_insight.get("type") == "CRITICAL":
+                        self.ai_insight_label.setStyleSheet("color: #f87171; font-weight: bold; font-size: 14px;")
+                        # Agentic UI: تفعيل زر الإجراء الفوري
+                        self.ai_action_btn.setText("⚡ معالجة فورية (Agentic)")
                         self.ai_action_btn.setStyleSheet("""
                             QPushButton {
-                                background-color: rgba(16, 185, 129, 0.1);
-                                border: 1px solid rgba(52, 211, 153, 0.3);
-                                color: #d1fae5;
+                                background-color: rgba(239, 68, 68, 0.2);
+                                border: 1px solid rgba(248, 113, 113, 0.5);
+                                color: #fecaca;
+                                border-radius: 6px;
+                                padding: 5px 15px;
+                                font-weight: bold;
+                            }
+                            QPushButton:hover {
+                                background-color: rgba(239, 68, 68, 0.4);
+                            }
+                        """)
+                    else:
+                        self.ai_insight_label.setStyleSheet("color: #e2e8f0; font-style: italic; font-size: 14px;")
+                        self.ai_action_btn.setText("تحليلات مفصلة")
+                        self.ai_action_btn.setStyleSheet("""
+                            QPushButton {
+                                background-color: rgba(255, 255, 255, 0.1);
+                                border: 1px solid rgba(255, 255, 255, 0.2);
+                                color: white;
                                 border-radius: 6px;
                                 padding: 5px 15px;
                             }
                             QPushButton:hover {
-                                background-color: rgba(16, 185, 129, 0.2);
+                                background-color: rgba(255, 255, 255, 0.2);
                             }
+                        """)
+                else:
+                    self.current_ai_insight = None
+                    self.ai_insight_label.setText("✅ Vision 2030 AI: جميع المؤشرات طبيعية. النظام يعمل بكفاءة.")
+                    self.ai_action_btn.setText("Scan")
+                    self.ai_action_btn.setStyleSheet("""
+                        QPushButton {
+                            background-color: rgba(16, 185, 129, 0.1);
+                            border: 1px solid rgba(52, 211, 153, 0.3);
+                            color: #d1fae5;
+                            border-radius: 6px;
+                            padding: 5px 15px;
+                        }
+                        QPushButton:hover {
+                            background-color: rgba(16, 185, 129, 0.2);
+                        }
                         """)
             except Exception:
                 logging.getLogger(__name__).warning("Ignored exception in main_window.py")
@@ -5228,9 +5235,9 @@ class MainWindow(QMainWindow):
 
     def _on_sales_data_loaded(self, data):
         """معالجة بيانات المبيعات المحمّلة"""
-        import pandas as pd
-
         try:
+            import pandas as pd
+
             # 🔥 التحقق من نوع البيانات: DataFrame أو dict
             if isinstance(data, pd.DataFrame):
                 # البيانات من SalesDataLoaderThread (DataFrame مباشرة)
@@ -5475,9 +5482,9 @@ class MainWindow(QMainWindow):
                     purchase.get("invoice_number", "-"),
                     purchase.get("supplier_name", "-"),
                     purchase.get("purchase_date", "-"),
-                    f"{purchase.get('total_amount', 0):,.2f}",
-                    f"{purchase.get('paid_amount', 0):,.2f}",
-                    f"{purchase.get('remaining_amount', 0):,.2f}",
+                    f"{purchase.get('total_amount') or 0:,.2f}",
+                    f"{purchase.get('paid_amount') or 0:,.2f}",
+                    f"{purchase.get('remaining_amount') or 0:,.2f}",
                     purchase.get("status", "-"),
                     purchase.get("payment_status", "-"),
                 ]
@@ -5749,9 +5756,9 @@ class MainWindow(QMainWindow):
             if getattr(self, "payment_service", None):
                 try:
                     receivables = self.payment_service.get_accounts_receivable()
-                    receivables_total = sum(float(r.get("balance", 0)) for r in receivables)
+                    receivables_total = sum(float(r.get("balance") or 0) for r in receivables)
                     payables = self.payment_service.get_accounts_payable()
-                    payables_total = sum(float(p.get("balance", 0)) for p in payables)
+                    payables_total = sum(float(p.get("balance") or 0) for p in payables)
                 except (AttributeError, ValueError, TypeError) as e:
                     self.logger.warning(f"Payment accounts fetch failed: {e}")
 
@@ -5878,12 +5885,12 @@ class MainWindow(QMainWindow):
             for row in revenue:
                 day = str(row.get("day") or row.get("sale_date") or row.get("d"))
                 combined.setdefault(day, {"revenue": 0.0, "expenses": 0.0})
-                combined[day]["revenue"] = float(row.get("amount", row.get("total", 0)))
+                combined[day]["revenue"] = float(row.get("amount") or row.get("total") or 0)
 
             for row in expenses:
                 day = str(row.get("day") or row.get("purchase_date") or row.get("d"))
                 combined.setdefault(day, {"revenue": 0.0, "expenses": 0.0})
-                combined[day]["expenses"] = float(row.get("amount", row.get("total", 0)))
+                combined[day]["expenses"] = float(row.get("amount") or row.get("total") or 0)
 
             sorted_days = sorted(combined.keys())
             self.revenue_vs_expense_table.setRowCount(len(sorted_days))
@@ -9730,7 +9737,7 @@ class MainWindow(QMainWindow):
                     try:
                         last_check = getattr(self.notifications_manager, "last_check_time", None)
                         if last_check:
-                            self._status_unread.setToolTip(f"آخر فحص: {last_check.strftime('%H:%Mf')}")
+                            self._status_unread.setToolTip(f"آخر فحص: {last_check.strftime('%H:%M:%S')}")
                     except Exception:
                         logging.getLogger(__name__).warning("Ignored exception in main_window.py")
                 except Exception:

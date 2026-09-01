@@ -218,7 +218,10 @@ class LoginDialog(BaseDialog):
         self.user_service = user_service
         self.current_session: Optional[UserSession] = None
         self.login_worker: Optional[LoginWorker] = None
-        self.security_service = SecurityService(user_service.db)
+        try:
+            self.security_service = SecurityService(user_service.db)
+        except Exception:
+            self.security_service = None
 
         # i18n
         self.i18n = I18n(locales_dir=str(Path(__file__).parent.parent.parent.parent / "locales"))

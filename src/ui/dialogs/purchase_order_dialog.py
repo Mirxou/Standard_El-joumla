@@ -421,7 +421,9 @@ class PurchaseOrderDialog(BaseDialog):
 
         if product_data:
             # تحديث الكود والسعر
-            self.items_table.item(row, 1).setText(product_data["code"] or "")
+            _code_cell = self.items_table.item(row, 1)
+            if _code_cell:
+                _code_cell.setText(product_data["code"] or "")
             price_spin = self.items_table.cellWidget(row, 3)
             price_spin.setValue(float(product_data["unit_price"]) if product_data["unit_price"] else 0.00)
 
@@ -448,8 +450,12 @@ class PurchaseOrderDialog(BaseDialog):
             net_amount = subtotal - discount_amount
 
             # تحديث الجدول
-            self.items_table.item(row, 6).setText(f"{subtotal:,.2f}")
-            self.items_table.item(row, 7).setText(f"{net_amount:,.2f}")
+            _subtotal_cell = self.items_table.item(row, 6)
+            if _subtotal_cell:
+                _subtotal_cell.setText(f"{subtotal:,.2f}")
+            _net_cell = self.items_table.item(row, 7)
+            if _net_cell:
+                _net_cell.setText(f"{net_amount:,.2f}")
 
             # إعادة حساب الإجمالي
             self._calculate_totals()
@@ -562,15 +568,15 @@ class PurchaseOrderDialog(BaseDialog):
                     break
 
             # الكمية والسعر
-            self.items_table.cellWidget(row, 2).setValue(float(item.quantity_ordered))
-            self.items_table.cellWidget(row, 3).setValue(float(item.unit_price))
-            self.items_table.cellWidget(row, 4).setValue(float(item.discount_percentage))
-            self.items_table.cellWidget(row, 5).setValue(float(item.tax_percentage))
+            self.items_table.cellWidget(row, 2).setValue(float(item.quantity_ordered or 0))
+            self.items_table.cellWidget(row, 3).setValue(float(item.unit_price or 0))
+            self.items_table.cellWidget(row, 4).setValue(float(item.discount_percentage or 0))
+            self.items_table.cellWidget(row, 5).setValue(float(item.tax_percentage or 0))
 
         # المبالغ
-        self.discount_spin.setValue(float(self.po.discount_amount))
-        self.tax_spin.setValue(float(self.po.tax_amount))
-        self.shipping_spin.setValue(float(self.po.shipping_cost))
+        self.discount_spin.setValue(float(self.po.discount_amount or 0))
+        self.tax_spin.setValue(float(self.po.tax_amount or 0))
+        self.shipping_spin.setValue(float(self.po.shipping_cost or 0))
 
         # الملاحظات
         self.notes_edit.setPlainText(self.po.notes or "")
@@ -736,8 +742,8 @@ class PurchaseOrderDialog(BaseDialog):
                     self.items_table.setCellWidget(row, 0, product_combo)
                     self.items_table.setItem(row, 1, QTableWidgetItem(product_data.get("barcode", "")))
 
-                    min_stock = float(product_data.get("min_stock", 0))
-                    current_stock = float(product_data.get("current_stock", 0))
+                    min_stock = float(product_data.get("min_stock") or 0)
+                    current_stock = float(product_data.get("current_stock") or 0)
                     suggested_qty = max(0, min_stock - current_stock + 10)
 
                     qty_spin = QDoubleSpinBox()
@@ -748,7 +754,7 @@ class PurchaseOrderDialog(BaseDialog):
                     qty_spin.valueChanged.connect(lambda val, r=row: self._update_item_row(r))
                     self.items_table.setCellWidget(row, 2, qty_spin)
 
-                    cost_price = float(product_data.get("cost_price", 0))
+                    cost_price = float(product_data.get("cost_price") or 0)
                     price_spin = QDoubleSpinBox()
                     price_spin.setMinimum(0.00)
                     price_spin.setMaximum(999999.99)

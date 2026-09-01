@@ -884,7 +884,7 @@ class SalesDialog(BaseDialog):
                     "id": product.id,
                     "name": product.name,
                     "barcode": product.barcode,
-                    "selling_price": float(product.selling_price),
+                    "selling_price": float(product.selling_price or 0),
                     "current_stock": product.current_stock,
                     "unit": product.unit,
                 }
@@ -992,7 +992,7 @@ class SalesDialog(BaseDialog):
     def add_product_to_cart(self, product_data):
         """إضافة منتج للسلة (تحديث الذاكرة + الجدول) - مع التحقق من المخزون"""
         product_id = product_data["id"]
-        available_stock = int(product_data["current_stock"])
+        available_stock = int(product_data.get("current_stock") or 0)
 
         # الإصلاح 2: التحقق من المخزون قبل الإضافة
         if available_stock <= 0:
@@ -1034,7 +1034,9 @@ class SalesDialog(BaseDialog):
                 self.table.blockSignals(False)
                 self.recalc_row(row)  # إعادة حساب السطر
                 # تمرير الجدول للسطر المحدث
-                self.table.scrollToItem(self.table.item(row, 1))
+                _scroll_item = self.table.item(row, 1)
+                if _scroll_item:
+                    self.table.scrollToItem(_scroll_item)
                 self.table.selectRow(row)
                 # print(f"✅ تم تحديث الكمية للمنتج: {item['name']} - الكمية الجديدة: {item['qty']}")
                 return
@@ -1078,7 +1080,7 @@ class SalesDialog(BaseDialog):
         # 2. المخزون (تلوين تحذيري)
         stock_item = QTableWidgetItem(str(item["stock"]))
         stock_item.setTextAlignment(Qt.AlignCenter)
-        if item["stock"] <= 0:
+        if (item["stock"] or 0) <= 0:
             stock_item.setForeground(QColor("red"))
             stock_item.setBackground(QColor(C.ACCENT_CORAL_SUBTLE))
         self.table.setItem(row_idx, 2, stock_item)
@@ -1184,7 +1186,9 @@ class SalesDialog(BaseDialog):
                     )
                     # إعادة القيمة القديمة
                     self.table.blockSignals(True)
-                    self.table.item(row, 4).setText(str(self.cart_items[row]["qty"]))
+                    _qty_cell = self.table.item(row, 4)
+                    if _qty_cell:
+                        _qty_cell.setText(str(self.cart_items[row]["qty"]))
                     self.table.blockSignals(False)
                     return
 
@@ -1195,7 +1199,9 @@ class SalesDialog(BaseDialog):
             elif col == 5:
                 # لا يمكن تعديل السعر - إعادة القيمة القديمة
                 self.table.blockSignals(True)
-                self.table.item(row, 5).setText(f"{self.cart_items[row]['price']:.2f}")
+                _price_cell = self.table.item(row, 5)
+                if _price_cell:
+                    _price_cell.setText(f"{self.cart_items[row]['price']:.2f}")
                 self.table.blockSignals(False)
                 QMessageBox.information(self, "معلومة", "السعر يأتي من المخزون ولا يمكن تعديله من هنا.")
 

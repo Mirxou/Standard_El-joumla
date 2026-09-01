@@ -46,7 +46,9 @@ class Supplier:
         """تحويل القيم بعد الإنشاء"""
         for field in ["credit_limit", "current_balance", "total_purchases"]:
             value = getattr(self, field)
-            if isinstance(value, (int, float, str)):
+            if value is None:
+                setattr(self, field, Decimal("0.00"))
+            elif isinstance(value, (int, float, str)):
                 setattr(self, field, Decimal(str(value)))
 
     @property
@@ -89,16 +91,16 @@ class Supplier:
             "tax_number": self.tax_number,
             "commercial_register": self.commercial_register,
             "payment_terms": self.payment_terms,
-            "credit_limit": float(self.credit_limit),
-            "current_balance": float(self.current_balance),
+            "credit_limit": float(self.credit_limit or 0),
+            "current_balance": float(self.current_balance or 0),
             "notes": self.notes,
             "is_active": self.is_active,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "last_purchase_date": (self.last_purchase_date.isoformat() if self.last_purchase_date else None),
-            "total_purchases": float(self.total_purchases),
+            "total_purchases": float(self.total_purchases or 0),
             "purchases_count": self.purchases_count,
-            "available_credit": float(self.available_credit),
+            "available_credit": float(self.available_credit or 0),
             "is_credit_exceeded": self.is_credit_exceeded,
             "full_address": self.full_address,
             "display_name": self.display_name,
@@ -573,8 +575,9 @@ class SupplierManager:
 
             def get_val(key, idx, default=None):
                 if is_dict:
-                    return row.get(key, default)
-                return row[idx] if len(row) > idx else default
+                    return row.get(key, default) or default
+                val = row[idx] if len(row) > idx else default
+                return val if val is not None else default
 
             supplier = Supplier(
                 id=get_val("id", 0),

@@ -1252,3 +1252,603 @@ Fixed 4 confirmed bugs in `src/services/report_exporter.py`. One reported bug (s
 - `src/services/notification_service.py` — fetch_all + dict access
 - `src/services/payment_service.py` — English payment type strings
 - `src/ui/windows/main_window.py` — correct combo box widget reference
+
+--- Task ID: 1
+**Audit: Crash-Point Analysis of Main Entry → Login → MainWindow Loading**
+**Scope:** main.py, src/ui/windows/main_window.py, src/ui/dialogs/login_dialog.py
+**Method:** Full line-by-line trace from `if __name__ == '__main__'` through splash → DB init → login → MainWindow.__init__ → setup_ui → dashboard load. Every potential unhandled exception, None-dereference, wrong-type, and missing-key access was checked.
+
+============================================================
+CRASH-POINTS FOUND
+============================================================
+
+[CRASH-1] main_window.py:5231 — `_on_sales_data_loaded`: unconditional `import pandas as pd` OUTSIDE the try/except block.
+  Why: If pandas is not installed, `ImportError` is raised before the try block at line 5233. The signal handler runs on the GUI thread; the exception propagates to the Qt event loop and terminates the application. The module-level `PANDAS_AVAILABLE` guard (line 114) is not consulted here.
+  Impact: App crash when sales tab data loads and pandas is missing.
+
+[CRASH-2] main_window.py:5478-5480 — `refresh_purchases_data`: `f"{purchase.get('total_amount', 0):,.2f}"` and same for `paid_amount`, `remaining_amount`.
+  Why: `.get('total_amount', 0)` returns `None` when the key EXISTS but its value is `NULL` in the database. `dict.get()` only uses the default when the key is MISSING. Then `f"{None:,.2f}"` raises `TypeError`. The `purchase_service.list_purchases()` can return rows where these columns are NULL (e.g., draft purchases).
+  Impact: `TypeError` crash when viewing purchases with NULL amounts.
+
+[CRASH-3] main_window.py:3493-3498 — `update_dashboard_activities_table`: DUPLICATE except clauses.
+  Why: Line 3493 has `except Exception as e:` and line 3497 has `except (KeyError, ValueError, TypeError, AttributeError) as e:`. In Python, the second except is unreachable code because `Exception` already catches everything. More critically, the second except block at line 3497-3504 accesses `self.dashboard_activities_table` and calls `table.setRowCount(1)` / `table.setItem(0, 0, info_item)` — but at this point the table's `clearSpans()` at line 3477 and `setRowCount(len(activities))` at line 3478 may have already succeeded for SOME rows before the exception. The second except handler then sets row count to 1, but the first except handler at line 3493-3495 logs and exits silently — meaning neither handler properly cleans up partial state. While this is a logic bug rather than a hard crash (both excepts handle the error), the dead code indicates a merge/rebase error that could mask real failures.
+  Impact: Silent data corruption of the activities table on partial failure. Not a hard crash, but a data-integrity issue.
+
+[CRASH-4] main_window.py:3290 — `_populate_dashboard_analytics`: `customer_row["id"]` on line 3290 (standalone expression with no assignment, looks like a debug leftover) followed by `customer_row["name"]` at 3291.
+  Why: If `data["customers"]` contains a dict that lacks the `"id"` or `"name"` key (e.g., if the SQL query schema changes or a JOIN fails), `KeyError` is raised. The outer try/except at line 3359 catches `(KeyError, ValueError, TypeError, AttributeError)`, so this won't crash the app — it will silently skip the update. However, if the exception is NOT one of those four types (e.g., `RuntimeError` from a deleted widget), it WILL propagate. Same applies to lines 3324-3327 for `product_row["id"]`, `product_row["name"]`, etc.
+  Impact: Low — caught by except, but fragile. A `RuntimeError` from Qt widget deletion would bypass the narrow except.
+
+[CRASH-5] main_window.py:2755 — `_populate_dashboard_data`: `top_insight["message"]`.
+  Why: `top_insight` comes from `ai_service.get_proactive_insights()`. If the AI service returns a dict without a `"message"` key, `KeyError` is raised. This IS inside the outer try/except (line 2805 catches `Exception`), so it won't crash the app. However, it will skip the entire dashboard data population including the financial KPI update below it (lines 2810-2835).
+  Impact: Medium — not a hard crash, but a silent data-loss bug. If AI insights fail, the entire `_populate_dashboard_data` short-circuits and financial KPIs are never updated.
+
+[CRASH-6] main_window.py:2746-2748 — `_populate_dashboard_data`: `AIPredictionService(self.db_manager)` instantiated on every dashboard data load.
+  Why: Every time dashboard data is loaded (including auto-refresh every 60 seconds), a NEW `AIPredictionService` is created. If the constructor fails (e.g., missing model file, broken DB connection), the exception is caught at line 2805, but it causes the same short-circuit as CRASH-5 — financial KPIs never update.
+  Impact: Medium — same silent data-loss pattern as CRASH-5.
+
+[CRASH-7] main_window.py:5231 + 5235 — `_on_sales_data_loaded`: no `PANDAS_AVAILABLE` guard.
+  Why: Even though pandas IS imported at line 5231 (which itself is CRASH-1), the method at line 5235 checks `isinstance(data, pd.DataFrame)`. If the `SalesDataLoaderThread` at line 5181 emits data as a non-DataFrame, non-dict type, the method falls through to the else branch at line 5243-5248 and silently returns. This is not a crash, but the method can never handle dict data from `DataLoaderWorker` because `SalesDataLoaderThread` is always used instead (line 5181 replaces the worker created at line 5176 — the first `DataLoaderWorker` at line 5176 is created then immediately discarded).
+  Impact: Dead code at lines 5139-5176 (the `load_sales()` closure and first `DataLoaderWorker` are never used). Not a crash but a code smell indicating potential logic confusion.
+
+[CRASH-8] main_window.py:612 — `__init__` → `self.logger.debug(f"Status timer initialization skipped: {e}")` when `self.logger` is None.
+  Why: `self.logger` is passed as a parameter to `MainWindow.__init__`. If `None` is passed (unlikely but possible), then `self.logger.debug(...)` at line 612 raises `AttributeError`. However, this is inside `except (AttributeError, RuntimeError)` which catches `AttributeError`, so it would be silently swallowed... but the `self.logger.debug()` call itself would raise `AttributeError` AGAIN before logging, creating an infinite recursion... actually no, because the except catches it. But the debug message is lost.
+  Impact: Low — caught by except, but indicates missing None guard.
+
+[CRASH-9] main_window.py:685-689 — `init_services` → `PaymentService(self.db_manager, self.logger)` when PaymentService import fails silently.
+  Why: Line 686: `self.payment_service = PaymentService(self.db_manager, self.logger)`. If the `PaymentService` import at line 681 fails (caught at line 688), `self.payment_service` remains `None`. Later at line 784 in `show_main_window`, `self.payment_service` (which is `None`) is passed to `MainWindow`. Inside MainWindow, `self.payment_service` is used at line 633 to set `self._passed_payment_service = None`, and then at line 684-689, if `not self.payment_service`, a NEW `PaymentService` is created. If this second import ALSO fails, `self.payment_service` remains `None`. This is handled, but if any code later calls `self.payment_service.some_method()` without a None check, it crashes.
+  Impact: Low — most callers check for None, but not all.
+
+[CRASH-10] main_window.py:2320 — `refresh_dashboard_stats`: `conn.execute(query_stats)` uses raw `self.db_manager.connection.execute()` when `self.db_manager.connection` exists.
+  Why: This bypasses the `execute_query()` method which returns `List[Dict]` and instead gets a raw `cursor.fetchone()` which returns a tuple. The code at line 2331 correctly indexes the tuple as `row[0]`, `row[1]`, etc. However, if the query returns NO rows (e.g., empty tables), `row` is `None` and line 2331 `row[0]` raises `TypeError: 'NoneType' object is not subscriptable`. This IS guarded by line 2326 `if not row: return`, so it's safe.
+  Impact: None — properly guarded. No crash.
+
+[CRASH-11] login_dialog.py:221 — `SecurityService(user_service.db)` — fragile attribute access.
+  Why: `user_service.db` is set in `UserService.__init__` at line 75. If `user_service` is ever passed as a raw `DatabaseManager` instead of a `UserService` instance (as in the standalone test at line 992), `user_service.db` raises `AttributeError`. In the main application flow this is safe because `main.py:597` passes `self.user_service` which is always a `UserService`. But the standalone test at line 992 will crash.
+  Impact: Standalone test crash only. Main flow is safe.
+
+[CRASH-12] main_window.py:9733 — `update_statusbar_metrics`: `last_check.strftime('%H:%Mf')` — likely a typo.
+  Why: The format string `'%H:%Mf'` is invalid. It should probably be `'%H:%M:%S'` or `'%H:%M:%S.%f'`. The `%Mf` format specifier doesn't exist in Python's strftime. This raises `ValueError`. However, this is inside a try/except at line 9730-9735, so it's caught.
+  Impact: None — caught by except. But the tooltip will never be set.
+
+[CRASH-13] main_window.py:1643 — `create_dashboard_tab`: `SmartAssistantWidget` created TWICE.
+  Why: Line 791 in `init_services` creates `self.smart_assistant_widget = SmartAssistantWidget(self)`. Then line 1643 in `create_dashboard_tab` creates it AGAIN: `self.smart_assistant_widget = SmartAssistantWidget(self)`, replacing the first one. The first widget (from `init_services`) loses its parent reference and becomes a leaked QWidget. The signal `command_received` from the first widget at line 793 is connected to `handle_ai_command`, but after replacement, this connection points to the OLD widget. The NEW widget at line 1645 connects to `handle_ai_command` (redundantly). If the old widget receives any signals before garbage collection, it could cause issues. Not a hard crash but a resource leak.
+  Impact: Memory leak + potential signal routing confusion.
+
+============================================================
+SUMMARY
+============================================================
+
+| # | Severity | File:Line | Issue |
+|---|----------|-----------|-------|
+| 1 | **CRITICAL** | main_window.py:5231 | `import pandas` outside try/except in signal handler |
+| 2 | **HIGH** | main_window.py:5478 | `None:,.2f` TypeError when purchase amount is NULL |
+| 3 | LOW | main_window.py:3493 | Duplicate except clause — dead code |
+| 4 | LOW | main_window.py:3290 | Narrow except catches KeyError but not RuntimeError |
+| 5 | MEDIUM | main_window.py:2755 | AI insight KeyError short-circuits entire dashboard update |
+| 6 | MEDIUM | main_window.py:2746 | AI service instantiation failure short-circuits dashboard |
+| 7 | LOW | main_window.py:5176 | Dead code — DataLoaderWorker immediately replaced |
+| 8 | LOW | main_window.py:612 | Missing None guard on self.logger in except handler |
+| 9 | LOW | main_window.py:685 | PaymentService None propagation |
+| 10 | OK | main_window.py:2320 | Properly guarded |
+| 11 | LOW | login_dialog.py:221 | Standalone test only — user_service.db attr access |
+| 12 | OK | main_window.py:9733 | Caught by except (but typo in strftime) |
+| 13 | LOW | main_window.py:1643 | SmartAssistantWidget created twice — memory leak |
+
+**Critical path verified SAFE:**
+- main.py `if __name__ == '__main__'` → `main()` → `InventoryManagementApp.__init__` → `run()` → splash → DB init worker → `on_init_completed` → `initialize_services` → `show_mandatory_login_dialog` → `LoginDialog` → `handle_login` → `authenticate_user` → `on_login_completed` → `show_main_window` → `MainWindow.__init__` → `init_services` → `setup_ui` → `switch_page('dashboard')` → `create_dashboard_tab` → `refresh_dashboard_stats`
+- None-dereference on `fetch_one()` results: All critical paths either check for None or use `.get()` with defaults.
+- Signal emission with wrong args: `DataLoaderWorker.data_loaded` emits `object`, `error_occurred` emits `str` — both correctly typed.
+- Timer callbacks: `_status_timer` (5s), `stability_timer` (2min), `dashboard_refresh_timer` (60s) — all guarded with try/except.
+
+
+--- Task ID: 2
+
+# Crash-Point Audit — All Dialog Files
+
+**Auditor:** Automated Crash-Point Audit Agent  
+**Date:** 2025-06-30  
+**Scope:** 6 dialog files — every line that can crash the application  
+**Context:** `fetch_one` returns `Dict[str,Any] | None`; `.get('key')` returns None if key missing; `int(None)`, `float(None)`, `Decimal(None)` all raise TypeError; `None.strftime(...)` raises AttributeError; `None <= 0` raises TypeError.
+
+---
+
+## FILE 1: src/ui/dialogs/payment_dialog.py
+
+[CRASH] payment_dialog.py:141: `self.apply_prefill_data()` — Method **does not exist** anywhere in the class hierarchy (BaseDialog, PaymentDialog). Called unconditionally in `__init__`. **Every instantiation of PaymentDialog crashes with `AttributeError`.** This is a guaranteed, unconditional crash.
+
+[CRASH] payment_dialog.py:530: `f"{inv} (متبقي: {rem:.2f})"` — `rem` comes from `r["remaining_amount"]` (line 528). If the `sales` table has `remaining_amount = NULL`, `rem` is None, and the `:.2f` format spec raises `TypeError`.
+
+---
+
+## FILE 2: src/ui/dialogs/sales_dialog.py
+
+[CRASH] sales_dialog.py:995: `int(product_data["current_stock"])` — `product_data["current_stock"]` is set from `product.current_stock` (line 888). The Product model's `__post_init__` only converts `current_stock` if `isinstance(value, (int, float, str))`; if the DB column is NULL, the field stays None. `int(None)` raises `TypeError`.
+
+[CRASH] sales_dialog.py:1081: `if item["stock"] <= 0:` — `item["stock"]` is set from `product.current_stock` via `load_sale_items` (line 1671: `stock = product.current_stock if product else 0`). If `product` is not None but `product.current_stock` is None, `stock` is None, and `None <= 0` raises `TypeError`.
+
+[CRASH] sales_dialog.py:1187: `self.table.item(row, 4).setText(...)` — If `self.table.item(row, 4)` returns None (e.g. cell was cleared or row index is stale after concurrent modification), `.setText()` raises `AttributeError: 'NoneType' object has no attribute 'setText'`.
+
+[CRASH] sales_dialog.py:1037: `self.table.scrollToItem(self.table.item(row, 1))` — If `self.table.item(row, 1)` returns None, `scrollToItem(None)` raises `TypeError` in PySide6.
+
+---
+
+## FILE 3: src/ui/dialogs/purchase_order_dialog.py
+
+[CRASH] purchase_order_dialog.py:565: `self.items_table.cellWidget(row, 2).setValue(float(item.quantity_ordered))` — `item` is a `PurchaseOrderItem`. Its `__post_init__` only converts decimal fields if `isinstance(value, (int, float, str))`. If the DB returns NULL, the field stays None. `float(None)` raises `TypeError`. Same pattern on lines 566 (`item.unit_price`), 567 (`item.discount_percentage`), 568 (`item.tax_percentage`).
+
+[CRASH] purchase_order_dialog.py:571: `self.discount_spin.setValue(float(self.po.discount_amount))` — Same root cause: `PurchaseOrder.__post_init__` skips None values. If `discount_amount` is NULL in the DB, `float(None)` crashes. Same on lines 572 (`tax_amount`), 573 (`shipping_cost`).
+
+[CRASH] purchase_order_dialog.py:424: `self.items_table.item(row, 1).setText(product_data["code"] or "")` — If `self.items_table.item(row, 1)` is None (cell not yet set or was cleared), `.setText()` raises `AttributeError`.
+
+[CRASH] purchase_order_dialog.py:451-452: `self.items_table.item(row, 6).setText(...)` and `self.items_table.item(row, 7).setText(...)` — If cells at column 6 or 7 are None (e.g. during initial `_add_item` before `render_table_row` equivalent completes), `.setText()` raises `AttributeError`.
+
+[CRASH] purchase_order_dialog.py:739: `min_stock = float(product_data.get("min_stock", 0))` — `.get()` returns 0 only if the key is **missing**. If the key exists but its value is None (DB NULL), `float(None)` crashes. Same on line 740 (`current_stock`) and line 751 (`cost_price`).
+
+---
+
+## FILE 4: src/ui/dialogs/product_dialog.py
+
+**No guaranteed crashes found.** All 4 save paths (enhanced/legacy × create/update) guard against None returns from services. `collect_form_data()` reads from Qt widgets (spin boxes, text fields) which always return non-None values. `populate_form()` uses `getattr` with fallbacks for optional fields. The only risk is type mismatches if model constructors receive unexpected types, but these are caught by try/except blocks.
+
+---
+
+## FILE 5: src/ui/dialogs/customer_management_dialog.py
+
+**No guaranteed crashes found.** `load_customers()` correctly guards `balance` with `or 0` (line 124). `delete_customer()` checks `if sales_result:` and `if payments_result:` before accessing dict keys. `on_search()` accesses `c["name"]` and `c["phone"]` which are always set from the query (with `or ""` fallbacks).
+
+---
+
+## FILE 6: src/ui/dialogs/supplier_management_dialog.py
+
+**No guaranteed crashes found.** `delete_supplier()` uses a ternary that correctly handles None from `fetch_one`: `isinstance(count_result, dict)` guards the dict branch, and `count_result[0] if count_result else 0` guards the tuple/None branch. `load_suppliers()` uses `.get()` with empty-string fallbacks. `on_search()` follows the same safe pattern.
+
+---
+
+## SUMMARY
+
+| File | Crash Count | Severity |
+|------|------------|----------|
+| payment_dialog.py | 2 | **CRITICAL** (line 141 blocks ALL usage) |
+| sales_dialog.py | 4 | HIGH (triggered by NULL DB values) |
+| purchase_order_dialog.py | 6 | HIGH (triggered by NULL DB values + missing cells) |
+| product_dialog.py | 0 | — |
+| customer_management_dialog.py | 0 | — |
+| supplier_management_dialog.py | 0 | — |
+| **TOTAL** | **12** | |
+
+### Root Cause Pattern
+The dominant crash pattern is: **dataclass `__post_init__` methods that only convert types when `isinstance(value, (int, float, str))`, leaving DB-sourced None values unconverted.** This affects Product, PurchaseOrderItem, and PurchaseOrder models. When dialog code later calls `int()`, `float()`, or uses comparison operators on these None fields, Python raises TypeError.
+
+### Priority Fix Order
+1. **payment_dialog.py:141** — Add `apply_prefill_data()` method or remove the call. Blocks all payment dialog usage.
+2. **purchase_order_dialog.py:565-568, 571-573** — Guard `float()` calls with `or 0` / `or 0.0`.
+3. **sales_dialog.py:995** — Guard `int()` with `or 0`.
+4. **sales_dialog.py:1081** — Guard stock comparison with `or 0`.
+5. **purchase_order_dialog.py:739-751** — Guard `.get()` returns against None values.
+6. **Model layer** — Fix `__post_init__` in Product, PurchaseOrderItem, PurchaseOrder to convert None → default (e.g., `if value is None: value = default` before isinstance check).
+--- Task ID: 3
+# Crash-Point Audit - Service Layer
+
+**Auditor:** Automated Crash-Point Audit Agent
+**Date:** 2025-06-30
+**Scope:** All service files (sales, payment, return, purchase_order, product_enhanced)
+**Mode:** REPORT ONLY - no fixes applied
+
+---
+
+## 1. src/services/sales_service.py
+
+[CRASH] sales_service.py:60: `row.get("invoice_number")` crashes with `AttributeError` if `fetch_one` returns a raw tuple instead of dict. `_generate_invoice_number` does not guard against non-dict rows.
+
+[CRASH] sales_service.py:407: `Decimal(str(row["quantity"]))` - if any row in `_get_top_selling_products` has a NULL `quantity`, `str(None)` produces `"None"`, then `Decimal("None")` raises `InvalidOperation`. Low risk but no guard.
+
+[CRASH] sales_service.py:437: `Decimal(str(row["total_purchases"]))` in `_get_top_customers` - if `SUM(s.final_amount)` returns None (LEFT JOIN with NULL customer_id for walk-in sales), `Decimal(str(None))` crashes. The `SUM` is missing COALESCE. **HIGH risk crash** on walk-in-only periods.
+
+---
+
+## 2. src/services/payment_service.py
+
+[CRASH] payment_service.py:231-232: `sale_row["remaining_amount"]` - if `sale_row` is a raw tuple, this raises `TypeError`. The `isinstance(sale_row, dict)` check on line 233 runs AFTER the crash. **HIGH risk.**
+
+[CRASH] payment_service.py:312,517: `self.db_manager.connection.cursor()` in fallback - if connection is None, raises `AttributeError`. **MEDIUM risk.**
+
+[CRASH] payment_service.py:649: `Decimal(str(row.get("available_credit")))` in `get_accounts_receivable` - if `credit_limit` is NULL, `available_credit` is NULL, `Decimal(str(None))` crashes. Missing `or 0`. **HIGH risk.**
+
+[CRASH] payment_service.py:705: Same NULL `available_credit` crash in `get_accounts_payable`. **HIGH risk.**
+
+[CRASH] payment_service.py:652,709: `date.fromisoformat(row.get("last_payment_date"))` - if value is a datetime string with time component, raises `ValueError`. **MEDIUM risk.**
+
+[CRASH] payment_service.py:889-890: `Decimal(str(row.get("total_amount")))` in `get_payment_summary` - if `SUM(amount_in_base_currency)` returns None (empty period), `str(None)` = `"None"`, crashes. **MEDIUM risk.**
+
+[CRASH] payment_service.py:1087: `Decimal(str(row["daily_amount"]))` in `get_cash_flow_report` - same NULL aggregate risk. **MEDIUM risk.**
+
+[CRASH] payment_service.py:1179-1183: `Decimal(str(row["avg_amount"]))` and `min_amount`/`max_amount` in `get_payment_trends_analysis` - if AVG/MIN/MAX returns None (single row with NULL values), crashes. **MEDIUM risk.**
+
+[CRASH] payment_service.py:1364: `Decimal(str(row.get("avg_amount", 0)))` in `get_period_comparison_analysis` - `.get(key, default)` returns None if the key exists with value NULL. Then `Decimal(str(None))` crashes. **HIGH risk.**
+
+[CRASH] payment_service.py:1593-1596: Same NULL aggregate `.get(key, default)` pattern in `get_payment_performance_kpis` - `avg_amount`, `min_amount`, `max_amount` all vulnerable. **HIGH risk.**
+
+**Verification: English-value fix is CORRECT.** All 6 report methods use `status = 'completed'` and classify by `payment_type` values `'customer_payment'`/`'supplier_payment'` (lines 902-904, 1097-1102, 1191-1194). No Arabic-value crash paths remain.
+
+---
+
+## 3. src/services/return_service.py
+
+[CRASH] return_service.py:93-117: `create_return` INSERT does NOT include the `return_number` column, even though it is generated at line 80. If the schema has `return_number` as NOT NULL, crashes with `IntegrityError`. **HIGH risk.**
+
+[CRASH] return_service.py:148,269: `self.db.connection.rollback()` - if connection is None, crashes with `AttributeError`. **MEDIUM risk.**
+
+[CRASH] return_service.py:303-317: `get_all_returns` filters by `return_type`, `customer_id`, `supplier_id` columns that do NOT exist in the current schema. If any caller passes these filters, the SQL crashes. Caught by try/except, returns []. **MEDIUM risk (silent data loss).**
+
+[CRASH] return_service.py:479-524: `get_return_statistics` queries reference non-existent columns (`return_type`, `return_reason`, `refund_amount`). Caught by try/except, returns {}. **MEDIUM risk (silent failure).**
+
+---
+
+## 4. src/services/purchase_order_service.py
+
+[CRASH] purchase_order_service.py:68-70: `result[0].get("po_number")` in `generate_po_number` - if `execute_query` returns tuples, `.get()` crashes. **MEDIUM risk.**
+
+[CRASH] purchase_order_service.py:661: Same tuple-vs-dict risk in `_generate_receiving_number`. **MEDIUM risk.**
+
+[CRASH] purchase_order_service.py:964: `max(po_amount, received_amount, invoice_amount, 1.0)` in `three_way_match` - if `po.total_amount` is None, `max()` crashes with `TypeError`. **HIGH risk.**
+
+[CRASH] purchase_order_service.py:670-673,777-780: Manual `BEGIN TRANSACTION`/`COMMIT`/`ROLLBACK` pattern. If `execute_update` auto-commits (SQLite default), the rollback is useless and receiving notes are left orphaned after partial failure. **Data integrity risk.**
+
+---
+
+## 5. src/services/product_service_enhanced.py
+
+[CRASH] product_service_enhanced.py:83: `existing_cols = [row.get('name', '') for row in cols_info]` in `create_product` - if PRAGMA `fetch_all` returns tuples, `row.get()` crashes. **HIGH risk** (7 locations: lines 83, 251, 315, 396, 470, 747, 794).
+
+[CRASH] product_service_enhanced.py:99: `self.db_manager.execute_insert(query, ...)` return value assumed to be int. If it returns a cursor or None, downstream code using `product.id` as integer crashes. **MEDIUM risk.**
+
+[CRASH] product_service_enhanced.py:517-521: `get_featured_products` hardcodes `reserved_stock` in SELECT without checking schema. Unlike `get_low_stock_products` and `get_products_requiring_reorder` which check for the column, this method does NOT. Crashes with `OperationalError` if column missing. **HIGH risk.**
+
+---
+
+## Summary Table
+
+| # | File:Line | Crash | Severity |
+|---|-----------|-------|----------|
+| 1 | payment_service.py:231-232 | Dict access on tuple row before isinstance check | HIGH |
+| 2 | payment_service.py:649,705 | Decimal(str(None)) from NULL credit_limit | HIGH |
+| 3 | payment_service.py:889-890 | Decimal(str(None)) from NULL SUM aggregate | MEDIUM |
+| 4 | payment_service.py:1364 | .get(key,default) returns None when key exists with NULL value | HIGH |
+| 5 | payment_service.py:1593-1596 | Same NULL aggregate .get pattern in KPIs | HIGH |
+| 6 | product_service_enhanced.py:83,251,315,396,470,747,794 | PRAGMA row.get() crashes on tuple rows (7 locations) | HIGH |
+| 7 | product_service_enhanced.py:517-521 | get_featured_products hardcodes reserved_stock without schema check | HIGH |
+| 8 | purchase_order_service.py:964 | max() with None from po.total_amount in three_way_match | HIGH |
+| 9 | sales_service.py:437 | SUM() can be NULL for walk-in sales (missing COALESCE) | HIGH |
+| 10 | return_service.py:93-117 | return_number generated but not inserted; NOT NULL crash | HIGH |
+| 11 | payment_service.py:312,517 | connection.cursor() when connection is None | MEDIUM |
+| 12 | payment_service.py:652,709 | date.fromisoformat on non-ISO date strings | MEDIUM |
+| 13 | purchase_order_service.py:68-70,661 | .get() on tuple rows in number generators | MEDIUM |
+| 14 | product_service_enhanced.py:99 | execute_insert return type assumed int | MEDIUM |
+| 15 | return_service.py:479-524 | Statistics query references non-existent columns | MEDIUM |
+
+## Next Actions (Priority Order)
+
+1. Add `COALESCE` to all SUM/AVG/MIN/MAX aggregates in payment_service.py.
+2. Replace `Decimal(str(row.get("x", 0)))` with `Decimal(str(row.get("x") or 0))` throughout payment_service.py.
+3. Guard PRAGMA parsing: use `row.get('name','') if isinstance(row,dict) else row[1]` at 7 locations in product_service_enhanced.py.
+4. Add reserved_stock column check to `get_featured_products` in product_service_enhanced.py.
+5. Include `return_number` in INSERT in return_service.py `create_return`.
+6. Guard `max()` in purchase_order_service.py `three_way_match` against None values.
+7. Fix `sale_row["remaining_amount"]` access pattern in payment_service.py lines 231-232.
+8. Add COALESCE to `_get_top_customers` in sales_service.py line 423.
+
+--- Task ID: 4
+
+# Crash-Point Audit — All Model Files
+
+**Scope:** payment.py, sale.py, customer.py, supplier.py, product.py, return_invoice.py  
+**Root cause pattern:** `dict.get('key', default)` returns `None` (NOT `default`) when the key **exists** with a SQL NULL value. Code then passes `None` to `Decimal(str(...))` or `float(...)` which raises `InvalidOperation` / `TypeError`.  
+**Note:** Crashes inside try/except are tagged [CRASH-SILENT] — the exception is swallowed, the function returns `None`/`[]`, and the caller receives no object. This causes downstream `None`-dereference crashes or silent data loss.
+
+---
+
+## 1. src/models/payment.py
+
+**_row_to_payment (line 691):** isinstance guard is **correct** — routes `dict` → `_row_to_payment_dict`, everything else → tuple fallback. The tuple fallback uses `safe_decimal(idx)` and `safe_date_at(idx)` which explicitly check `row[idx] is not None`. **Verified OK.**
+
+**_row_to_payment_dict (line 764):** Uses `safe_decimal(value)` (checks `if value is None: return None`) followed by `or Decimal("0")`. This pattern is **safe** — `None or Decimal("0")` evaluates to `Decimal("0")`. Lines 801, 803, 804 are all safe.
+
+[DATA-CORRUPTION] payment.py:802 — `row_dict.get("currency", "DZD")` when DB NULL → returns `None` (not `"DZD"`). Sets `currency=None` on the Payment object. Not a direct crash, but downstream code calling `.upper()` or string ops on `currency` will crash.
+
+[DATA-CORRUPTION] payment.py:797-800 — Same `.get(key, default)` pattern for `payment_number`, `payment_type`, `payment_method`, `status`. NULL in any of these → field set to `None` instead of the intended default.
+
+[DATA-CORRUPTION] payment.py:808 — `safe_date(row_dict.get("payment_date"))` returns `None` for NULL. `payment_date` field has no `or` fallback, so it stays `None`. `__post_init__` does not reset it. Downstream `.isoformat()` calls will crash.
+
+**create_payment (line 250):** Well-defended with `safe_float()`, try-except, and fallback value_map. **No direct crash.**
+
+---
+
+## 2. src/models/sale.py — HIGHEST CRASH DENSITY
+
+**_row_to_sale (line 1090):** The `gv(k, i, d)` helper uses `row.get(k, d)` for dicts. When key exists with NULL, returns `None` (not `d`). The second branch `hasattr(row, "keys")` (for sqlite3.Row) does `row[k]` which also returns `None` on NULL without falling back to `d`.
+
+[CRASH] sale.py:1117-1118 — `Decimal(str(gv("total_amount", 3, 0)))` → NULL → `Decimal(str(None))` → `decimal.InvalidOperation`
+[CRASH] sale.py:1120-1121 — `Decimal(str(gv("discount_amount", 4, 0)))` → same
+[CRASH] sale.py:1123-1124 — `Decimal(str(gv("discount_percentage", 18, 0)))` → same
+[CRASH] sale.py:1126-1127 — `Decimal(str(gv("tax_amount", 19, 0)))` → same
+[CRASH] sale.py:1129-1130 — `Decimal(str(gv("tax_percentage", 20, 0)))` → same
+[CRASH] sale.py:1132-1133 — `Decimal(str(gv("final_amount", 5, 0)))` → same
+[CRASH] sale.py:1135-1136 — `Decimal(str(gv("paid_amount", 21, 0)))` → same
+[CRASH] sale.py:1138-1139 — `Decimal(str(gv("remaining_amount", 22, 0)))` → same
+[CRASH] sale.py:1148-1149 — `Decimal(str(gv("exchange_rate", 24, 1.0)))` → same
+
+**else-branch (row_len < 25, line 1163):**
+[CRASH] sale.py:1173-1174 — `Decimal(str(gv("total_amount", 3, 0)))` → same NULL pattern
+[CRASH] sale.py:1176-1177 — `Decimal(str(gv("discount_amount", 4, 0)))` → same
+[CRASH] sale.py:1179-1180 — `Decimal(str(gv("final_amount", 5, 0)))` → same
+[CRASH] sale.py:1192-1193 — `Decimal(str(gv("paid_amount", paid_idx, 0)))` → same
+[CRASH] sale.py:1195-1196 — `Decimal(str(gv("remaining_amount", remaining_idx, 0)))` → same
+
+**Protected (correct pattern):** sale.py:1157-1160 — `subtotal` uses `if gv(...) is not None else None` guard. **Safe.**
+
+**_row_to_sale_item (line 1222):**
+[CRASH] sale.py:1239 — `float(gv("quantity", 4, 0))` → NULL → `float(None)` → `TypeError`
+[CRASH] sale.py:1240 — `Decimal(str(gv("unit_price", 5, 0)))` → NULL → `decimal.InvalidOperation`
+[CRASH] sale.py:1241 — `Decimal(str(gv("total_price", 6, 0)))` → same
+[CRASH] sale.py:1242 — `Decimal(str(gv("cost_price", 7, 0)))` → same
+[CRASH] sale.py:1243 — `Decimal(str(gv("profit", 8, 0)))` → same
+[CRASH] sale.py:1244 — `Decimal(str(gv("discount", 10, 0)))` → same
+[CRASH] sale.py:1245 — `Decimal(str(gv("tax_amount", 11, 0)))` → same
+
+**_row_to_sale_dict (line 1566):**
+[CRASH] sale.py:1580-1581 — `float(Decimal(str(gv("total_amount", 3, 0))))` → NULL → `decimal.InvalidOperation`
+
+**_create_sale_item (line 689):**
+[CRASH-SILENT] sale.py:699 — `Decimal(str(cost_row.get("cost_price", 0)))` → if `cost_price` is NULL in products table, `cost_row.get("cost_price", 0)` returns `None` → `Decimal(str(None))` → `InvalidOperation`. Caught by except, returns `None`. Caller gets `None` for the sale item ID — silent data loss.
+
+**_create_sale_item_in_transaction (line 763):**
+[CRASH-SILENT] sale.py:776 — `Decimal(str(cost_row[0]))` → if `cost_price` is NULL, `cost_row[0]` is `None` → `Decimal(str(None))` → `InvalidOperation`. Caught by except, returns `None`.
+
+**update_sale / _do_update_sale (lines 1297, 1431):**
+[CRASH-SILENT] sale.py:1369,1370,1371,1372,1373,1374,1375,1376,1391 — `float(sale.total_amount)` etc. If `sale` object was constructed with None Decimal fields (unlikely given _row_to_sale would crash first), these would raise `TypeError`. Currently protected by the fact that _row_to_sale crashes before creating the object, but if a Sale is manually constructed with None values, these lines crash.
+[CRASH-SILENT] sale.py:1456-1463,1478 — Same pattern in `_do_update_sale`.
+
+---
+
+## 3. src/models/customer.py
+
+**_row_to_customer (line 785):** `get_val(key, idx, default)` uses `row.get(key, default)` — same NULL-trap.
+
+[CRASH-SILENT] customer.py:808 — `Decimal(str(get_val("credit_limit", 10, 0)))` → NULL → `Decimal(str(None))` → `InvalidOperation`. Caught by except at line 836, returns `None`. Entire Customer object is lost.
+[CRASH-SILENT] customer.py:809 — `Decimal(str(get_val("current_balance", 11, 0)))` → same pattern.
+
+**Protected (correct `or` pattern):**
+- customer.py:833 — `Decimal(str(get_val("total_purchases", 29) or 0))` — `None or 0` → `0`. **Safe.**
+- customer.py:834 — `int(get_val("purchases_count", 30) or 0)` — **Safe.**
+- customer.py:819 — `Decimal(str(get_val(...) or 0))` — **Safe.**
+
+**create_customer (line 352):**
+[CRASH-SILENT] customer.py:364 — `float(customer.credit_limit)` — if credit_limit is `None` (possible if Customer was constructed with explicit None), crashes. Wrapped in try-except.
+[CRASH-SILENT] customer.py:365 — `float(customer.current_balance)` — same.
+
+**update_balance (line 596):** Atomic SQL. Takes `float` parameter, not from DB row. **Safe.**
+
+---
+
+## 4. src/models/supplier.py
+
+**_row_to_supplier (line 541):**
+
+**Tuple path (line 549):** Uses `or 0` pattern. **Safe:**
+- supplier.py:562 — `Decimal(str(row[11] or 0))` — **Safe.**
+- supplier.py:563 — `Decimal(str(row[12] or 0))` — **Safe.**
+- supplier.py:568 — `Decimal(str(row[14] or 0))` — **Safe.**
+- supplier.py:569 — `int(row[15] or 0)` — **Safe.**
+
+**Dict path (line 579):**
+[CRASH-SILENT] supplier.py:594 — `Decimal(str(get_val("credit_limit", 14, 0)))` → NULL → `Decimal(str(None))` → `InvalidOperation`. Caught by except at line 606, returns `None`.
+[CRASH-SILENT] supplier.py:595 — `Decimal(str(get_val("current_balance", 15, 0)))` → same.
+
+**Protected:** supplier.py:603 — `Decimal(str(get_val("total_purchases", 22) or 0))` — **Safe.**
+
+**create_supplier (line 233):**
+[CRASH-SILENT] supplier.py:262 — `float(supplier.credit_limit)` — if None, crashes. try-except.
+[CRASH-SILENT] supplier.py:263 — `float(supplier.current_balance)` — same.
+
+**update_supplier_balance (line 421):** Atomic SQL. **Safe.**
+
+---
+
+## 5. src/models/product.py
+
+**_row_to_product (line 436):**
+
+[CRASH-SILENT] product.py:455 — `Decimal(str(get_val("cost_price", 6, 0)))` → NULL → `Decimal(str(None))` → `InvalidOperation`. Caught by except at line 470, returns `None`.
+[CRASH-SILENT] product.py:456 — `Decimal(str(get_val("selling_price", 7, 0)))` → same.
+[CRASH-SILENT] product.py:457 — `Decimal(str(get_val("wholesale_price", 8, 0)))` → same.
+[CRASH-SILENT] product.py:458 — `Decimal(str(get_val("vip_price", 9, 0)))` → same.
+[CRASH-SILENT] product.py:461 — `float(get_val("current_stock", 12, 0))` → NULL → `float(None)` → `TypeError`. Same except block.
+
+**create_product (line 162):**
+[CRASH-SILENT] product.py:187 — `float(product.cost_price)` — if None, crashes. try-except.
+[CRASH-SILENT] product.py:188 — `float(product.selling_price)` — same.
+[CRASH-SILENT] product.py:189 — `float(product.wholesale_price)` — same.
+[CRASH-SILENT] product.py:190 — `float(product.vip_price)` — same.
+[CRASH-SILENT] product.py:193 — `float(product.current_stock)` — same.
+
+---
+
+## 6. src/models/return_invoice.py
+
+**No `_row_to_return` function exists.** The ReturnManager returns raw dicts from `list_returns()` (line 529). The `from_dict` class methods pass values through to `__post_init__` which only converts `isinstance(value, (int, float, str))` — None values pass through unconverted.
+
+[DATA-CORRUPTION] return_invoice.py:234-235 — `__post_init__` skips None values for Decimal fields. If `from_dict` receives a dict with NULL from DB, fields like `total_amount` remain `None`. Later `to_dict()` at line 407 calls `float(self.total_amount)` → `TypeError`.
+
+[CRASH] return_invoice.py:134-139 — `ReturnItem.to_dict()`: `float(self.quantity_returned)`, `float(self.unit_price)`, etc. If any field is `None`, crashes.
+
+[CRASH] return_invoice.py:407-418 — `ReturnInvoice.to_dict()`: `float(self.subtotal)`, `float(self.discount_amount)`, `float(self.total_amount)`, `float(self.refund_amount)`, `float(self.credit_note_amount)`. If any is `None`, crashes.
+
+---
+
+## Summary
+
+| File | Direct [CRASH] | Silent [CRASH-SILENT] | Data Corruption | Root Cause |
+|------|----------------|----------------------|-----------------|-------------|
+| payment.py | 0 | 0 | 4 | `.get(key, default)` returns None on NULL |
+| sale.py | **16** | 3 | 0 | `gv()` / `Decimal(str(None))` / `float(None)` |
+| customer.py | 0 | 4 | 0 | `get_val()` / `Decimal(str(None))` |
+| supplier.py | 0 | 2 | 0 | `get_val()` / `Decimal(str(None))` |
+| product.py | 0 | 10 | 0 | `get_val()` / `Decimal(str(None))` / `float(None)` |
+| return_invoice.py | 2 | 0 | 1 | `to_dict()` / `float(None)` on None fields |
+| **TOTAL** | **18** | **19** | **5** | |
+
+## Fix Pattern
+
+The universal fix for the `gv`/`get_val` NULL problem:
+```python
+# BROKEN — default is ignored when key exists with NULL:
+Decimal(str(gv("amount", 3, 0)))
+
+# FIX OPTION A — `or` fallback (None coalescing):
+Decimal(str(gv("amount", 3, 0) or 0))
+
+# FIX OPTION B — safe helper like payment.py:
+def safe_decimal(value):
+    if value is None:
+        return Decimal("0")
+    return Decimal(str(value))
+
+# FIX OPTION C — COALESCE in SQL:
+SELECT COALESCE(amount, 0) as amount FROM sales
+```
+
+--- Task ID: 5a
+
+## Fix NULL-Handling Crashes in Model _row_to_* Methods
+
+**Date:** 2025-07-01
+**Scope:** 5 model files — sale.py, return_invoice.py, product.py, customer.py, supplier.py
+
+### Root Cause
+`dict.get('key', default)` returns `None` (not `default`!) when the key exists with a SQL NULL value. When `None` reaches `Decimal(str(None))` it raises `InvalidOperation`; when it reaches `float(None)` or `int(None)` it raises `TypeError`.
+
+### Changes Made
+
+#### 1. `src/models/sale.py` — 3 `gv()` helper functions fixed
+- **`_row_to_sale` gv (line ~1094):** Changed `row.get(k, d)` → `row.get(k, d) or d` for dict path; added `val if val is not None else d` for tuple/keys paths. Covers 16 Decimal/float conversion sites.
+- **`_row_to_sale_item` gv (line ~1231):** Same `or d` / `is not None` pattern.
+- **`_row_to_sale_dict` gv (line ~1574):** Same pattern.
+
+#### 2. `src/models/return_invoice.py` — float(None) in to_dict() + __post_init__
+- **ReturnItem.to_dict():** Added `or 0` to all 6 `float(self.*)` calls (quantity_returned, quantity_original, unit_price, discount_amount, tax_amount, total_amount).
+- **ReturnInvoice.to_dict():** Added `or 0` to all 6 `float(self.*)` calls (subtotal, discount_amount, tax_amount, total_amount, refund_amount, credit_note_amount).
+- **ReturnItem.__post_init__:** Added `if value is None: setattr(..., Decimal("0"))` before the isinstance check.
+- **ReturnInvoice.__post_init__:** Same None guard for decimal_fields loop.
+
+#### 3. `src/models/product.py` — _row_to_product + __post_init__
+- **get_val helper:** Changed `row.get(key, default)` → `row.get(key, default) or default`; added `val if val is not None else default` for tuple path.
+- **Product.__post_init__:** Added `if value is None: setattr(..., Decimal("0.00"))` and `if self.current_stock is None: self.current_stock = 0.0`.
+
+#### 4. `src/models/customer.py` — _row_to_customer + to_dict()
+- **get_val helper:** Same `or default` / `is not None` pattern.
+- **Customer.to_dict():** Added `or 0` to 4 float() calls (credit_limit, current_balance, total_purchases, available_credit).
+
+#### 5. `src/models/supplier.py` — _row_to_supplier + __post_init__ + to_dict()
+- **get_val helper:** Same `or default` / `is not None` pattern.
+- **Supplier.__post_init__:** Added `if value is None: setattr(..., Decimal("0.00"))` guard.
+- **Supplier.to_dict():** Added `or 0` to 4 float() calls (credit_limit, current_balance, total_purchases, available_credit).
+
+### Verification
+All 5 files pass `ast.parse()` — syntax is valid.
+
+--- Task ID: 5b: Fix crash points in dialog files ---
+Date: 2026-09-01
+
+## payment_dialog.py
+- **L141**: Created `apply_prefill_data()` method (was missing, causing AttributeError). Method safely sets entity_combo index and amount_spinbox from `prefill_entity_id`/`prefill_amount` with best-effort try/except.
+- **L530**: `rem` (remaining_amount) from DB could be None → `{rem:.2f}` crash. Fixed: `{rem or 0:,.2f}`.
+
+## sales_dialog.py
+- **L887**: `float(product.selling_price)` → `float(product.selling_price or 0)` — ORM field can be NULL.
+- **L995**: `int(product_data["current_stock"])` → `int(product_data.get("current_stock") or 0)` — DB NULL crashes int().
+- **L1037**: `scrollToItem(self.table.item(row,1))` on None cell → added `_scroll_item` None guard.
+- **L1081**: `if item["stock"] <= 0` when stock is None → `if (item["stock"] or 0) <= 0`.
+- **L1187**: `self.table.item(row,4).setText(...)` on None → added `_qty_cell` None guard.
+- **L1198**: `self.table.item(row,5).setText(...)` on None → added `_price_cell` None guard.
+
+## purchase_order_dialog.py
+- **L424**: `self.items_table.item(row,1).setText(...)` on None → added `_code_cell` None guard.
+- **L451-452**: `self.items_table.item(row,6/7).setText(...)` on None → added `_subtotal_cell`/`_net_cell` None guards.
+- **L565-568**: `float(item.quantity_ordered/unit_price/discount_percentage/tax_percentage)` → added `or 0` to all 4.
+- **L571-573**: `float(self.po.discount_amount/tax_amount/shipping_cost)` → added `or 0` to all 3.
+- **L739-740**: `float(product_data.get("min_stock/current_stock", 0))` → changed to `or 0` (handles explicit None from DB).
+- **L751**: `float(product_data.get("cost_price", 0))` → changed to `or 0`.
+
+Total fixes: 18 crash points addressed across 3 files.
+
+--- Task ID: 5c
+
+**Fix crash points in service files: NULL aggregates, div-by-zero, missing columns**
+
+### payment_service.py (20 fixes)
+- **L231-235**: `sale_row["remaining_amount"]` could be NULL → added `or 0` before `Decimal(str(...))`.
+- **L649**: `Decimal(str(row.get("available_credit")))` → added `or 0` to prevent `Decimal(str(None))`.
+- **L705**: Same fix for `available_credit` in `get_accounts_payable`.
+- **L833-834**: `Decimal(str(r.get("amount"/"paid_amount")))` → added `or 0`.
+- **L890**: `Decimal(str(row.get("total_amount")))` → added `or 0`.
+- **L1087**: `Decimal(str(row["daily_amount"]))` → added `or 0`.
+- **L1180-1183**: All 4 aggregates in trends report (`total_amount`, `avg_amount`, `min_amount`, `max_amount`) → added `or 0`.
+- **L1253**: `Decimal(str(row["monthly_amount"]))` → added `or 0`.
+- **L1364-1365**: Changed `.get("key", 0)` to `.get("key") or 0` (default is bypassed when key exists with NULL).
+- **L1593-1596**: Same pattern fix for all 4 aggregates in KPI report.
+
+### sales_service.py (3 fixes)
+- **L391-392**: `SUM(si.quantity)` and `SUM(si.total_price)` → wrapped in `COALESCE(..., 0)`.
+- **L423**: `SUM(s.final_amount) AS total_purchases` → wrapped in `COALESCE(..., 0)`.
+- **L437**: `Decimal(str(row["total_purchases"]))` → added `or 0` as defense-in-depth.
+
+### purchase_order_service.py (4 fixes)
+- **L68**: Added `isinstance(result[0], dict)` guard before `.get("po_number")` for tuple-row safety.
+- **L659**: Same `isinstance` guard for `.get("receiving_number")`.
+- **L931**: `float(po.total_amount)` → `float(po.total_amount or 0)` to handle NULL.
+- **L964**: `max(po_amount, received_amount, invoice_amount, 1.0)` → filtered None values first: `max([a for a in (...) if a is not None]) if amounts else 1.0`.
+
+### return_service.py + database_manager.py (3 fixes)
+- **return_service.py L100-103**: Added `return_number` to INSERT columns and values (was generated but never inserted).
+- **database_manager.py L751**: Added `return_number TEXT UNIQUE` column to `return_invoices` CREATE TABLE.
+- **database_manager.py L763-770**: Added ALTER TABLE migration to add `return_number` column for existing databases.
+
+### product_service_enhanced.py (8 fixes)
+- **New helper `_get_pragma_columns(table)`**: Safely extracts column names from PRAGMA table_info, handling both dict and tuple row formats.
+- **L82-83, L250-251**: Replaced manual `row.get('name', '')` PRAGMA parsing with `_get_pragma_columns()`.
+- **L314-315, L395-396, L469-470, L746-747, L793-794**: Replaced all 5 remaining PRAGMA patterns with helper call.
+- **L527-551 (`get_featured_products`)**: Wrapped hardcoded `reserved_stock` column in SELECT with schema check (`_get_pragma_columns`) to avoid crash when column doesn't exist.
+
+Total: 38 crash points addressed across 6 files.
+
+--- Task ID: 5d
+**Scope:** Crash points in main_window.py and login_dialog.py
+**Date:** 2025-07-01
+
+### main_window.py (7 fixes)
+
+1. **L5231 – `import pandas as pd` outside try/except in `_on_sales_data_loaded`**
+   - Moved `import pandas as pd` inside the existing `try:` block. Previously, if pandas was not installed, the `ImportError` would propagate uncaught before reaching the `try` guard.
+
+2. **L5478-5480 – `purchase.get('total_amount', 0)` returns `None` when DB column is NULL**
+   - Changed `purchase.get('total_amount', 0)` → `purchase.get('total_amount') or 0` (and same for `paid_amount`, `remaining_amount`). The `.get()` default only fires when the key is absent; a key present with `None` value passes through and crashes `f"{None:,.2f}"`.
+   - Also fixed identical pattern at **L5752/5754** (`r.get("balance", 0)` in float() sum) and **L5881/5886** (`row.get("amount", row.get("total", 0))` in float()).
+
+3. **L2755 – `top_insight['message']` KeyError short-circuits dashboard**
+   - Changed `top_insight["message"]` → `top_insight.get("message", "")` so a missing key shows empty text instead of crashing.
+
+4. **L2746-2749 – `AIPredictionService` instantiated every dashboard refresh, failure kills dashboard**
+   - Wrapped the `AIPredictionService(self.db_manager)` + `get_proactive_insights()` in its own `try/except`. On failure, `insights` defaults to `[]` so the dashboard renders normally.
+
+5. **L9733 – Typo `'%H:%Mf'` in strftime**
+   - Changed to `'%H:%M:%S'`. The `f` after `M` was a typo (not a valid directive); it would raise `ValueError` on every statusbar refresh.
+
+6. **L612, L626 – `self.logger` used inside `except` but may be `None`**
+   - Added `if self.logger:` guard before `.debug(...)` calls in two `except` blocks during `__init__`.
+
+### login_dialog.py (1 fix)
+
+7. **L221 – `SecurityService(user_service.db)` crashes in standalone test**
+   - Wrapped in `try/except`; sets `self.security_service = None` on failure so the dialog still loads.
+
+**Verification:** Both files pass `python -m py_compile` cleanly.

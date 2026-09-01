@@ -141,6 +141,19 @@ class PaymentDialog(BaseDialog):
         self.apply_prefill_data()
         self.notify = NotificationManager(self)
 
+    def apply_prefill_data(self):
+        """تطبيق البيانات المملوءة مسبقاً (entity_id, amount) على النموذج"""
+        try:
+            if self.prefill_entity_id is not None:
+                for i in range(self.entity_combo.count()):
+                    if self.entity_combo.itemData(i) == self.prefill_entity_id:
+                        self.entity_combo.setCurrentIndex(i)
+                        break
+            if self.prefill_amount is not None:
+                self.amount_spinbox.setValue(float(self.prefill_amount))
+        except Exception:
+            pass  # prefill is best-effort, never block the dialog
+
         self.setModal(True)
         self.resize(800, 600)
 
@@ -527,7 +540,7 @@ class PaymentDialog(BaseDialog):
                     inv = r["invoice_number"] if isinstance(r, dict) else r[1]
                     rem = r["remaining_amount"] if isinstance(r, dict) else r[3]
                     sid = r["id"] if isinstance(r, dict) else r[0]
-                    self.sale_combo.addItem(f"{inv} (متبقي: {rem:.2f})", sid)
+                    self.sale_combo.addItem(f"{inv} (متبقي: {rem or 0:,.2f})", sid)
             else:
                 self.sale_combo.setEnabled(False)
         except Exception:

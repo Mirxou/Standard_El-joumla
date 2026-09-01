@@ -1093,13 +1093,15 @@ class SaleManager:
 
         def gv(k, i, d=None):
             if isinstance(row, dict):
-                return row.get(k, d)
+                return row.get(k, d) or d
             if hasattr(row, "keys"):
                 try:
-                    return row[k]
+                    val = row[k]
                 except (IndexError, KeyError):
-                    pass
-            return row[i] if len(row) > i else d
+                    return d
+                return val if val is not None else d
+            val = row[i] if len(row) > i else d
+            return val if val is not None else d
 
         # تحديد الفهارس بناءً على حجم الصف
         row_len = len(row) if not isinstance(row, dict) else 99
@@ -1228,8 +1230,9 @@ class SaleManager:
 
         def gv(k, i, d=None):
             if is_dict:
-                return row.get(k, d)
-            return row[i] if len(row) > i else d
+                return row.get(k, d) or d
+            val = row[i] if len(row) > i else d
+            return val if val is not None else d
 
         return SaleItem(
             id=gv("id", 0),
@@ -1570,8 +1573,9 @@ class SaleManager:
 
         def gv(k, i, d=None):
             if is_dict:
-                return row.get(k, d)
-            return row[i] if len(row) > i else d
+                return row.get(k, d) or d
+            val = row[i] if len(row) > i else d
+            return val if val is not None else d
 
         return {
             "id": gv("id", 0),

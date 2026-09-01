@@ -98,11 +98,12 @@ class ReturnService:
             cursor.execute(
                 """
                 INSERT INTO return_invoices (
-                    original_invoice_id, return_date, reason,
+                    return_number, original_invoice_id, return_date, reason,
                     total_refund_amount, status
-                ) VALUES (?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
+                    return_invoice.return_number,
                     return_invoice.original_sale_id,
                     (return_invoice.return_date.isoformat()
                      if return_invoice.return_date else None),

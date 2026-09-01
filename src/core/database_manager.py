@@ -750,6 +750,7 @@ class DatabaseManager:
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS return_invoices (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    return_number TEXT UNIQUE,
                     original_invoice_id INTEGER,
                     return_date DATETIME DEFAULT CURRENT_TIMESTAMP,
                     reason TEXT,
@@ -758,6 +759,15 @@ class DatabaseManager:
                     FOREIGN KEY(original_invoice_id) REFERENCES sales(id)
                 )
             """)
+
+            # Ensure return_number column exists for databases created before this fix
+            try:
+                cursor.execute("PRAGMA table_info(return_invoices)")
+                columns = [col[1] for col in cursor.fetchall()]
+                if 'return_number' not in columns:
+                    cursor.execute("ALTER TABLE return_invoices ADD COLUMN return_number TEXT UNIQUE")
+            except Exception as e:
+                self.logger.warning(f"Could not add return_number to return_invoices: {e}")
 
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS return_items (

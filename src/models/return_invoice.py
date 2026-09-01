@@ -98,7 +98,9 @@ class ReturnItem:
         ]
         for field_name in decimal_fields:
             value = getattr(self, field_name)
-            if isinstance(value, (int, float, str)):
+            if value is None:
+                setattr(self, field_name, Decimal("0"))
+            elif isinstance(value, (int, float, str)):
                 setattr(self, field_name, Decimal(str(value)))
 
         # تحويل السبب
@@ -131,12 +133,12 @@ class ReturnItem:
             "product_id": self.product_id,
             "product_name": self.product_name,
             "product_barcode": self.product_barcode,
-            "quantity_returned": float(self.quantity_returned),
-            "quantity_original": float(self.quantity_original),
-            "unit_price": float(self.unit_price),
-            "discount_amount": float(self.discount_amount),
-            "tax_amount": float(self.tax_amount),
-            "total_amount": float(self.total_amount),
+            "quantity_returned": float(self.quantity_returned or 0),
+            "quantity_original": float(self.quantity_original or 0),
+            "unit_price": float(self.unit_price or 0),
+            "discount_amount": float(self.discount_amount or 0),
+            "tax_amount": float(self.tax_amount or 0),
+            "total_amount": float(self.total_amount or 0),
             "return_reason": (
                 self.return_reason.name if isinstance(self.return_reason, ReturnReason) else self.return_reason
             ),
@@ -231,7 +233,9 @@ class ReturnInvoice:
         ]
         for field_name in decimal_fields:
             value = getattr(self, field_name)
-            if isinstance(value, (int, float, str)):
+            if value is None:
+                setattr(self, field_name, Decimal("0"))
+            elif isinstance(value, (int, float, str)):
                 setattr(self, field_name, Decimal(str(value)))
 
         # تحويل الأنواع والحالات
@@ -404,18 +408,18 @@ class ReturnInvoice:
                 self.return_reason.name if isinstance(self.return_reason, ReturnReason) else self.return_reason
             ),
             "description": self.description,
-            "subtotal": float(self.subtotal),
-            "discount_amount": float(self.discount_amount),
-            "tax_amount": float(self.tax_amount),
-            "total_amount": float(self.total_amount),
+            "subtotal": float(self.subtotal or 0),
+            "discount_amount": float(self.discount_amount or 0),
+            "tax_amount": float(self.tax_amount or 0),
+            "total_amount": float(self.total_amount or 0),
             "refund_method": (
                 self.refund_method.name if isinstance(self.refund_method, RefundMethod) else self.refund_method
             ),
-            "refund_amount": float(self.refund_amount),
+            "refund_amount": float(self.refund_amount or 0),
             "refund_date": self.refund_date.isoformat() if self.refund_date else None,
             "refund_reference": self.refund_reference,
             "credit_note_number": self.credit_note_number,
-            "credit_note_amount": float(self.credit_note_amount),
+            "credit_note_amount": float(self.credit_note_amount or 0),
             "exchange_sale_id": self.exchange_sale_id,
             "notes": self.notes,
             "internal_notes": self.internal_notes,

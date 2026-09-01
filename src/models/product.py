@@ -44,9 +44,13 @@ class Product:
         """تحويل القيم بعد الإنشاء"""
         for field in ["cost_price", "selling_price", "wholesale_price", "vip_price"]:
             value = getattr(self, field)
-            if isinstance(value, (int, float, str)):
+            if value is None:
+                setattr(self, field, Decimal("0.00"))
+            elif isinstance(value, (int, float, str)):
                 setattr(self, field, Decimal(str(value)))
-        if isinstance(self.current_stock, (int, float, str)):
+        if self.current_stock is None:
+            self.current_stock = 0.0
+        elif isinstance(self.current_stock, (int, float, str)):
             self.current_stock = float(self.current_stock)
 
     @property
@@ -442,8 +446,9 @@ class ProductManager:
 
             def get_val(key, idx, default=None):
                 if is_dict:
-                    return row.get(key, default)
-                return row[idx] if len(row) > idx else default
+                    return row.get(key, default) or default
+                val = row[idx] if len(row) > idx else default
+                return val if val is not None else default
 
             product = Product(
                 id=get_val("id", 0),

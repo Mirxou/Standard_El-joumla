@@ -65,7 +65,7 @@ class PurchaseOrderService:
 
         result = self.db.execute_query(query, (f"{prefix}%",))
 
-        if result and result[0].get("po_number"):
+        if result and isinstance(result[0], dict) and result[0].get("po_number"):
             last_number = result[0].get("po_number")
             sequence = int(last_number.split("-")[-1]) + 1
         else:
@@ -656,7 +656,7 @@ class PurchaseOrderService:
 
         result = self.db.execute_query(query, (f"{prefix}%",))
 
-        if result and result[0].get("receiving_number"):
+        if result and isinstance(result[0], dict) and result[0].get("receiving_number"):
             last_number = result[0].get("receiving_number")
             sequence = int(last_number.split("-")[-1]) + 1
         else:
@@ -928,7 +928,7 @@ class PurchaseOrderService:
                 return {"matched": False, "error": "أمر الشراء غير موجود"}
 
             # 1. مبلغ أمر الشراء
-            po_amount = float(po.total_amount)
+            po_amount = float(po.total_amount or 0)
 
             # 2. مبلغ الاستلام الفعلي (محسوب من receiving_items × purchase_order_items.unit_price)
             # Bug #4 fix: receiving_notes has no total_amount column;
@@ -961,7 +961,8 @@ class PurchaseOrderService:
             diff_po_invoice = abs(po_amount - invoice_amount)
             diff_received_invoice = abs(received_amount - invoice_amount)
 
-            max_amount = max(po_amount, received_amount, invoice_amount, 1.0)
+            amounts = [a for a in (po_amount, received_amount, invoice_amount) if a is not None]
+            max_amount = max(amounts) if amounts else 1.0
             tolerance_amount = max_amount * tolerance
 
             is_matched = (

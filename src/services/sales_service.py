@@ -388,8 +388,8 @@ class SalesService:
             query = """
                 SELECT
                     p.name AS product_name,
-                    SUM(si.quantity) AS quantity,
-                    SUM(si.total_price) AS revenue
+                    COALESCE(SUM(si.quantity), 0) AS quantity,
+                    COALESCE(SUM(si.total_price), 0) AS revenue
                 FROM sale_items si
                 JOIN sales s ON s.id = si.sale_id
                 JOIN products p ON p.id = si.product_id
@@ -420,7 +420,7 @@ class SalesService:
                 SELECT
                     COALESCE(c.name, 'عميل نقدي') AS customer_name,
                     COUNT(*) AS invoice_count,
-                    SUM(s.final_amount) AS total_purchases
+                    COALESCE(SUM(s.final_amount), 0) AS total_purchases
                 FROM sales s
                 LEFT JOIN customers c ON c.id = s.customer_id AND c.is_deleted = 0
                 WHERE s.sale_date >= ? AND s.sale_date <= ?
@@ -434,7 +434,7 @@ class SalesService:
             return [
                 {
                     "customer_name": row["customer_name"],
-                    "total_purchases": Decimal(str(row["total_purchases"])),
+                    "total_purchases": Decimal(str(row["total_purchases"] or 0)),
                     "invoice_count": int(row["invoice_count"]),
                 }
                 for row in rows

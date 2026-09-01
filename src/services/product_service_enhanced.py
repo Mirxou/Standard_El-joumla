@@ -38,6 +38,25 @@ class ProductService:
 
     # ==================== عمليات CRUD الأساسية ====================
 
+    def _get_pragma_columns(self, table: str = 'products') -> set:
+        """Safely extract column names from PRAGMA table_info.
+
+        Handles both dict and tuple row formats returned by different DB backends.
+        """
+        try:
+            rows = self.db_manager.fetch_all(f"PRAGMA table_info({table})")
+            if not rows:
+                return set()
+            cols = set()
+            for row in rows:
+                if isinstance(row, dict):
+                    cols.add(row.get('name', ''))
+                elif isinstance(row, (list, tuple)) and len(row) > 1:
+                    cols.add(row[1])
+            return cols
+        except Exception:
+            return set()
+
     def create_product(self, product: Product) -> Optional[int]:
         """إنشاء منتج جديد مع جميع بياناته"""
         try:
@@ -79,8 +98,7 @@ class ProductService:
             }
 
             # get existing columns from DB
-            cols_info = self.db_manager.fetch_all("PRAGMA table_info(products)")
-            existing_cols = [row.get('name', '') for row in cols_info] if cols_info else []
+            existing_cols = self._get_pragma_columns('products')
 
             insert_cols = []
             insert_vals = []
@@ -247,8 +265,7 @@ class ProductService:
                 col_map["selling_price"] = selling_price_val  # include both; PRAGMA check will filter
 
             # Get existing columns from DB
-            cols_info = self.db_manager.fetch_all("PRAGMA table_info(products)")
-            existing_cols = [row.get('name', '') for row in cols_info] if cols_info else []
+            existing_cols = self._get_pragma_columns('products')
 
             update_parts = []
             update_vals = []
@@ -311,8 +328,7 @@ class ProductService:
         """البحث عن المنتجات"""
         try:
             # الحصول على الأعمدة المتاحة فقط
-            cols_info = self.db_manager.fetch_all("PRAGMA table_info(products)")
-            available_cols = {row.get('name', '') for row in cols_info} if cols_info else set()
+            available_cols = self._get_pragma_columns('products')
 
             # اختيار الأعمدة الموجودة فقط من الجدول
             all_cols_to_check = [
@@ -392,8 +408,7 @@ class ProductService:
         """الحصول على المنتجات ذات المخزون المنخفض"""
         try:
             # Get available columns
-            cols_info = self.db_manager.fetch_all("PRAGMA table_info(products)")
-            available_cols = {row.get('name', '') for row in cols_info} if cols_info else set()
+            available_cols = self._get_pragma_columns('products')
 
             all_cols_to_check = [
                 "id",
@@ -466,8 +481,7 @@ class ProductService:
         """الحصول على المنتجات التي تحتاج إلى إعادة طلب"""
         try:
             # F3 FIX: check for reserved_stock column existence like get_low_stock_products does
-            cols_info = self.db_manager.fetch_all("PRAGMA table_info(products)")
-            available_cols = {row.get('name', '') for row in cols_info} if cols_info else set()
+            available_cols = self._get_pragma_columns('products')
 
             has_reserved = "reserved_stock" in available_cols
 
@@ -513,11 +527,18 @@ class ProductService:
     def get_featured_products(self, limit: int = 10) -> List[Product]:
         """الحصول على المنتجات المميزة"""
         try:
-            query = """
-            SELECT id, name, name_en, sku, barcode, category_id, supplier_id,
-                   product_type, description, specifications, unit,
-                   cost_price, base_price, pricing_policy,
-                   current_stock, reserved_stock, min_stock, reorder_point, max_stock,
+            available_cols = self._get_pragma_columns('products')
+            has_reserved = "reserved_stock" in available_cols
+
+            base_cols = "id, name, name_en, sku, barcode, category_id, supplier_id, product_type, description, specifications, unit, cost_price, base_price, pricing_policy,"
+            if has_reserved:
+                stock_cols = "current_stock, reserved_stock, min_stock, reorder_point, max_stock,"
+            else:
+                stock_cols = "current_stock, min_stock, reorder_point, max_stock,"
+
+            query = f"""
+            SELECT {base_cols}
+                   {stock_cols}
                    image_path, images, tags,
                    is_active, is_discontinued, is_featured,
                    created_at, updated_at, discontinued_date,
@@ -743,8 +764,7 @@ class ProductService:
         """حساب قيمة المخزون الإجمالي"""
         try:
             # F3 FIX: check for reserved_stock column existence
-            cols_info = self.db_manager.fetch_all("PRAGMA table_info(products)")
-            available_cols = {row.get('name', '') for row in cols_info} if cols_info else set()
+            available_cols = self._get_pragma_columns('products')
 
             if "reserved_stock" in available_cols:
                 query = """
@@ -790,8 +810,7 @@ class ProductService:
         """الحصول على إحصائيات المنتجات"""
         try:
             # F3 FIX: check for reserved_stock column existence
-            cols_info = self.db_manager.fetch_all("PRAGMA table_info(products)")
-            available_cols = {row.get('name', '') for row in cols_info} if cols_info else set()
+            available_cols = self._get_pragma_columns('products')
 
             has_reserved = "reserved_stock" in available_cols
 
