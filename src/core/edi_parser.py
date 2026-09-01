@@ -268,9 +268,9 @@ class EDIParser:
     def _map_edifact_document_type(self, msg_type: str) -> str:
         """تحويل نوع رسالة EDIFACT إلى كود قياسي"""
         mapping = {
-            "ORDERS": "850",  # Purchase Order  # noqa: F601
+            "ORDERS": "850",  # Purchase Order
             "INVOIC": "810",  # Invoice
-            "ORDERS": "855",  # Purchase Order Acknowledgment  # noqa: F601
+            "ORDRSP": "855",  # Purchase Order Acknowledgment
             "DESADV": "856",  # Advanced Shipping Notice
             "APERAK": "997",  # Functional Acknowledgment
         }

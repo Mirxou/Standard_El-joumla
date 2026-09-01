@@ -9,13 +9,37 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 from src.api.api_client import APIClient
-from src.api.circuit_breaker import CircuitBreaker
-from src.api.delta_sync import DeltaSyncService
-from src.core.local_database_manager import LocalDatabaseManager
-from src.repositories.customer_repository import CustomerRepository
-from src.repositories.product_repository import ProductRepository
-from src.repositories.sale_repository import SaleRepository
 from src.utils.logger import setup_logger
+
+try:
+    from src.api.circuit_breaker import CircuitBreaker
+except ImportError:
+    CircuitBreaker = None
+
+try:
+    from src.api.delta_sync import DeltaSyncService
+except ImportError:
+    DeltaSyncService = None
+
+try:
+    from src.core.local_database_manager import LocalDatabaseManager
+except ImportError:
+    LocalDatabaseManager = None
+
+try:
+    from src.repositories.customer_repository import CustomerRepository
+except ImportError:
+    CustomerRepository = None
+
+try:
+    from src.repositories.product_repository import ProductRepository
+except ImportError:
+    ProductRepository = None
+
+try:
+    from src.repositories.sale_repository import SaleRepository
+except ImportError:
+    SaleRepository = None
 
 
 class SyncService:
@@ -23,20 +47,20 @@ class SyncService:
 
     def __init__(
         self,
-        local_db: LocalDatabaseManager,
+        local_db,
         api_client: APIClient,
-        circuit_breaker: Optional[CircuitBreaker] = None,
+        circuit_breaker=None,
     ):
         self.local_db = local_db
         self.api_client = api_client
-        self.delta_sync = DeltaSyncService(local_db)
-        self.circuit_breaker = circuit_breaker or CircuitBreaker()
+        self.delta_sync = DeltaSyncService(local_db) if DeltaSyncService and local_db else None
+        self.circuit_breaker = circuit_breaker or (CircuitBreaker() if CircuitBreaker else None)
         self.logger = setup_logger(__name__)
 
         # Repositories
-        self.product_repo = ProductRepository(local_db)
-        self.sale_repo = SaleRepository(local_db)
-        self.customer_repo = CustomerRepository(local_db)
+        self.product_repo = ProductRepository(local_db) if ProductRepository and local_db else None
+        self.sale_repo = SaleRepository(local_db) if SaleRepository and local_db else None
+        self.customer_repo = CustomerRepository(local_db) if CustomerRepository and local_db else None
 
     def sync_ultimate_flow(self) -> Dict[str, Any]:
         """
@@ -54,9 +78,13 @@ class SyncService:
             "errors": [],
         }
 
+        if not self.delta_sync or not self.circuit_breaker:
+            result["errors"].append("Required dependencies not available (DeltaSyncService/CircuitBreaker)")
+            return result
+
         try:
             # 1. Handshake - الحصول على آخر timestamp
-            last_synced = self.local_db.get_last_synced_at()
+            last_synced = self.local_db.get_last_synced_at() if hasattr(self.local_db, 'get_last_synced_at') else None
             if last_synced is None:
                 last_synced = datetime.fromtimestamp(0)
 
@@ -234,11 +262,11 @@ class SyncService:
             return None
 
         # الحصول على السجل المحلي
-        if table_name == "products":
+        if table_name == "products" and self.product_repo:
             local_record = self.product_repo.find_by_id(record_id, include_deleted=True)
-        elif table_name == "sales":
+        elif table_name == "sales" and self.sale_repo:
             local_record = self.sale_repo.find_by_id(record_id, include_deleted=True)
-        elif table_name == "customers":
+        elif table_name == "customers" and self.customer_repo:
             local_record = self.customer_repo.find_by_id(record_id, include_deleted=True)
         else:
             local_record = None
@@ -292,11 +320,11 @@ class SyncService:
             except (TypeError, ValueError):
                 return False
 
-            if table_name == "products":
+            if table_name == "products" and self.product_repo:
                 repo = self.product_repo
-            elif table_name == "sales":
+            elif table_name == "sales" and self.sale_repo:
                 repo = self.sale_repo
-            elif table_name == "customers":
+            elif table_name == "customers" and self.customer_repo:
                 repo = self.customer_repo
             else:
                 return False
@@ -333,8 +361,8 @@ class SyncService:
         Returns:
             حالة المزامنة
         """
-        summary = self.delta_sync.get_sync_summary()
-        circuit_state = self.circuit_breaker.get_state()
+        summary = self.delta_sync.get_sync_summary() if self.delta_sync else {"pending_count": 0, "is_synced": True}
+        circuit_state = self.circuit_breaker.get_state() if self.circuit_breaker else "unavailable"
 
         return {
             **summary,

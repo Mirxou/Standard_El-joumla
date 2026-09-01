@@ -26,15 +26,15 @@ def _fetch_one_helper(db_manager, query, params=()) -> Any:
         row = db_manager.fetch_one(query, params)
         if row is not None:
             return row
-    except Exception:
-        pass
+    except Exception as e:
+        logging.warning(f'_fetch_one_helper fetch_one failed: {e}')
 
     try:
         rows = db_manager.fetch_all(query, params)
         if rows:
             return rows[0]
-    except Exception:
-        pass
+    except Exception as e:
+        logging.warning(f'_fetch_one_helper fetch_all failed: {e}')
 
     return None
 
@@ -43,15 +43,15 @@ def _fetch_all_helper(db_manager, query, params=()) -> List[Any]:
     """Safely fetch all rows from database"""
     try:
         return db_manager.fetch_all(query, params)
-    except Exception:
-        pass
+    except Exception as e:
+        logging.warning(f'_fetch_all_helper fetch_all failed: {e}')
 
     try:
         row = db_manager.fetch_one(query, params)
         if row is not None:
             return [row]
-    except Exception:
-        pass
+    except Exception as e:
+        logging.warning(f'_fetch_all_helper fetch_one failed: {e}')
 
     return []
 
@@ -802,9 +802,9 @@ class WarehouseTransferManager:
                     try:
                         num = int(last_number.split("-")[1])
                         return f"TRF-{num + 1:06d}"
-                    except Exception:
+                    except Exception as e:
                         if self.logger:
-                            self.logger.warning("Ignored exception in warehouse.py - generate_transfer_number")
+                            self.logger.warning(f"Ignored exception in warehouse.py - generate_transfer_number: {e}")
             return "TRF-000001"
         except Exception as e:
             _log_error(self.logger, f"Error generating transfer number: {e}")

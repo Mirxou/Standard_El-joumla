@@ -625,38 +625,42 @@ class HybridDataService:
                         if operation == "create":
                             # الحصول على المنتج من قاعدة البيانات المحلية
                             product = self.db.execute_query("SELECT * FROM products WHERE id = ?", (entity_id,))
-                            if product:
-                                # إرسال إلى API
-                                result = self.api.post(
-                                    "products",
-                                    (product[0] if isinstance(product, list) else product),
-                                )
-                                success = result is not None
+                            if not product:
+                                continue
+                            # إرسال إلى API
+                            result = self.api.post(
+                                "products",
+                                (product[0] if isinstance(product, list) else product),
+                            )
+                            success = result is not None
                         elif operation == "update":
                             product = self.db.execute_query("SELECT * FROM products WHERE id = ?", (entity_id,))
-                            if product:
-                                result = self.api.put(
-                                    f"products/{entity_id}",
-                                    (product[0] if isinstance(product, list) else product),
-                                )
-                                success = result is not None
+                            if not product:
+                                continue
+                            result = self.api.put(
+                                f"products/{entity_id}",
+                                (product[0] if isinstance(product, list) else product),
+                            )
+                            success = result is not None
                         elif operation == "delete":
                             success = self.api.delete(f"products/{entity_id}")
 
                     elif entity_type == "sale":
                         if operation == "create":
                             sale = self.db.execute_query("SELECT * FROM sales WHERE id = ?", (entity_id,))
-                            if sale:
-                                result = self.api.post("sales", sale[0] if isinstance(sale, list) else sale)
-                                success = result is not None
+                            if not sale:
+                                continue
+                            result = self.api.post("sales", sale[0] if isinstance(sale, list) else sale)
+                            success = result is not None
                         elif operation == "update":
                             sale = self.db.execute_query("SELECT * FROM sales WHERE id = ?", (entity_id,))
-                            if sale:
-                                result = self.api.put(
-                                    f"sales/{entity_id}",
-                                    sale[0] if isinstance(sale, list) else sale,
-                                )
-                                success = result is not None
+                            if not sale:
+                                continue
+                            result = self.api.put(
+                                f"sales/{entity_id}",
+                                sale[0] if isinstance(sale, list) else sale,
+                            )
+                            success = result is not None
                         elif operation == "delete":
                             success = self.api.delete(f"sales/{entity_id}")
 

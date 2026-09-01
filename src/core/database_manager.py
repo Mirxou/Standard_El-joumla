@@ -1135,7 +1135,13 @@ class DatabaseManager:
                 self._thread_local.transaction_conn = None
 
     def execute_query(self, query: str, params: Tuple = ()) -> Any:
-        """تنفيذ استعلام وإرجاع النتائج أو cursor للعمليات الأخرى"""
+        """تنفيذ استعلام وإرجاع النتائج أو cursor للعمليات الأخرى
+
+        NOTE: For DML operations (INSERT/UPDATE/DELETE), prefer using
+        execute_insert() or execute_non_query() instead. This method
+        returns a closed cursor for DML, making lastrowid/rowcount
+        inaccessible after return.
+        """
         with self.get_cursor() as cursor:
             start_t = time.perf_counter()
             cursor.execute(query, params)
@@ -1150,12 +1156,16 @@ class DatabaseManager:
                 return [dict(zip(columns, row)) for row in rows]
             else:
                 # للعمليات الأخرى مثل CREATE, INSERT, UPDATE, DELETE
+                # Capture lastrowid before the context manager closes the cursor
+                lastrowid = getattr(cursor, 'lastrowid', None)
+                rowcount = getattr(cursor, 'rowcount', -1)
                 if self.pool is None:
                     self.connection.commit()
                 else:
                     # مع Pool، يتم الالتزام عبر الاتصال داخل السياق
                     cursor.connection.commit()
-                return cursor
+                # Return a simple dict with available info instead of the closed cursor
+                return {'lastrowid': lastrowid, 'rowcount': rowcount, 'closed': True}
 
     def fetch_one(self, query: str, params: Tuple = ()) -> Optional[Dict[str, Any]]:
         """تنفيذ استعلام وإرجاع صف واحد كـ dict"""
@@ -1286,7 +1296,10 @@ class DatabaseManager:
         """الحصول على آخر ID تم إدراجه"""
         with self.get_cursor() as cursor:
             cursor.execute("SELECT last_insert_rowid()")
-            return cursor.fetchone()[0]
+            row = cursor.fetchone()
+            if row is None:
+                return 0
+            return row[0] if isinstance(row, tuple) else (row.get("last_insert_rowid()", 0) if isinstance(row, dict) else row)
 
     def get_connection(self):
         """

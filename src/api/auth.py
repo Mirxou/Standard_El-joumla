@@ -363,7 +363,9 @@ class JWTAuthManager:
         if not payload:
             return None
 
-        user_id = int(payload.get("sub"))
+        user_id = int(payload.get("sub") or 0)
+        if not user_id:
+            return None
         username = payload.get("username")
         company_id = payload.get("company_id")
 
@@ -391,7 +393,9 @@ class JWTAuthManager:
         if not payload:
             return None
 
-        user_id = int(payload.get("sub"))
+        user_id = int(payload.get("sub") or 0)
+        if not user_id:
+            return None
 
         try:
             user = self.db_manager.fetch_one(

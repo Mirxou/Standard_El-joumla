@@ -288,7 +288,10 @@ class QuoteHistoryDialog(BaseDialog):
         row = self.table.currentRow()
         customer = self.table.item(row, 1).text()
         date_str = self.table.item(row, 2).text()
-        total_val = float(self.table.item(row, 4).text().replace(",", ""))
+        try:
+            total_val = float(self.table.item(row, 4).text().replace(",", ""))
+        except (ValueError, TypeError, AttributeError):
+            total_val = 0.0
 
         # We need items for the PDF
         # We can use a quick query here or add get_quote method to service.

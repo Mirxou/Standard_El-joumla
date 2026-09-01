@@ -1082,9 +1082,8 @@ class LocalDatabaseManager:
             raise DatabaseException(f"خطأ في تنفيذ الاستعلام: {str(e)}")
 
     # NOTE: get_connection(), get_last_insert_id(), execute_insert()
-    # are defined above in their proper locations (lines ~183, ~1106, ~1113)
-    # The compatibility aliases below (execute_update, execute_insert, fetch_all)
-    # provide backward compatibility for services expecting different method names.
+    # are defined at their proper locations (lines ~182, ~1280, ~1292).
+    # No duplicates exist; the single definitions serve all callers.
 
     def execute(self, query: str, params: Tuple = ()):
         """تنفيذ استعلام SQL مباشر"""

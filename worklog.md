@@ -2664,3 +2664,164 @@ After fix: `rg -n '\.item\([^)]+\)\.(text|setText|setData)\(' src/ui/windows/ -g
 - `src/models/quote.py` — no double-counting
 - `src/services/advanced_ai_service.py` — table names already correct
 - `src/core/local_database_manager.py` — reviewed execute_query return contract
+
+--- Task ID: 2b
+
+## AI Module Bug Fixes
+
+**Date:** 2025-06-30
+**Scope:** 12 files in src/ai/
+
+### Fixes Applied
+
+1. **advanced_analytics_engine.py** — Wrapped 2x `datetime.fromisoformat` (lines ~280, ~335) in try/except returning `datetime.now().date()` on error. Changed `_calculate_growth_rate` to return `999999.9` instead of `float('inf')` when `first_half == 0`.
+
+2. **advanced_analytics_system.py:163** — Changed dead `dashboard_config or {}` to `dashboard_config = dashboard_config or {}`.
+
+3. **advanced_nlp_engine.py** — Wrapped `import numpy` and `import pandas` in separate try/except blocks (setting `np = None` / `pd = None`). Wrapped global `advanced_nlp_engine = AdvancedNLPEngine()` in try/except (setting to `None` on error).
+
+4. **advanced_prediction_system.py:286-299** — Added guard `if price_per_unit == cost_per_unit: margin = 0.0`. Added ternary guard on `break_even_units` calculation to avoid division by zero.
+
+5. **computer_vision.py:45** — Wrapped `from PIL import Image` in try/except with `PIL_AVAILABLE` flag and `Image = None` fallback.
+
+6. **deep_learning_engine.py:20** — Wrapped `from unittest.mock import MagicMock` in try/except. Wrapped `import numpy` and `import pandas` in try/except blocks.
+
+7. **machine_learning_model.py** — Wrapped 4x `datetime.fromisoformat` calls (lines ~231, ~241, ~293, ~541) in try/except with `continue` on error. Removed dead code `list(daily_sales.keys())` at line ~405.
+
+8. **predictive_analytics.py** — Changed `product["id"]` to `product.get("id") or product.get("product_id")` for DB column compatibility. Wrapped `datetime.fromisoformat` list comprehension (line ~175) in explicit loop with try/except.
+
+9. **predictive_analytics_platform.py:22-23** — Wrapped `import numpy` and `import pandas` in separate try/except blocks.
+
+10. **process_mining_engine.py:17-19** — Wrapped `import matplotlib.pyplot` and `import networkx` in try/except blocks with `MATPLOTLIB_AVAILABLE`/`NETWORKX_AVAILABLE` flags.
+
+11. **rpa_system.py:24-29** — Replaced fake `try: pass` pyperclip block with actual `import pyperclip` in try/except.
+
+12. **voice_control_agent.py:68** — Removed duplicate "مساعدة" keyword from help command keywords list.
+
+--- Task ID: 3b
+
+## Bug Fixes - API Module Remaining Bugs
+
+**Date:** 2025-06-30
+**Scope:** src/api/ module - 8 files, 15+ bugs fixed
+
+### 1. auth.py - JWT sub crash on missing payload key
+- **Bug:** `int(payload.get('sub'))` crashes with `TypeError` when payload lacks 'sub' key (returns None).
+- **Fix:** Changed to `int(payload.get('sub') or 0)` with a guard `if not user_id: return None` in both `refresh_access_token()` and `get_current_user()`.
+
+### 2. delta_sync.py - None table_name crash + f-string
+- **Bug:** `get_pending_count(table_name=None)` could crash in recursive calls. f-string was already correct.
+- **Fix:** Added early `if not table_name: return 0` guard at the top of the method.
+
+### 3. api_client.py - IndexError on empty product list
+- **Bug:** `product[0]` and `sale[0]` accessed after truthy check, but empty edge cases could cause IndexError.
+- **Fix:** Changed `if product:` blocks to `if not product: continue` pattern, ensuring safe access to index 0. Applied to both product and sale sync operations.
+
+### 4. cache_manager.py - @cached decorator awaits sync functions
+- **Bug:** Both `@cached` and `@invalidate_cache` decorators unconditionally used `await func(...)` even for synchronous functions, causing `TypeError: object NoneType can't be used in 'await' expression`.
+- **Fix:** Added `asyncio.iscoroutinefunction(func)` check. Sync functions are called directly; async functions are awaited. Applied to both decorators.
+
+### 5. middleware.py - Overly broad path matching
+- **Bug:** `request.url.path.startswith(path)` for exclude_paths was too broad. `"/"` excluded matched ALL paths. `/api/v1/auth/login` excluded matched `/api/v1/auth/login/something`.
+- **Fix:** Replaced with exact match logic: `path == "/"` only matches root; other paths use `request_path == path or request_path.startswith(path + "/")`. Applied to both AuthMiddleware and RateLimitMiddleware.
+
+### 6. routes.py - Duplicate routes and model definitions
+- **Removed duplicate /health** endpoint (kept the one with tags=["System"]).
+- **Removed duplicate GET /warehouses** (`_old_get_warehouses`), **POST /warehouses** (`_old_create_warehouse`), **DELETE /warehouses/{id}** (`_old_delete_warehouse`).
+- **Removed duplicate GET /purchases** (`_old_get_purchases`) and **POST /purchases** (`_old_create_purchase`).
+- **Removed duplicate WS /ws** (`_old_websocket_endpoint`).
+- **Fixed ws_manager.rooms → ws_manager.active_connections** (the actual attribute name on WebSocketManager).
+- **Removed first duplicate model definitions:** ReturnCreate, ReturnResponse, PurchaseItemResponse, PurchaseResponse, PurchaseCreate. Kept the more complete later definitions. Removed stale `# noqa: F811` comments.
+
+### 7. thread_pool_manager.py - PySide6 import in server code
+- **Bug:** `from PySide6.QtCore import QRunnable, QThreadPool` crashes in server/headless environments without Qt.
+- **Fix:** Wrapped in `try/except ImportError`. Set fallback stubs. Added `PYSIDE6_AVAILABLE` guards in all methods that use QThreadPool.
+
+### 8. sync_service.py - Hard imports with no graceful degradation
+- **Bug:** Top-level imports of CircuitBreaker, DeltaSyncService, LocalDatabaseManager, and all Repository classes would crash if any module was unavailable.
+- **Fix:** Wrapped each import in `try/except ImportError` with `None` fallback. Added None guards in `__init__`, `sync_ultimate_flow`, `_check_conflict`, `_apply_remote_change`, and `get_sync_status`.
+
+--- Task ID: 4b
+**Scope:** Core module remaining bugs
+
+### 1. permission_manager.py - else-branch tuple indexing on dict rows (lines 489-509, 527-547, 581-605)
+- **Bug:** Three else branches (get_role_by_id, get_role_by_name, list_roles) used `row[N]` tuple indexing. Since fetch_one/fetch_all always return dicts, these were dead code that would crash if ever reached.
+- **Fix:** Added `isinstance(row, tuple)` check inside each else branch. Tuple path preserved for safety; dict path uses `.get()` key access.
+
+### 2. database_manager.py - get_last_insert_id() crash on None (line 1289)
+- **Bug:** `cursor.fetchone()[0]` without None check — would raise TypeError if fetchone returned None.
+- **Fix:** Store result in `row`, return 0 if None. Handle both tuple and dict return types.
+
+### 3. database_manager.py - execute_query() returns closed cursor for DML (line 1158)
+- **Bug:** DML path returned `cursor` inside `with self.get_cursor()` context — cursor closed on exit, making lastrowid/rowcount inaccessible to callers.
+- **Fix:** Capture `lastrowid` and `rowcount` before context exit. Return `{'lastrowid': ..., 'rowcount': ..., 'closed': True}` dict. Added docstring warning to use execute_insert/execute_non_query for DML.
+
+### 4. edi_parser.py - Duplicate dict key 'ORDERS' (lines 270-273)
+- **Bug:** Mapping dict had two `'ORDERS'` keys; second (`855`) silently overwrote first (`850`), losing Purchase Order mapping.
+- **Fix:** Renamed second key from `'ORDERS'` to `'ORDRSP'` (the correct EDIFACT message type for Purchase Order Acknowledgment). Removed noqa comments.
+
+### 5. local_database_manager.py - Misleading comment about duplicate execute_insert (line 1084)
+- **Finding:** Only one `execute_insert` method exists (line 1292). No duplicate to remove. The comment at line 1084 referenced incorrect line numbers and mentioned non-existent duplicates.
+- **Fix:** Corrected the comment to reflect actual method locations and state that no duplicates exist.
+
+### 6. postgresql_backend.py - Unconditional psycopg2 import + fetchone None check (lines 12-13, 88)
+- **Bug 1:** `import psycopg2` at top level would crash the entire application if psycopg2 was not installed, even when using SQLite backend.
+- **Fix 1:** Wrapped in `try/except ImportError` with None fallback. Added `psycopg2 is None` guards in `connect()` and `execute_query()`.
+- **Bug 2:** `cursor.fetchone()[0]` in execute_insert without None check.
+- **Fix 2:** Store in `row`, return None if None. Handle both tuple and non-tuple returns.
+
+--- Task ID: 5b6b
+
+### Models + UI remaining bug fixes (13 files)
+
+**1. src/models/user.py**
+- **Bug:** `update_user` / `delete_user` called `getattr(res, 'rowcount', 1)` which returned True when `execute_query` returned None. Also `to_dict()` crashed when `permissions` was None.
+- **Fix:** Added `if res is None: return False` in both methods. Changed `list(self.permissions)` → `list(self.permissions or [])`.
+
+**2. src/models/permission.py**
+- **Bug:** `from_dict` used `data["name"]` / `data["code"]` with KeyError crash on missing keys.
+- **Fix:** Changed to `data.get()` with explicit validation raising `ValueError` for missing required fields.
+
+**3. src/models/warehouse.py**
+- **Bug:** `_fetch_one_helper` and `_fetch_all_helper` had bare `except Exception: pass` swallowing all errors silently. Also line ~807 generic warning without exception info.
+- **Fix:** Changed to `except Exception as e: logging.warning(f'...: {e}')` for all 5 sites.
+
+**4. src/models/purchase.py**
+- **Bug:** Dead tuple-index code paths in `_row_to_purchase` (lines 731+). Since `fetch_one` always returns dict, the `if len(row) == 26:` and subsequent tuple paths were unreachable dead code that would crash if ever reached with a dict.
+- **Fix:** Changed first `if len(row) == 26:` to `elif isinstance(row, (list, tuple)):` to guard the tuple path.
+
+**5. src/models/purchase_order.py**
+- **Bug:** 3 sites with `except Exception:` logging generic "Ignored exception" without the actual error.
+- **Fix:** Added `as e` and included `{e}` in all 3 warning messages.
+
+**6. src/models/receiving_note.py**
+- **Bug:** 5 sites with generic exception swallowing (same pattern as purchase_order).
+- **Fix:** Added `as e` and included `{e}` in all 5 warning messages.
+
+**7. src/models/quote.py**
+- **Bug:** 2 sites with generic exception swallowing.
+- **Fix:** Added `as e` and included `{e}` in both warning messages.
+
+**8. src/ui/windows/accounts_window.py**
+- **Bug:** `data[0].keys()` in CSV export crashed when data was empty or contained tuples.
+- **Fix:** Added `if not data: return` guard and `isinstance(data[0], dict)` check before accessing `.keys()`.
+
+**9. src/ui/windows/stock_adjustments_window.py**
+- **Bug:** `r['sku']` dict access on possible tuple rows.
+- **Fix:** Added `isinstance(r, dict)` guard with tuple fallback using index access.
+
+**10. src/ui/dialogs/quote_history_dialog.py**
+- **Bug:** `float()` on non-numeric table text caused crash.
+- **Fix:** Wrapped in `try/except (ValueError, TypeError, AttributeError)` defaulting to 0.0.
+
+**11. src/ui/windows/advanced_search_window.py**
+- **Bug:** `float()` on non-numeric table text for wholesale/cost prices.
+- **Fix:** Wrapped both `float()` calls in `try/except` defaulting to 0.0.
+
+**12. src/utils/logger.py**
+- **Bug:** Duplicate pytest-fix block at module level (lines 253-279) identical to the one inside `setup_logger` (lines 42-69).
+- **Fix:** Removed the duplicate block entirely.
+
+**13. src/experimental/deprecated_services/einvoice_service.py**
+- **Bug:** `invoice_data.pop("digital_signature")` mutated the caller's dict.
+- **Fix:** Used `invoice_data.get("digital_signature")` and created a filtered copy `{k: v for k, v in invoice_data.items() if k != "digital_signature"}` for hash computation.

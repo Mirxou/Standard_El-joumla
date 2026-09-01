@@ -1034,6 +1034,13 @@ class AccountsWindow(QMainWindow):
 
             import csv
 
+            if not data:
+                QMessageBox.warning(self, "تحذير", "لا توجد بيانات للتصدير")
+                return
+            if not isinstance(data[0], dict):
+                QMessageBox.warning(self, "تحذير", "تنسيق البيانات غير مدعوم للتصدير")
+                return
+
             with open(file_path, "w", newline="", encoding="utf-8-sig") as csvfile:
                 fieldnames = data[0].keys()
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)

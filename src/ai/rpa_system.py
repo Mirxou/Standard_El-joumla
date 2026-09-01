@@ -22,7 +22,7 @@ except ImportError:
     PYAUTOGUI_AVAILABLE = False
 
 try:
-    pass
+    import pyperclip
 
     PYPERCLIP_AVAILABLE = True
 except ImportError:

@@ -89,7 +89,12 @@ class PredictiveEngine:
                 continue
 
             # حساب معدل المبيعات اليومي من البيانات التاريخية
-            sales_history = self._get_sales_history(product["id"], days=90)
+            pid = product.get("id")
+            if pid is None:
+                pid = product.get("product_id")
+            if pid is None:
+                continue
+            sales_history = self._get_sales_history(pid, days=90)
 
             if not sales_history:
                 continue
@@ -172,7 +177,13 @@ class PredictiveEngine:
             avg_order_value = total_purchases / len(purchases) if purchases else 0
 
             # حساب تكرار الشراء (أيام بين المشتريات)
-            purchase_dates = [datetime.fromisoformat(p["date"]) for p in purchases if p.get("date")]
+            purchase_dates = []
+            for p in purchases:
+                if p.get("date"):
+                    try:
+                        purchase_dates.append(datetime.fromisoformat(p["date"]))
+                    except (ValueError, TypeError):
+                        pass
             purchase_dates.sort()
 
             if len(purchase_dates) > 1:

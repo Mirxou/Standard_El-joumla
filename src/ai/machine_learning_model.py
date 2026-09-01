@@ -228,7 +228,10 @@ class SalesPredictionModel:
         daily_totals = defaultdict(float)
 
         for sale in sales_data:
-            date = datetime.fromisoformat(sale["date"]).date().isoformat()
+            try:
+                date = datetime.fromisoformat(sale["date"]).date().isoformat()
+            except (ValueError, TypeError):
+                continue
             daily_totals[date] += sale.get("amount", 0)
 
         return dict(daily_totals)
@@ -238,7 +241,10 @@ class SalesPredictionModel:
         weekly_totals = defaultdict(list)
 
         for date_str, amount in daily_sales.items():
-            date = datetime.fromisoformat(date_str)
+            try:
+                date = datetime.fromisoformat(date_str)
+            except (ValueError, TypeError):
+                continue
             day_of_week = date.weekday()  # 0=الاثنين, 6=الأحد
             weekly_totals[day_of_week].append(amount)
 
@@ -290,7 +296,10 @@ class SalesPredictionModel:
         values = []
 
         for date_str, amount in daily_sales.items():
-            date = datetime.fromisoformat(date_str)
+            try:
+                date = datetime.fromisoformat(date_str)
+            except (ValueError, TypeError):
+                continue
             # استخدام عدد الأيام من تاريخ مرجعي
             reference_date = datetime(2020, 1, 1)
             days_since_reference = (date - reference_date).days
@@ -402,7 +411,6 @@ class SalesPredictionModel:
             }
 
         # استخدام cross-validation بسيط
-        list(daily_sales.keys())
         values = list(daily_sales.values())
 
         # تقسيم البيانات
@@ -538,7 +546,10 @@ class InventoryPredictionModel:
 
         for item in inventory_data:
             if "date" in item and "sales_velocity" in item:
-                date = datetime.fromisoformat(item["date"])
+                try:
+                    date = datetime.fromisoformat(item["date"])
+                except (ValueError, TypeError):
+                    continue
                 month = date.month
                 monthly_demand[month].append(item["sales_velocity"])
 

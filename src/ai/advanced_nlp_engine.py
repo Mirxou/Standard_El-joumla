@@ -19,8 +19,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import numpy as np
-import pandas as pd
+try:
+    import numpy as np
+except ImportError:
+    np = None
+
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
 
 warnings.filterwarnings("ignore")
 
@@ -841,7 +848,10 @@ class AdvancedNLPEngine:
 
 
 # Global instance for easy access
-advanced_nlp_engine = AdvancedNLPEngine()
+try:
+    advanced_nlp_engine = AdvancedNLPEngine()
+except Exception:
+    advanced_nlp_engine = None
 
 if __name__ == "__main__":
     # Example usage

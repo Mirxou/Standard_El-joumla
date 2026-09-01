@@ -283,7 +283,12 @@ class AdvancedPredictionSystem:
         # افتراضات للربحية
         cost_per_unit = 50.0
         price_per_unit = 100.0
-        margin = (price_per_unit - cost_per_unit) / price_per_unit
+
+        # Guard against division by zero when price equals cost
+        if price_per_unit == cost_per_unit:
+            margin = 0.0
+        else:
+            margin = (price_per_unit - cost_per_unit) / price_per_unit
 
         predicted_sales = sales_forecast.get("predicted_sales", 0)
         predicted_units = predicted_sales / price_per_unit  # افتراض
@@ -291,7 +296,7 @@ class AdvancedPredictionSystem:
         return {
             "gross_margin": round(margin * 100, 2),
             "predicted_profit": round(predicted_units * (price_per_unit - cost_per_unit), 2),
-            "break_even_units": round(cost_per_unit / (price_per_unit - cost_per_unit), 2),
+            "break_even_units": round(cost_per_unit / (price_per_unit - cost_per_unit), 2) if price_per_unit != cost_per_unit else 0,
             "profitability_score": ("high" if margin > 0.3 else "medium" if margin > 0.2 else "low"),
         }
 

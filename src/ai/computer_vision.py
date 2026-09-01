@@ -42,7 +42,13 @@ try:
 except ImportError:
     TORCH_AVAILABLE = False
 
-from PIL import Image
+try:
+    from PIL import Image
+
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+    Image = None
 
 warnings.filterwarnings("ignore")
 

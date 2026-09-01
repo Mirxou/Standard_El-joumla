@@ -78,12 +78,24 @@ class Permission:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Permission":
+        name = data.get("name")
+        code = data.get("code")
+        resource_type_str = data.get("resource_type")
+        action_str = data.get("action")
+        if not name:
+            raise ValueError("Permission 'name' is required")
+        if not code:
+            raise ValueError("Permission 'code' is required")
+        if not resource_type_str:
+            raise ValueError("Permission 'resource_type' is required")
+        if not action_str:
+            raise ValueError("Permission 'action' is required")
         return cls(
             id=data.get("id"),
-            name=data["name"],
-            code=data["code"],
-            resource_type=ResourceType[data["resource_type"]],
-            action=PermissionAction[data["action"]],
+            name=name,
+            code=code,
+            resource_type=ResourceType[resource_type_str],
+            action=PermissionAction[action_str],
             description=data.get("description", ""),
             is_system=bool(data.get("is_system", False)),
             created_at=(

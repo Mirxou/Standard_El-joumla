@@ -9,8 +9,12 @@ import logging
 from contextlib import contextmanager
 from typing import Any, Dict, List, Optional, Tuple
 
-import psycopg2
-import psycopg2.extras
+try:
+    import psycopg2
+    import psycopg2.extras
+except ImportError:
+    psycopg2 = None
+    psycopg2_extras = None
 
 from src.utils.logger import setup_logger
 
@@ -36,6 +40,9 @@ class PostgreSQLBackend(DatabaseBackend):
 
     def connect(self) -> bool:
         """إنشاء الاتصال بقاعدة البيانات"""
+        if psycopg2 is None:
+            self.logger.error("psycopg2 is not installed; cannot connect to PostgreSQL")
+            return False
         try:
             self.connection = psycopg2.connect(self.db_url)
             self.connection.autocommit = True  # Default to autocommit, manage transactions manually
@@ -58,6 +65,8 @@ class PostgreSQLBackend(DatabaseBackend):
         """تنفيذ SELECT query"""
         if not self.connection:
             raise RuntimeError("Database connection not initialized")
+        if psycopg2 is None:
+            raise RuntimeError("psycopg2 is not installed")
 
         # تحويل صيغة placeholers من ؟ إلى %s الخاصة بـ psycopg2
         pg_query = query.replace("?", "%s")
@@ -85,8 +94,10 @@ class PostgreSQLBackend(DatabaseBackend):
         try:
             with self.connection.cursor() as cursor:
                 cursor.execute(pg_query, params)
-                last_id = cursor.fetchone()[0]
-                return last_id
+                row = cursor.fetchone()
+                if row is None:
+                    return None
+                return row[0] if isinstance(row, tuple) else row
         except Exception as e:
             self.logger.error(f"Error executing insert: {query}, Error: {e}")
             raise

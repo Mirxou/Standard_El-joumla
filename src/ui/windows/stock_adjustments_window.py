@@ -503,7 +503,10 @@ class StockAdjustmentsWindow(QMainWindow):
             )
             products = list(rows) if rows else []
             for r in products:
-                product_combo.addItem(f"{r['sku']} - {r['name']}", r['id'])
+                if isinstance(r, dict):
+                    product_combo.addItem(f"{r['sku']} - {r['name']}", r['id'])
+                elif isinstance(r, (list, tuple)) and len(r) >= 3:
+                    product_combo.addItem(f"{r[1]} - {r[2]}", r[0])
         except Exception as e:
             QMessageBox.critical(self, "خطأ", f"فشل تحميل المنتجات:\n{e}")
             return

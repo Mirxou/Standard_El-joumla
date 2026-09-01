@@ -65,7 +65,7 @@ class VoiceControlAgent(BaseAgent):
             },
             "مساعدة": {
                 "action": "help",
-                "keywords": ["مساعدة", "مساعدة", "أوامر"],
+                "keywords": ["مساعدة", "أوامر"],
                 "response": "يمكنك قول: افتح الفواتير، أنشئ فاتورة، أرني المبيعات، أو مساعدة",
             },
             # Expected by unit tests:

@@ -14,9 +14,21 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-import matplotlib.pyplot as plt
+try:
+    import matplotlib.pyplot as plt
 
-import networkx as nx
+    MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    plt = None
+    MATPLOTLIB_AVAILABLE = False
+
+try:
+    import networkx as nx
+
+    NETWORKX_AVAILABLE = True
+except ImportError:
+    nx = None
+    NETWORKX_AVAILABLE = False
 
 
 class ProcessType(Enum):

@@ -1012,8 +1012,14 @@ class AdvancedSearchWindow(QMainWindow):
                 return
             p_id = int(id_cell.text())
             p_name = name_cell.text()
-            w_price = float(w_cell.text().replace(",", ""))
-            c_price = float(c_cell.text().replace(",", ""))
+            try:
+                w_price = float(w_cell.text().replace(",", ""))
+            except (ValueError, TypeError, AttributeError):
+                w_price = 0.0
+            try:
+                c_price = float(c_cell.text().replace(",", ""))
+            except (ValueError, TypeError, AttributeError):
+                c_price = 0.0
 
             qty, ok = QInputDialog.getDouble(self, "الكمية", f"كمية {p_name}:", 1, 1, 10000, 0)
 

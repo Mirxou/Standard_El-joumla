@@ -221,8 +221,8 @@ class Quote:
             if isinstance(value, str) and value:
                 try:
                     setattr(self, field_name, datetime.fromisoformat(value).date())
-                except Exception:
-                    logging.getLogger(__name__).warning("Ignored exception in quote.py")
+                except Exception as e:
+                    logging.getLogger(__name__).warning(f"Ignored exception in quote.py - date parsing: {e}")
 
         # تحويل الطوابع الزمنية
         for field_name in ["created_at", "updated_at"]:
@@ -230,8 +230,8 @@ class Quote:
             if isinstance(value, str) and value:
                 try:
                     setattr(self, field_name, datetime.fromisoformat(value))
-                except Exception:
-                    logging.getLogger(__name__).warning("Ignored exception in quote.py")
+                except Exception as e:
+                    logging.getLogger(__name__).warning(f"Ignored exception in quote.py - datetime parsing: {e}")
 
     @property
     def is_valid(self) -> bool:

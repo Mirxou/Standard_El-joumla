@@ -46,12 +46,6 @@ from src.utils.logger import setup_logger
 router = APIRouter()
 
 
-# Health check endpoint for production readiness
-@router.get("/health")
-async def health():
-    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
-
-
 # Security
 security = HTTPBearer()
 
@@ -119,24 +113,6 @@ class ReturnItemSchema(BaseModel):
     unit_price: float
     return_reason: Optional[str] = None
     notes: Optional[str] = None
-
-
-class ReturnCreate(BaseModel):
-    return_type: str
-    return_reason: Optional[str] = None
-    original_sale_id: Optional[int] = None
-    customer_id: Optional[int] = None
-    items: List[ReturnItemSchema]
-    notes: Optional[str] = None
-
-
-class ReturnResponse(BaseModel):
-    id: int
-    return_number: str
-    return_type: str
-    status: str
-    total_amount: float
-    created_at: str
 
 
 # ==================== Warehouse Models ====================
@@ -300,42 +276,7 @@ class UserListResponse(BaseModel):
     users: List[UserInfo]
 
 
-class PurchaseItemResponse(BaseModel):
-    id: int
-    purchase_id: int
-    product_id: int
-    product_name: str
-    quantity_ordered: float
-    quantity_received: float
-    unit_cost: float
-    total_amount: float
-    is_fully_received: bool
-
-
-class PurchaseResponse(BaseModel):
-    id: int
-    invoice_number: str
-    supplier_name: str
-    purchase_date: str
-    status: str
-    payment_status: str
-    total_amount: float
-    paid_amount: float
-    remaining_amount: float
-    items_count: int
-    is_fully_received: bool
-
-
-class PurchaseCreate(BaseModel):
-    supplier_id: int
-    purchase_date: Optional[str] = None
-    expected_delivery_date: Optional[str] = None
-    payment_terms: str = "نقدي"
-    notes: Optional[str] = None
-    items: List[Dict[str, Any]]  # Simplified for now, should be PurchaseItemCreate
-
-
-class ReturnResponse(BaseModel):  # noqa: F811
+class ReturnResponse(BaseModel):
     id: int
     return_number: str
     return_type: str
@@ -347,7 +288,7 @@ class ReturnResponse(BaseModel):  # noqa: F811
     items_count: int = 0
 
 
-class ReturnCreate(BaseModel):  # noqa: F811
+class ReturnCreate(BaseModel):
     return_type: str = "SALE_RETURN"
     original_sale_id: Optional[int] = None
     original_purchase_id: Optional[int] = None
@@ -500,14 +441,6 @@ def get_user_manager() -> "UserManager":
 
     db_manager = get_db_manager()
     return UserManager(db_manager, logger)
-
-
-def get_purchase_manager() -> "PurchaseManager":
-    """الحصول على Purchase Manager"""
-    from src.models.purchase import PurchaseManager
-
-    db_manager = get_db_manager()
-    return PurchaseManager(db_manager, logger)
 
 
 def get_return_manager() -> "ReturnManager":
@@ -796,102 +729,6 @@ async def get_user_companies(
     return result
 
 
-# ==================== Warehouse Routes ====================
-
-
-@router.get("/warehouses", response_model=WarehouseListResponse, tags=["Warehouses"])
-async def _old_get_warehouses(
-    include_inactive: bool = False,
-    current_user: Dict[str, Any] = Depends(get_current_user),
-    warehouse_manager: "WarehouseManager" = Depends(get_warehouse_manager),
-):
-    """
-    الحصول على قائمة المستودعات
-    """
-    warehouses_data = warehouse_manager.get_all_warehouses(include_inactive=include_inactive)
-
-    # Convert to response model
-    result = []
-    for w in warehouses_data:
-        # Determine status string based on capacity/active
-        status_str = "نشط"
-        if not w.is_active:
-            status_str = "غير نشط"
-        elif w.capacity > 0 and (w.current_utilization / w.capacity) > 0.9:
-            status_str = "ممتلئ تقريباً"
-
-        result.append(
-            WarehouseResponse(
-                id=w.id,
-                code=w.code,
-                name=w.name,
-                name_en=w.name_en,
-                warehouse_type=w.warehouse_type,
-                capacity=float(w.capacity),
-                current_utilization=float(w.current_utilization),
-                address=w.address,
-                city=w.city,
-                phone=w.phone,
-                manager_name=w.manager_name,
-                is_active=w.is_active,
-                status=status_str,
-            )
-        )
-
-    return WarehouseListResponse(warehouses=result)
-
-
-@router.post("/warehouses", response_model=Dict[str, Any], tags=["Warehouses"])
-async def _old_create_warehouse(
-    warehouse_data: WarehouseCreate,
-    current_user: Dict[str, Any] = Depends(get_current_user),
-    warehouse_manager: "WarehouseManager" = Depends(get_warehouse_manager),
-):
-    """
-    إنشاء مستودع جديد
-    """
-    from src.models.warehouse import Warehouse
-
-    # Create Warehouse object
-    new_warehouse = Warehouse(
-        code=warehouse_data.code,
-        name=warehouse_data.name,
-        name_en=warehouse_data.name_en,
-        warehouse_type=warehouse_data.warehouse_type,
-        capacity=warehouse_data.capacity,
-        address=warehouse_data.address,
-        city=warehouse_data.city,
-        phone=warehouse_data.phone,
-        manager_name=warehouse_data.manager_name,
-        is_active=warehouse_data.is_active,
-        is_default=warehouse_data.is_default,
-        created_by=current_user["user_id"],
-    )
-
-    warehouse_id = warehouse_manager.create_warehouse(new_warehouse)
-
-    if not warehouse_id:
-        raise HTTPException(status_code=400, detail="فشل إنشاء المستودع. ربما الرمز مكرر؟")
-
-    return {"message": "تم إنشاء المستودع بنجاح", "id": warehouse_id}
-
-
-@router.delete("/warehouses/{warehouse_id}", tags=["Warehouses"])
-async def _old_delete_warehouse(
-    warehouse_id: int,
-    current_user: Dict[str, Any] = Depends(get_current_user),
-    warehouse_manager: "WarehouseManager" = Depends(get_warehouse_manager),
-):
-    """
-    حذف مستودع
-    """
-    success = warehouse_manager.delete_warehouse(warehouse_id)
-    if not success:
-        raise HTTPException(status_code=400, detail="فشل حذف المستودع. قد يحتوي على مخزون.")
-
-    return {"message": "تم حذف المستودع بنجاح"}
-
-
 @router.get("/warehouses/{warehouse_id}/inventory", tags=["Warehouses"])
 async def get_warehouse_inventory(
     warehouse_id: int,
@@ -1063,83 +900,6 @@ async def create_supplier(
         raise HTTPException(status_code=400, detail="فشل إنشاء المورد")
 
     return {"id": supplier_id, "message": "تم إنشاء المورد بنجاح"}
-
-
-# ==================== Purchase Routes ====================
-
-
-@router.get("/purchases", response_model=List[PurchaseResponse], tags=["Purchases"])
-async def _old_get_purchases(
-    current_user: Dict[str, Any] = Depends(get_current_user),
-    purchase_manager: "PurchaseManager" = Depends(get_purchase_manager),
-):
-    """الحصول على قائمة المشتريات"""
-    # Using list_purchases for summary view
-    purchases_data = purchase_manager.list_purchases(limit=100)
-
-    # Mapping Dict to Pydantic Model (manual or auto)
-    # list_purchases returns dicts that match PurchaseResponse structure mostly
-    return [
-        PurchaseResponse(
-            id=p["id"],
-            invoice_number=p["invoice_number"],
-            supplier_name=p["supplier_name"],
-            purchase_date=p["purchase_date"],
-            status=p["status"],
-            payment_status=p["payment_status"],
-            total_amount=float(p["total_amount"]),
-            paid_amount=float(p["paid_amount"]),
-            remaining_amount=float(p["remaining_amount"]),
-            items_count=0,  # Not in list_purchases currently, maybe update manager or fetch detail
-            is_fully_received=False,  # Placeholder
-        )
-        for p in purchases_data
-    ]
-
-
-@router.post("/purchases", response_model=Dict[str, Any], tags=["Purchases"])
-async def _old_create_purchase(
-    purchase_data: PurchaseCreate,
-    current_user: Dict[str, Any] = Depends(get_current_user),
-    purchase_manager: "PurchaseManager" = Depends(get_purchase_manager),
-):
-    """إنشاء فاتورة مشتريات جديدة"""
-    from src.models.purchase import Purchase, PurchaseItem
-
-    # Create Purchase Object
-    new_purchase = Purchase(
-        supplier_id=purchase_data.supplier_id,
-        purchase_date=(
-            datetime.strptime(purchase_data.purchase_date, "%Y-%m-%d").date()
-            if purchase_data.purchase_date
-            else date.today()
-        ),
-        expected_delivery_date=(
-            datetime.strptime(purchase_data.expected_delivery_date, "%Y-%m-%d").date()
-            if purchase_data.expected_delivery_date
-            else None
-        ),
-        payment_terms=purchase_data.payment_terms,
-        notes=purchase_data.notes,
-        created_by=current_user["user_id"],
-    )
-
-    # Add Items
-    for item_data in purchase_data.items:
-        item = PurchaseItem(
-            product_id=item_data["product_id"],
-            quantity_ordered=item_data["quantity"],
-            unit_cost=item_data["unit_cost"],
-            # Add other fields as needed
-        )
-        new_purchase.add_item(item)
-
-    purchase_id = purchase_manager.create_purchase(new_purchase)
-
-    if not purchase_id:
-        raise HTTPException(status_code=400, detail="فشل إنشاء الفاتورة")
-
-    return {"id": purchase_id, "message": "تم إنشاء فاتورة المشتريات بنجاح"}
 
 
 # ==================== Products Routes ====================
@@ -2179,7 +1939,7 @@ class PurchaseUpdate(BaseModel):
     notes: Optional[str] = Field(None, description="ملاحظات")
 
 
-class PurchaseItemResponse(BaseModel):  # noqa: F811
+class PurchaseItemResponse(BaseModel):
     """نموذج استجابة عنصر مشتريات"""
 
     id: Optional[int]
@@ -2650,49 +2410,6 @@ async def delete_purchase(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطأ في حذف الفاتورة: {str(e)}",
         )
-
-
-# ==================== WebSocket Routes ====================
-
-
-@router.websocket("/ws")
-async def _old_websocket_endpoint(websocket: WebSocket):
-    """
-    WebSocket endpoint للـ Real-time Updates
-
-    يدعم:
-    - Notifications
-    - Data Updates
-    - System Events
-    """
-    ws_manager = get_websocket_manager()
-    await ws_manager.connect(websocket, room="default")
-
-    try:
-        while True:
-            # استقبال الرسائل من العميل
-            data = await websocket.receive_json()
-
-            # معالجة الرسائل الواردة (يمكن إضافة منطق هنا)
-            message_type = data.get("type", "unknown")
-
-            if message_type == "ping":
-                # إرسال pong
-                await ws_manager.send_personal_message(
-                    {"type": "pong", "timestamp": datetime.now().isoformat()}, websocket
-                )
-            elif message_type == "subscribe":
-                # الاشتراك في Room محدد
-                room = data.get("room", "default")
-                await ws_manager.connect(websocket, room=room)
-                await ws_manager.send_personal_message({"type": "subscribed", "room": room}, websocket)
-
-    except WebSocketDisconnect:
-        ws_manager.disconnect(websocket, room="default")
-        logger.info("WebSocket منقطع")
-    except Exception as e:
-        logger.log(logging.ERROR, f"خطأ في WebSocket: {e}", exc_info=True)
-        ws_manager.disconnect(websocket, room="default")
 
 
 # ==================== Notifications Routes ====================
@@ -3356,8 +3073,8 @@ async def trigger_sync(
             sent_count = 0
 
             # الحصول على جميع الاتصالات في room
-            if hasattr(ws_manager, "rooms") and room_name in ws_manager.rooms:
-                connections = ws_manager.rooms[room_name]
+            if hasattr(ws_manager, "active_connections") and room_name in ws_manager.active_connections:
+                connections = ws_manager.active_connections[room_name]
                 for websocket in connections:
                     try:
                         await ws_manager.send_personal_message(message, websocket)

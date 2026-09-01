@@ -160,7 +160,7 @@ class AdvancedAnalyticsSystem:
 
     def generate_executive_dashboard(self, dashboard_config: Dict[str, Any] = None) -> Dict[str, Any]:
         """توليد لوحة تحكم تنفيذية"""
-        dashboard_config or {}
+        dashboard_config = dashboard_config or {}
 
         # الحصول على آخر تحليل شامل
         latest_analysis = self._get_latest_analysis()

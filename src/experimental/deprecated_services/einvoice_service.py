@@ -227,10 +227,10 @@ class EInvoiceGenerator:
         Returns:
             True إذا كانت الفاتورة صحيحة
         """
-        # التحقق من التوقيع
-        saved_signature = invoice_data.pop("digital_signature", None)
-        calculated_signature = self._generate_signature(invoice_data)
-        invoice_data["digital_signature"] = saved_signature
+        # التحقق من التوقيع (copy to avoid mutating input)
+        saved_signature = invoice_data.get("digital_signature")
+        data_for_hash = {k: v for k, v in invoice_data.items() if k != "digital_signature"}
+        calculated_signature = self._generate_signature(data_for_hash)
 
         return saved_signature == calculated_signature
 

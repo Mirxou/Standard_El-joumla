@@ -19,8 +19,15 @@ from enum import Enum as _Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-import numpy as np
-import pandas as pd
+try:
+    import numpy as np
+except ImportError:
+    np = None
+
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
 
 warnings.filterwarnings("ignore")
 

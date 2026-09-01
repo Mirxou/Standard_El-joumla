@@ -248,32 +248,3 @@ class PerformanceLogger:
 def get_logger(name: str = "standard_eljoumla") -> logging.Logger:
     """الحصول على logger موجود أو إنشاء جديد"""
     return logging.getLogger(name)
-
-
-# إصلاح لخلل في tests/unit/conftest.py حيث يقوم fail_on_error باستدعاء _original_error بدلاً من _original_critical
-try:
-    import os
-    import sys
-    if os.environ.get("PYTEST_CURRENT_TEST") is not None:
-        orig_critical = None
-        for mod in list(sys.modules.values()):
-            if mod and hasattr(mod, "_original_critical"):
-                orig_critical = mod._original_critical
-                break
-        if orig_critical:
-            def corrected_fail_on_critical(self, msg, *args, **kwargs):
-                if "test_" in self.name or self.name in ("database_operations", "src.utils.logger"):
-                    return orig_critical(self, msg, *args, **kwargs)
-                try:
-                    if args:
-                        formatted_msg = msg % args
-                    else:
-                        formatted_msg = msg
-                except Exception:
-                    formatted_msg = msg
-                import pytest
-                pytest.fail(f"Application logged a CRITICAL in {self.name}: {formatted_msg}")
-
-            logging.Logger.critical = corrected_fail_on_critical
-except Exception:
-    pass

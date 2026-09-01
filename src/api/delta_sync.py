@@ -98,6 +98,8 @@ class DeltaSyncService:
         Returns:
             عدد العناصر المعلقة
         """
+        if not table_name:
+            return 0
         if table_name:
             query = f"""
                 SELECT COUNT(*) as count FROM {table_name}

@@ -55,7 +55,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # التحقق من المسارات المستثناة
-        if any(request.url.path.startswith(path) for path in self.exclude_paths):
+        request_path = request.url.path
+        excluded = False
+        for path in self.exclude_paths:
+            if path == "/":
+                if request_path == "/":
+                    excluded = True
+                    break
+            elif request_path == path or request_path.startswith(path + "/"):
+                excluded = True
+                break
+        if excluded:
             return await call_next(request)
 
         # الحصول على Token من Header
@@ -118,7 +128,17 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable):
         """معالجة الطلب"""
         # التحقق من المسارات المستثناة
-        if any(request.url.path.startswith(path) for path in self.exclude_paths):
+        request_path = request.url.path
+        excluded = False
+        for path in self.exclude_paths:
+            if path == "/":
+                if request_path == "/":
+                    excluded = True
+                    break
+            elif request_path == path or request_path.startswith(path + "/"):
+                excluded = True
+                break
+        if excluded:
             return await call_next(request)
 
         # الحصول على IP Address

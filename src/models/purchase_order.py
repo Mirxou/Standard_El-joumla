@@ -126,8 +126,8 @@ class PurchaseOrderItem:
             if isinstance(value, str) and value:
                 try:
                     setattr(self, field_name, datetime.fromisoformat(value).date())
-                except Exception:
-                    logging.getLogger(__name__).warning("Ignored exception in purchase_order.py")
+                except Exception as e:
+                    logging.getLogger(__name__).warning(f"Ignored exception in purchase_order.py - date parsing: {e}")
 
     @property
     def subtotal(self) -> Decimal:
@@ -379,8 +379,8 @@ class PurchaseOrder:
             if isinstance(value, str) and value:
                 try:
                     setattr(self, field_name, datetime.fromisoformat(value).date())
-                except Exception:
-                    logging.getLogger(__name__).warning("Ignored exception in purchase_order.py")
+                except Exception as e:
+                    logging.getLogger(__name__).warning(f"Ignored exception in purchase_order.py - date parsing: {e}")
 
         # تحويل الطوابع الزمنية
         for field_name in ["created_at", "updated_at"]:
@@ -388,8 +388,8 @@ class PurchaseOrder:
             if isinstance(value, str) and value:
                 try:
                     setattr(self, field_name, datetime.fromisoformat(value))
-                except Exception:
-                    logging.getLogger(__name__).warning("Ignored exception in purchase_order.py")
+                except Exception as e:
+                    logging.getLogger(__name__).warning(f"Ignored exception in purchase_order.py - datetime parsing: {e}")
 
     @property
     def is_draft(self) -> bool:

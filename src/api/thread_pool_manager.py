@@ -7,7 +7,13 @@ Thread Pool Manager
 
 from typing import Any, Callable, Optional
 
-from PySide6.QtCore import QRunnable, QThreadPool
+try:
+    from PySide6.QtCore import QRunnable, QThreadPool
+    PYSIDE6_AVAILABLE = True
+except ImportError:
+    QRunnable = object  # type: ignore[assignment,misc]
+    QThreadPool = None  # type: ignore[assignment,misc]
+    PYSIDE6_AVAILABLE = False
 
 from src.utils.logger import setup_logger
 
@@ -22,10 +28,14 @@ class ThreadPoolManager:
             raise RuntimeError("ThreadPoolManager is a singleton. Use get_instance()")
 
         self.logger = setup_logger(__name__)
-        self.thread_pool = QThreadPool.globalInstance()
-        # تعيين عدد الخيوط المتاحة
-        self.thread_pool.setMaxThreadCount(4)  # يمكن تعديله حسب الحاجة
-        self.logger.info(f"✅ تم تهيئة Thread Pool Manager (Max Threads: {self.thread_pool.maxThreadCount()})")
+        if not PYSIDE6_AVAILABLE:
+            self.thread_pool = None
+            self.logger.warning("⚠️ PySide6 not available - ThreadPoolManager will be non-functional")
+        else:
+            self.thread_pool = QThreadPool.globalInstance()
+            # تعيين عدد الخيوط المتاحة
+            self.thread_pool.setMaxThreadCount(4)  # يمكن تعديله حسب الحاجة
+            self.logger.info(f"✅ تم تهيئة Thread Pool Manager (Max Threads: {self.thread_pool.maxThreadCount()})")
 
     @classmethod
     def get_instance(cls) -> "ThreadPoolManager":
@@ -34,7 +44,7 @@ class ThreadPoolManager:
             cls._instance = cls()
         return cls._instance
 
-    def start(self, runnable: QRunnable, priority: int = 0):
+    def start(self, runnable, priority: int = 0):
         """
         تشغيل Runnable في Thread Pool
 
@@ -42,6 +52,9 @@ class ThreadPoolManager:
             runnable: QRunnable للتشغيل
             priority: الأولوية (0 = عادية)
         """
+        if not PYSIDE6_AVAILABLE or self.thread_pool is None:
+            self.logger.warning("ThreadPoolManager not available (PySide6 missing)")
+            return
         self.thread_pool.start(runnable, priority)
         self.logger.debug("🔄 تم بدء تشغيل Runnable في Thread Pool")
 
@@ -55,18 +68,26 @@ class ThreadPoolManager:
         Returns:
             True إذا انتهت جميع المهام
         """
+        if not PYSIDE6_AVAILABLE or self.thread_pool is None:
+            return True
         return self.thread_pool.waitForDone(timeout)
 
     def active_thread_count(self) -> int:
         """عدد الخيوط النشطة"""
+        if not PYSIDE6_AVAILABLE or self.thread_pool is None:
+            return 0
         return self.thread_pool.activeThreadCount()
 
     def max_thread_count(self) -> int:
         """الحد الأقصى لعدد الخيوط"""
+        if not PYSIDE6_AVAILABLE or self.thread_pool is None:
+            return 0
         return self.thread_pool.maxThreadCount()
 
     def set_max_thread_count(self, count: int):
         """تعيين الحد الأقصى لعدد الخيوط"""
+        if not PYSIDE6_AVAILABLE or self.thread_pool is None:
+            return
         self.thread_pool.setMaxThreadCount(count)
         self.logger.info(f"✅ تم تحديث Max Thread Count إلى: {count}")
 

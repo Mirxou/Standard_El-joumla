@@ -132,7 +132,7 @@ class User:
             "full_name": self.full_name,
             "role": self.role,
             "is_active": self.is_active,
-            "permissions": list(self.permissions),
+            "permissions": list(self.permissions or []),
         }
 
 
@@ -332,6 +332,8 @@ class UserManager:
                 user.id,
             )
             res = self.db_manager.execute_query(query, params)
+            if res is None:
+                return False
             rowcount = getattr(res, "rowcount", 1)
             if not isinstance(rowcount, int):
                 rowcount = 1
@@ -349,6 +351,8 @@ class UserManager:
             if not self._save_user_permissions(user_id, set()):
                 return False
             res = self.db_manager.execute_query("DELETE FROM users WHERE id = ?", (user_id,))
+            if res is None:
+                return False
             rowcount = getattr(res, "rowcount", 1)
             if not isinstance(rowcount, int):
                 rowcount = 1

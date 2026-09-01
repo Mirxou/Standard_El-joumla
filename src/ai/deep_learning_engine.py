@@ -17,10 +17,20 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
-from unittest.mock import MagicMock
+try:
+    from unittest.mock import MagicMock
+except ImportError:
+    MagicMock = None
 
-import numpy as np
-import pandas as pd
+try:
+    import numpy as np
+except ImportError:
+    np = None
+
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
 
 try:
     import tensorflow as tf

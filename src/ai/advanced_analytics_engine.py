@@ -234,7 +234,7 @@ class AdvancedAnalyticsEngine:
         second_half = statistics.mean(values[len(values) // 2 :])
 
         if first_half == 0:
-            return float("inf") if second_half > 0 else 0.0
+            return 999999.9 if second_half > 0 else 0.0
 
         return ((second_half - first_half) / first_half) * 100
 
@@ -278,11 +278,14 @@ class AdvancedAnalyticsEngine:
         daily_sales = defaultdict(float)
         for sale in sales_data:
             date_value = sale.get("date")
-            if isinstance(date_value, str):
-                date = datetime.fromisoformat(date_value).date()
-            elif isinstance(date_value, datetime):
-                date = date_value.date()
-            else:
+            try:
+                if isinstance(date_value, str):
+                    date = datetime.fromisoformat(date_value).date()
+                elif isinstance(date_value, datetime):
+                    date = date_value.date()
+                else:
+                    date = datetime.now().date()
+            except (ValueError, TypeError):
                 date = datetime.now().date()
             daily_sales[date] += sale["amount"]
 
@@ -331,11 +334,14 @@ class AdvancedAnalyticsEngine:
         daily_totals = defaultdict(float)
         for sale in sales_data:
             date_value = sale.get("date")
-            if isinstance(date_value, str):
-                date = datetime.fromisoformat(date_value).date()
-            elif isinstance(date_value, datetime):
-                date = date_value.date()
-            else:
+            try:
+                if isinstance(date_value, str):
+                    date = datetime.fromisoformat(date_value).date()
+                elif isinstance(date_value, datetime):
+                    date = date_value.date()
+                else:
+                    date = datetime.now().date()
+            except (ValueError, TypeError):
                 date = datetime.now().date()
             daily_totals[date] += sale["amount"]
 

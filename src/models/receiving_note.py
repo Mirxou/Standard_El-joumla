@@ -123,8 +123,8 @@ class ReceivingItem:
             if isinstance(value, str) and value:
                 try:
                     setattr(self, field_name, datetime.fromisoformat(value).date())
-                except Exception:
-                    logging.getLogger(__name__).warning("Ignored exception in receiving_note.py")
+                except Exception as e:
+                    logging.getLogger(__name__).warning(f"Ignored exception in receiving_note.py - date parsing: {e}")
 
     @property
     def acceptance_rate(self) -> Decimal:
@@ -249,8 +249,8 @@ class ReceivingNote:
             if isinstance(value, str) and value:
                 try:
                     setattr(self, field_name, datetime.fromisoformat(value).date())
-                except Exception:
-                    logging.getLogger(__name__).warning("Ignored exception in receiving_note.py")
+                except Exception as e:
+                    logging.getLogger(__name__).warning(f"Ignored exception in receiving_note.py - date parsing: {e}")
 
         # تحويل الطوابع الزمنية
         for field_name in ["created_at", "updated_at", "completed_at"]:
@@ -258,8 +258,8 @@ class ReceivingNote:
             if isinstance(value, str) and value:
                 try:
                     setattr(self, field_name, datetime.fromisoformat(value))
-                except Exception:
-                    logging.getLogger(__name__).warning("Ignored exception in receiving_note.py")
+                except Exception as e:
+                    logging.getLogger(__name__).warning(f"Ignored exception in receiving_note.py - datetime parsing: {e}")
 
     @property
     def total_quantity_received(self) -> Decimal:
@@ -428,8 +428,8 @@ class SupplierEvaluation:
             if isinstance(value, str) and value:
                 try:
                     setattr(self, field_name, datetime.fromisoformat(value).date())
-                except Exception:
-                    logging.getLogger(__name__).warning("Ignored exception in receiving_note.py")
+                except Exception as e:
+                    logging.getLogger(__name__).warning(f"Ignored exception in receiving_note.py - date parsing: {e}")
 
         # تحويل الطوابع الزمنية
         for field_name in ["created_at", "updated_at"]:
@@ -437,8 +437,8 @@ class SupplierEvaluation:
             if isinstance(value, str) and value:
                 try:
                     setattr(self, field_name, datetime.fromisoformat(value))
-                except Exception:
-                    logging.getLogger(__name__).warning("Ignored exception in receiving_note.py")
+                except Exception as e:
+                    logging.getLogger(__name__).warning(f"Ignored exception in receiving_note.py - datetime parsing: {e}")
 
     def calculate_overall_score(self):
         """حساب التقييم الإجمالي"""

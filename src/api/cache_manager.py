@@ -5,6 +5,7 @@ Redis Cache Manager for API
 مدير Redis Cache للـ API
 """
 
+import asyncio
 import logging
 import json
 import os
@@ -279,7 +280,10 @@ def cached(prefix: str = "api", ttl: int = 300, key_func: Optional[Callable] = N
 
             # تنفيذ الدالة
             logger.debug(f"❌ Cache MISS: {cache_key}")
-            result = await func(*args, **kwargs) if hasattr(func, "__call__") else func(*args, **kwargs)
+            if not asyncio.iscoroutinefunction(func):
+                result = func(*args, **kwargs)
+            else:
+                result = await func(*args, **kwargs)
 
             # تسجيل Metric
             try:
@@ -318,7 +322,10 @@ def invalidate_cache(pattern: str):
         @wraps(func)
         async def wrapper(*args, **kwargs):
             # تنفيذ الدالة أولاً
-            result = await func(*args, **kwargs) if hasattr(func, "__call__") else func(*args, **kwargs)
+            if not asyncio.iscoroutinefunction(func):
+                result = func(*args, **kwargs)
+            else:
+                result = await func(*args, **kwargs)
 
             # إبطال Cache
             cache_manager = get_cache_manager()
