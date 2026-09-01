@@ -126,7 +126,6 @@ class EDIGenerator:
             lines.append("UNS+S'")
 
             # CNT: Control Total
-            data.get("summary", {}).get("total_amount", 0.0)
             lines.append(f"CNT+2:{len(items)}'")
 
             # UNT: Message Trailer

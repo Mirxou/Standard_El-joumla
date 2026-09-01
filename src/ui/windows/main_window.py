@@ -2281,8 +2281,9 @@ class MainWindow(QMainWindow):
                 if result and isinstance(result, dict):
                     return tuple(result.values())
                 return result
-        except Exception:
-            pass
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"_db_fetch_one failed: {e}")
         return None
 
     def refresh_dashboard_stats(self):
@@ -5142,49 +5143,7 @@ class MainWindow(QMainWindow):
                 valid_methods = {"نقدي", "بطاقة", "تحويل بنكي", "آجل", "مختلط"}
                 payment_method = payment_text if payment_text in valid_methods else None
 
-            # تحميل البيانات في الخلفية باستخدام Worker
-            def load_sales():
-                """تحميل بيانات المبيعات في الخلفية"""
-                try:
-                    sales_list = self.sales_service.list_sales(
-                        search_term=search_term if search_term else None,
-                        status=status,
-                        payment_method=payment_method,
-                        limit=500,
-                    )
-                    # حساب الملخص من جميع الفواتير (بدون فلترة التاريخ) أو من الفواتير المحملة
-                    # إذا كانت هناك فلاتر، نحسب من sales_list مباشرة
-                    if sales_list:
-                        # حساب الملخص من البيانات المحملة
-                        total_invoices = len(sales_list)
-                        total_revenue = sum(float(s.get("total_amount", 0) or 0) for s in sales_list)
-                        total_paid = sum(float(s.get("paid_amount", 0) or 0) for s in sales_list)
-                        total_remaining = sum(float(s.get("remaining_amount", 0) or 0) for s in sales_list)
-                        avg_invoice_value = total_revenue / total_invoices if total_invoices > 0 else 0.0
-
-                        summary = {
-                            "total_invoices": total_invoices,
-                            "total_revenue": total_revenue,
-                            "total_amount": total_revenue,  # للتوافق
-                            "total_paid": total_paid,
-                            "total_remaining": total_remaining,
-                            "avg_invoice_value": avg_invoice_value,
-                        }
-                    else:
-                        # إذا لم تكن هناك بيانات، جلب الملخص من قاعدة البيانات
-                        summary = self.sales_service.get_sales_summary()
-                    return {"sales": sales_list, "summary": summary}
-                except Exception as e:
-                    if self.logger:
-                        self.logger.error(f"خطأ في تحميل بيانات المبيعات: {e}")
-                    return None
-
             # إنشاء Worker وتشغيله
-            sales_worker = DataLoaderWorker(load_sales)
-            # 🔥 استخدام SalesDataLoaderThread الجديد
-            db_path = (  # noqa: F841
-                self.db_manager.db_path if hasattr(self.db_manager, "db_path") else "data/standard_eljoumla.db"
-            )  # noqa: F841
             sales_worker = SalesDataLoaderThread(
                 db_manager=self.db_manager,
                 search_term=search_term,

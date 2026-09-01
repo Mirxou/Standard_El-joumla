@@ -716,11 +716,10 @@ class AccountingWindow(QMainWindow):
             total_credit = Decimal("0")
 
             for i, line in enumerate(lines):
-                is_dict = isinstance(line, dict)
-                account_name = line.get("account_name", "") if is_dict else (line[3] if len(line) > 3 else "")
-                account_code = line.get("account_code", "") if is_dict else (line[2] if len(line) > 2 else "")
-                debit = Decimal(str(line.get("debit_amount", 0) if is_dict else (line[4] if len(line) > 4 else 0)))
-                credit = Decimal(str(line.get("credit_amount", 0) if is_dict else (line[5] if len(line) > 5 else 0)))
+                account_name = line.get("account_name", "")
+                account_code = line.get("account_code", "")
+                debit = Decimal(str(line.get("debit_amount", 0) or 0))
+                credit = Decimal(str(line.get("credit_amount", 0) or 0))
 
                 table.setItem(i, 0, QTableWidgetItem(account_name))
                 table.setItem(i, 1, QTableWidgetItem(account_code))

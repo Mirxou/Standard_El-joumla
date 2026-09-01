@@ -435,7 +435,6 @@ class PurchaseOrderDialog(BaseDialog):
             qty_spin = self.items_table.cellWidget(row, 2)
             price_spin = self.items_table.cellWidget(row, 3)
             discount_spin = self.items_table.cellWidget(row, 4)
-            self.items_table.cellWidget(row, 5)
 
             qty = Decimal(str(qty_spin.value()))
             price = Decimal(str(price_spin.value()))

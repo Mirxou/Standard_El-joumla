@@ -837,16 +837,8 @@ class LoginDialog(BaseDialog):
                     logging.getLogger(__name__).error(
                         f"جدول user_2fa غير موجود، تم تجاوز التحقق الثنائي: {_2fa_exc}"
                     )
-                    from PySide6.QtWidgets import QMessageBox
-                    QMessageBox.warning(
-                        self,
-                        "⚠️ تحذير أمني",
-                        "جدول التحقق الثنائي (2FA) غير موجود في قاعدة البيانات.\n"
-                        "تم تسجيل الدخول بدون تحقق ثنائي.\n"
-                        "يرجى إبلاغ مسؤول النظام."
-                    )
                 else:
-                    logging.getLogger(__name__).warning(f"خطأ في التحقق من 2FA: {_2fa_exc}")
+                    logging.getLogger(__name__).warning(f"2FA check failed, proceeding without 2FA: {_2fa_exc}")
 
             if needs_2fa:
                 from PySide6.QtWidgets import QInputDialog

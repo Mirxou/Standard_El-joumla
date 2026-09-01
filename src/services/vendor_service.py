@@ -141,8 +141,8 @@ class VendorService:
                         reference_id=purchase_id,
                         reference_type="purchase_order",
                     )
-                except Exception:
-                    logging.getLogger(__name__).warning("Ignored exception in vendor_service.py")
+                except Exception as inv_err:
+                    logging.getLogger(__name__).warning(f"Failed to record stock movement for product {pid}: {inv_err}")
 
             if self.logger:
                 self.logger.info(f"تم استلام أمر الشراء {purchase_id}")
@@ -157,26 +157,26 @@ class VendorService:
         try:
             # 1. نسبة التسليم في الموعد (40%)
             # استخدام purchase_orders
-            q_total = 'SELECT COUNT(*) FROM purchase_orders WHERE supplier_id = ? AND status = "received"'
+            q_total = 'SELECT COUNT(*) as cnt FROM purchase_orders WHERE supplier_id = ? AND status = "received"'
             row = self.db.fetch_one(q_total, (vendor_id,))
-            total_orders = row["COUNT(*)"] if row else 0
+            total_orders = int(row.get("cnt", 0) or 0) if row else 0
 
             if total_orders == 0:
                 return 50.0
 
             # مقارنة delivery_date بـ expected_delivery_date
-            q_on_time = 'SELECT COUNT(*) FROM purchase_orders WHERE supplier_id = ? AND status = "received" AND (expected_delivery_date IS NULL OR julianday(delivery_date) <= julianday(expected_delivery_date))'  # noqa: E501
+            q_on_time = 'SELECT COUNT(*) as cnt FROM purchase_orders WHERE supplier_id = ? AND status = "received" AND (expected_delivery_date IS NULL OR julianday(delivery_date) <= julianday(expected_delivery_date))'  # noqa: E501
             row = self.db.fetch_one(q_on_time, (vendor_id,))
-            on_time_count = row["COUNT(*)"] if row else 0
+            on_time_count = int(row.get("cnt", 0) or 0) if row else 0
             on_time_score = (on_time_count / total_orders) * 100
 
             # 2. دقة الكميات (30%)
             fulfillment_score = 100.0
 
             # 3. سرعة التوريد (30%)
-            q_avg_days = 'SELECT AVG(julianday(delivery_date) - julianday(order_date)) FROM purchase_orders WHERE supplier_id = ? AND status = "received"'  # noqa: E501
+            q_avg_days = 'SELECT AVG(julianday(delivery_date) - julianday(order_date)) as avg_lead FROM purchase_orders WHERE supplier_id = ? AND status = "received"'  # noqa: E501
             _r = self.db.fetch_one(q_avg_days, (vendor_id,))
-            avg_days = _r["AVG(julianday(delivery_date) - julianday(order_date))"] if _r else 7
+            avg_days = float(_r.get("avg_lead", 7) or 7) if _r else 7.0
             lead_time_score = max(0, 100 - (avg_days * 5))
 
             final_score = (on_time_score * 0.4) + (fulfillment_score * 0.3) + (lead_time_score * 0.3)
@@ -245,15 +245,15 @@ class VendorService:
     def vendor_performance(self, vendor_id: int) -> Dict[str, Any]:
         try:
             # استخدام purchase_orders
-            q_avg = 'SELECT AVG(julianday(delivery_date) - julianday(order_date)) FROM purchase_orders WHERE supplier_id = ? AND status = "received"'  # noqa: E501
+            q_avg = 'SELECT AVG(julianday(delivery_date) - julianday(order_date)) as avg_lead FROM purchase_orders WHERE supplier_id = ? AND status = "received"'  # noqa: E501
             _r = self.db.fetch_one(q_avg, (vendor_id,))
-            avg_days = _r["AVG(julianday(delivery_date) - julianday(order_date))"] if _r else 0
-            q_total = "SELECT COUNT(*) FROM purchase_orders WHERE supplier_id = ?"
+            avg_days = float(_r.get("avg_lead", 0) or 0) if _r else 0.0
+            q_total = "SELECT COUNT(*) as cnt FROM purchase_orders WHERE supplier_id = ?"
             _r2 = self.db.fetch_one(q_total, (vendor_id,))
-            total = _r2["COUNT(*)"] if _r2 else 0
-            q_on_time = 'SELECT COUNT(*) FROM purchase_orders WHERE supplier_id = ? AND status = "received" AND (expected_delivery_date IS NULL OR julianday(delivery_date) <= julianday(expected_delivery_date))'  # noqa: E501
+            total = int(_r2.get("cnt", 0) or 0) if _r2 else 0
+            q_on_time = 'SELECT COUNT(*) as cnt FROM purchase_orders WHERE supplier_id = ? AND status = "received" AND (expected_delivery_date IS NULL OR julianday(delivery_date) <= julianday(expected_delivery_date))'  # noqa: E501
             _r3 = self.db.fetch_one(q_on_time, (vendor_id,))
-            on_time = _r3["COUNT(*)"] if _r3 else 0
+            on_time = int(_r3.get("cnt", 0) or 0) if _r3 else 0
 
             quality_score = self.calculate_quality_score(vendor_id)
 

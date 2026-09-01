@@ -145,8 +145,9 @@ class QuoteHistoryDialog(BaseDialog):
         if hasattr(self.sales_service, "get_all_quotes"):
             try:
                 quotes = self.sales_service.get_all_quotes()
-            except Exception:
-                pass
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Failed to load quotes via sales_service: {e}")
 
         if quotes is None or not isinstance(quotes, list):
             try:

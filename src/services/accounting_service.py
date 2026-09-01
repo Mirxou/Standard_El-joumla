@@ -229,14 +229,13 @@ class AccountingService:
                 (journal_id,),
             )
             for line in lines:
-                is_dict = isinstance(line, dict)
-                aid = line.get("account_id") if is_dict else line[0]
+                aid = line.get("account_id")
                 # Guard: skip lines with no valid account_id
                 if not aid:
                     self.logger.warning(f"سطر قيد بدون account_id صالح في journal_id={journal_id} — تم التخطي")
                     continue
-                debit = Decimal(str(line.get("debit_amount", 0) if is_dict else line[1]))
-                credit = Decimal(str(line.get("credit_amount", 0) if is_dict else line[2]))
+                debit = Decimal(str(line.get("debit_amount", 0) or 0))
+                credit = Decimal(str(line.get("credit_amount", 0) or 0))
                 diff = debit - credit
                 self.db.execute_query(
                     "UPDATE chart_of_accounts SET current_balance = current_balance + ? WHERE id = ?",
@@ -299,8 +298,8 @@ class AccountingService:
             entry.reference_id = str(purchase_data.get('po_id', ''))
             entry.entry_date = datetime.now()
 
-            total = Decimal(str(purchase_data.get('total', 0)))
-            tax = Decimal(str(purchase_data.get('tax', 0)))
+            total = Decimal(str(purchase_data.get('total', 0) or 0))
+            tax = Decimal(str(purchase_data.get('tax', 0) or 0))
 
             # H6 FIX: جلب account_id من دليل الحسابات
             inv_code = purchase_data.get('inventory_account', '4100')
@@ -352,7 +351,7 @@ class AccountingService:
             entry.reference_id = str(payment_data.get('payment_id', ''))
             entry.entry_date = datetime.now()
 
-            amount = Decimal(str(payment_data.get('amount', 0)))
+            amount = Decimal(str(payment_data.get('amount', 0) or 0))
             method = payment_data.get('method', 'cash')
 
             if payment_data.get('payment_type') == 'received':

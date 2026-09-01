@@ -1428,8 +1428,11 @@ class ReportsWindow(QMainWindow):
 
     def export_report(self, export_format, file_path=None):
         """تصدير التقرير الحالي بالتنسيق المحدد"""
+        import logging
+        _logger = logging.getLogger(__name__)
         # التوافق مع استدعاءات الاختبارات
         if isinstance(export_format, str):
+            _logger.warning(f"export_report called with string format '{export_format}' instead of ExportFormat enum")
             return True
 
         if not self.current_report_data:

@@ -92,19 +92,19 @@ class ReportGenerator:
         card_sales = Decimal("0")
 
         for row in sales_data:
-            total_sales += Decimal(str(row.get("total", 0)))
+            total_sales += Decimal(str(row.get("total", 0) or 0))
             total_profit += Decimal(str(row.get("profit", 0) or 0))
-            total_quantity += Decimal(str(row.get("quantity", 0)))
+            total_quantity += Decimal(str(row.get("quantity", 0) or 0))
             total_discount += Decimal(str(row.get("discount", 0) or 0))
             total_tax += Decimal(str(row.get("tax", 0) or 0))
 
             payment_method = row.get("payment_method")
             if payment_method == "cash":
-                cash_sales += Decimal(str(row.get("total", 0)))
+                cash_sales += Decimal(str(row.get("total", 0) or 0))
             elif payment_method == "credit":
-                credit_sales += Decimal(str(row.get("total", 0)))
+                credit_sales += Decimal(str(row.get("total", 0) or 0))
             elif payment_method in ["card", "debit_card", "credit_card"]:
-                card_sales += Decimal(str(row.get("total", 0)))
+                card_sales += Decimal(str(row.get("total", 0) or 0))
 
         summary.total_sales = float(total_sales)
         summary.total_invoices = len(sales_data)

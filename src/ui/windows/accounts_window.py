@@ -532,7 +532,7 @@ class AccountsWindow(QMainWindow):
             self.receivables_table.setItem(row, 0, QTableWidgetItem(str(account.get("customer_name", ""))))
 
             # الرصيد
-            balance = Decimal(str(account.get("balance", 0)))
+            balance = Decimal(str(account.get("balance", 0) or 0))
             total += balance
             self.receivables_table.setItem(row, 1, QTableWidgetItem(f"{balance:.2f} ج.م"))
 
@@ -581,7 +581,7 @@ class AccountsWindow(QMainWindow):
             self.payables_table.setItem(row, 0, QTableWidgetItem(str(account.get("supplier_name", ""))))
 
             # الرصيد
-            balance = Decimal(str(account.get("balance", 0)))
+            balance = Decimal(str(account.get("balance", 0) or 0))
             total += balance
             self.payables_table.setItem(row, 1, QTableWidgetItem(f"{balance:.2f} ج.م"))
 
@@ -634,7 +634,7 @@ class AccountsWindow(QMainWindow):
             self.schedules_table.setItem(row, 1, QTableWidgetItem(str(entity_name)))
 
             # المبلغ
-            amount = Decimal(str(schedule.get("amount", 0)))
+            amount = Decimal(str(schedule.get("amount", 0) or 0))
             self.schedules_table.setItem(row, 2, QTableWidgetItem(f"{amount:.2f} ج.م"))
 
             # تاريخ الاستحقاق
@@ -878,7 +878,7 @@ class AccountsWindow(QMainWindow):
             total = Decimal("0")
             for account in receivables_data:
                 customer_name = account.get("customer_name", "غير محدد")
-                balance = Decimal(str(account.get("balance", 0)))
+                balance = Decimal(str(account.get("balance", 0) or 0))
                 total += balance
 
                 report_text += f"العميل: {customer_name}\n"
@@ -905,7 +905,7 @@ class AccountsWindow(QMainWindow):
             total = Decimal("0")
             for account in payables_data:
                 supplier_name = account.get("supplier_name", "غير محدد")
-                balance = Decimal(str(account.get("balance", 0)))
+                balance = Decimal(str(account.get("balance", 0) or 0))
                 total += balance
 
                 report_text += f"المورد: {supplier_name}\n"
@@ -934,7 +934,7 @@ class AccountsWindow(QMainWindow):
 
                 for account in accounts:
                     name = account.get("name", "غير محدد")
-                    balance = Decimal(str(account.get("balance", 0)))
+                    balance = Decimal(str(account.get("balance", 0) or 0))
                     days = account.get("days_overdue", 0)
 
                     report_text += f"الاسم: {name}\n"
@@ -970,7 +970,7 @@ class AccountsWindow(QMainWindow):
             total_inflows = Decimal("0")
 
             for flow in inflows:
-                amount = Decimal(str(flow.get("amount", 0)))
+                amount = Decimal(str(flow.get("amount", 0) or 0))
                 total_inflows += amount
                 date_str = flow.get("date", "")
                 description = flow.get("description", "")
@@ -990,7 +990,7 @@ class AccountsWindow(QMainWindow):
             total_outflows = Decimal("0")
 
             for flow in outflows:
-                amount = Decimal(str(flow.get("amount", 0)))
+                amount = Decimal(str(flow.get("amount", 0) or 0))
                 total_outflows += amount
                 date_str = flow.get("date", "")
                 description = flow.get("description", "")

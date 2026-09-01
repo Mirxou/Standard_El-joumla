@@ -886,10 +886,10 @@ class SystemManagementWindow(QDialog):
     def load_settings(self):
         """تحميل الإعدادات"""
         try:
-            cursor = self.db_manager.connection.cursor()
-            cursor.execute("SELECT key, value FROM system_settings WHERE category = 'general'")
-
-            settings = dict(cursor.fetchall())
+            rows = self.db_manager.execute_query(
+                "SELECT key, value FROM system_settings WHERE category = 'general'"
+            )
+            settings = {r.get("key", ""): r.get("value", "") for r in rows} if rows else {}
 
             self.company_name_edit.setText(settings.get("company_name", ""))
             self.company_address_edit.setText(settings.get("company_address", ""))
@@ -906,8 +906,6 @@ class SystemManagementWindow(QDialog):
     def save_settings(self):
         """حفظ الإعدادات"""
         try:
-            cursor = self.db_manager.connection.cursor()
-
             settings = {
                 "company_name": self.company_name_edit.text(),
                 "company_address": self.company_address_edit.text(),
@@ -916,21 +914,15 @@ class SystemManagementWindow(QDialog):
             }
 
             for key, value in settings.items():
-                cursor.execute(
-                    """
-                    UPDATE system_settings
-                    SET value = ?
-                    WHERE key = ?
-                """,
+                self.db_manager.execute_non_query(
+                    "UPDATE system_settings SET value = ? WHERE key = ?",
                     (value, key),
                 )
 
-            self.db_manager.connection.commit()
             QMessageBox.information(self, "نجح", "تم حفظ الإعدادات بنجاح")
 
         except Exception as e:
             QMessageBox.critical(self, "خطأ", f"فشل حفظ الإعدادات: {str(e)}")
-            self.db_manager.connection.rollback()
 
     # ==================== Data Loading ====================
 

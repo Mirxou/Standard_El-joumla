@@ -696,7 +696,7 @@ class SaleManager:
                 (item.product_id,)
             )
             if cost_row:
-                item.cost_price = Decimal(str(cost_row.get("cost_price", 0)))
+                item.cost_price = Decimal(str(cost_row.get("cost_price", 0) or 0))
 
             # جلب أو إنشاء الدفعة بنظام FEFO (الأقرب للانتهاء أولاً)
             batch_row = self.db_manager.fetch_one(
@@ -1309,8 +1309,9 @@ class SaleManager:
                 old_sale = self.get_sale_by_id(sale.id)
                 if old_sale and old_sale.items:
                     old_items = old_sale.items
-            except Exception:
-                pass
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"Could not fetch old sale items for stock restoration: {e}")
 
             # محاولة استخدام get_cursor إذا متاح
             use_cursor = hasattr(
@@ -1342,7 +1343,9 @@ class SaleManager:
                                 cur, sale.items, operation="sale"
                             )
                     return True
-                except Exception:
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"get_cursor path failed, falling back to transaction path: {e}")
                     use_cursor = False
 
             if not use_cursor:

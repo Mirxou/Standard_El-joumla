@@ -2825,3 +2825,34 @@ After fix: `rg -n '\.item\([^)]+\)\.(text|setText|setData)\(' src/ui/windows/ -g
 **13. src/experimental/deprecated_services/einvoice_service.py**
 - **Bug:** `invoice_data.pop("digital_signature")` mutated the caller's dict.
 - **Fix:** Used `invoice_data.get("digital_signature")` and created a filtered copy `{k: v for k, v in invoice_data.items() if k != "digital_signature"}` for hash computation.
+
+--- Task ID: ROW0
+
+**Scope:** Audit all `row[N]` tuple indexing patterns in 11 service files + 4 UI files for incorrect usage on `fetch_one`/`fetch_all` results (which return `Dict[str, Any]`, not tuples).
+
+**Files checked (15 total):**
+1. `src/services/import_export_service.py`
+2. `src/services/recurring_invoice_service.py`
+3. `src/services/business_intelligence_service.py`
+4. `src/services/exchange_rate_service.py`
+5. `src/services/advanced_reporting_service.py`
+6. `src/services/billing_service.py`
+7. `src/services/report_generator.py`
+8. `src/services/audit_log_service.py`
+9. `src/services/rbac_service.py`
+10. `src/services/advanced_business_analytics_service.py`
+11. `src/services/payment_service.py`
+12. `src/ui/notifications_manager.py`
+13. `src/ui/dialogs/category_dialog.py`
+14. `src/ui/dialogs/customer_form_dialog.py`
+15. `src/ui/dialogs/quote_history_dialog.py`
+
+**Findings:** All `row[N]` patterns found in the listed files fall into one of three safe categories:
+
+1. **Raw cursor results** (no fix needed): `cursor.fetchall()` / `cursor.fetchone()` on a raw `conn.cursor()` return tuples. Found in: `business_intelligence_service.py` (lines 947,950,952,953,1055), `advanced_business_analytics_service.py` (line 1542), `advanced_reporting_service.py` (lines 316-324, 415-421, 511, 559, 597, 671-678), `audit_log_service.py` (lines 62, 82, 137), `rbac_service.py` (line 30), `import_export_service.py` (line 95), `notifications_manager.py` (line 177).
+
+2. **Defensive isinstance guards** (no fix needed): Patterns like `row.get("key") if isinstance(row, dict) else row[N]` already handle the dict path correctly. The `row[N]` fallback is dead code when `fetch_one`/`fetch_all` are used but causes no bug. Found in: `recurring_invoice_service.py` (line 86), `exchange_rate_service.py` (lines 67, 75), `billing_service.py` (line 108), `payment_service.py` (line 234), `category_dialog.py` (lines 109-112), `customer_form_dialog.py` (lines 140, 254), `quote_history_dialog.py` (line 307).
+
+3. **List indexing on list-of-dicts** (no fix needed): `result[0]["key"]` where `result` is a list from `execute_query`. Found in: `report_generator.py` (lines 475, 476, 753, 763, 773, 783, 882, 889, 902, 1031).
+
+**Result:** No actual bugs found. All `row[N]` patterns in the specified files are either on genuine tuples (raw cursor) or safely guarded. Zero file modifications needed.

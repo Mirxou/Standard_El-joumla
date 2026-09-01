@@ -566,7 +566,7 @@ class DynamicPricingEngine:
             if not bp_row or not bp_row.get('retail_price'):
                 return {}
 
-            base_price = Decimal(str(bp_row.get('retail_price')))
+            base_price = Decimal(str(bp_row.get('retail_price') or 0))
 
             # Get all adjustments
             inventory_adj = self._calculate_inventory_adjustment(product_id)
@@ -708,7 +708,7 @@ class DynamicPricingEngine:
             if not bp_row or not bp_row.get('retail_price'):
                 return {}
 
-            base_price = Decimal(str(bp_row.get('retail_price')))
+            base_price = Decimal(str(bp_row.get('retail_price') or 0))
 
             # Create a mock customer for testing
             mock_customer = Customer(id=1, name="Test Customer")  # noqa: F841

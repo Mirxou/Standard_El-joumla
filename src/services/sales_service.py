@@ -293,10 +293,10 @@ class SalesService:
                 return {
                     "date": target_date.isoformat(),
                     "total_sales": row.get("total_sales", 0),
-                    "total_revenue": float(row.get("total_revenue", 0)),
-                    "total_collected": float(row.get("total_collected", 0)),
-                    "total_outstanding": float(row.get("total_outstanding", 0)),
-                    "total_discounts": float(row.get("total_discounts", 0)),
+                    "total_revenue": float(row.get("total_revenue", 0) or 0),
+                    "total_collected": float(row.get("total_collected", 0) or 0),
+                    "total_outstanding": float(row.get("total_outstanding", 0) or 0),
+                    "total_discounts": float(row.get("total_discounts", 0) or 0),
                 }
 
             return {
@@ -529,9 +529,9 @@ class SalesService:
                 # H5 FIX + C3: fetch_one يعيد dict الآن
                 return {
                     'total_sales': result.get('total_sales', 0),
-                    'total_revenue': float(result.get('total_revenue', 0)),
-                    'paid_amount': float(result.get('paid_amount', 0)),
-                    'outstanding': float(result.get('outstanding', 0)),
+                    'total_revenue': float(result.get('total_revenue', 0) or 0),
+                    'paid_amount': float(result.get('paid_amount', 0) or 0),
+                    'outstanding': float(result.get('outstanding', 0) or 0),
                     'avg_sale': float(result.get('avg_sale', 0) or 0),
                 }
             return {'total_sales': 0, 'total_revenue': 0, 'paid_amount': 0, 'outstanding': 0, 'avg_sale': 0}
@@ -728,8 +728,8 @@ class SalesService:
 
         if row:
             total_sales = row.get("total_sales", 0)
-            total_revenue = float(row.get("total_revenue", 0.0))
-            returns = float(row.get("returns_total", 0.0))
+            total_revenue = float(row.get("total_revenue", 0.0) or 0)
+            returns = float(row.get("returns_total", 0.0) or 0)
 
         net_sales = total_revenue - returns
         profit = self._calculate_daily_profit(target_date)

@@ -87,8 +87,9 @@ class PurchaseOrderService:
         # Use transaction for atomicity
         try:
             self.db.execute_query("BEGIN TRANSACTION")
-        except Exception:
-            pass  # May already be in a transaction or DB doesn't support it
+        except Exception as e:
+            if self.logger:
+                self.logger.debug(f"BEGIN TRANSACTION note: {e}")
 
         try:
             # حفظ أمر الشراء
@@ -144,8 +145,9 @@ class PurchaseOrderService:
 
             try:
                 self.db.execute_query("COMMIT")
-            except Exception:
-                pass
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"COMMIT failed after creating PO {po.po_number}: {e}")
 
             # بدء سير العمل إذا كان متاحاً
             if self.workflow_service and po.created_by:
@@ -311,8 +313,8 @@ class PurchaseOrderService:
         )
         existing_db_items = {}
         for r in (existing_rows or []):
-            rid = r.get("id") if isinstance(r, dict) else r[0]
-            rpid = r.get("product_id") if isinstance(r, dict) else r[1]
+            rid = r.get("id")
+            rpid = r.get("product_id")
             existing_db_items[rid] = rpid
 
         # Find which existing DB items have receiving_items linked (cannot delete these)
@@ -325,7 +327,7 @@ class PurchaseOrderService:
             )
             protected_ids = set()
             for r in (protected_ids_rows or []):
-                protected_ids.add(r.get("po_item_id") if isinstance(r, dict) else r[0])
+                protected_ids.add(r.get("po_item_id"))
         else:
             protected_ids = set()
 
@@ -669,8 +671,9 @@ class PurchaseOrderService:
         # Use transaction for atomicity
         try:
             self.db.execute_query("BEGIN TRANSACTION")
-        except Exception:
-            pass
+        except Exception as e:
+            if self.logger:
+                self.logger.debug(f"BEGIN TRANSACTION note: {e}")
 
         try:
             # إنشاء إشعار الاستلام
@@ -776,8 +779,9 @@ class PurchaseOrderService:
 
             try:
                 self.db.execute_query("COMMIT")
-            except Exception:
-                pass
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"COMMIT failed after receiving shipment for PO {po_id}: {e}")
 
             return True
         except Exception:
@@ -944,7 +948,7 @@ class PurchaseOrderService:
             received_amount = 0.0
             if received_rows and received_rows[0]:
                 row = received_rows[0]
-                received_amount = float(row.get("total", 0) if isinstance(row, dict) else row[0])
+                received_amount = float(row.get("total", 0) or 0)
 
             # 3. مبلغ فاتورة المورد
             inv_row = self.db.fetch_one(
@@ -954,7 +958,7 @@ class PurchaseOrderService:
             if not inv_row:
                 return {"matched": False, "error": "فاتورة المشتريات غير موجودة"}
 
-            invoice_amount = float(inv_row.get("total_amount", 0) if isinstance(inv_row, dict) else inv_row[2])
+            invoice_amount = float(inv_row.get("total_amount", 0) or 0)
 
             # 4. حساب الفروقات
             diff_po_received = abs(po_amount - received_amount)
@@ -1001,25 +1005,17 @@ class PurchaseOrderService:
                 "ORDER BY purchase_date DESC",
                 (supplier_id,)
             )
-            results = []
-            for row in rows:
-                if isinstance(row, dict):
-                    results.append(row)
-                else:
-                    results.append({
-                        "id": row[0], "invoice_number": row[1],
-                        "purchase_date": row[2], "total_amount": row[3],
-                        "payment_status": row[4],
-                    })
-            return results
-        except Exception:
+            return rows if rows else []
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Error fetching unmatched invoices for supplier {supplier_id}: {e}")
             return []
 
     def ensure_match_columns(self):
         """التأكد من وجود أعمدة المطابقة في جدول purchase_orders"""
         try:
             cols = self.db.fetch_all("PRAGMA table_info(purchase_orders)")
-            col_names = {c["name"] if isinstance(c, dict) else c[1] for c in cols}
+            col_names = {c["name"] for c in cols}
             if "related_invoice_id" not in col_names:
                 self.db.execute_query(
                     "ALTER TABLE purchase_orders ADD COLUMN related_invoice_id INTEGER"

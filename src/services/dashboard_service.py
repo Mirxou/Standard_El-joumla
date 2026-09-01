@@ -247,8 +247,8 @@ class DashboardService:
                 color="#3F51B5",
             )
 
-        total = float(rows[0].get("total_sales", 0))
-        count = int(rows[0].get("order_count", 0))
+        total = float(rows[0].get("total_sales", 0) or 0)
+        count = int(rows[0].get("order_count", 0) or 0)
         aov = total / count
 
         # Previous period AOV
@@ -258,7 +258,7 @@ class DashboardService:
         prev_rows = self.db.execute_query(q, [prev_start, prev_end])
         prev_aov = 0.0
         if isinstance(prev_rows, list) and prev_rows and prev_rows[0].get("order_count", 0) > 0:
-            prev_aov = float(prev_rows[0].get("total_sales", 0)) / int(prev_rows[0].get("order_count", 1))
+            prev_aov = float(prev_rows[0].get("total_sales", 0) or 0) / int(prev_rows[0].get("order_count", 1) or 1)
 
         change = self._change_pct(prev_aov, aov)
 

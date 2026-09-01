@@ -99,15 +99,6 @@ class DeltaSyncService:
             عدد العناصر المعلقة
         """
         if not table_name:
-            return 0
-        if table_name:
-            query = f"""
-                SELECT COUNT(*) as count FROM {table_name}
-                WHERE is_synced = 0 AND is_deleted = 0
-            """
-            results = self.local_db.execute_query(query)
-            return results[0].get("count", results[0].get("COUNT(*)", 0)) if results else 0
-        else:
             # إجمالي من جميع الجداول
             tables = [
                 "products",
@@ -122,6 +113,13 @@ class DeltaSyncService:
             for table in tables:
                 total += self.get_pending_count(table)
             return total
+
+        query = f"""
+            SELECT COUNT(*) as count FROM {table_name}
+            WHERE is_synced = 0 AND is_deleted = 0
+        """
+        results = self.local_db.execute_query(query)
+        return results[0].get("count", results[0].get("COUNT(*)", 0)) if results else 0
 
     def get_sync_summary(self) -> Dict[str, Any]:
         """
