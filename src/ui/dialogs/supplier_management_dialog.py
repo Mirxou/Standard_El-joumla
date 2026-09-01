@@ -101,7 +101,7 @@ class SupplierManagementDialog(BaseDialog):
     def load_suppliers(self):
         """تحميل قائمة الموردين"""
         try:
-            query = "SELECT id, name, phone, email, contact_person, is_active FROM suppliers ORDER BY name"
+            query = "SELECT id, name, phone, email, contact_person, is_active FROM suppliers WHERE is_active = 1 ORDER BY name"
             results = self.db_manager.fetch_all(query)
 
             self.suppliers = []

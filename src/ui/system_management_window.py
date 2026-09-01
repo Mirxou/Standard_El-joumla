@@ -432,10 +432,10 @@ class SystemManagementWindow(QDialog):
 
             for row, backup in enumerate(backups):
                 # Name
-                self.backups_table.setItem(row, 0, QTableWidgetItem(backup["name"]))
+                self.backups_table.setItem(row, 0, QTableWidgetItem(backup["backup_name"]))
 
                 # Date
-                date_str = backup.get("date", "-")
+                date_str = backup.get("timestamp", "-")
                 if isinstance(date_str, str) and date_str != "-":
                     try:
                         date_obj = datetime.fromisoformat(date_str)
@@ -445,12 +445,14 @@ class SystemManagementWindow(QDialog):
                 self.backups_table.setItem(row, 1, QTableWidgetItem(date_str))
 
                 # Size
-                size_mb = backup.get("size", 0) / (1024 * 1024)
+                size_mb = backup.get("file_size", 0) / (1024 * 1024)
                 size_str = f"{size_mb:.2f} MB" if size_mb > 0 else "-"
                 self.backups_table.setItem(row, 2, QTableWidgetItem(size_str))
 
                 # Type
-                backup_type = backup.get("type", "manual")
+                # No 'type' field in backup metadata; infer from description
+                desc = backup.get("description", "")
+                backup_type = "automatic" if ("تلقائي" in desc or "automatic" in desc.lower()) else "manual"
                 type_ar = "تلقائي" if backup_type == "automatic" else "يدوي"
                 self.backups_table.setItem(row, 3, QTableWidgetItem(type_ar))
 
@@ -464,11 +466,11 @@ class SystemManagementWindow(QDialog):
                 actions_layout.setContentsMargins(2, 2, 2, 2)
 
                 restore_btn = QPushButton("استعادة")
-                restore_btn.clicked.connect(lambda checked, n=backup["name"]: self.restore_backup(n))
+                restore_btn.clicked.connect(lambda checked, n=backup["backup_name"]: self.restore_backup(n))
                 actions_layout.addWidget(restore_btn)
 
                 delete_btn = QPushButton("حذف")
-                delete_btn.clicked.connect(lambda checked, n=backup["name"]: self.delete_backup(n))
+                delete_btn.clicked.connect(lambda checked, n=backup["backup_name"]: self.delete_backup(n))
                 actions_layout.addWidget(delete_btn)
 
                 self.backups_table.setCellWidget(row, 5, actions_widget)

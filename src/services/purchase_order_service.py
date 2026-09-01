@@ -246,6 +246,9 @@ class PurchaseOrderService:
         """تحديث أمر شراء"""
         po.updated_at = datetime.now()
 
+        # Bug #1 fix: ensure match columns exist before referencing them in UPDATE
+        self.ensure_match_columns()
+
         query = """
         UPDATE purchase_orders SET
             supplier_id = ?, supplier_name = ?, supplier_contact = ?,
@@ -293,14 +296,97 @@ class PurchaseOrderService:
 
         self.db.execute_update(query, params)
 
-        # تحديث البنود (حذف وإعادة الإدخال)
-        delete_items = "DELETE FROM purchase_order_items WHERE purchase_order_id = ?"
-        self.db.execute_update(delete_items, (po.id,))
-
-        for item in po.items:
-            self._save_po_item(po.id, item)
+        # Bug #2 fix: UPDATE existing items / INSERT new ones instead of DELETE+INSERT
+        # to avoid orphaning receiving_items foreign keys
+        self._sync_po_items(po)
 
         return True
+
+    def _sync_po_items(self, po: PurchaseOrder):
+        """Sync PO items: UPDATE existing, INSERT new, DELETE only unreceived ones."""
+        # Fetch existing DB item IDs for this PO
+        existing_rows = self.db.fetch_all(
+            "SELECT id, product_id FROM purchase_order_items WHERE purchase_order_id = ?",
+            (po.id,),
+        )
+        existing_db_items = {}
+        for r in (existing_rows or []):
+            rid = r.get("id") if isinstance(r, dict) else r[0]
+            rpid = r.get("product_id") if isinstance(r, dict) else r[1]
+            existing_db_items[rid] = rpid
+
+        # Find which existing DB items have receiving_items linked (cannot delete these)
+        if existing_db_items:
+            protected_ids_rows = self.db.fetch_all(
+                "SELECT DISTINCT po_item_id FROM receiving_items WHERE po_item_id IN ({})".format(
+                    ",".join("?" for _ in existing_db_items)
+                ),
+                tuple(existing_db_items.keys()),
+            )
+            protected_ids = set()
+            for r in (protected_ids_rows or []):
+                protected_ids.add(r.get("po_item_id") if isinstance(r, dict) else r[0])
+        else:
+            protected_ids = set()
+
+        incoming_item_ids = set()
+        for item in po.items:
+            if item.id and item.id in existing_db_items:
+                # UPDATE existing item
+                incoming_item_ids.add(item.id)
+                self._update_po_item(po.id, item)
+            else:
+                # INSERT new item
+                self._save_po_item(po.id, item)
+
+        # Delete items that were removed from the PO AND have no receiving_items
+        deletable = set(existing_db_items.keys()) - incoming_item_ids - protected_ids
+        if deletable:
+            self.db.execute_update(
+                "DELETE FROM purchase_order_items WHERE id IN ({})".format(
+                    ",".join("?" for _ in deletable)
+                ),
+                tuple(deletable),
+            )
+
+    def _update_po_item(self, po_id: int, item: PurchaseOrderItem):
+        """تحديث بند أمر شراء موجود"""
+        query = """
+        UPDATE purchase_order_items SET
+            product_id = ?, product_name = ?, product_code = ?,
+            quantity_ordered = ?, quantity_received = ?, quantity_pending = ?,
+            unit_price = ?, discount_percent = ?, tax_percent = ?,
+            subtotal = ?, discount_amount = ?, tax_amount = ?, net_amount = ?,
+            required_date = ?, expected_delivery_date = ?, actual_delivery_date = ?,
+            specifications = ?, quality_requirements = ?, packaging_requirements = ?,
+            notes = ?
+        WHERE id = ? AND purchase_order_id = ?
+        """
+        params = (
+            item.product_id,
+            item.product_name,
+            item.product_code,
+            float(item.quantity_ordered),
+            float(item.quantity_received),
+            float(item.quantity_pending),
+            float(item.unit_price),
+            float(item.discount_percentage),
+            float(item.tax_percentage),
+            float(item.subtotal),
+            float(item.discount_amount),
+            float(item.tax_amount),
+            float(item.net_amount),
+            item.required_date.isoformat() if item.required_date else None,
+            (item.expected_delivery_date.isoformat() if item.expected_delivery_date else None),
+            (item.actual_delivery_date.isoformat() if item.actual_delivery_date else None),
+            item.specifications,
+            item.quality_requirements,
+            item.packaging_requirements,
+            item.notes,
+            item.id,
+            po_id,
+        )
+        self.db.execute_update(query, params)
 
     def delete_purchase_order(self, po_id: int) -> bool:
         """حذف أمر شراء (soft delete)"""
@@ -675,6 +761,19 @@ class PurchaseOrderService:
                 if self.logger:
                     self.logger.warning(f"خطأ في إنشاء قيد محاسبي للشراء: {e}")
 
+            # Update supplier balance (increase debt when PO is received)
+            try:
+                from decimal import Decimal as _Decimal
+                from src.models.supplier import SupplierManager
+                supplier_mgr = SupplierManager(self.db, self.logger)
+                po_total = _Decimal(str(getattr(po, 'total_amount', 0) or 0))
+                supplier_id = getattr(po, 'supplier_id', None)
+                if supplier_id and po_total > 0:
+                    supplier_mgr.update_supplier_balance(supplier_id, po_total)
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"فشل تحديث رصيد المورد: {e}")
+
             try:
                 self.db.execute_query("COMMIT")
             except Exception:
@@ -831,10 +930,15 @@ class PurchaseOrderService:
             # 1. مبلغ أمر الشراء
             po_amount = float(po.total_amount)
 
-            # 2. مبلغ الاستلام الفعلي (من receiving_notes)
+            # 2. مبلغ الاستلام الفعلي (محسوب من receiving_items × purchase_order_items.unit_price)
+            # Bug #4 fix: receiving_notes has no total_amount column;
+            # calculate from ri.quantity_received * poi.unit_price via join
             received_rows = self.db.fetch_all(
-                "SELECT COALESCE(SUM(total_amount), 0) as total FROM receiving_notes "
-                "WHERE purchase_order_id = ? AND status != 'cancelled'",
+                "SELECT COALESCE(SUM(ri.quantity_received * poi.unit_price), 0) as total "
+                "FROM receiving_items ri "
+                "JOIN receiving_notes rn ON ri.receiving_id = rn.id "
+                "JOIN purchase_order_items poi ON ri.po_item_id = poi.id "
+                "WHERE rn.purchase_order_id = ? AND rn.status != 'cancelled'",
                 (po_id,)
             )
             received_amount = 0.0

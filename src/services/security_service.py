@@ -31,17 +31,8 @@ class SecurityService:
                     enabled_at TEXT NOT NULL
                 )
                 """)
-            # login attempts for brute force protection
-            self.db.execute_query("""
-                CREATE TABLE IF NOT EXISTS login_attempts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT,
-                    ip_address TEXT,
-                    user_agent TEXT,
-                    success INTEGER NOT NULL,
-                    created_at TEXT NOT NULL
-                )
-                """)
+            # login_attempts table is created by UserService._create_security_tables()
+            # with a unified schema; do not create it here to avoid schema conflicts.
         except Exception as e:
             if self.logger:
                 self.logger.error(f"فشل تهيئة جداول الأمان: {e}")

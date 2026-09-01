@@ -411,7 +411,8 @@ class PurchaseOrderDialog(BaseDialog):
         self.items_table.setItem(row, 7, QTableWidgetItem("0.00"))
 
         # ربط تغيير المنتج
-        product_combo.currentIndexChanged.connect(lambda r=row: self._on_product_changed(r))
+        # Bug #3 fix: consume signal arg with 'val' param so 'r' defaults to captured row
+        product_combo.currentIndexChanged.connect(lambda val, r=row: self._on_product_changed(r))
 
     def _on_product_changed(self, row):
         """عند تغيير المنتج في صف"""
@@ -774,6 +775,7 @@ class PurchaseOrderDialog(BaseDialog):
 
                     self.items_table.setItem(row, 6, QTableWidgetItem("0.00"))
                     self.items_table.setItem(row, 7, QTableWidgetItem("0.00"))
-                    product_combo.currentIndexChanged.connect(lambda r=row: self._on_product_changed(r))
+                    # Bug #3 fix: consume signal arg with 'val' param so 'r' defaults to captured row
+                    product_combo.currentIndexChanged.connect(lambda val, r=row: self._on_product_changed(r))
                     self._update_item_row(row)
                     break

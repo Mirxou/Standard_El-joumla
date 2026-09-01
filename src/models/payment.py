@@ -691,43 +691,61 @@ class PaymentManager:
     def _row_to_payment(self, row) -> Payment:
         """تحويل صف قاعدة البيانات إلى كائن دفعة
 
-        Schema المتوقع: id, payment_number, payment_type, payment_method, status,
-        amount, currency, exchange_rate, amount_in_base_currency,
-        currency_id, base_amount, converted_amount (Multi-Currency),
-        payment_date, due_date, customer_id, supplier_id, user_id,
-        sale_id, purchase_id, reference_number, bank_name, account_number,
-        notes, account_code, cost_center, created_at, updated_at (27 عمود)
+        Uses dict access when possible; falls back to tuple indexing only
+        when the DB driver returns raw tuples.
         """
+        # Prefer dict access (SQLite row_factory returns dicts)
+        if isinstance(row, dict):
+            return self._row_to_payment_dict(row)
+
+        # Fallback: tuple indexing (legacy path)
         row_len = len(row)
 
-        # قراءة حقول Multi-Currency - الأعمدة 9-11
-        currency_id = row[9] if row_len > 9 and row[9] is not None else None
+        def safe_decimal(idx):
+            val = row[idx] if row_len > idx and row[idx] is not None else None
+            if val is None:
+                return None
+            try:
+                return Decimal(str(val))
+            except Exception:
+                return None
 
-        base_amount = (
-            Decimal(str(row[10])) if row_len > 10 and row[10] is not None and not isinstance(row[10], str) else None
-        )
-        converted_amount = (
-            Decimal(str(row[11])) if row_len > 11 and row[11] is not None and not isinstance(row[11], str) else None
-        )
+        def safe_date_at(idx):
+            val = row[idx] if row_len > idx else None
+            if not val:
+                return None
+            try:
+                return date.fromisoformat(val)
+            except Exception:
+                return None
+
+        def safe_datetime_at(idx):
+            val = row[idx] if row_len > idx else None
+            if not val:
+                return None
+            try:
+                return datetime.fromisoformat(val)
+            except Exception:
+                return None
+
+        currency_id = row[9] if row_len > 9 and row[9] is not None else None
 
         return Payment(
             id=row[0] if row_len > 0 else None,
             payment_number=row[1] if row_len > 1 else "",
-            payment_type=row[2] if row_len > 2 else PaymentType.CUSTOMER_PAYMENT.value,
-            payment_method=row[3] if row_len > 3 else PaymentMethod.CASH.value,
-            status=row[4] if row_len > 4 else PaymentStatus.PENDING.value,
-            amount=(Decimal(str(row[5])) if row_len > 5 and row[5] is not None else Decimal("0")),
-            currency=row[6] if row_len > 6 else "DZD",  # للتوافق مع الكود القديم
-            exchange_rate=(Decimal(str(row[7])) if row_len > 7 and row[7] is not None else Decimal("1.0")),
-            amount_in_base_currency=(
-                Decimal(str(row[8])) if row_len > 8 and row[8] is not None else Decimal("0")
-            ),  # للتوافق مع الكود القديم
+            payment_type=row[2] if row_len > 2 else 'customer_payment',
+            payment_method=row[3] if row_len > 3 else 'cash',
+            status=row[4] if row_len > 4 else 'pending',
+            amount=safe_decimal(5) or Decimal("0"),
+            currency=row[6] if row_len > 6 else "DZD",
+            exchange_rate=safe_decimal(7) or Decimal("1.0"),
+            amount_in_base_currency=safe_decimal(8) or Decimal("0"),
             # Multi-Currency Support
             currency_id=currency_id,
-            base_amount=base_amount,
-            converted_amount=converted_amount,
-            payment_date=(date.fromisoformat(row[12]) if row_len > 12 and row[12] else None),
-            due_date=date.fromisoformat(row[13]) if row_len > 13 and row[13] else None,
+            base_amount=safe_decimal(10),
+            converted_amount=safe_decimal(11),
+            payment_date=safe_date_at(12),
+            due_date=safe_date_at(13),
             customer_id=row[14] if row_len > 14 else None,
             supplier_id=row[15] if row_len > 15 else None,
             user_id=row[16] if row_len > 16 else None,
@@ -739,8 +757,8 @@ class PaymentManager:
             notes=row[22] if row_len > 22 else None,
             account_code=row[23] if row_len > 23 else None,
             cost_center=row[24] if row_len > 24 else None,
-            created_at=(datetime.fromisoformat(row[25]) if row_len > 25 and row[25] else None),
-            updated_at=(datetime.fromisoformat(row[26]) if row_len > 26 and row[26] else None),
+            created_at=safe_datetime_at(25),
+            updated_at=safe_datetime_at(26),
         )
 
     def _row_to_payment_dict(self, row_dict: dict) -> Payment:

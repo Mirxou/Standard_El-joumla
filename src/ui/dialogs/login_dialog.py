@@ -826,8 +826,24 @@ class LoginDialog(BaseDialog):
                     "SELECT 1 FROM user_2fa WHERE user_id = ?", (session.user_id,)
                 )
                 needs_2fa = bool(rows)
-            except Exception:
+            except Exception as _2fa_exc:
                 needs_2fa = False
+                # If the table doesn't exist, 2FA cannot work — warn the user
+                import sqlite3
+                if isinstance(_2fa_exc, sqlite3.OperationalError) and "no such table" in str(_2fa_exc).lower():
+                    logging.getLogger(__name__).error(
+                        f"جدول user_2fa غير موجود، تم تجاوز التحقق الثنائي: {_2fa_exc}"
+                    )
+                    from PySide6.QtWidgets import QMessageBox
+                    QMessageBox.warning(
+                        self,
+                        "⚠️ تحذير أمني",
+                        "جدول التحقق الثنائي (2FA) غير موجود في قاعدة البيانات.\n"
+                        "تم تسجيل الدخول بدون تحقق ثنائي.\n"
+                        "يرجى إبلاغ مسؤول النظام."
+                    )
+                else:
+                    logging.getLogger(__name__).warning(f"خطأ في التحقق من 2FA: {_2fa_exc}")
 
             if needs_2fa:
                 from PySide6.QtWidgets import QInputDialog

@@ -83,21 +83,22 @@ class UserService:
         # إعدادات الأمان
         self.security_settings = SecuritySettings()
 
+        # إنشاء جداول إضافية للأمان أولاً (قبل تحميل الإعدادات منها)
+        self._create_security_tables()
+
         # تحميل إعدادات الأمان من قاعدة البيانات
         self._load_security_settings()
-
-        # إنشاء جداول إضافية للأمان
-        self._create_security_tables()
 
     def _create_security_tables(self):
         """إنشاء جداول الأمان الإضافية"""
         try:
-            # جدول محاولات تسجيل الدخول
+            # جدول محاولات تسجيل الدخول (المخطط الموحد - يشمل جميع الأعمدة المطلوبة)
             self.db.execute_query("""
                 CREATE TABLE IF NOT EXISTS login_attempts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username TEXT NOT NULL,
                     ip_address TEXT,
+                    user_agent TEXT,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                     success BOOLEAN NOT NULL,
                     failure_reason TEXT,

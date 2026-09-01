@@ -336,8 +336,6 @@ class NotificationService:
         Returns:
             قائمة الإشعارات
         """
-        cursor = self.db.connection.cursor()
-
         query = "SELECT * FROM notifications WHERE 1=1"
         params = []
 
@@ -355,26 +353,26 @@ class NotificationService:
         query += " ORDER BY priority DESC, created_at DESC LIMIT ?"
         params.append(limit)
 
-        cursor.execute(query, params)
+        rows = self.db.fetch_all(query, tuple(params))
 
         notifications = []
-        for row in cursor.fetchall():
-            data = json.loads(row[8]) if row[8] else None
+        for row in rows:
+            data = json.loads(row["data"]) if row.get("data") else None
 
             notifications.append(
                 Notification(
-                    id=row[0],
-                    title=row[1],
-                    message=row[2],
-                    type=NotificationType(row[3]),
-                    priority=NotificationPriority(row[4]),
-                    category=AlertCategory(row[5]),
-                    user_id=row[6],
-                    action_url=row[7],
+                    id=row["id"],
+                    title=row["title"],
+                    message=row["message"],
+                    type=NotificationType(row["type"]),
+                    priority=NotificationPriority(row["priority"]),
+                    category=AlertCategory(row["category"]),
+                    user_id=row.get("user_id"),
+                    action_url=row.get("action_url"),
                     data=data,
-                    read=bool(row[9]),
-                    read_at=datetime.fromisoformat(row[10]) if row[10] else None,
-                    created_at=datetime.fromisoformat(row[11]),
+                    read=bool(row.get("read", 0)),
+                    read_at=datetime.fromisoformat(row["read_at"]) if row.get("read_at") else None,
+                    created_at=datetime.fromisoformat(row["created_at"]),
                 )
             )
 

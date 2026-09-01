@@ -594,21 +594,14 @@ class CustomerManager:
             return False
 
     def update_balance(self, customer_id: int, amount: float, operation: str = "increase") -> bool:
-        """تحديث رصيد العميل"""
+        """تحديث رصيد العميل (atomic SQL)"""
         try:
-            customer = self.get_customer_by_id(customer_id)
-            if not customer:
-                return False
-
             amount_decimal = Decimal(str(amount))
-            new_balance = (
-                customer.current_balance + amount_decimal
-                if operation == "increase"
-                else customer.current_balance - amount_decimal
-            )
-
-            query = "UPDATE customers SET current_balance = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-            return self.db_manager.execute_non_query(query, (float(new_balance), customer_id)) > 0
+            if operation == "increase":
+                query = "UPDATE customers SET current_balance = current_balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+            else:
+                query = "UPDATE customers SET current_balance = current_balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+            return self.db_manager.execute_non_query(query, (float(amount_decimal), customer_id)) > 0
         except Exception as e:
             if self.logger:
                 self.logger.error(f"Error updating balance: {e}")

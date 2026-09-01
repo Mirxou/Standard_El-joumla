@@ -365,6 +365,7 @@ class InventoryManagementApp(QApplication):
         self.config_manager.load_config()  # تحميل الإعدادات من الملف
         self.db_manager: Optional[LocalDatabaseManager] = None
         self.current_user = None
+        self.current_session = None
 
         # الخدمات
         self.inventory_service: Optional[InventoryService] = None
@@ -620,6 +621,9 @@ class InventoryManagementApp(QApplication):
                         if self.current_user:
                             self.logger.info(f"تم تسجيل دخول المستخدم بنجاح: {self.current_user.username}")
 
+                            # حفظ الجلسة الحالية واستخدامها لاحقاً في تسجيل الخروج
+                            self.current_session = session
+
                             # بدء مراقبة الجلسة
                             self._start_session_monitoring(session)
 
@@ -822,6 +826,15 @@ class InventoryManagementApp(QApplication):
     def handle_logout(self):
         """معالجة تسجيل الخروج"""
         try:
+            # إيقاف مؤقتات مراقبة الجلسة
+            if hasattr(self, 'session_monitor_timer') and self.session_monitor_timer:
+                self.session_monitor_timer.stop()
+                self.session_monitor_timer = None
+
+            if hasattr(self, 'activity_timer') and self.activity_timer:
+                self.activity_timer.stop()
+                self.activity_timer = None
+
             # إغلاق النوافذ المفتوحة
             if self.main_window:
                 self.main_window.close()
@@ -831,11 +844,15 @@ class InventoryManagementApp(QApplication):
                 self.reports_window.close()
                 self.reports_window = None
 
-            # إنهاء جلسة المستخدم
-            if self.current_user and self.user_service:
-                self.user_service.logout_user(self.current_user.id)
+            # إنهاء جلسة المستخدم باستخدام معرف الجلسة (وليس معرف المستخدم)
+            if self.current_session and self.user_service:
+                self.user_service.logout_user(self.current_session.session_id)
+            elif self.current_user and self.user_service:
+                self.logger.warning("تسجيل الخروج بدون جلسة صالحة، محاولة إنهاء جميع جلسات المستخدم")
+                self.user_service.terminate_all_sessions(self.current_user.id)
 
             self.current_user = None
+            self.current_session = None
 
             # عرض نافذة تسجيل الدخول الإجباري مرة أخرى
             self.show_mandatory_login_dialog()
@@ -905,10 +922,17 @@ class InventoryManagementApp(QApplication):
                     except Exception:
                         pass
 
-            # إنهاء جلسة المستخدم (سريع)
-            if self.current_user and self.user_service:
+            # إنهاء جلسة المستخدم (سريع) باستخدام معرف الجلسة الصحيح
+            if self.current_session and self.user_service:
                 try:
-                    QTimer.singleShot(0, lambda: self.user_service.logout_user(self.current_user.id))
+                    session_id = self.current_session.session_id
+                    QTimer.singleShot(0, lambda sid=session_id: self.user_service.logout_user(sid))
+                except Exception:
+                    pass
+            elif self.current_user and self.user_service:
+                try:
+                    user_id = self.current_user.id
+                    QTimer.singleShot(0, lambda uid=user_id: self.user_service.terminate_all_sessions(uid))
                 except Exception:
                     pass
 

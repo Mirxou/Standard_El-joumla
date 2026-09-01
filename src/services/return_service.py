@@ -93,76 +93,26 @@ class ReturnService:
             cursor = self.db.connection.cursor()
 
             # إدراج المرتجع
+            # BUGFIX (13c): Match actual DB schema: return_invoices has only
+            # (id, original_invoice_id, return_date, reason, total_refund_amount, status).
             cursor.execute(
                 """
                 INSERT INTO return_invoices (
-                    return_number, return_type, original_sale_id, original_purchase_id,
-                    original_invoice_number, customer_id, supplier_id, contact_name,
-                    contact_phone, return_date, original_invoice_date, status,
-                    return_reason, description, subtotal, discount_amount, tax_amount,
-                    total_amount, refund_method, refund_amount, refund_date,
-                    refund_reference, credit_note_number, credit_note_amount,
-                    exchange_sale_id, notes, internal_notes, created_by, approved_by,
-                    created_at, updated_at, approved_at
-                ) VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?
-                )
-            """,
+                    original_invoice_id, return_date, reason,
+                    total_refund_amount, status
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
                 (
-                    return_invoice.return_number,
-                    (
-                        return_invoice.return_type.name
-                        if isinstance(return_invoice.return_type, ReturnType)
-                        else return_invoice.return_type
-                    ),
                     return_invoice.original_sale_id,
-                    return_invoice.original_purchase_id,
-                    return_invoice.original_invoice_number,
-                    return_invoice.customer_id,
-                    return_invoice.supplier_id,
-                    return_invoice.contact_name,
-                    return_invoice.contact_phone,
-                    (return_invoice.return_date.isoformat() if return_invoice.return_date else None),
-                    (
-                        return_invoice.original_invoice_date.isoformat()
-                        if return_invoice.original_invoice_date
-                        else None
-                    ),
-                    (
-                        return_invoice.status.name
-                        if isinstance(return_invoice.status, ReturnStatus)
-                        else return_invoice.status
-                    ),
-                    (
-                        return_invoice.return_reason.name
-                        if isinstance(return_invoice.return_reason, ReturnReason)
-                        else return_invoice.return_reason
-                    ),
-                    return_invoice.description,
-                    float(return_invoice.subtotal),
-                    float(return_invoice.discount_amount),
-                    float(return_invoice.tax_amount),
+                    (return_invoice.return_date.isoformat()
+                     if return_invoice.return_date else None),
+                    (return_invoice.return_reason.name
+                     if isinstance(return_invoice.return_reason, ReturnReason)
+                     else str(return_invoice.return_reason or '')),
                     float(return_invoice.total_amount),
-                    (
-                        return_invoice.refund_method.name
-                        if isinstance(return_invoice.refund_method, RefundMethod)
-                        else return_invoice.refund_method
-                    ),
-                    float(return_invoice.refund_amount),
-                    (return_invoice.refund_date.isoformat() if return_invoice.refund_date else None),
-                    return_invoice.refund_reference,
-                    return_invoice.credit_note_number,
-                    float(return_invoice.credit_note_amount),
-                    return_invoice.exchange_sale_id,
-                    return_invoice.notes,
-                    return_invoice.internal_notes,
-                    return_invoice.created_by,
-                    return_invoice.approved_by,
-                    (return_invoice.created_at.isoformat() if return_invoice.created_at else None),
-                    (return_invoice.updated_at.isoformat() if return_invoice.updated_at else None),
-                    (return_invoice.approved_at.isoformat() if return_invoice.approved_at else None),
+                    (return_invoice.status.name
+                     if isinstance(return_invoice.status, ReturnStatus)
+                     else str(return_invoice.status or 'approved')),
                 ),
             )
 
@@ -170,39 +120,22 @@ class ReturnService:
             return_invoice.id = return_id
 
             # إدراج البنود
+            # BUGFIX (13c): Match actual DB schema: return_items has only
+            # (id, return_id, product_id, quantity, refund_price).
             for item in return_invoice.items:
                 item.return_id = return_id
                 item.calculate_totals()
                 cursor.execute(
                     """
                     INSERT INTO return_items (
-                        return_id, original_sale_item_id, original_purchase_item_id,
-                        product_id, product_name, product_barcode, quantity_returned,
-                        quantity_original, unit_price, discount_amount, tax_amount,
-                        total_amount, return_reason, condition, restockable, notes
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+                        return_id, product_id, quantity, refund_price
+                    ) VALUES (?, ?, ?, ?)
+                    """,
                     (
                         return_id,
-                        item.original_sale_item_id,
-                        item.original_purchase_item_id,
                         item.product_id,
-                        item.product_name,
-                        item.product_barcode,
                         float(item.quantity_returned),
-                        float(item.quantity_original),
                         float(item.unit_price),
-                        float(item.discount_amount),
-                        float(item.tax_amount),
-                        float(item.total_amount),
-                        (
-                            item.return_reason.name
-                            if isinstance(item.return_reason, ReturnReason)
-                            else item.return_reason
-                        ),
-                        item.condition,
-                        1 if item.restockable else 0,
-                        item.notes,
                     ),
                 )
                 item.id = cursor.lastrowid
@@ -278,70 +211,29 @@ class ReturnService:
             cursor = self.db.connection.cursor()
 
             # تحديث المرتجع
+            # BUGFIX (13c): Match actual DB schema: return_invoices has only
+            # (id, original_invoice_id, return_date, reason, total_refund_amount, status).
             cursor.execute(
                 """
                 UPDATE return_invoices SET
-                    return_type = ?, original_sale_id = ?, original_purchase_id = ?,
-                    original_invoice_number = ?, customer_id = ?, supplier_id = ?,
-                    contact_name = ?, contact_phone = ?, return_date = ?,
-                    original_invoice_date = ?, status = ?, return_reason = ?,
-                    description = ?, subtotal = ?, discount_amount = ?, tax_amount = ?,
-                    total_amount = ?, refund_method = ?, refund_amount = ?,
-                    refund_date = ?, refund_reference = ?, credit_note_number = ?,
-                    credit_note_amount = ?, exchange_sale_id = ?, notes = ?,
-                    internal_notes = ?, approved_by = ?, updated_at = ?, approved_at = ?
+                    original_invoice_id = ?,
+                    return_date = ?,
+                    reason = ?,
+                    total_refund_amount = ?,
+                    status = ?
                 WHERE id = ?
             """,
                 (
-                    (
-                        return_invoice.return_type.name
-                        if isinstance(return_invoice.return_type, ReturnType)
-                        else return_invoice.return_type
-                    ),
                     return_invoice.original_sale_id,
-                    return_invoice.original_purchase_id,
-                    return_invoice.original_invoice_number,
-                    return_invoice.customer_id,
-                    return_invoice.supplier_id,
-                    return_invoice.contact_name,
-                    return_invoice.contact_phone,
-                    (return_invoice.return_date.isoformat() if return_invoice.return_date else None),
-                    (
-                        return_invoice.original_invoice_date.isoformat()
-                        if return_invoice.original_invoice_date
-                        else None
-                    ),
-                    (
-                        return_invoice.status.name
-                        if isinstance(return_invoice.status, ReturnStatus)
-                        else return_invoice.status
-                    ),
-                    (
-                        return_invoice.return_reason.name
-                        if isinstance(return_invoice.return_reason, ReturnReason)
-                        else return_invoice.return_reason
-                    ),
-                    return_invoice.description,
-                    float(return_invoice.subtotal),
-                    float(return_invoice.discount_amount),
-                    float(return_invoice.tax_amount),
+                    (return_invoice.return_date.isoformat()
+                     if return_invoice.return_date else None),
+                    (return_invoice.return_reason.name
+                     if isinstance(return_invoice.return_reason, ReturnReason)
+                     else str(return_invoice.return_reason or '')),
                     float(return_invoice.total_amount),
-                    (
-                        return_invoice.refund_method.name
-                        if isinstance(return_invoice.refund_method, RefundMethod)
-                        else return_invoice.refund_method
-                    ),
-                    float(return_invoice.refund_amount),
-                    (return_invoice.refund_date.isoformat() if return_invoice.refund_date else None),
-                    return_invoice.refund_reference,
-                    return_invoice.credit_note_number,
-                    float(return_invoice.credit_note_amount),
-                    return_invoice.exchange_sale_id,
-                    return_invoice.notes,
-                    return_invoice.internal_notes,
-                    return_invoice.approved_by,
-                    (return_invoice.updated_at.isoformat() if return_invoice.updated_at else None),
-                    (return_invoice.approved_at.isoformat() if return_invoice.approved_at else None),
+                    (return_invoice.status.name
+                     if isinstance(return_invoice.status, ReturnStatus)
+                     else str(return_invoice.status or 'approved')),
                     return_invoice.id,
                 ),
             )
@@ -350,39 +242,22 @@ class ReturnService:
             cursor.execute("DELETE FROM return_items WHERE return_id = ?", (return_invoice.id,))
 
             # إدراج البنود الجديدة
+            # BUGFIX (13c): Match actual DB schema: return_items has only
+            # (id, return_id, product_id, quantity, refund_price).
             for item in return_invoice.items:
                 item.return_id = return_invoice.id
                 item.calculate_totals()
                 cursor.execute(
                     """
                     INSERT INTO return_items (
-                        return_id, original_sale_item_id, original_purchase_item_id,
-                        product_id, product_name, product_barcode, quantity_returned,
-                        quantity_original, unit_price, discount_amount, tax_amount,
-                        total_amount, return_reason, condition, restockable, notes
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        return_id, product_id, quantity, refund_price
+                    ) VALUES (?, ?, ?, ?)
                 """,
                     (
                         return_invoice.id,
-                        item.original_sale_item_id,
-                        item.original_purchase_item_id,
                         item.product_id,
-                        item.product_name,
-                        item.product_barcode,
                         float(item.quantity_returned),
-                        float(item.quantity_original),
                         float(item.unit_price),
-                        float(item.discount_amount),
-                        float(item.tax_amount),
-                        float(item.total_amount),
-                        (
-                            item.return_reason.name
-                            if isinstance(item.return_reason, ReturnReason)
-                            else item.return_reason
-                        ),
-                        item.condition,
-                        1 if item.restockable else 0,
-                        item.notes,
                     ),
                 )
 
@@ -456,17 +331,23 @@ class ReturnService:
             rows = cursor.fetchall()
 
             returns = []
-            for row in rows:
-                columns = [desc[0] for desc in cursor.description]
-                return_data = dict(zip(columns, row))
+            # BUGFIX (13c): Capture invoice columns BEFORE the loop so that
+            # the inner SELECT on return_items does not corrupt cursor.description
+            # for the next iteration of the outer loop.
+            invoice_columns = [desc[0] for desc in cursor.description]
 
-                # الحصول على البنود
-                cursor.execute(
+            for row in rows:
+                return_data = dict(zip(invoice_columns, row))
+
+                # الحصول على البنود — use a separate cursor to avoid
+                # overwriting the outer cursor's description.
+                item_cursor = self.db.connection.cursor()
+                item_cursor.execute(
                     "SELECT * FROM return_items WHERE return_id = ?",
                     (return_data["id"],),
                 )
-                items_rows = cursor.fetchall()
-                items_columns = [desc[0] for desc in cursor.description]
+                items_rows = item_cursor.fetchall()
+                items_columns = [desc[0] for desc in item_cursor.description]
 
                 items = []
                 for item_row in items_rows:
@@ -481,6 +362,12 @@ class ReturnService:
 
         except Exception as e:
             logger.log(logging.ERROR, f"خطأ في الحصول على المرتجعات: {str(e)}")
+            # NOTE (13c): The get_all_returns filters reference columns
+            # (return_type, customer_id, supplier_id) that do not exist in
+            # the current return_invoices schema.  Only status and
+            # return_date are valid filters.  A future schema migration
+            # should add the missing columns if the rich filtering is
+            # needed.
             return []
 
     def approve_return(self, return_id: int, approved_by: int) -> bool:

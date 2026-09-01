@@ -96,11 +96,7 @@ class ProductService:
 
             placeholders = ",".join(["?"] * len(insert_cols))
             query = f"INSERT INTO products ({', '.join(insert_cols)}) VALUES ({placeholders})"
-            self.db_manager.execute_query(query, tuple(insert_vals))
-            try:
-                product_id = self.db_manager.get_last_insert_id()
-            except Exception:
-                product_id = None
+            product_id = self.db_manager.execute_insert(query, tuple(insert_vals))
             if product_id:
                 product.id = product_id
 
@@ -212,55 +208,71 @@ class ProductService:
     def update_product(self, product: Product) -> bool:
         """تحديث بيانات المنتج"""
         try:
-            query = """
-            UPDATE products SET
-                name = ?, name_en = ?, barcode = ?, category_id = ?, supplier_id = ?,
-                product_type = ?, description = ?, specifications = ?, unit = ?,
-                cost_price = ?, base_price = ?, pricing_policy = ?,
-                current_stock = ?, reserved_stock = ?, min_stock = ?, reorder_point = ?, max_stock = ?,
-                image_path = ?, images = ?, tags = ?,
-                is_active = ?, is_discontinued = ?, is_featured = ?,
-                updated_at = ?
-            WHERE id = ?
-            """
+            # Build column map dynamically – only columns that exist in the DB will be updated
+            col_map = {
+                "name": product.name,
+                "name_en": product.name_en,
+                "barcode": product.barcode,
+                "category_id": product.category_id,
+                "supplier_id": getattr(product, "supplier_id", None),
+                "product_type": getattr(product, "product_type", None),
+                "description": product.description,
+                "specifications": (
+                    json.dumps(product.specifications, ensure_ascii=False)
+                    if product.specifications
+                    else None
+                ),
+                "unit": product.unit,
+                "cost_price": float(product.cost_price) if product.cost_price is not None else None,
+                "pricing_policy": getattr(product, "pricing_policy", None),
+                "current_stock": product.current_stock,
+                "reserved_stock": getattr(product, "reserved_stock", None),
+                "min_stock": getattr(product, "min_stock", None),
+                "reorder_point": getattr(product, "reorder_point", None),
+                "max_stock": getattr(product, "max_stock", None),
+                "image_path": product.image_path,
+                "images": json.dumps(product.images) if product.images else None,
+                "tags": json.dumps(product.tags) if product.tags else None,
+                "is_active": int(product.is_active),
+                "is_discontinued": int(getattr(product, "is_discontinued", 0)),
+                "is_featured": int(getattr(product, "is_featured", 0)),
+                "updated_at": datetime.now(),
+            }
 
-            params = (
-                product.name,
-                product.name_en,
-                product.barcode,
-                product.category_id,
-                product.supplier_id,
-                product.product_type,
-                product.description,
-                json.dumps(product.specifications, ensure_ascii=False),
-                product.unit,
-                float(product.cost_price),
-                float(product.base_price),
-                product.pricing_policy,
-                product.current_stock,
-                product.reserved_stock,
-                product.min_stock,
-                product.reorder_point,
-                product.max_stock,
-                product.image_path,
-                json.dumps(product.images),
-                json.dumps(product.tags),
-                product.is_active,
-                product.is_discontinued,
-                product.is_featured,
-                datetime.now(),
-                product.id,
-            )
+            # Handle base_price / selling_price: write to whichever columns exist
+            base_price_val = float(product.base_price) if getattr(product, "base_price", None) is not None else None
+            selling_price_val = base_price_val  # same value, different column name
+            if base_price_val is not None:
+                col_map["base_price"] = base_price_val
+                col_map["selling_price"] = selling_price_val  # include both; PRAGMA check will filter
 
-            result = self.db_manager.execute_query(query, params)
-            if result and result.rowcount > 0:
+            # Get existing columns from DB
+            cols_info = self.db_manager.fetch_all("PRAGMA table_info(products)")
+            existing_cols = [row.get('name', '') for row in cols_info] if cols_info else []
+
+            update_parts = []
+            update_vals = []
+            for col, val in col_map.items():
+                if col in existing_cols and val is not None:
+                    update_parts.append(f"{col} = ?")
+                    update_vals.append(val)
+
+            if not update_parts:
                 if self.logger:
-                    self.logger.info(f"تم تحديث المنتج: {product.name}")
-                return True
+                    self.logger.error("لا توجد أعمدة صالحة للتحديث في جدول المنتجات")
+                return False
+
+            update_vals.append(product.id)
+            query = f"UPDATE products SET {', '.join(update_parts)} WHERE id = ?"
+
+            self.db_manager.execute_non_query(query, tuple(update_vals))
+            if self.logger:
+                self.logger.info(f"تم تحديث المنتج: {product.name}")
+            return True
 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"خطأ في تحديث المنتج {product.id}: {str(e)}")
+                self.logger.error(f"خطأ في تحديث المنتج {getattr(product, 'id', '؟')}: {str(e)}")
 
         return False
 

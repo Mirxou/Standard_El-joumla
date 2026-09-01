@@ -14,7 +14,6 @@ from ..models.payment import (
     PaymentManager,
     PaymentMethod,
     PaymentStatus,
-    PaymentType,
 )
 from ..models.supplier import SupplierManager
 from ..services.exchange_rate_service import ExchangeRateService
@@ -245,7 +244,7 @@ class PaymentService:
                     pass  # non-blocking: if query fails, allow payment to proceed
 
             payment = Payment(
-                payment_type=PaymentType.CUSTOMER_PAYMENT.value,
+                payment_type='customer_payment',
                 payment_method=payment_method,
                 amount=amount,
                 payment_date=payment_date or date.today(),
@@ -332,7 +331,7 @@ class PaymentService:
                 payment_obj.id = payment_id
                 payment_obj.amount = amount
                 payment_obj.customer_id = customer_id
-                payment_obj.payment_type = PaymentType.CUSTOMER_PAYMENT.value
+                payment_obj.payment_type = 'customer_payment'
                 payment_obj.payment_method = payment_method
                 payment_obj.status = PaymentStatus.COMPLETED.value
                 payment_obj.reference_number = reference_number
@@ -459,7 +458,7 @@ class PaymentService:
                 return None
 
             payment = Payment(
-                payment_type=PaymentType.SUPPLIER_PAYMENT.value,
+                payment_type='supplier_payment',
                 payment_method=payment_method,
                 amount=amount,
                 payment_date=payment_date or date.today(),
@@ -762,7 +761,7 @@ class PaymentService:
             payables = []
 
             for payment in overdue_payments:
-                if payment.supplier_id and payment.payment_type == PaymentType.SUPPLIER_PAYMENT.value:
+                if payment.supplier_id and payment.payment_type == 'supplier_payment':
                     supplier = self.supplier_manager.get_supplier_by_id(payment.supplier_id)
                     if supplier:
                         # M1 FIX: فحص due_date قبل الطرح
@@ -869,7 +868,7 @@ class PaymentService:
                 (
                     start_date.isoformat(),
                     end_date.isoformat(),
-                    PaymentStatus.COMPLETED.value,
+                    'completed',
                 ),
             )
 
@@ -899,10 +898,10 @@ class PaymentService:
                     }
                 )
 
-                # تجميع الإجماليات
-                if payment_type == PaymentType.CUSTOMER_PAYMENT.value:
+                # تجميع الإجماليات (DB stores English-normalized values)
+                if payment_type == 'customer_payment':
                     summary["totals"]["customer_payments"] += amount
-                elif payment_type == PaymentType.SUPPLIER_PAYMENT.value:
+                elif payment_type == 'supplier_payment':
                     summary["totals"]["supplier_payments"] += amount
 
                 summary["totals"]["total_payments"] += amount
@@ -1068,7 +1067,7 @@ class PaymentService:
                 (
                     start_date.isoformat(),
                     end_date.isoformat(),
-                    PaymentStatus.COMPLETED.value,
+                    'completed',
                 ),
             )
 
@@ -1094,10 +1093,11 @@ class PaymentService:
                         "net": Decimal("0.00"),
                     }
 
-                if payment_type == PaymentType.CUSTOMER_PAYMENT.value:
+                # DB stores English-normalized payment_type values
+                if payment_type == 'customer_payment':
                     cash_flow["daily_flow"][payment_date]["inflow"] += amount
                     cash_flow["summary"]["total_inflow"] += amount
-                elif payment_type == PaymentType.SUPPLIER_PAYMENT.value:
+                elif payment_type == 'supplier_payment':
                     cash_flow["daily_flow"][payment_date]["outflow"] += amount
                     cash_flow["summary"]["total_outflow"] += amount
 
@@ -1156,7 +1156,7 @@ class PaymentService:
                 (
                     start_date.isoformat(),
                     end_date.isoformat(),
-                    PaymentStatus.COMPLETED.value,
+                    'completed',
                 ),
             )
 
@@ -1189,8 +1189,8 @@ class PaymentService:
 
             if len(periods) >= 2:
                 for payment_type in [
-                    PaymentType.CUSTOMER_PAYMENT.value,
-                    PaymentType.SUPPLIER_PAYMENT.value,
+                    'customer_payment',
+                    'supplier_payment',
                 ]:
                     amounts = []
                     for period in periods:
@@ -1241,7 +1241,7 @@ class PaymentService:
                 (
                     start_date.isoformat(),
                     end_date.isoformat(),
-                    PaymentStatus.COMPLETED.value,
+                    'completed',
                 ),
             )
 
@@ -1340,11 +1340,11 @@ class PaymentService:
                 results = self.db_manager.fetch_all(
                     query,
                     (
-                        PaymentType.CUSTOMER_PAYMENT.value,
-                        PaymentType.SUPPLIER_PAYMENT.value,
+                        'customer_payment',
+                        'supplier_payment',
                         start_date.isoformat(),
                         end_date.isoformat(),
-                        PaymentStatus.COMPLETED.value,
+                        'completed',
                     ),
                 )
 
@@ -1400,11 +1400,11 @@ class PaymentService:
                 unique_result = self.db_manager.fetch_one(
                     unique_query,
                     (
-                        PaymentType.CUSTOMER_PAYMENT.value,
-                        PaymentType.SUPPLIER_PAYMENT.value,
+                        'customer_payment',
+                        'supplier_payment',
                         start_date.isoformat(),
                         end_date.isoformat(),
-                        PaymentStatus.COMPLETED.value,
+                        'completed',
                     ),
                 )
 
@@ -1540,18 +1540,18 @@ class PaymentService:
                 (
                     start_date.isoformat(),
                     end_date.isoformat(),
-                    PaymentStatus.COMPLETED.value,
+                    'completed',
                 ),
             )
 
             collection_results = self.db_manager.fetch_one(
                 collection_query,
                 (
-                    PaymentStatus.COMPLETED.value,
-                    PaymentStatus.COMPLETED.value,
+                    'completed',
+                    'completed',
                     start_date.isoformat(),
                     end_date.isoformat(),
-                    PaymentType.CUSTOMER_PAYMENT.value,
+                    'customer_payment',
                 ),
             )
 
@@ -1560,8 +1560,8 @@ class PaymentService:
                 (
                     start_date.isoformat(),
                     end_date.isoformat(),
-                    PaymentType.CUSTOMER_PAYMENT.value,
-                    PaymentStatus.COMPLETED.value,
+                    'customer_payment',
+                    'completed',
                 ),
             )
 

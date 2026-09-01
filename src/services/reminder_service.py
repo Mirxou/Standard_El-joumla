@@ -69,8 +69,8 @@ class ReminderService:
                 """
                 INSERT INTO reminders
             (sale_id, customer_id, reminder_type, subject,
-             message, due_at, recipient_email, created_by)
-                VALUES (?, ?, 'payment', ?, ?, ?, ?, ?)
+             message, due_at, status, recipient_email, created_by)
+                VALUES (?, ?, 'payment', ?, ?, ?, 'pending', ?, ?)
                 """,
                 (
                     sale_id,

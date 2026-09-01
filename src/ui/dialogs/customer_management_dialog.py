@@ -101,7 +101,7 @@ class CustomerManagementDialog(BaseDialog):
     def load_customers(self):
         """تحميل قائمة العملاء"""
         try:
-            query = "SELECT id, name, phone, email, current_balance, is_active FROM customers ORDER BY name"
+            query = "SELECT id, name, phone, email, current_balance, is_active FROM customers WHERE is_active = 1 ORDER BY name"
             results = self.db_manager.fetch_all(query)
 
             self.customers = []

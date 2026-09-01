@@ -419,14 +419,10 @@ class SupplierManager:
             return False
 
     def update_supplier_balance(self, supplier_id: int, amount_change: Decimal) -> bool:
-        """تحديث رصيد المورد"""
+        """تحديث رصيد المورد (atomic SQL)"""
         try:
-            supplier = self.get_supplier_by_id(supplier_id)
-            if not supplier:
-                return False
-            new_balance = supplier.current_balance + amount_change
-            query = "UPDATE suppliers SET current_balance = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-            return self._execute_non_query(query, (float(new_balance), supplier_id)) > 0
+            query = "UPDATE suppliers SET current_balance = current_balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+            return self._execute_non_query(query, (float(amount_change), supplier_id)) > 0
         except Exception as e:
             if self.logger:
                 self.logger.error(f"Error updating supplier balance {supplier_id}: {e}")

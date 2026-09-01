@@ -5121,28 +5121,19 @@ class MainWindow(QMainWindow):
             payment_text = self.sales_payment_combo.currentText() if hasattr(self, "sales_payment_combo") else "الكل"
             search_term = self.sales_search_input.text().strip() if hasattr(self, "sales_search_input") else ""
 
-            # تحويل الحالة
+            # تحويل الحالة - قاعدة البيانات تخزن القيم العربية
             status = None
             if status_text != "الكل":
-                status_map = {
-                    "مسودة": "draft",
-                    "مؤكدة": "confirmed",
-                    "مدفوعة": "paid",
-                    "مدفوعة جزئياً": "partially_paid",
-                    "ملغية": "cancelled",
-                }
-                status = status_map.get(status_text)
+                # قيم الحالة في قاعدة البيانات بالعربية
+                valid_statuses = {"مسودة", "مؤكدة", "مدفوعة", "مدفوعة جزئياً", "ملغية", "قيد الانتظار", "مفتورة", "مرتجعة"}
+                status = status_text if status_text in valid_statuses else None
 
-            # تحويل طريقة الدفع
+            # تحويل طريقة الدفع - قاعدة البيانات تخزن القيم العربية
             payment_method = None
             if payment_text != "الكل":
-                payment_map = {
-                    "نقدي": "cash",
-                    "بطاقة": "card",
-                    "تحويل بنكي": "bank_transfer",
-                    "آجل": "credit",
-                }
-                payment_method = payment_map.get(payment_text)
+                # قيم طريقة الدفع في قاعدة البيانات بالعربية
+                valid_methods = {"نقدي", "بطاقة", "تحويل بنكي", "آجل", "مختلط"}
+                payment_method = payment_text if payment_text in valid_methods else None
 
             # تحميل البيانات في الخلفية باستخدام Worker
             def load_sales():
@@ -8953,7 +8944,7 @@ class MainWindow(QMainWindow):
         try:
             from PySide6.QtCore import QSettings
 
-            seconds = self.notifications_interval_spin.value() * 60
+            seconds = self.notifications_interval_combo.currentData() * 60
             s = QSettings("StandardElJoumla", "ERP")
             s.setValue("notifications/interval_seconds", seconds)
             # إعادة تشغيل الفاحص إذا كان مفعلاً

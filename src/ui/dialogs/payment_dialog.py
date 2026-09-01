@@ -676,12 +676,13 @@ class PaymentDialog(BaseDialog):
 
                 # اسم العميل/المورد
                 entity_name = "غير معروف"
-                if payment.payment_type == PaymentType.CUSTOMER_PAYMENT.value:
-                    customer = next((c for c in self.customers if c.id == payment.entity_id), None)
+                # DB stores English-normalized payment_type values
+                if payment.payment_type == 'customer_payment':
+                    customer = next((c for c in self.customers if c.id == (payment.customer_id or payment.supplier_id)), None)
                     if customer:
                         entity_name = customer.name
                 else:
-                    supplier = next((s for s in self.suppliers if s.id == payment.entity_id), None)
+                    supplier = next((s for s in self.suppliers if s.id == (payment.supplier_id or payment.customer_id)), None)
                     if supplier:
                         entity_name = supplier.name
 

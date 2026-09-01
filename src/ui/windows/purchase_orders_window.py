@@ -655,7 +655,69 @@ class PurchaseOrdersWindow(QMainWindow):
 
     def _update_table_with_pos(self, pos):
         """تحديث الجدول بأوامر الشراء"""
-        # (نفس محتوى _load_purchase_orders)
+        # Bug #5 fix: was empty no-op; now actually populates the table
+        self.pos_table.setRowCount(0)
+        total_value = Decimal("0.00")
+
+        for po in pos:
+            row = self.pos_table.rowCount()
+            self.pos_table.insertRow(row)
+
+            # رقم الأمر
+            self.pos_table.setItem(row, 0, QTableWidgetItem(po.po_number))
+
+            # المورد
+            self.pos_table.setItem(row, 1, QTableWidgetItem(po.supplier_name or ""))
+
+            # تاريخ الأمر
+            date_str = po.order_date.strftime("%Y-%m-%d") if po.order_date else ""
+            self.pos_table.setItem(row, 2, QTableWidgetItem(date_str))
+
+            # التاريخ المطلوب
+            req_date_str = po.required_date.strftime("%Y-%m-%d") if po.required_date else ""
+            req_item = QTableWidgetItem(req_date_str)
+            if po.is_overdue:
+                req_item.setBackground(QColor("#FFEBEE"))
+                req_item.setForeground(QColor(C.ACCENT_CORAL))
+            self.pos_table.setItem(row, 3, req_item)
+
+            # الحالة
+            status_item = QTableWidgetItem(po.status.value if hasattr(po.status, "value") else str(po.status))
+            status_item.setBackground(QColor(self._get_status_color(po.status)))
+            self.pos_table.setItem(row, 4, status_item)
+
+            # الأولوية
+            priority_item = QTableWidgetItem(
+                po.priority.value if hasattr(po.priority, "value") else str(po.priority)
+            )
+            priority_item.setBackground(QColor(self._get_priority_color(po.priority)))
+            self.pos_table.setItem(row, 5, priority_item)
+
+            # الإجمالي
+            total_item = QTableWidgetItem(f"{po.total_amount:,.2f}")
+            total_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.pos_table.setItem(row, 6, total_item)
+
+            # نسبة الاستلام
+            receipt_pct = po.receipt_percentage
+            receipt_item = QTableWidgetItem(f"{receipt_pct:.1f}%")
+            receipt_item.setTextAlignment(Qt.AlignCenter)
+            if receipt_pct >= 100:
+                receipt_item.setBackground(QColor("#C8E6C9"))
+            elif receipt_pct > 0:
+                receipt_item.setBackground(QColor("#FFF9C4"))
+            self.pos_table.setItem(row, 7, receipt_item)
+
+            # حفظ المعرف
+            self.pos_table.item(row, 0).setData(Qt.UserRole, po.id)
+
+            total_value += po.total_amount
+
+        # تحديث الإحصائيات
+        self.total_pos_label.setText(str(len(pos)))
+        self.total_value_label.setText(f"{total_value:,.2f} دج")
+
+        self.status_message.setText(f"تم تحميل {len(pos)} أمر شراء")
 
     def _on_po_selected(self):
         """عند اختيار أمر شراء"""

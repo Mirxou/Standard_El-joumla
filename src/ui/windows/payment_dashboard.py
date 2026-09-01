@@ -563,28 +563,45 @@ class PaymentDashboard(QMainWindow):
             widget.change_label.setStyleSheet(f"font-size: 10px; color: {change_color};")
 
     def update_kpis(self, kpis: Dict[str, Any]):
-        """تحديث مؤشرات الأداء الرئيسية"""
+        """تحديث مؤشرات الأداء الرئيسية
+
+        Handles both flat keys (from _load_kpis_from_db fallback)
+        and nested keys (from get_payment_performance_kpis service).
+        """
         try:
             # If service returned no data, fall back to direct DB queries
             if not kpis and self.db_manager:
                 kpis = self._load_kpis_from_db()
 
-            # تحديث القيم في مؤشرات الأداء
-            if "total_amount" in kpis:
-                self._set_kpi_value("إجمالي المدفوعات", f"{kpis['total_amount']:,.0f} د.ج")
+            # Extract nested summary when present (service returns nested structure)
+            summary = kpis.get('summary', {})
+            coll = kpis.get('collection_metrics', {})
 
-            if "total_transactions" in kpis:
-                self._set_kpi_value("عدد المعاملات", f"{kpis['total_transactions']:,}")
+            # total_amount: flat or nested
+            total_amount = kpis.get('total_amount') or summary.get('total_amount', 0)
+            if total_amount:
+                self._set_kpi_value("إجمالي المدفوعات", f"{float(total_amount):,.0f} د.ج")
 
-            if "average_transaction" in kpis:
-                self._set_kpi_value("متوسط قيمة المعاملة", f"{kpis['average_transaction']:,.0f} د.ج")
+            # total_transactions: flat or nested
+            total_tx = kpis.get('total_transactions') or summary.get('total_transactions', 0)
+            if total_tx:
+                self._set_kpi_value("عدد المعاملات", f"{int(total_tx):,}")
 
-            if "collection_rate" in kpis:
-                self._set_kpi_value("معدل التحصيل", f"{kpis['collection_rate']:.1f}%")
+            # average_transaction / avg_transaction_value
+            avg_tx = kpis.get('average_transaction') or summary.get('avg_transaction_value', 0)
+            if avg_tx:
+                self._set_kpi_value("متوسط قيمة المعاملة", f"{float(avg_tx):,.0f} د.ج")
 
+            # collection_rate: flat or nested
+            cr = kpis.get('collection_rate') or coll.get('collection_rate')
+            if cr is not None:
+                self._set_kpi_value("معدل التحصيل", f"{float(cr):.1f}%")
+
+            # pending_amount (only available from flat fallback)
             if "pending_amount" in kpis:
                 self._set_kpi_value("المبالغ المستحقة", f"{kpis['pending_amount']:,.0f} د.ج")
 
+            # net_cash_flow (only available from flat fallback)
             if "net_cash_flow" in kpis:
                 val = kpis['net_cash_flow']
                 sign = "+" if val >= 0 else ""
@@ -686,7 +703,10 @@ class PaymentDashboard(QMainWindow):
             self.logger.error(f"خطأ في تحديث الرسوم البيانية: {e}", exc_info=True)
 
     def update_trends_chart(self, trends_data: Dict[str, Any]):
-        """تحديث رسم الاتجاهات"""
+        """تحديث رسم الاتجاهات
+
+        Service returns: {trends_data: {period: {payment_type: {total_amount, ...}}}}
+        """
         try:
             chart = QChart()
             chart.setTitle("اتجاهات المدفوعات")
@@ -695,9 +715,22 @@ class PaymentDashboard(QMainWindow):
             series = QLineSeries()
             series.setName("المدفوعات")
 
-            # إضافة البيانات (مثال)
-            if "periods" in trends_data:
-                for i, period in enumerate(trends_data["periods"][:12]):  # آخر 12 فترة
+            # Service stores data under 'trends_data' key, keyed by period string
+            inner = trends_data.get("trends_data", {})
+            if inner:
+                periods = sorted(inner.keys())
+                for i, period in enumerate(periods[:12]):
+                    period_types = inner[period]
+                    # Sum all payment types for this period
+                    total = sum(
+                        float(v.get("total_amount", 0))
+                        for v in period_types.values()
+                        if isinstance(v, dict)
+                    )
+                    series.append(i, total)
+            elif "periods" in trends_data:
+                # Legacy flat format
+                for i, period in enumerate(trends_data["periods"][:12]):
                     series.append(i, period.get("total_amount", 0))
 
             chart.addSeries(series)
@@ -709,7 +742,10 @@ class PaymentDashboard(QMainWindow):
             self.logger.error(f"خطأ في تحديث رسم الاتجاهات: {e}", exc_info=True)
 
     def update_forecast_chart(self, forecast_data: Dict[str, Any]):
-        """تحديث رسم التوقعات"""
+        """تحديث رسم التوقعات
+
+        Service returns: {predictions: {payment_type: [{month, predicted_amount, confidence}]}}
+        """
         try:
             chart = QChart()
             chart.setTitle("توقعات المدفوعات")
@@ -722,8 +758,22 @@ class PaymentDashboard(QMainWindow):
             forecast_series = QLineSeries()
             forecast_series.setName("التوقعات")
 
-            # إضافة البيانات
-            if "forecasts" in forecast_data:
+            # Service stores predictions under 'predictions' key, dict of payment_type -> list
+            predictions = forecast_data.get("predictions", {})
+            if predictions:
+                # Collect all forecast points across payment types, sorted by month
+                all_points = []
+                for ptype, items in predictions.items():
+                    if isinstance(items, list):
+                        for item in items:
+                            if isinstance(item, dict):
+                                all_points.append(item)
+                # Sort by month
+                all_points.sort(key=lambda x: x.get("month", ""))
+                for i, fc in enumerate(all_points):
+                    forecast_series.append(i, float(fc.get("predicted_amount", 0)))
+            elif "forecasts" in forecast_data:
+                # Legacy flat format
                 for i, forecast in enumerate(forecast_data["forecasts"]):
                     forecast_series.append(i, forecast.get("predicted_amount", 0))
 
@@ -737,7 +787,10 @@ class PaymentDashboard(QMainWindow):
             self.logger.error(f"خطأ في تحديث رسم التوقعات: {e}", exc_info=True)
 
     def update_comparison_chart(self, comparison_data: Dict[str, Any]):
-        """تحديث رسم المقارنات"""
+        """تحديث رسم المقارنات
+
+        Service returns: {current_period: {data: {total_amount}}, previous_period: {data: {total_amount}}}
+        """
         try:
             chart = QChart()
             chart.setTitle("مقارنة الفترات")
@@ -745,13 +798,20 @@ class PaymentDashboard(QMainWindow):
             # إنشاء مجموعة أعمدة
             series = QBarSeries()
 
+            # Extract total_amount from nested 'data' key
+            prev_data = comparison_data.get("previous_period", {})
+            curr_data = comparison_data.get("current_period", {})
+            # Support both nested (service) and flat (legacy) structures
+            prev_amount = prev_data.get("data", prev_data).get("total_amount", 0)
+            curr_amount = curr_data.get("data", curr_data).get("total_amount", 0)
+
             # مجموعة الفترة السابقة
             prev_set = QBarSet("الفترة السابقة")
-            prev_set.append(comparison_data.get("previous_period", {}).get("total_amount", 0))
+            prev_set.append(float(prev_amount) if prev_amount else 0)
 
             # مجموعة الفترة الحالية
             current_set = QBarSet("الفترة الحالية")
-            current_set.append(comparison_data.get("current_period", {}).get("total_amount", 0))
+            current_set.append(float(curr_amount) if curr_amount else 0)
 
             series.append(prev_set)
             series.append(current_set)

@@ -485,7 +485,8 @@ class SaleManager:
                         cursor, sale.items, operation="sale"
                     )
 
-                connection.commit()
+                # تم إنشاء الفاتورة والعناصر بنجاح
+                # لا يتم عمل commit هنا — يتم التعامل معه من قبل السياق الخارجي (transaction)
 
                 # إرسال الإشارات
                 if sale_id:
@@ -818,6 +819,10 @@ class SaleManager:
                 self.logger.error(f"Error creating item in transaction: {e}"
                 )
             return None
+
+    def add_sale_item(self, item: SaleItem):
+        """إضافة عنصر مبيعات مستقل (واجهة عامة تؤول إلى _create_sale_item)"""
+        return self._create_sale_item(item)
 
     def _handle_auto_conversion_in_transaction(self, cursor, product_id: int, deficit_qty: float) -> None:
         """
@@ -1840,7 +1845,17 @@ class SaleManager:
     def process_return(
         self, sale_id: int, items: List[Dict]
     ) -> tuple:
-        """معالجة مرتجع"""
+        """معالجة مرتجع
+
+        .. deprecated:: Task 13c
+            This method inserts into the ``sales`` table with a ``RET-`` prefix,
+            bypassing the dedicated ``return_invoices`` / ``return_items`` tables
+            managed by :class:`src.services.return_service.ReturnService`.
+            It is **not called** from any production code path (only a legacy unit
+            test references it).  New code should use ``ReturnService.create_return()``
+            instead.  This stub is retained for backward-compat with the test suite
+            and will be removed in a future release.
+        """
         try:
             conn = self.db_manager.get_connection()
             cursor = conn.cursor()
@@ -1903,7 +1918,7 @@ class SaleManager:
 
             if soft_delete:
                 query = (
-                    "UPDATE sales SET status = 'cancelled', "
+                    "UPDATE sales SET status = 'ملغية', is_deleted = 1, "
                     "updated_at = CURRENT_TIMESTAMP "
                     "WHERE id = ?"
                 )

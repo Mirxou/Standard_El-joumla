@@ -13,6 +13,7 @@ import re
 import shutil
 import threading
 import zipfile
+from base64 import urlsafe_b64decode, urlsafe_b64encode
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -21,8 +22,6 @@ import schedule
 
 # Optional cryptography imports (present in requirements.txt)
 try:
-    pass
-
     from cryptography.fernet import Fernet
     from cryptography.hazmat.primitives import hashes
     from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -30,12 +29,6 @@ try:
     _CRYPTO_AVAILABLE = True
 except Exception:
     _CRYPTO_AVAILABLE = False
-import hashlib  # noqa: F811
-from base64 import urlsafe_b64decode, urlsafe_b64encode
-
-from cryptography.fernet import Fernet  # noqa: F811
-from cryptography.hazmat.primitives import hashes  # noqa: F811
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC  # noqa: F811
 
 from ..core.database_manager import DatabaseManager
 
@@ -54,7 +47,7 @@ class BackupService:
 
         # Encryption state/config
         self._encryption_password: Optional[str] = None
-        self._fernet_key: Optional[bytes] = None
+        self._fernet: Optional[Any] = None
         self._config_path = self.backup_dir / "backup_config.json"
         self._config = self._load_config()
 

@@ -445,8 +445,8 @@ class ReportExporter:
             # التحقق من وجود الأعمدة في جدول products
             try:
                 columns_info = self.db.fetch_all("PRAGMA table_info(products)")
-                # PRAGMA table_info returns tuples: (cid, name, type, notnull, default_value, pk)
-                available_columns = {row[1] for row in columns_info} if columns_info else set()
+                # fetch_all returns DictRow (dict subclass); key 'name' gives the column name
+                available_columns = {row['name'] for row in columns_info} if columns_info else set()
             except Exception:
                 # في حالة الخطأ، افترض أن الأعمدة الأساسية موجودة فقط
                 available_columns = {
@@ -466,11 +466,11 @@ class ReportExporter:
             has_max_stock = "max_stock" in available_columns
 
             # بناء الاستعلام بناءً على الأعمدة المتاحة
-            supplier_join = "LEFT JOIN suppliers s ON p.supplier_id = s.id" if has_supplier_id else ""  # noqa: F841
-            supplier_select = "s.name as supplier_name," if has_supplier_id else "NULL as supplier_name,"  # noqa: F841
-            "COALESCE(p.max_stock, 0)" if has_max_stock else "0"
+            supplier_join = "LEFT JOIN suppliers s ON p.supplier_id = s.id" if has_supplier_id else ""
+            supplier_select = "s.name as supplier_name," if has_supplier_id else "NULL as supplier_name,"
+            max_stock_col = "COALESCE(p.max_stock, 0)" if has_max_stock else "0"
 
-            query = """
+            query = f"""
                 SELECT
                     p.id,
                     p.name,
@@ -1354,11 +1354,13 @@ class ReportExporter:
                 query += " AND c.id = ?"
                 params.append(filters.customer_id)
 
+            query += " GROUP BY c.id, c.name, c.phone, c.email"
+
             if filters.min_amount:
                 query += " HAVING total_purchases >= ?"
                 params.append(filters.min_amount)
 
-            query += " GROUP BY c.id, c.name, c.phone, c.email ORDER BY total_purchases DESC"
+            query += " ORDER BY total_purchases DESC"
 
             rows = self.db.execute_query(query, tuple(params))
 
@@ -2059,9 +2061,7 @@ class ReportExporter:
             query += " GROUP BY DATE(p.payment_date), p.payment_type, p.payment_method"
             query += " ORDER BY payment_date DESC"
 
-            cursor = self.db_manager.connection.cursor()
-            cursor.execute(query, params)
-            results = cursor.fetchall()
+            results = self.db_manager.execute_query(query, tuple(params), exclude_deleted=False)
 
             # تجميع البيانات حسب التاريخ
             daily_flow = {}
@@ -2154,9 +2154,7 @@ class ReportExporter:
             query += " GROUP BY p.payment_type, p.payment_method"
             query += " ORDER BY total_amount DESC"
 
-            cursor = self.db_manager.connection.cursor()
-            cursor.execute(query, params)
-            results = cursor.fetchall()
+            results = self.db_manager.execute_query(query, tuple(params), exclude_deleted=False)
 
             data = []
             total_transactions = 0
@@ -2232,9 +2230,7 @@ class ReportExporter:
             query += " GROUP BY p.payment_method"
             query += " ORDER BY total_amount DESC"
 
-            cursor = self.db_manager.connection.cursor()
-            cursor.execute(query, params)
-            results = cursor.fetchall()
+            results = self.db_manager.execute_query(query, tuple(params), exclude_deleted=False)
 
             data = []
             total_usage = 0
