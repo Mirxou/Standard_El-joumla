@@ -969,7 +969,8 @@ class AdvancedSearchWindow(QMainWindow):
 
         row = item.row()
 
-        product_id = self.results_table.item(row, 0).text()
+        id_cell = self.results_table.item(row, 0)
+        product_id = id_cell.text() if id_cell else ""
 
         current_price_item = self.results_table.item(row, 4)  # Index 4 is Wholesale Price
 
@@ -1002,13 +1003,17 @@ class AdvancedSearchWindow(QMainWindow):
 
         try:
 
-            p_id = int(self.results_table.item(row_idx, 0).text())
-
-            p_name = self.results_table.item(row_idx, 1).text()
-
-            w_price = float(self.results_table.item(row_idx, 4).text().replace(",", ""))
-
-            c_price = float(self.results_table.item(row_idx, 5).text().replace(",", ""))
+            id_cell = self.results_table.item(row_idx, 0)
+            name_cell = self.results_table.item(row_idx, 1)
+            w_cell = self.results_table.item(row_idx, 4)
+            c_cell = self.results_table.item(row_idx, 5)
+            if not id_cell or not name_cell or not w_cell or not c_cell:
+                QMessageBox.warning(self, "تحذير", "بيانات المنتج غير مكتملة")
+                return
+            p_id = int(id_cell.text())
+            p_name = name_cell.text()
+            w_price = float(w_cell.text().replace(",", ""))
+            c_price = float(c_cell.text().replace(",", ""))
 
             qty, ok = QInputDialog.getDouble(self, "الكمية", f"كمية {p_name}:", 1, 1, 10000, 0)
 

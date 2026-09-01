@@ -73,7 +73,8 @@ class MFAService:
         self.db_manager = db_manager
         self.user_id = user_id
         self.encryption_manager = encryption_manager
-        self._create_tables()
+        if self.db is not None:
+            self._create_tables()
 
     def generate_mfa_secret_and_qr_code(self, username: str, app_name: str) -> Dict[str, str]:
         """إنشاء سر MFA ورمز QR مرتبط به."""
@@ -117,6 +118,8 @@ class MFAService:
 
     def _create_tables(self):
         """إنشاء جداول MFA"""
+        if self.db is None:
+            return
         with self.db.get_cursor() as cursor:
             # جدول إعدادات MFA
             cursor.execute("""
@@ -194,6 +197,12 @@ class MFAService:
         backup_codes = [self._generate_backup_code() for _ in range(10)]
         backup_codes_hashed = [self._hash_code(code) for code in backup_codes]
 
+        if self.db is None:
+            return {
+                "mfa_enabled": False,
+                "error": "No database connection",
+            }
+
         import json
 
         with self.db.get_cursor() as cursor:
@@ -243,6 +252,8 @@ class MFAService:
 
     def disable_mfa(self, user_id: int) -> bool:
         """تعطيل MFA"""
+        if self.db is None:
+            return False
         with self.db.get_cursor() as cursor:
             cursor.execute(
                 """
@@ -259,6 +270,8 @@ class MFAService:
 
     def get_mfa_config(self, user_id: int) -> Optional[MFAConfig]:
         """الحصول على إعدادات MFA للمستخدم"""
+        if self.db is None:
+            return None
         import json
 
         with self.db.get_cursor() as cursor:
@@ -304,6 +317,9 @@ class MFAService:
 
         # حساب وقت انتهاء الصلاحية
         expires_at = (datetime.now() + timedelta(minutes=self.OTP_VALIDITY_MINUTES)).isoformat()
+
+        if self.db is None:
+            return {"success": False, "message": "No database connection"}
 
         with self.db.get_cursor() as cursor:
             # حذف OTP القديم غير المستخدم
@@ -384,6 +400,9 @@ class MFAService:
         Returns:
             نتيجة التحقق
         """
+        if self.db is None:
+            return {"success": False, "message": "No database connection"}
+
         with self.db.get_cursor() as cursor:
             # الحصول على OTP
             cursor.execute(
@@ -462,8 +481,10 @@ class MFAService:
         Returns:
             نتيجة التحقق
         """
+        if self.db is None:
+            return {"success": False, "message": "No database connection"}
+
         with self.db.get_cursor() as cursor:
-            # الحصول على TOTP secret
             cursor.execute(
                 """
                 SELECT totp_secret FROM mfa_settings WHERE user_id = ?
@@ -489,6 +510,9 @@ class MFAService:
 
     def verify_backup_code(self, user_id: int, code: str, ip_address: Optional[str] = None) -> Dict:
         """التحقق من Backup Code"""
+        if self.db is None:
+            return {"success": False, "message": "No database connection"}
+
         import json
 
         with self.db.get_cursor() as cursor:
@@ -586,6 +610,8 @@ class MFAService:
         ip_address: Optional[str] = None,
     ):
         """تسجيل محاولة التحقق"""
+        if self.db is None:
+            return
         with self.db.get_cursor() as cursor:
             cursor.execute(
                 """

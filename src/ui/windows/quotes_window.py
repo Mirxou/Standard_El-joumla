@@ -325,7 +325,9 @@ class QuotesWindow(QMainWindow):
                 self.quotes_table.setItem(row, 5, status_item)
 
                 # حفظ المعرف
-                self.quotes_table.item(row, 0).setData(Qt.UserRole, quote.id)
+                cell = self.quotes_table.item(row, 0)
+                if cell:
+                    cell.setData(Qt.UserRole, quote.id)
 
             # تحديث الإحصائيات
             self._update_statistics()

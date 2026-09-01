@@ -320,7 +320,7 @@ class IntrusionDetectionSystem:
                 ) VALUES (?, ?, ?, ?, ?)
             """
 
-            result = self.db_manager.execute_query(
+            self.db_manager.execute_non_query(
                 query,
                 (
                     ip_address,
@@ -331,12 +331,9 @@ class IntrusionDetectionSystem:
                 ),
             )
 
-            if result:
-                self._blocked_ips[ip_address] = expires_at
-                self.logger.info(f"✅ تم حظر IP: {ip_address} ({reason})")
-                return True
-
-            return False
+            self._blocked_ips[ip_address] = expires_at
+            self.logger.info(f"✅ تم حظر IP: {ip_address} ({reason})")
+            return True
 
         except Exception as e:
             self.logger.error(f"❌ خطأ في حظر IP: {e}", exc_info=True)
@@ -450,11 +447,7 @@ class IntrusionDetectionSystem:
                 company_id,
             )
 
-            result = self.db_manager.execute_query(query, values)
-            if result:
-                return result.lastrowid
-
-            return None
+            return self.db_manager.execute_insert(query, values)
 
         except Exception as e:
             self.logger.error(f"❌ خطأ في حفظ تهديد: {e}", exc_info=True)

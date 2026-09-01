@@ -519,7 +519,11 @@ class CurrencyManagementWindow(QMainWindow):
             QMessageBox.warning(self, "تحذير", "يرجى اختيار عملة للتعديل")
             return
 
-        currency_id = int(self.currencies_table.item(current_row, 0).text())
+        id_cell = self.currencies_table.item(current_row, 0)
+        if not id_cell:
+            QMessageBox.warning(self, "تحذير", "لم يتم العثور على العملة")
+            return
+        currency_id = int(id_cell.text())
         currency = self.currency_manager.get_currency(currency_id)
 
         if currency:
@@ -544,8 +548,13 @@ class CurrencyManagementWindow(QMainWindow):
             QMessageBox.warning(self, "تحذير", "يرجى اختيار عملة للحذف")
             return
 
-        currency_id = int(self.currencies_table.item(current_row, 0).text())
-        currency_code = self.currencies_table.item(current_row, 1).text()
+        id_cell = self.currencies_table.item(current_row, 0)
+        code_cell = self.currencies_table.item(current_row, 1)
+        if not id_cell or not code_cell:
+            QMessageBox.warning(self, "تحذير", "لم يتم العثور على بيانات العملة")
+            return
+        currency_id = int(id_cell.text())
+        currency_code = code_cell.text()
 
         reply = QMessageBox.question(
             self,
@@ -601,7 +610,11 @@ class CurrencyManagementWindow(QMainWindow):
             QMessageBox.warning(self, "تحذير", "يرجى اختيار سعر صرف للتعديل")
             return
 
-        rate_id = int(self.rates_table.item(current_row, 0).text())
+        id_cell = self.rates_table.item(current_row, 0)
+        if not id_cell:
+            QMessageBox.warning(self, "تحذير", "لم يتم العثور على سعر الصرف")
+            return
+        rate_id = int(id_cell.text())
         rates = self.exchange_rate_service.get_exchange_rates()
         exchange_rate = next((r for r in rates if r.id == rate_id), None)
 
@@ -641,9 +654,15 @@ class CurrencyManagementWindow(QMainWindow):
             QMessageBox.warning(self, "تحذير", "يرجى اختيار سعر صرف للحذف")
             return
 
-        rate_id = int(self.rates_table.item(current_row, 0).text())
-        from_currency = self.rates_table.item(current_row, 1).text()
-        to_currency = self.rates_table.item(current_row, 2).text()
+        id_cell = self.rates_table.item(current_row, 0)
+        from_cell = self.rates_table.item(current_row, 1)
+        to_cell = self.rates_table.item(current_row, 2)
+        if not id_cell or not from_cell or not to_cell:
+            QMessageBox.warning(self, "تحذير", "لم يتم العثور على بيانات سعر الصرف")
+            return
+        rate_id = int(id_cell.text())
+        from_currency = from_cell.text()
+        to_currency = to_cell.text()
 
         reply = QMessageBox.question(
             self,

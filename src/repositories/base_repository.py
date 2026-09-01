@@ -44,7 +44,9 @@ class BaseRepository(ABC):
             (record_id,),
             exclude_deleted=not include_deleted,
         )
-        return results[0] if results else None
+        if not results:
+            return None
+        return results[0]
 
     def find_all(
         self,
@@ -215,7 +217,9 @@ class BaseRepository(ABC):
             f"SELECT COUNT(*) as count FROM {self.table_name} WHERE 1=1 {deleted_filter}",
             exclude_deleted=not include_deleted,
         )
-        return results[0]["count"] if results else 0
+        if not results:
+            return 0
+        return results[0]["count"]
 
     def find_pending_sync(self) -> List[Dict[str, Any]]:
         """

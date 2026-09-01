@@ -125,7 +125,8 @@ class AdvancedAnalyticsEngine:
     def _get_sales_data(self, start_date: datetime = None, end_date: datetime = None) -> List[Dict[str, Any]]:
         """الحصول على بيانات المبيعات"""
         # محاكاة بيانات المبيعات
-
+        if end_date is None:
+            end_date = datetime.now()
         days = 30 if not start_date else (end_date - start_date).days
 
         sales = []

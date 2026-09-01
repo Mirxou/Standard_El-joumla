@@ -447,7 +447,7 @@ class AnomalyDetectionSystem:
 
     def _calculate_severity_distribution(self, anomalies: Dict[str, List]) -> Dict[str, int]:
         """حساب توزيع الشدة"""
-        severity_count = {"low": 0, "medium": 0, "high": 0}
+        severity_count = {"low": 0, "medium": 0, "high": 0, "critical": 0}
 
         for anomaly_list in anomalies.values():
             for anomaly in anomaly_list:

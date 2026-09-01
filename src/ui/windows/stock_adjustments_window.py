@@ -404,7 +404,10 @@ class StockAdjustmentsWindow(QMainWindow):
             return None
 
         row = selected[0].row()
-        return int(self.table.item(row, 0).text())
+        id_cell = self.table.item(row, 0)
+        if not id_cell:
+            return None
+        return int(id_cell.text())
 
     def approve_adjustment(self):
         """اعتماد التسوية"""

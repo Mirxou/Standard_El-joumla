@@ -310,7 +310,11 @@ class EDIManagementWindow(QMainWindow):
             return
 
         row = selected_items[0].row()
-        partner_id = int(self.partners_table.item(row, 0).text())
+        id_cell = self.partners_table.item(row, 0)
+        if not id_cell:
+            QMessageBox.warning(self, "تحذير", "لم يتم العثور على الشريك")
+            return
+        partner_id = int(id_cell.text())
 
         partner = self.edi_service.get_partner(partner_id)
         if not partner:
@@ -329,8 +333,13 @@ class EDIManagementWindow(QMainWindow):
             return
 
         row = selected_items[0].row()
-        partner_id = int(self.partners_table.item(row, 0).text())
-        partner_name = self.partners_table.item(row, 1).text()
+        id_cell = self.partners_table.item(row, 0)
+        name_cell = self.partners_table.item(row, 1)
+        if not id_cell or not name_cell:
+            QMessageBox.warning(self, "تحذير", "لم يتم العثور على بيانات الشريك")
+            return
+        partner_id = int(id_cell.text())
+        partner_name = name_cell.text()
 
         reply = QMessageBox.question(
             self,
@@ -390,7 +399,11 @@ class EDIManagementWindow(QMainWindow):
     def view_document(self, index):
         """عرض مستند"""
         row = index.row()
-        doc_id = int(self.documents_table.item(row, 0).text())
+        id_cell = self.documents_table.item(row, 0)
+        if not id_cell:
+            QMessageBox.warning(self, "تحذير", "لم يتم العثور على المستند")
+            return
+        doc_id = int(id_cell.text())
 
         doc = self.edi_service.get_document(doc_id)
         if not doc:

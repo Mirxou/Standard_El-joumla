@@ -168,11 +168,13 @@ class WebSocketManager:
         import asyncio
 
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.create_task(self.send_to_user(user_id, notification))
-            else:
-                loop.run_until_complete(self.send_to_user(user_id, notification))
+            loop = asyncio.get_running_loop()
+            asyncio.create_task(self.send_to_user(user_id, notification))
+        except RuntimeError:
+            # No running loop — create a new one (e.g. called from a sync thread)
+            loop = asyncio.new_event_loop()
+            loop.run_until_complete(self.send_to_user(user_id, notification))
+            loop.close()
         except Exception as e:
             self.logger.debug(f"send_notification failed (non-critical): {e}")
 
@@ -208,11 +210,13 @@ class WebSocketManager:
         import asyncio
 
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.create_task(self.broadcast_to_room(room, update_message))
-            else:
-                loop.run_until_complete(self.broadcast_to_room(room, update_message))
+            loop = asyncio.get_running_loop()
+            asyncio.create_task(self.broadcast_to_room(room, update_message))
+        except RuntimeError:
+            # No running loop — create a new one (e.g. called from a sync thread)
+            loop = asyncio.new_event_loop()
+            loop.run_until_complete(self.broadcast_to_room(room, update_message))
+            loop.close()
         except Exception as e:
             self.logger.debug(f"send_data_update failed (non-critical): {e}")
 

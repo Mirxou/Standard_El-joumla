@@ -446,7 +446,11 @@ class ComplianceManagementWindow(QMainWindow):
             return
 
         row = selected_items[0].row()
-        rule_id = int(self.rules_table.item(row, 0).text())
+        id_cell = self.rules_table.item(row, 0)
+        if not id_cell:
+            QMessageBox.warning(self, "تحذير", "لم يتم العثور على القاعدة")
+            return
+        rule_id = int(id_cell.text())
 
         rule = self.compliance_service.get_compliance_rule(rule_id)
         if not rule:
@@ -465,8 +469,13 @@ class ComplianceManagementWindow(QMainWindow):
             return
 
         row = selected_items[0].row()
-        rule_id = int(self.rules_table.item(row, 0).text())
-        rule_name = self.rules_table.item(row, 1).text()
+        id_cell = self.rules_table.item(row, 0)
+        name_cell = self.rules_table.item(row, 1)
+        if not id_cell or not name_cell:
+            QMessageBox.warning(self, "تحذير", "لم يتم العثور على بيانات القاعدة")
+            return
+        rule_id = int(id_cell.text())
+        rule_name = name_cell.text()
 
         reply = QMessageBox.question(
             self,
@@ -490,7 +499,11 @@ class ComplianceManagementWindow(QMainWindow):
             return
 
         row = selected_items[0].row()
-        rule_id = int(self.rules_table.item(row, 0).text())
+        id_cell = self.rules_table.item(row, 0)
+        if not id_cell:
+            QMessageBox.warning(self, "تحذير", "لم يتم العثور على القاعدة")
+            return
+        rule_id = int(id_cell.text())
 
         self.statusBar().showMessage("جاري تشغيل الفحص...")
 

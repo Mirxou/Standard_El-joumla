@@ -156,7 +156,7 @@ class AuditTrail:
 
         where_clause = " AND ".join(conditions) if conditions else "1=1"  # noqa: F841
 
-        query = """
+        query = f"""
             SELECT * FROM audit_logs
             WHERE {where_clause}
             ORDER BY timestamp DESC

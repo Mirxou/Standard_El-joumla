@@ -627,7 +627,9 @@ class PurchaseOrdersWindow(QMainWindow):
                 self.pos_table.setItem(row, 7, receipt_item)
 
                 # حفظ المعرف
-                self.pos_table.item(row, 0).setData(Qt.UserRole, po.id)
+                cell = self.pos_table.item(row, 0)
+                if cell:
+                    cell.setData(Qt.UserRole, po.id)
 
                 total_value += po.total_amount
 
@@ -709,7 +711,9 @@ class PurchaseOrdersWindow(QMainWindow):
             self.pos_table.setItem(row, 7, receipt_item)
 
             # حفظ المعرف
-            self.pos_table.item(row, 0).setData(Qt.UserRole, po.id)
+            cell = self.pos_table.item(row, 0)
+            if cell:
+                cell.setData(Qt.UserRole, po.id)
 
             total_value += po.total_amount
 

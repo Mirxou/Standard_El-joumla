@@ -358,7 +358,10 @@ class WebhookManagementWindow(QMainWindow):
             return None
 
         row = selected_rows[0].row()
-        webhook_id = int(self.webhooks_table.item(row, 0).text())
+        id_cell = self.webhooks_table.item(row, 0)
+        if not id_cell:
+            return None
+        webhook_id = int(id_cell.text())
 
         return self.webhook_service.get_webhook(webhook_id)
 
@@ -602,7 +605,10 @@ class WebhookManagementWindow(QMainWindow):
             return
 
         # الحصول على Log ID
-        log_id = int(self.logs_table.item(row, 0).text())
+        id_cell = self.logs_table.item(row, 0)
+        if not id_cell:
+            return
+        log_id = int(id_cell.text())
 
         # الحصول على السجلات
         logs = self.webhook_service.get_webhook_logs(limit=10000)

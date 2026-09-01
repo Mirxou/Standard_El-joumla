@@ -176,9 +176,8 @@ class SecurityMonitor:
                 datetime.now().isoformat(),
             )
 
-            result = self.db_manager.execute_query(query, values)
-            if result:
-                event_id = result.lastrowid
+            event_id = self.db_manager.execute_insert(query, values)
+            if event_id:
                 self.logger.info(f"✅ تم تسجيل حدث أمني: {event_type} (ID: {event_id})")
 
                 # إرسال تنبيه للحدث عالي الخطورة

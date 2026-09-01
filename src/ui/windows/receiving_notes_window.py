@@ -365,7 +365,11 @@ class ReceivingNotesWindow(QMainWindow):
             QMessageBox.warning(self, "تحذير", "يرجى اختيار ملاحظة للتعديل")
             return
         try:
-            note_id = self.notes_table.item(current_row, 0).text()
+            cell = self.notes_table.item(current_row, 0)
+            if not cell:
+                QMessageBox.warning(self, "تحذير", "لم يتم العثور على الملاحظة")
+                return
+            note_id = cell.text()
             self._show_note_dialog(note_id=int(note_id))
         except Exception as e:
             self.logger.error(f"خطأ في فتح التعديل: {e}")
@@ -381,7 +385,11 @@ class ReceivingNotesWindow(QMainWindow):
         reply = QMessageBox.question(self, "تأكيد", "هل تريد حذف هذه الملاحظة؟")
         if reply == QMessageBox.Yes:
             try:
-                note_id = self.notes_table.item(current_row, 0).text()
+                cell = self.notes_table.item(current_row, 0)
+                if not cell:
+                    QMessageBox.warning(self, "تحذير", "لم يتم العثور على الملاحظة")
+                    return
+                note_id = cell.text()
                 with self.db.get_cursor() as cursor:
                     cursor.execute("DELETE FROM receiving_notes WHERE id = ?", (note_id,))
                     cursor.connection.commit()
@@ -398,7 +406,11 @@ class ReceivingNotesWindow(QMainWindow):
             return
 
         try:
-            note_id = self.notes_table.item(current_row, 0).text()
+            cell = self.notes_table.item(current_row, 0)
+            if not cell:
+                QMessageBox.warning(self, "تحذير", "لم يتم العثور على الملاحظة")
+                return
+            note_id = cell.text()
             with self.db.get_cursor() as cursor:
                 cursor.execute(
                     "UPDATE receiving_notes SET status = ?, approved_by = ?, "

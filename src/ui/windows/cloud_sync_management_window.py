@@ -323,7 +323,11 @@ class CloudSyncManagementWindow(QMainWindow):
             return
 
         row = selected_items[0].row()
-        settings_id = int(self.settings_table.item(row, 0).text())
+        id_cell = self.settings_table.item(row, 0)
+        if not id_cell:
+            QMessageBox.warning(self, "تحذير", "لم يتم العثور على الإعدادات")
+            return
+        settings_id = int(id_cell.text())
 
         settings = self.cloud_sync_service.get_settings(settings_id)
         if not settings:
@@ -342,8 +346,13 @@ class CloudSyncManagementWindow(QMainWindow):
             return
 
         row = selected_items[0].row()
-        settings_id = int(self.settings_table.item(row, 0).text())
-        settings_name = self.settings_table.item(row, 1).text()
+        id_cell = self.settings_table.item(row, 0)
+        name_cell = self.settings_table.item(row, 1)
+        if not id_cell or not name_cell:
+            QMessageBox.warning(self, "تحذير", "لم يتم العثور على بيانات الإعدادات")
+            return
+        settings_id = int(id_cell.text())
+        settings_name = name_cell.text()
 
         reply = QMessageBox.question(
             self,
@@ -367,7 +376,11 @@ class CloudSyncManagementWindow(QMainWindow):
             return
 
         row = selected_items[0].row()
-        settings_id = int(self.settings_table.item(row, 0).text())
+        id_cell = self.settings_table.item(row, 0)
+        if not id_cell:
+            QMessageBox.warning(self, "تحذير", "لم يتم العثور على الإعدادات")
+            return
+        settings_id = int(id_cell.text())
 
         reply = QMessageBox.question(
             self,
@@ -416,7 +429,11 @@ class CloudSyncManagementWindow(QMainWindow):
     def resolve_conflict(self, index):
         """حل تعارض"""
         row = index.row()
-        conflict_id = int(self.conflicts_table.item(row, 0).text())  # noqa: F841
+        id_cell = self.conflicts_table.item(row, 0)
+        if not id_cell:
+            QMessageBox.warning(self, "تحذير", "لم يتم العثور على التعارض")
+            return
+        conflict_id = int(id_cell.text())  # noqa: F841
 
         QMessageBox.information(self, "قريباً", "ميزة حل التعارضات ستكون متاحة قريباً")
 

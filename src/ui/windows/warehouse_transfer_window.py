@@ -386,7 +386,9 @@ class WarehouseTransferWindow(QMainWindow):
                 self.transfers_table.setItem(row, 7, QTableWidgetItem(transfer.notes or ""))
 
                 # حفظ معرف التحويل
-                self.transfers_table.item(row, 0).setData(Qt.UserRole, transfer.id)
+                cell = self.transfers_table.item(row, 0)
+                if cell:
+                    cell.setData(Qt.UserRole, transfer.id)
 
             self.status_bar.showMessage(f"تم تحميل {len(transfers)} تحويل")
 

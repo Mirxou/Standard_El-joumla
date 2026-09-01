@@ -104,10 +104,9 @@ class GDPRHandler:
                 ) VALUES (?, ?, ?, ?, ?)
             """
 
-            result = self.db_manager.execute_query(query, ("ACCESS", customer_id, "PENDING", requested_by, company_id))
+            request_id = self.db_manager.execute_insert(query, ("ACCESS", customer_id, "PENDING", requested_by, company_id))
 
-            if result:
-                request_id = result.lastrowid
+            if request_id:
                 self.logger.info(f"✅ تم إنشاء طلب وصول إلى البيانات للعميل: {customer_id}")
                 return request_id
 
@@ -198,7 +197,7 @@ class GDPRHandler:
 
             request_data_json = json.dumps(corrections, ensure_ascii=False, default=str)
 
-            result = self.db_manager.execute_query(
+            request_id = self.db_manager.execute_insert(
                 query,
                 (
                     "RECTIFICATION",
@@ -210,8 +209,7 @@ class GDPRHandler:
                 ),
             )
 
-            if result:
-                request_id = result.lastrowid
+            if request_id:
                 self.logger.info(f"✅ تم إنشاء طلب تصحيح بيانات للعميل: {customer_id}")
                 return request_id
 
@@ -251,7 +249,7 @@ class GDPRHandler:
             request_data = {"reason": reason}
             request_data_json = json.dumps(request_data, ensure_ascii=False, default=str)
 
-            result = self.db_manager.execute_query(
+            request_id = self.db_manager.execute_insert(
                 query,
                 (
                     "ERASURE",
@@ -263,8 +261,7 @@ class GDPRHandler:
                 ),
             )
 
-            if result:
-                request_id = result.lastrowid
+            if request_id:
                 self.logger.info(f"✅ تم إنشاء طلب حذف بيانات للعميل: {customer_id}")
                 return request_id
 
@@ -301,7 +298,7 @@ class GDPRHandler:
                     WHERE id = ?
                 """
 
-                self.db_manager.execute_query(update_query, (anonymized_name, anonymized_email, customer_id))
+                self.db_manager.execute_non_query(update_query, (anonymized_name, anonymized_email, customer_id))
 
                 return {
                     "success": True,
@@ -313,7 +310,7 @@ class GDPRHandler:
                 # حذف كامل (يجب توخي الحذر!)
                 # ملاحظة: قد نحتاج لحذف البيانات المرتبطة أولاً
                 delete_query = "DELETE FROM customers WHERE id = ?"
-                self.db_manager.execute_query(delete_query, (customer_id,))
+                self.db_manager.execute_non_query(delete_query, (customer_id,))
 
                 return {
                     "success": True,
@@ -356,7 +353,7 @@ class GDPRHandler:
             request_data = {"format": format}
             request_data_json = json.dumps(request_data, ensure_ascii=False, default=str)
 
-            result = self.db_manager.execute_query(
+            request_id = self.db_manager.execute_insert(
                 query,
                 (
                     "PORTABILITY",
@@ -368,8 +365,7 @@ class GDPRHandler:
                 ),
             )
 
-            if result:
-                request_id = result.lastrowid
+            if request_id:
                 self.logger.info(f"✅ تم إنشاء طلب قابلية نقل بيانات للعميل: {customer_id}")
                 return request_id
 
@@ -461,13 +457,9 @@ class GDPRHandler:
             response_json = json.dumps(response_data, ensure_ascii=False, default=str) if response_data else ""
             completed_at = datetime.now().isoformat() if status == "COMPLETED" else None
 
-            result = self.db_manager.execute_query(query, (status, response_json, completed_at, request_id))
-
-            if result:
-                self.logger.info(f"✅ تم تحديث حالة طلب GDPR: {request_id}")
-                return True
-
-            return False
+            self.db_manager.execute_non_query(query, (status, response_json, completed_at, request_id))
+            self.logger.info(f"✅ تم تحديث حالة طلب GDPR: {request_id}")
+            return True
 
         except Exception as e:
             self.logger.error(f"❌ خطأ في تحديث حالة طلب GDPR: {e}", exc_info=True)

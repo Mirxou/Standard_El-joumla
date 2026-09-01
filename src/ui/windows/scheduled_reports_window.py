@@ -363,7 +363,11 @@ class ScheduledReportsWindow(QMainWindow):
             return
 
         row = selected_items[0].row()
-        report_id = int(self.reports_table.item(row, 0).text())
+        id_cell = self.reports_table.item(row, 0)
+        if not id_cell:
+            QMessageBox.warning(self, "تحذير", "لم يتم العثور على التقرير")
+            return
+        report_id = int(id_cell.text())
 
         report = self.scheduled_reports_service.get_scheduled_report(report_id)
         if not report:
@@ -382,8 +386,13 @@ class ScheduledReportsWindow(QMainWindow):
             return
 
         row = selected_items[0].row()
-        report_id = int(self.reports_table.item(row, 0).text())
-        report_name = self.reports_table.item(row, 1).text()
+        id_cell = self.reports_table.item(row, 0)
+        name_cell = self.reports_table.item(row, 1)
+        if not id_cell or not name_cell:
+            QMessageBox.warning(self, "تحذير", "لم يتم العثور على بيانات التقرير")
+            return
+        report_id = int(id_cell.text())
+        report_name = name_cell.text()
 
         reply = QMessageBox.question(
             self,
@@ -407,7 +416,11 @@ class ScheduledReportsWindow(QMainWindow):
             return
 
         row = selected_items[0].row()
-        report_id = int(self.reports_table.item(row, 0).text())
+        id_cell = self.reports_table.item(row, 0)
+        if not id_cell:
+            QMessageBox.warning(self, "تحذير", "لم يتم العثور على التقرير")
+            return
+        report_id = int(id_cell.text())
 
         self.statusBar().showMessage("جاري تشغيل التقرير...")
 

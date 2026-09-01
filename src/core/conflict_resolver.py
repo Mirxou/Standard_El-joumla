@@ -170,7 +170,7 @@ class ConflictResolver:
                 WHERE id = ?
             """
 
-            self.db_manager.execute_query(
+            self.db_manager.execute_non_query(
                 query,
                 (
                     strategy.value,
@@ -229,7 +229,7 @@ class ConflictResolver:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING')
             """
 
-            result = self.db_manager.execute_query(
+            conflict_id = self.db_manager.execute_insert(
                 query,
                 (
                     sync_settings_id,
@@ -242,8 +242,7 @@ class ConflictResolver:
                 ),
             )
 
-            if result:
-                conflict_id = result.lastrowid
+            if conflict_id:
                 self.logger.info(f"✅ تم إنشاء تعارض: ID={conflict_id}")
                 return conflict_id
 

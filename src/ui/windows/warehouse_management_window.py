@@ -421,7 +421,9 @@ class WarehouseManagementWindow(QMainWindow):
                 self.warehouses_table.setItem(row, 4, default_item)
 
                 # حفظ معرف المستودع في البيانات
-                self.warehouses_table.item(row, 0).setData(Qt.UserRole, warehouse.id)
+                cell = self.warehouses_table.item(row, 0)
+                if cell:
+                    cell.setData(Qt.UserRole, warehouse.id)
 
             self.status_bar.showMessage(f"تم تحميل {len(warehouses)} مستودع")
 

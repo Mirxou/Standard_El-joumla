@@ -143,8 +143,9 @@ class RoboticProcessAutomationSystem:
         self.recording_script_id: Optional[str] = None
 
         # إعداد PyAutoGUI
-        pyautogui.FAILSAFE = True
-        pyautogui.PAUSE = 0.1
+        if PYAUTOGUI_AVAILABLE:
+            pyautogui.FAILSAFE = True
+            pyautogui.PAUSE = 0.1
 
         # إعداد التسجيل
         self._setup_logging()
@@ -368,7 +369,7 @@ class RoboticProcessAutomationSystem:
         try:
             while self.is_recording:
                 # تسجيل النقرات والكتابة
-                if keyboard.is_pressed("esc"):  # مفتاح إيقاف التسجيل
+                if KEYBOARD_AVAILABLE and keyboard.is_pressed("esc"):  # مفتاح إيقاف التسجيل
                     break
 
                 time.sleep(0.1)
@@ -502,6 +503,9 @@ class RoboticProcessAutomationSystem:
         button = params.get("button", "left")
         clicks = params.get("clicks", 1)
 
+        if not PYAUTOGUI_AVAILABLE:
+            return {"status": "error", "error": "pyautogui not available"}
+
         if x is not None and y is not None:
             pyautogui.click(x=x, y=y, button=button, clicks=clicks)
         else:
@@ -514,6 +518,9 @@ class RoboticProcessAutomationSystem:
         """تنفيذ كتابة نص"""
         text = params.get("text", "")
         interval = params.get("interval", 0.02)
+
+        if not PYAUTOGUI_AVAILABLE:
+            return {"status": "error", "error": "pyautogui not available"}
 
         pyautogui.typewrite(text, interval=interval)
 
@@ -531,6 +538,9 @@ class RoboticProcessAutomationSystem:
         region = params.get("region")  # (left, top, width, height)
         filename = params.get("filename", f"screenshot_{int(datetime.now().timestamp())}.png")
 
+        if not PYAUTOGUI_AVAILABLE:
+            return {"status": "error", "error": "pyautogui not available"}
+
         if region:
             screenshot = pyautogui.screenshot(region=region)
         else:
@@ -543,6 +553,9 @@ class RoboticProcessAutomationSystem:
     def _execute_hotkey(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """تنفيذ اختصار لوحة المفاتيح"""
         keys = params.get("keys", [])
+
+        if not PYAUTOGUI_AVAILABLE:
+            return {"status": "error", "error": "pyautogui not available"}
 
         if isinstance(keys, list):
             pyautogui.hotkey(*keys)

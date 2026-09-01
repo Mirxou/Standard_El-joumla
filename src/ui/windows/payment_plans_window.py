@@ -397,7 +397,9 @@ class PaymentPlansWindow(QMainWindow):
             self.plans_table.setItem(row, 13, QTableWidgetItem(plan.notes or ""))
 
             # تخزين معرف الخطة
-            self.plans_table.item(row, 0).setData(Qt.UserRole, plan.id)
+            cell = self.plans_table.item(row, 0)
+            if cell:
+                cell.setData(Qt.UserRole, plan.id)
 
     def load_upcoming_installments(self):
         """تحميل الأقساط المستحقة قريباً"""

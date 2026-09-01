@@ -364,7 +364,9 @@ class ReturnsWindow(QMainWindow):
                 self.returns_table.setItem(row, 6, status_item)
 
                 # حفظ المعرف
-                self.returns_table.item(row, 0).setData(Qt.UserRole, ret.id)
+                cell = self.returns_table.item(row, 0)
+                if cell:
+                    cell.setData(Qt.UserRole, ret.id)
 
             # تحديث الإحصائيات
             self._update_statistics()

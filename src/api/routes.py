@@ -561,7 +561,7 @@ def get_current_user(
     # التحقق مما إذا كان AuthMiddleware قد قام بالمصادقة بالفعل
     if hasattr(request.state, "user_id") and request.state.user_id:
         return {
-            "sub": request.state.user_id,
+            "user_id": request.state.user_id,
             "username": getattr(request.state, "username", "unknown"),
             "company_id": getattr(request.state, "company_id", None),
         }
@@ -2715,7 +2715,7 @@ async def get_notifications(
         db_manager: مدير قاعدة البيانات
     """
     try:
-        user_id = current_user.get("id")
+        user_id = current_user.get("user_id") or current_user.get("sub")
 
         # بناء الاستعلام
         query = "SELECT * FROM notifications WHERE 1=1"
@@ -2781,7 +2781,7 @@ async def mark_notification_read(
         db_manager: مدير قاعدة البيانات
     """
     try:
-        user_id = current_user.get("id")
+        user_id = current_user.get("user_id") or current_user.get("sub")
 
         # التحقق من أن الإشعار موجود ومتاح للمستخدم
         notification = db_manager.fetch_one(
@@ -2879,7 +2879,7 @@ async def create_return(
             customer_id=return_data.customer_id,
             items=items,
             notes=return_data.notes,
-            created_by=current_user["id"],
+            created_by=current_user.get("user_id") or current_user.get("sub"),
             return_date=date.today(),
         )
 

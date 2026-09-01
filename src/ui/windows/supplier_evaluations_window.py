@@ -390,7 +390,11 @@ class SupplierEvaluationsWindow(QMainWindow):
             QMessageBox.warning(self, "تحذير", "يرجى اختيار تقييم للتعديل")
             return
         try:
-            eval_id = self.evaluations_table.item(current_row, 0).text()
+            cell = self.evaluations_table.item(current_row, 0)
+            if not cell:
+                QMessageBox.warning(self, "تحذير", "لم يتم العثور على التقييم")
+                return
+            eval_id = cell.text()
             self._show_evaluation_dialog(eval_id=int(eval_id))
         except Exception as e:
             self.logger.error(f"خطأ في فتح التعديل: {e}")
@@ -406,7 +410,11 @@ class SupplierEvaluationsWindow(QMainWindow):
         reply = QMessageBox.question(self, "تأكيد", "هل تريد حذف هذا التقييم؟")
         if reply == QMessageBox.Yes:
             try:
-                eval_id = self.evaluations_table.item(current_row, 0).text()
+                cell = self.evaluations_table.item(current_row, 0)
+                if not cell:
+                    QMessageBox.warning(self, "تحذير", "لم يتم العثور على التقييم")
+                    return
+                eval_id = cell.text()
                 with self.db.get_cursor() as cursor:
                     cursor.execute("DELETE FROM supplier_evaluations WHERE id = ?", (eval_id,))
                     cursor.connection.commit()

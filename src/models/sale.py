@@ -1093,7 +1093,8 @@ class SaleManager:
 
         def gv(k, i, d=None):
             if isinstance(row, dict):
-                return row.get(k, d) or d
+                val = row.get(k, d)
+                return d if val is None else val
             if hasattr(row, "keys"):
                 try:
                     val = row[k]
@@ -1230,7 +1231,8 @@ class SaleManager:
 
         def gv(k, i, d=None):
             if is_dict:
-                return row.get(k, d) or d
+                val = row.get(k, d)
+                return d if val is None else val
             val = row[i] if len(row) > i else d
             return val if val is not None else d
 
@@ -1573,7 +1575,8 @@ class SaleManager:
 
         def gv(k, i, d=None):
             if is_dict:
-                return row.get(k, d) or d
+                val = row.get(k, d)
+                return d if val is None else val
             val = row[i] if len(row) > i else d
             return val if val is not None else d
 

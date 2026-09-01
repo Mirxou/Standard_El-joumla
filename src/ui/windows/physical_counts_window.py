@@ -580,7 +580,10 @@ class PhysicalCountsWindow(QMainWindow):
             return None
 
         row = selected[0].row()
-        count_id = int(self.table.item(row, 0).text())
+        id_cell = self.table.item(row, 0)
+        if not id_cell:
+            return None
+        count_id = int(id_cell.text())
         return count_id
 
     def create_new_count(self):

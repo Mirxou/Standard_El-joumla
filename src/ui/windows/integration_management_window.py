@@ -179,7 +179,11 @@ class IntegrationManagementWindow(QMainWindow):
             return
 
         row = selected_items[0].row()
-        integration_id = int(self.integrations_table.item(row, 0).text())
+        id_cell = self.integrations_table.item(row, 0)
+        if not id_cell:
+            QMessageBox.warning(self, "تحذير", "لم يتم العثور على التكامل")
+            return
+        integration_id = int(id_cell.text())
 
         integration = self.integration_service.get_integration(integration_id)
         if not integration:
@@ -198,8 +202,13 @@ class IntegrationManagementWindow(QMainWindow):
             return
 
         row = selected_items[0].row()
-        integration_id = int(self.integrations_table.item(row, 0).text())
-        integration_name = self.integrations_table.item(row, 1).text()
+        id_cell = self.integrations_table.item(row, 0)
+        name_cell = self.integrations_table.item(row, 1)
+        if not id_cell or not name_cell:
+            QMessageBox.warning(self, "تحذير", "لم يتم العثور على بيانات التكامل")
+            return
+        integration_id = int(id_cell.text())
+        integration_name = name_cell.text()
 
         reply = QMessageBox.question(
             self,
@@ -223,7 +232,11 @@ class IntegrationManagementWindow(QMainWindow):
             return
 
         row = selected_items[0].row()
-        integration_id = int(self.integrations_table.item(row, 0).text())
+        id_cell = self.integrations_table.item(row, 0)
+        if not id_cell:
+            QMessageBox.warning(self, "تحذير", "لم يتم العثور على التكامل")
+            return
+        integration_id = int(id_cell.text())
 
         integration = self.integration_service.get_integration(integration_id)
         if not integration:

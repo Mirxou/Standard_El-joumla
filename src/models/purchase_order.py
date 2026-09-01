@@ -487,8 +487,8 @@ class PurchaseOrder:
 
     def calculate_totals(self):
         """حساب المجاميع"""
-        # حساب المجموع الفرعي من البنود
-        self.subtotal = sum(item.total_amount for item in self.items)
+        # حساب المجموع الفرعي من البنود (المبلغ الصافي قبل الضريبة)
+        self.subtotal = sum(item.net_amount for item in self.items)
 
         # حساب الخصم الإجمالي
         if self.discount_percentage > 0 and self.discount_amount == 0:

@@ -387,8 +387,10 @@ class PermissionManagementWindow(QMainWindow):
 
             # فلتر البحث
             if search_text:
-                username = self.users_table.item(row, 1).text().lower()
-                email = self.users_table.item(row, 3).text().lower()
+                user_cell = self.users_table.item(row, 1)
+                email_cell = self.users_table.item(row, 3)
+                username = user_cell.text().lower() if user_cell else ""
+                email = email_cell.text().lower() if email_cell else ""
                 if search_text not in username and search_text not in email:
                     show = False
 
@@ -399,7 +401,8 @@ class PermissionManagementWindow(QMainWindow):
 
             # فلتر الحالة
             if status != "الكل" and show:
-                user_status = self.users_table.item(row, 5).text()
+                status_cell = self.users_table.item(row, 5)
+                user_status = status_cell.text() if status_cell else ""
                 if user_status != status:
                     show = False
 
@@ -499,7 +502,11 @@ class PermissionManagementWindow(QMainWindow):
             QMessageBox.warning(self, "تحذير", "الرجاء تحديد دور أولاً")
             return
 
-        role_id = int(self.roles_table.item(row, 0).text())
+        cell = self.roles_table.item(row, 0)
+        if not cell:
+            QMessageBox.warning(self, "تحذير", "لم يتم العثور على الدور")
+            return
+        role_id = int(cell.text())
         QMessageBox.information(self, "تعديل", f"سيتم تعديل الدور {role_id}")
 
     def delete_selected_role(self):
@@ -509,7 +516,8 @@ class PermissionManagementWindow(QMainWindow):
             QMessageBox.warning(self, "تحذير", "الرجاء تحديد دور أولاً")
             return
 
-        is_system = self.roles_table.item(row, 3).text() == "نعم"
+        sys_cell = self.roles_table.item(row, 3)
+        is_system = sys_cell.text() == "نعم" if sys_cell else False
         if is_system:
             QMessageBox.warning(self, "خطأ", "لا يمكن حذف دور نظامي")
             return
