@@ -95,8 +95,8 @@ class CRMService:
                 now,
             )
             res = self.db.execute_query(q, params)
-            if res and hasattr(res, "lastrowid"):
-                return res.lastrowid
+            if isinstance(res, dict):
+                return res.get('lastrowid')
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في إنشاء عميل: {e}")

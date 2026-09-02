@@ -62,7 +62,7 @@ class RecurringInvoiceService:
             next_date,
         )
         res = self.db.execute_query(q, params)
-        return res.lastrowid if hasattr(res, "lastrowid") else None
+        return res.get('lastrowid') if isinstance(res, dict) else None
 
     def get_active_subscriptions(self) -> List[Dict[str, Any]]:
         q = """SELECT * FROM recurring_invoices WHERE is_active = 1 AND (end_date IS NULL OR end_date >= DATE('now'))"""

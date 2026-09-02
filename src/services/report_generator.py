@@ -827,7 +827,7 @@ class ReportGenerator:
         schedule_id = 1
         try:
             if hasattr(self.db, 'execute'):
-                cursor = self.db.execute(
+                schedule_id = self.db.execute_insert(
                     "INSERT INTO scheduled_reports "
                     "(report_type, frequency, recipients, created_at) "
                     "VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
@@ -836,8 +836,6 @@ class ReportGenerator:
                         frequency, ",".join(recipients or []),
                     )
                 )
-                if hasattr(cursor, 'lastrowid') and cursor.lastrowid:
-                    schedule_id = cursor.lastrowid
         except Exception:
             pass  # Table may not exist yet
         return {"success": True, "schedule_id": schedule_id}

@@ -32,7 +32,7 @@ class VendorService:
                 vendor_data.get("email"),
                 vendor_data.get("address"),
                 vendor_data.get("payment_terms", "نقدي"),
-                float(vendor_data.get("credit_limit", 0)),
+                float(vendor_data.get("credit_limit") or 0),
                 now,
                 now,
             )
@@ -88,10 +88,9 @@ class VendorService:
                 str(meta or {}),
             )
 
-            res = self.db.execute_query(q, params)
-            if not res or not hasattr(res, "lastrowid"):
+            po_id = self.db.execute_insert(q, params)
+            if not po_id:
                 return None
-            po_id = res.lastrowid
 
             for it in items:
                 # استخدام جدول purchase_order_items الصحيح

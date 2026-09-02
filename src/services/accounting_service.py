@@ -104,8 +104,8 @@ class AccountingService:
                     parent_account_id=gv(row, "parent_account_id"),
                     is_active=bool(gv(row, "is_active", True)),
                     is_locked=bool(gv(row, "is_locked", False)),
-                    opening_balance=Decimal(str(gv(row, "opening_balance", "0"))),
-                    current_balance=Decimal(str(gv(row, "current_balance", "0"))),
+                    opening_balance=Decimal(str(gv(row, "opening_balance", "0") or 0)),
+                    current_balance=Decimal(str(gv(row, "current_balance", "0") or 0)),
                     created_at=gv(row, "created_at"),
                     updated_at=gv(row, "updated_at"),
                 )
@@ -533,8 +533,8 @@ class AccountingService:
                         account_id=gv(lr, "account_id", 0),
                         account_code=gv(lr, "account_code", ""),
                         account_name=gv(lr, "account_name", ""),
-                        debit_amount=Decimal(str(gv(lr, "debit_amount", 0))),
-                        credit_amount=Decimal(str(gv(lr, "credit_amount", 0))),
+                        debit_amount=Decimal(str(gv(lr, "debit_amount", 0) or 0)),
+                        credit_amount=Decimal(str(gv(lr, "credit_amount", 0) or 0)),
                         description=gv(lr, "description", ""),
                     )
                 )

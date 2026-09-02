@@ -445,7 +445,7 @@ class AdvancedInventoryManagementService:
 
             query += " ORDER BY i.expiry_date ASC"
 
-            data = self.db.execute_query(query, params, fetch_all=True)
+            data = self.db.execute_query(query, params)
 
             expiring_items = []
             for row in data:
@@ -498,7 +498,7 @@ class AdvancedInventoryManagementService:
                 query += " AND i.warehouse_id = ?"
                 params.append(warehouse_id)
 
-            data = self.db.execute_query(query, params, fetch_one=True)
+            data = self.db.fetch_one(query, tuple(params) if params else ())
 
             valuation = {
                 "total_value": float(data.get("total_value", 0) or 0) if data else 0,
@@ -520,7 +520,7 @@ class AdvancedInventoryManagementService:
         try:
             self.warehouses = {}
             query = "SELECT warehouse_id, name, location, capacity, status FROM warehouses WHERE status = 'active'"
-            data = self.db.execute_query(query, fetch_all=True)
+            data = self.db.execute_query(query)
 
             for row in data:
                 wh_id = get_value(row, 'warehouse_id')
@@ -542,7 +542,7 @@ class AdvancedInventoryManagementService:
                 SELECT quantity FROM inventory_items
                 WHERE product_id = ? AND warehouse_id = ? AND batch_id = ? AND status = 'active'
             """
-            data = self.db.execute_query(query, (product_id, warehouse_id, batch_id), fetch_one=True)
+            data = self.db.fetch_one(query, (product_id, warehouse_id, batch_id))
             return data.get("quantity", 0) if data else 0
 
         except Exception as e:
@@ -557,8 +557,8 @@ class AdvancedInventoryManagementService:
                 WHERE product_id = ? AND batch_id = ? AND status = 'active'
                 ORDER BY created_at DESC LIMIT 1
             """
-            data = self.db.execute_query(query, (product_id, batch_id), fetch_one=True)
-            return Decimal(str(data.get("unit_cost", 0))) if data else Decimal("0")
+            data = self.db.fetch_one(query, (product_id, batch_id))
+            return Decimal(str(data.get("unit_cost", 0) or 0)) if data else Decimal("0")
 
         except Exception as e:
             self.logger.error(f"Error getting batch cost: {e}", exc_info=True)
@@ -686,10 +686,14 @@ class AdvancedInventoryManagementService:
                 query += " AND p.warehouse_id = ?"
                 params.append(warehouse_id)
 
-            data = self.db.execute_query(query, params, fetch_all=True)
+            data = self.db.execute_query(query, params)
 
             for row in data:
-                product_id, name, current_stock, min_stock, wh_id = row
+                product_id = row.get('id')
+                name = row.get('name')
+                current_stock = row.get('current_stock') or 0
+                min_stock = row.get('min_stock')
+                wh_id = row.get('warehouse_id')
                 if min_stock and current_stock <= min_stock * self.low_stock_threshold:
                     severity = (
                         "critical"
@@ -763,10 +767,14 @@ class AdvancedInventoryManagementService:
                 query += " AND p.warehouse_id = ?"
                 params.append(warehouse_id)
 
-            data = self.db.execute_query(query, params, fetch_all=True)
+            data = self.db.execute_query(query, params)
 
             for row in data:
-                product_id, name, current_stock, max_stock, wh_id = row
+                product_id = row.get('id')
+                name = row.get('name')
+                current_stock = row.get('current_stock') or 0
+                max_stock = row.get('max_stock') or 0
+                wh_id = row.get('warehouse_id')
                 if current_stock >= max_stock * self.overstock_threshold:
                     alert = InventoryAlert(
                         alert_id=f"OVERSTOCK_{product_id}_{wh_id}",
@@ -803,10 +811,13 @@ class AdvancedInventoryManagementService:
 
             query += " GROUP BY i.product_id, p.name, i.warehouse_id HAVING damaged_quantity > 0"
 
-            data = self.db.execute_query(query, params, fetch_all=True)
+            data = self.db.execute_query(query, params)
 
             for row in data:
-                product_id, name, damaged_quantity, wh_id = row
+                product_id = row.get('product_id')
+                name = row.get('name')
+                damaged_quantity = row.get('damaged_quantity') or 0
+                wh_id = row.get('warehouse_id')
                 alert = InventoryAlert(
                     alert_id=f"DAMAGED_{product_id}_{wh_id}",
                     product_id=product_id,
@@ -837,7 +848,7 @@ class AdvancedInventoryManagementService:
                 query += " AND id = ?"
                 params.append(product_id)
 
-            data = self.db.execute_query(query, params, fetch_all=True)
+            data = self.db.execute_query(query, params)
 
             products = []
             for row in data:
@@ -930,7 +941,7 @@ class AdvancedInventoryManagementService:
                 query += " AND warehouse_id = ?"
                 params.append(warehouse_id)
 
-            data = self.db.execute_query(query, params, fetch_one=True)
+            data = self.db.fetch_one(query, tuple(params) if params else ())
 
             summary = {
                 "total_products": data.get("total_products", 0) or 0 if data else 0,
@@ -968,7 +979,7 @@ class AdvancedInventoryManagementService:
 
             query += " GROUP BY p.id, p.name, p.current_stock, p.min_stock, p.max_stock"
 
-            data = self.db.execute_query(query, params, fetch_all=True)
+            data = self.db.execute_query(query, params)
 
             products = []
             for row in data:
@@ -1046,7 +1057,7 @@ class AdvancedInventoryManagementService:
 
             query += " ORDER BY created_at DESC LIMIT 100"
 
-            data = self.db.execute_query(query, params, fetch_all=True)
+            data = self.db.execute_query(query, params)
 
             transactions = []
             for row in data:

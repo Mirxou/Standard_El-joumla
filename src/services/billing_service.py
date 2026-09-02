@@ -173,8 +173,8 @@ class BillingService:
                 q, (None, sub_row.get('customer_id'),
                     float(sub_row.get('amount', 0)), "unpaid", now)
             )
-            if res and hasattr(res, "lastrowid"):
-                return res.lastrowid
+            if isinstance(res, dict):
+                return res.get('lastrowid')
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في توليد فاتورة للاشتراك: {e}")

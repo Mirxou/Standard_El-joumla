@@ -41,7 +41,7 @@ class SupportService:
     def create_ticket(self, user_id: int, subject: str, description: str, priority: str = "normal") -> int:
         q = """INSERT INTO support_tickets (user_id, subject, description, priority) VALUES (?, ?, ?, ?)"""
         res = self.db.execute_query(q, (user_id, subject, description, priority))
-        return res.lastrowid if hasattr(res, "lastrowid") else None
+        return res.get('lastrowid') if isinstance(res, dict) else None
 
     def update_ticket_status(self, ticket_id: int, status: str):
         q = """UPDATE support_tickets SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?"""

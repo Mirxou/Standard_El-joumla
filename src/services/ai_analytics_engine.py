@@ -303,7 +303,7 @@ class AIAnalyticsEngine:
                 ORDER BY sale_date
             """
 
-            data = self.db.execute_query(query, (product_id, start_date), fetch_all=True)
+            data = self.db.fetch_all(query, (product_id, start_date))
 
             return [
                 {"date": row["sale_date"], "quantity": row["quantity"],
@@ -490,7 +490,7 @@ class AIAnalyticsEngine:
                 FROM sales WHERE customer_id = ?
             """
 
-            purchase_data = self.db.execute_query(total_purchases_query, (customer_id,), fetch_one=True)
+            purchase_data = self.db.fetch_one(total_purchases_query, (customer_id,))
 
             # فترة الخمول
             days_since_last_order = (
@@ -507,7 +507,7 @@ class AIAnalyticsEngine:
                 WHERE s.customer_id = ?
             """
 
-            diversity_data = self.db.execute_query(product_diversity_query, (customer_id,), fetch_one=True)
+            diversity_data = self.db.fetch_one(product_diversity_query, (customer_id,))
 
             return {
                 "order_count": purchase_data.get("order_count", 0) if purchase_data else 0,
@@ -683,7 +683,7 @@ class AIAnalyticsEngine:
                 ORDER BY total_quantity DESC
             """
 
-            data = self.db.execute_query(query, (customer_id,), fetch_all=True)
+            data = self.db.fetch_all(query, (customer_id,))
 
             return [
                 {
@@ -704,7 +704,7 @@ class AIAnalyticsEngine:
         """الحصول على جميع المنتجات"""
         try:
             query = "SELECT id, name, category_id FROM products WHERE is_active = 1"
-            data = self.db.execute_query(query, fetch_all=True)
+            data = self.db.fetch_all(query)
 
             return [{"id": row["id"], "name": row["name"], "category_id": row["category_id"]} for row in data]
 
@@ -771,7 +771,7 @@ class AIAnalyticsEngine:
                 WHERE created_at >= ? AND created_at < ?
             """
 
-            current_sales = self.db.execute_query(
+            current_sales = self.db.fetch_one(
                 current_sales_query,
                 (
                     current_month,
@@ -781,10 +781,9 @@ class AIAnalyticsEngine:
                         else current_month.replace(year=current_month.year + 1, month=1)
                     ),
                 ),
-                fetch_one=True,
             )
 
-            last_sales = self.db.execute_query(current_sales_query, (last_month, current_month), fetch_one=True)
+            last_sales = self.db.fetch_one(current_sales_query, (last_month, current_month))
 
             current_total = float(current_sales.get("SUM(total_amount)") or 0) if current_sales else 0
             last_total = float(last_sales.get("SUM(total_amount)") or 0) if last_sales else 0
@@ -828,7 +827,7 @@ class AIAnalyticsEngine:
                 GROUP BY segment
             """
 
-            data = self.db.execute_query(segment_query, fetch_all=True)
+            data = self.db.fetch_all(segment_query)
 
             for row in data:
                 segment_name = row["segment"]
@@ -855,7 +854,7 @@ class AIAnalyticsEngine:
                 ORDER BY current_stock / NULLIF(min_stock, 0) ASC
             """
 
-            low_stock_products = self.db.execute_query(low_stock_query, fetch_all=True)
+            low_stock_products = self.db.fetch_all(low_stock_query)
 
             alerts["low_stock_products"] = [
                 {
@@ -876,7 +875,7 @@ class AIAnalyticsEngine:
                 ORDER BY current_stock DESC
             """
 
-            excess_stock_products = self.db.execute_query(excess_stock_query, fetch_all=True)
+            excess_stock_products = self.db.fetch_all(excess_stock_query)
 
             alerts["excess_stock_products"] = [
                 {
@@ -910,7 +909,7 @@ class AIAnalyticsEngine:
                 HAVING AVG(si.unit_price) < p.selling_price * 0.9 AND COUNT(si.id) > 10
             """
 
-            data = self.db.execute_query(price_increase_opportunities, fetch_all=True)
+            data = self.db.fetch_all(price_increase_opportunities)
 
             opportunities["price_increase_candidates"] = [
                 {

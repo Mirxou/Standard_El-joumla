@@ -477,13 +477,12 @@ class UIAdaptationService:
             # Load recent interactions
             cutoff_date = datetime.now() - timedelta(days=self.learning_period_days)
 
-            interactions = self.db_manager.execute_query(
+            interactions = self.db_manager.fetch_all(
                 """SELECT element_id, interaction_type, timestamp, metadata
                    FROM ui_interactions
                    WHERE user_id = ? AND timestamp >= ?
                    ORDER BY timestamp DESC""",
                 (self.user_id, cutoff_date),
-                fetch_all=True,
             )
 
             # Build elements cache

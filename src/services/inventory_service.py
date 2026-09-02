@@ -415,7 +415,7 @@ class InventoryService:
                         id=get_value(row, "id", 0),
                         product_id=get_value(row, "product_id", 0),
                         movement_type=get_value(row, "movement_type", ""),
-                        quantity=float(get_value(row, "quantity", 0)),
+                        quantity=float(get_value(row, "quantity", 0) or 0),
                         reference_id=get_value(row, "reference_id"),
                         reference_type=get_value(row, "reference_type"),
                         notes=get_value(row, "notes"),
@@ -443,8 +443,8 @@ class InventoryService:
             for row in rows:
                 pid = get_value(row, "id", 0)
                 name_val = get_value(row, "name", "")
-                curr = float(get_value(row, "current_stock", 0))
-                mins = float(get_value(row, "min_stock", 0))
+                curr = float(get_value(row, "current_stock", 0) or 0)
+                mins = float(get_value(row, "min_stock", 0) or 0)
 
                 alerts.append(
                     StockAlert(

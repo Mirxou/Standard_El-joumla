@@ -315,7 +315,7 @@ class SalesPredictionService:
                 ORDER BY sale_date
             """
 
-            data = self.db.execute_query(query, (product_id, start_date), fetch_all=True)
+            data = self.db.fetch_all(query, (product_id, start_date))
 
             return [
                 {"date": row.get('sale_date'), "quantity": row.get('quantity', 0),
@@ -703,7 +703,7 @@ class SalesPredictionService:
                 WHERE id = ?
             """
 
-            data = self.db.execute_query(query, (product_id,), fetch_one=True)
+            data = self.db.fetch_one(query, (product_id,))
 
             return {
                 "current_stock": data.get("current_stock", 0) if data else 0,
@@ -774,7 +774,7 @@ class SalesPredictionService:
         """الحصول على جميع المنتجات"""
         try:
             query = "SELECT id, name FROM products WHERE is_active = 1"
-            data = self.db.execute_query(query, fetch_all=True)
+            data = self.db.fetch_all(query)
 
             return [{"id": row.get('id'), "name": row.get('name')} for row in data]
 

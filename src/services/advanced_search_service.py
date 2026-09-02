@@ -373,9 +373,9 @@ class AdvancedSearchService:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         now = datetime.now()
-        self.db.execute_query(
+        return self.db.execute_insert(
             sql,
-            [
+            (
                 saved_filter.name,
                 saved_filter.description,
                 saved_filter.entity.name,
@@ -385,9 +385,8 @@ class AdvancedSearchService:
                 saved_filter.created_by,
                 now,
                 now,
-            ],
-        )
-        return self.db.get_last_insert_id()
+            ),
+        ) or 0
 
     def load_filter(self, filter_id: int) -> Optional[SavedFilter]:
         """تحميل فلتر محفوظ"""
@@ -450,8 +449,8 @@ class AdvancedSearchService:
     def delete_filter(self, filter_id: int) -> bool:
         """حذف فلتر"""
         sql = "DELETE FROM saved_filters WHERE id = ?"
-        result = self.db.execute_query(sql, [filter_id])
-        return bool(result)
+        result = self.db.execute_query(sql, (filter_id,))
+        return (result.get('rowcount', 0) > 0) if isinstance(result, dict) else bool(result)
 
     # ==================== Helper Methods ====================
     def get_available_fields(self, entity: SearchEntity) -> List[Dict[str, str]]:

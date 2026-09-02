@@ -42,8 +42,8 @@ class SecurityService:
             now = datetime.now()
             q = "INSERT INTO roles (name, permissions, created_at, updated_at) VALUES (?, ?, ?, ?)"
             res = self.db.execute_query(q, (name, ",".join(permissions), now, now))
-            if res and hasattr(res, "lastrowid"):
-                return res.lastrowid
+            if isinstance(res, dict):
+                return res.get('lastrowid')
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في إنشاء الدور: {e}")

@@ -472,7 +472,7 @@ class SupplyChainIntegrationService:
                 FROM suppliers
                 WHERE status = 'active'
             """
-            data = self.db.execute_query(query, fetch_all=True)
+            data = self.db.fetch_all(query)
 
             for row in data:
                 self.suppliers[row['supplier_id']] = {
@@ -543,7 +543,7 @@ class SupplyChainIntegrationService:
         """الحصول على أمر شراء"""
         try:
             query = "SELECT * FROM purchase_orders WHERE po_id = ?"
-            data = self.db.execute_query(query, (po_id,), fetch_one=True)
+            data = self.db.fetch_one(query, (po_id,))
 
             if data:
                 return {
@@ -587,7 +587,7 @@ class SupplyChainIntegrationService:
         """الحصول على تكلفة عنصر من أمر الشراء"""
         try:
             query = "SELECT unit_price FROM purchase_order_items WHERE po_id = ? AND product_id = ?"
-            data = self.db.execute_query(query, (po_id, product_id), fetch_one=True)
+            data = self.db.fetch_one(query, (po_id, product_id))
             return Decimal(str(data["unit_price"])) if data else Decimal("0")
 
         except Exception as e:
@@ -654,7 +654,7 @@ class SupplyChainIntegrationService:
                 FROM purchase_orders
                 WHERE supplier_id = ? AND status = 'received'
             """
-            orders_data = self.db.execute_query(orders_query, (supplier_id,), fetch_one=True)
+            orders_data = self.db.fetch_one(orders_query, (supplier_id,))
 
             # بيانات التسليم
             delivery_query = """
@@ -663,7 +663,7 @@ class SupplyChainIntegrationService:
                 WHERE supplier_id = ? AND status = 'received'
                 AND expected_delivery IS NOT NULL AND actual_delivery IS NOT NULL
             """
-            delivery_data = self.db.execute_query(delivery_query, (supplier_id,), fetch_all=True)
+            delivery_data = self.db.fetch_all(delivery_query, (supplier_id,))
 
             return {
                 "total_orders": (orders_data.get("total_orders", 0) or 0) if orders_data else 0,
@@ -788,7 +788,7 @@ class SupplyChainIntegrationService:
             """
 
             tomorrow = datetime.now() + timedelta(days=1)
-            data = self.db.execute_query(query, (tomorrow.isoformat(),), fetch_all=True)
+            data = self.db.fetch_all(query, (tomorrow.isoformat(),))
 
             for row in data:
                 po_id = row["po_id"]
@@ -851,7 +851,7 @@ class SupplyChainIntegrationService:
                 JOIN supplier_products sp ON s.supplier_id = sp.supplier_id
                 WHERE sp.product_id = ?
             """
-            data = self.db.execute_query(query, (product_id,), fetch_all=True)
+            data = self.db.fetch_all(query, (product_id,))
 
             suppliers = []
             for row in data:
@@ -921,7 +921,7 @@ class SupplyChainIntegrationService:
                 WHERE p.is_active = 1 AND p.current_stock <= p.min_stock * 1.2
             """
 
-            data = self.db.execute_query(query, fetch_all=True)
+            data = self.db.fetch_all(query)
 
             items = []
             for row in data:
@@ -955,7 +955,7 @@ class SupplyChainIntegrationService:
         """الحصول على عناصر أمر الشراء"""
         try:
             query = "SELECT product_id FROM purchase_order_items WHERE po_id = ?"
-            data = self.db.execute_query(query, (po_id,), fetch_all=True)
+            data = self.db.fetch_all(query, (po_id,))
             return [row["product_id"] for row in data]
 
         except Exception as e:
@@ -973,7 +973,7 @@ class SupplyChainIntegrationService:
                 HAVING supplier_count <= 1
             """
 
-            data = self.db.execute_query(query, fetch_all=True)
+            data = self.db.fetch_all(query)
 
             return [
                 {"product_id": row["id"], "name": row["name"],
