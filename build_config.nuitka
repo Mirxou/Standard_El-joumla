@@ -1,0 +1,103 @@
+# =============================================================================
+# Nuitka Build Configuration for El-Joumla ERP
+# إعدادات بناء Nuitka لنظام الجملة
+# =============================================================================
+#
+# This file documents the Nuitka build configuration used by scripts/build.py.
+# Nuitka does not natively read .nuitka config files — all options are passed
+# via the command line in build.py. This file serves as a human-readable
+# reference and can be adapted into a Nuitka --user-package-configuration
+# YAML if needed in the future.
+#
+# -----------------------------------------------------------------------------
+# Project Info
+# -----------------------------------------------------------------------------
+#   Application : El-Joumla ERP (نظام إدارة المبيعات والمجوز بالجملة)
+#   Version     : 6.0.0
+#   Company     : Standard El-Joumla
+#   UI Framework: PySide6 (Qt 6)
+#   Entry Point : main.py
+#   Target OS   : Windows 10/11
+#
+# -----------------------------------------------------------------------------
+# Build Modes
+# -----------------------------------------------------------------------------
+#
+# 1. ONEFILE  (--onefile)
+#    Produces a single self-extracting .exe.
+#    Pros : Easy distribution, one file to ship.
+#    Cons : Slower startup (unpacks to temp), larger binary, harder to debug.
+#    Use  : Quick demos, portable USB distribution.
+#
+# 2. STANDALONE (--standalone)
+#    Produces a folder with .exe + all dependencies.
+#    Pros : Fast startup, easier debugging, InnoSetup installer support.
+#    Cons : Multiple files to distribute.
+#    Use  : Production deployments, installer creation.
+#
+# -----------------------------------------------------------------------------
+# Key Nuitka Options (as passed in build.py)
+# -----------------------------------------------------------------------------
+#
+#   --onefile / --standalone          Build mode selector
+#   --enable-qt=pyside6               Enable PySide6 plugin (auto-includes Qt)
+#   --windows-disable-console         Hide console window on launch
+#   --windows-icon-from-ico=...       Application icon (.ico)
+#   --windows-company-name=...        Company name in EXE metadata
+#   --windows-product-name=...        Product name in EXE metadata
+#   --windows-file-version=...        File version (e.g. 6.0.0)
+#   --windows-product-version=...     Product version
+#   --output-filename=...             Output EXE name (onefile mode)
+#   --output-dir=...                  Output directory (standalone mode)
+#   --include-data-dir=src=dst        Embed data directories at build time
+#   --assume-yes-for-downloads        Auto-accept dependency downloads (MSVC, etc.)
+#   --show-progress                   Display compilation progress
+#   --show-memory                     Show memory usage during compilation
+#   --python-flag=no_site            Skip site.py at runtime (faster startup)
+#
+# -----------------------------------------------------------------------------
+# Data Directories Included
+# -----------------------------------------------------------------------------
+#
+#   assets/    → Icons, images, QSS stylesheets, font files
+#   locales/   → Arabic/English translation .qm files
+#   config/    → app_config.json, dev_config.json
+#   data/      → Default data files, user_behavior.json
+#
+# -----------------------------------------------------------------------------
+# InnoSetup Installer (standalone mode only)
+# -----------------------------------------------------------------------------
+#
+# After a standalone build, build.py can generate an installer.iss script.
+# Run with:  iscc installer.iss
+#
+#   Output     : ElJoumla_Setup_6.0.0.exe
+#   Compression: LZMA2 Ultra64 with solid compression
+#   Languages  : Arabic + English
+#   Features   : Desktop icon, start menu entry, auto-launch after install
+#
+# -----------------------------------------------------------------------------
+# Prerequisites
+# -----------------------------------------------------------------------------
+#
+#   1. Python 3.10+ with all project dependencies installed
+#   2. Nuitka:           pip install nuitka
+#   3. PySide6:          pip install PySide6
+#   4. C compiler:       MSVC (auto-downloaded by Nuitka) or MinGW64
+#   5. InnoSetup 6:      https://jrsoftware.org/isdl.php  (optional, for installer)
+#   6. Application icon: assets/icons/app_icon.ico
+#
+# -----------------------------------------------------------------------------
+# Quick Start
+# -----------------------------------------------------------------------------
+#
+#   Onefile build:
+#       python scripts/build.py --mode onefile
+#
+#   Standalone build + installer:
+#       python scripts/build.py --mode standalone --installer
+#
+#   Clean + build both modes:
+#       python scripts/build.py --mode both --clean --installer
+#
+# =============================================================================

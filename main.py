@@ -34,6 +34,11 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QTimer, Signal, QThread, QLoggingCategory
 from PySide6.QtGui import QFont, QPixmap, QIcon, QColor, QFontDatabase
 
+# ✅ High DPI Scaling — تفعيل قبل إنشاء QApplication
+QApplication.setHighDpiScaleFactorRoundingPolicy(
+    Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+)
+
 _TEST_MODE = bool(os.environ.get("PYTEST_CURRENT_TEST")) or getattr(QApplication, "__name__", "") == "MockQApplication"
 
 # قمع تحذيرات Qt حول الأنماط
@@ -399,6 +404,14 @@ class InventoryManagementApp(QApplication):
         # عامل التهيئة
         self.init_worker: Optional[DatabaseInitWorker] = None
 
+        # ✅ أنظمة الإنتاج الجديدة
+        self.memory_monitor = None
+        self.connectivity_monitor = None
+        self.auto_updater = None
+        self.single_instance = None
+        self.crash_handler = None
+        self.enhanced_logging = None
+
         # إعداد معالج الإغلاق
         self.aboutToQuit.connect(self.cleanup)
 
@@ -409,11 +422,29 @@ class InventoryManagementApp(QApplication):
         try:
             self.logger.info("بدء تشغيل التطبيق")
 
+            # ✅ حماية النسخة الواحدة
+            self._init_single_instance()
+
+            # ✅ نظام التقاط الأعطال المحسّن
+            self._init_crash_handler()
+
+            # ✅ نظام السجلات المحسّن
+            self._init_enhanced_logging()
+
+            # ✅ مراقبة الذاكرة
+            self._init_memory_monitor()
+
             # عرض شاشة البداية
             self.show_splash_screen()
 
             # تهيئة قاعدة البيانات
             self.initialize_database()
+
+            # ✅ مراقب الاتصال
+            self._init_connectivity_monitor()
+
+            # ✅ فحص التحديثات (صامت)
+            self._init_auto_updater()
 
         except Exception as e:
             self.logger.error(f"خطأ في تشغيل التطبيق: {str(e)}")
@@ -421,6 +452,96 @@ class InventoryManagementApp(QApplication):
             return False
 
         return True
+
+    def _init_single_instance(self):
+        """✅ حماية النسخة الواحدة"""
+        try:
+            from src.core.single_instance import SingleInstance
+            self.single_instance = SingleInstance("ElJoumlaERP")
+            if not self.single_instance.try_lock():
+                QMessageBox.warning(
+                    None, "ال تطبيق يعمل",
+                    "نسخة أخرى من النظام تعمل بالفعل.\n\n"
+                    "لا يمكن تشغيل نسختين في نفس الوقت لتجنب تلف البيانات."
+                )
+                sys.exit(0)
+        except Exception as e:
+            self.logger.warning(f"فشل تفعيل حماية النسخة الواحدة: {e}")
+
+    def _init_crash_handler(self):
+        """✅ نظام التقاط الأعطال المحسّن"""
+        try:
+            from src.core.crash_handler import CrashHandler
+            self.crash_handler = CrashHandler.get_instance(
+                app_name="El-Joumla ERP",
+                app_version="6.0.0"
+            )
+            self.crash_handler.install()
+        except Exception as e:
+            self.logger.warning(f"فشل تفعيل معالج الأعطال المحسّن: {e}")
+
+    def _init_enhanced_logging(self):
+        """✅ نظام السجلات المحسّن"""
+        try:
+            from src.core.enhanced_logging import EnhancedLoggingSystem
+            self.enhanced_logging = EnhancedLoggingSystem(
+                log_dir="logs",
+                app_name="ElJoumla",
+                app_version="6.0.0"
+            )
+            # تنظيف السجلات القديمة
+            self.enhanced_logging.cleanup_old_logs()
+        except Exception as e:
+            self.logger.warning(f"فشل تفعيل نظام السجلات المحسّن: {e}")
+
+    def _init_memory_monitor(self):
+        """✅ مراقبة الذاكرة"""
+        try:
+            from src.core.memory_monitor import MemoryMonitor
+            self.memory_monitor = MemoryMonitor(
+                parent=self,
+                warning_mb=300,
+                critical_mb=500,
+                check_interval_ms=30000
+            )
+            self.memory_monitor.memory_warning.connect(
+                lambda level, mb: self.logger.warning(f"ذاكرة عالية: {mb:.1f}MB")
+            )
+            self.memory_monitor.memory_critical.connect(
+                lambda level, mb: self.logger.critical(f"ذاكرة حرجة: {mb:.1f}MB")
+            )
+            self.memory_monitor.start()
+        except Exception as e:
+            self.logger.warning(f"فشل تفعيل مراقبة الذاكرة: {e}")
+
+    def _init_connectivity_monitor(self):
+        """✅ مراقب الاتصال"""
+        try:
+            from src.core.connectivity_monitor import ConnectivityMonitor
+            self.connectivity_monitor = ConnectivityMonitor(parent=self)
+            self.connectivity_monitor.disconnected.connect(
+                lambda: self.logger.warning("فُقد الاتصال بالإنترنت — وضع غير متصل")
+            )
+            self.connectivity_monitor.connected.connect(
+                lambda: self.logger.info("تم استعادة الاتصال بالإنترنت")
+            )
+            self.connectivity_monitor.start()
+        except Exception as e:
+            self.logger.warning(f"فشل تفعيل مراقب الاتصال: {e}")
+
+    def _init_auto_updater(self):
+        """✅ فحص التحديثات"""
+        try:
+            from src.core.auto_updater import AutoUpdater
+            self.auto_updater = AutoUpdater(
+                parent=self,
+                current_version="6.0.0",
+                channel="stable"
+            )
+            # فحص صامت بعد 30 ثانية من التشغيل
+            QTimer.singleShot(30000, lambda: self.auto_updater.check_for_updates(silent=True) if self.auto_updater else None)
+        except Exception as e:
+            self.logger.warning(f"فشل تفعيل نظام التحديث: {e}")
 
     def show_splash_screen(self):
         """عرض شاشة البداية"""
@@ -933,6 +1054,25 @@ class InventoryManagementApp(QApplication):
                 try:
                     user_id = self.current_user.id
                     QTimer.singleShot(0, lambda uid=user_id: self.user_service.terminate_all_sessions(uid))
+                except Exception:
+                    pass
+
+            # ✅ إيقاف أنظمة الإنتاج
+            if self.memory_monitor:
+                try:
+                    self.memory_monitor.stop()
+                except Exception:
+                    pass
+
+            if self.connectivity_monitor:
+                try:
+                    self.connectivity_monitor.stop()
+                except Exception:
+                    pass
+
+            if self.single_instance:
+                try:
+                    self.single_instance.release()
                 except Exception:
                     pass
 

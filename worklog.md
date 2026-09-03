@@ -3054,3 +3054,42 @@ These kwargs don't exist on `DatabaseManager.execute_query()`. Fixed by:
 4. **billing_service.py** (line 176): same pattern
 5. **recurring_invoice_service.py** (line 65): ternary `hasattr` → `isinstance(res, dict)`
 6. **report_generator.py** (line 839): changed `self.db.execute()` + `hasattr(cursor, 'lastrowid')` to `self.db.execute_insert()`
+
+--- Task ID: MAJOR-REPAIR
+Agent: Main Orchestrator
+Task: Complete major repair of El-Joumla ERP — fix 300+ remaining bugs
+
+Work Log:
+- Ran 4 parallel audit scans: hasattr/lastrowid (19 bugs), execute_query DML (150+ occurrences), Decimal/float(None) (46 bugs), UI .text() + Arabic SQL (71 bugs)
+- Fixed all 19 hasattr(.lastrowid) and .lastrowid direct access bugs → execute_insert
+- Fixed 60+ execute_query INSERT → execute_insert across 50+ files
+- Fixed 50+ execute_query UPDATE/DELETE → execute_non_query across 40+ files  
+- Fixed 20+ getattr(.rowcount) on dict → .get() pattern
+- Fixed 46 Decimal(str(None))/float(None) crashes with `or 0` guards
+- Fixed 6 unguarded .item().text() UI crashes with None guards
+- Fixed 65 Arabic/English enum mismatches in SQL queries across 17 files
+- Removed get_last_insert_id() workarounds and invalid commit=True kwargs
+- Verified 0 remaining bugs across all 6 pattern categories
+- All 387 files compile, 0 ruff F-errors
+
+Stage Summary:
+- Commit f8b6446: 78 files changed, 374 insertions, 553 deletions
+- Total bugs fixed this round: 300+
+- All 387 Python files compile successfully
+- 0 ruff F-errors (F401 excluded)
+- Deep scan confirms zero remaining bugs in all 6 categories
+
+--- Task ID: QA-CHECKLIST
+Agent: Main Orchestrator
+Task: Production-readiness QA checklist for El-Joumla v6.0.0
+
+Work Log:
+- Gathered project stats: 387 files, 179,746 LOC, 42 windows, 107 services, 31 models
+- Tech stack: PySide6 6.10.1, Python 3.10+, SQLite WAL mode, 21 QThread classes, 2696 try/except
+- Security: database_encryption.py, encryption_manager.py, mfa_service.py, gdpr_handler.py
+- Current test coverage: 28.87%
+- Created comprehensive QA checklist covering 6 domains with 150+ specific checkpoints
+
+Stage Summary:
+- Detailed production readiness checklist created and delivered to user
+- Key risks identified: test coverage (28.87%), no auto-updater, memory leak monitoring needed

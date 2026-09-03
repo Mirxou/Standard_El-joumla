@@ -9660,6 +9660,14 @@ class MainWindow(QMainWindow):
         self._status_websocket.setStyleSheet("color:{Colors.TEXT_MUTED}; padding:0 8px; font-size:10px;")
         statusbar.addPermanentWidget(self._status_websocket)
 
+        # ✅ مؤشر حالة الاتصال بالإنترنت
+        try:
+            app_instance = QApplication.instance()
+            if app_instance and hasattr(app_instance, 'connectivity_monitor') and app_instance.connectivity_monitor:
+                app_instance.connectivity_monitor.create_status_widget(statusbar)
+        except Exception:
+            pass
+
         # رسالة قاعدة البيانات الأولى
         if self.db_manager:
             try:
