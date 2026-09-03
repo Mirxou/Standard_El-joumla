@@ -9662,6 +9662,7 @@ class MainWindow(QMainWindow):
 
         # ✅ مؤشر حالة الاتصال بالإنترنت
         try:
+            from PySide6.QtWidgets import QApplication
             app_instance = QApplication.instance()
             if app_instance and hasattr(app_instance, 'connectivity_monitor') and app_instance.connectivity_monitor:
                 app_instance.connectivity_monitor.create_status_widget(statusbar)
