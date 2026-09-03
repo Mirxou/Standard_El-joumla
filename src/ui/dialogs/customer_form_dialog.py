@@ -297,7 +297,7 @@ class CustomerFormDialog(BaseDialog):
                         self.customer_id,
                     )
 
-                self.db_manager.execute_query(query, params)
+                self.db_manager.execute_non_query(query, params)
                 self.notify.show_success(
                     self.i18n.get_message("success"),
                     self.i18n.get_message("customer_updated"),
@@ -338,7 +338,7 @@ class CustomerFormDialog(BaseDialog):
                         self.active_checkbox.isChecked(),
                     )
 
-                self.db_manager.execute_query(query, params)
+                self.db_manager.execute_insert(query, params)
                 self.notify.show_success(
                     self.i18n.get_message("success"),
                     self.i18n.get_message("customer_added"),

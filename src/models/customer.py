@@ -326,7 +326,7 @@ class CustomerManager:
                    SUM(total_amount) as total_purchases,
                    COUNT(*) as purchases_count
             FROM sales
-            WHERE customer_id = ? AND status != 'ملغية'
+            WHERE customer_id = ? AND status != 'cancelled'
             """
             row = self.db_manager.fetch_one(query, (customer_id,))
             if row:

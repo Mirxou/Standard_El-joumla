@@ -29,7 +29,7 @@ class AIPredictionService:
         query = """
             SELECT sale_date, SUM(final_amount) as daily_total
             FROM sales
-            WHERE status NOT IN ('cancelled', 'ملغية')
+            WHERE status != 'cancelled'
             GROUP BY sale_date
             ORDER BY sale_date ASC
         """
@@ -71,7 +71,7 @@ class AIPredictionService:
         """
         Flags sales transactions that are > 3 standard deviations from the mean.
         """
-        query = "SELECT id, invoice_number, final_amount as total_amount FROM sales WHERE status NOT IN ('cancelled', 'ملغية')"  # noqa: E501
+        query = "SELECT id, invoice_number, final_amount as total_amount FROM sales WHERE status != 'cancelled'"  # noqa: E501
         conn = self.db.get_connection()
         df = pd.read_sql_query(query, conn)
 
@@ -94,7 +94,7 @@ class AIPredictionService:
             query = """
                 SELECT sale_date, SUM(final_amount) as daily_total
                 FROM sales
-                WHERE status NOT IN ('cancelled', 'ملغية')
+                WHERE status != 'cancelled'
                   AND sale_date >= DATE('now', '-90 days')
                 GROUP BY sale_date
                 ORDER BY sale_date ASC
@@ -149,7 +149,7 @@ class AIPredictionService:
                        SUM(si.quantity) as daily_demand
                 FROM sale_items si
                 JOIN sales s ON s.id = si.sale_id
-                WHERE s.status NOT IN ('cancelled', 'ملغية')
+                WHERE s.status != 'cancelled'
                   AND s.sale_date >= DATE('now', '-90 days')
             """
             params = []
@@ -206,7 +206,7 @@ class AIPredictionService:
                     COALESCE(SUM(s.final_amount), 0) as total_spent
                 FROM customers c
                 LEFT JOIN sales s ON c.id = s.customer_id
-                    AND s.status NOT IN ('cancelled', 'ملغية')
+                    AND s.status != 'cancelled'
                 GROUP BY c.id, c.name, c.phone
             """
             conn = self.db.get_connection()
@@ -291,7 +291,7 @@ class AIPredictionService:
                     JOIN sale_items si ON p.id = si.product_id
                     JOIN sales s ON s.id = si.sale_id
                     WHERE s.sale_date >= DATE('now', '-30 days')
-                      AND s.status NOT IN ('cancelled', 'ملغية')
+                      AND s.status != 'cancelled'
                     GROUP BY p.id
                     ORDER BY recent_qty DESC
                     LIMIT 10

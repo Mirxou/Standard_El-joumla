@@ -651,7 +651,7 @@ class WorkflowDesignerWindow(QMainWindow):
                 try:
                     # حذف الخطوة (يمكن إضافة دالة delete_step في WorkflowService)
                     query = "DELETE FROM workflow_steps WHERE id = ?"
-                    self.db_manager.execute_query(query, (step.id,))
+                    self.db_manager.execute_non_query(query, (step.id,))
                     QMessageBox.information(self, "نجح", "تم حذف الخطوة بنجاح")
                     self.load_workflow_steps(self.current_workflow_id)
                 except Exception as e:
@@ -682,7 +682,7 @@ class WorkflowDesignerWindow(QMainWindow):
             if args:
                 workflow_id = args[0]
                 query = "UPDATE workflows SET is_active = 1 WHERE id = ?"
-                self.db_manager.execute_query(query, (workflow_id,))
+                self.db_manager.execute_non_query(query, (workflow_id,))
                 self.load_workflows()
             return True
         except Exception:

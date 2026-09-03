@@ -559,11 +559,11 @@ class PaymentManager:
         try:
             query = """
             SELECT * FROM payments
-            WHERE due_date < ? AND status NOT IN (?, ?)
+            WHERE due_date < ? AND status NOT IN (?)
             ORDER BY due_date ASC
             """
             today = date.today().isoformat()
-            results = self.db_manager.fetch_all(query, (today, "completed", "مكتمل"))
+            results = self.db_manager.fetch_all(query, (today, "completed"))
             return [
                 self._row_to_payment_dict(dict(row))
                 if isinstance(row, dict)
@@ -667,7 +667,7 @@ class PaymentManager:
                 updated_at = ?
             WHERE id = ?
             """
-            self.db_manager.execute_query(query, (float(amount), datetime.now().isoformat(), customer_id))
+            self.db_manager.execute_non_query(query, (float(amount), datetime.now().isoformat(), customer_id))
 
         except Exception as e:
             if self.logger:
@@ -682,7 +682,7 @@ class PaymentManager:
                 updated_at = ?
             WHERE id = ?
             """
-            self.db_manager.execute_query(query, (float(amount), datetime.now().isoformat(), supplier_id))
+            self.db_manager.execute_non_query(query, (float(amount), datetime.now().isoformat(), supplier_id))
 
         except Exception as e:
             if self.logger:

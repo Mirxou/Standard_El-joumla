@@ -65,7 +65,7 @@ class ReminderService:
             if message is None:
                 message = f"المتبقي: {invoice.get('remaining')} دج - الرجاء السداد قبل {due_at.date()}"
 
-            self.db.execute_query(
+            reminder_id = self.db.execute_insert(
                 """
                 INSERT INTO reminders
             (sale_id, customer_id, reminder_type, subject,
@@ -82,7 +82,6 @@ class ReminderService:
                     created_by,
                 ),
             )
-            reminder_id = self.db.get_last_insert_id()
             return {"success": True, "id": reminder_id}
         except Exception as e:
             logger.log(logging.ERROR, f"Failed to schedule payment reminder: {e}")
@@ -155,7 +154,7 @@ class ReminderService:
                     attachments=attachments,
                 )
                 if send_res.get("success"):
-                    self.db.execute_query(
+                    self.db.execute_non_query(
                         "UPDATE reminders SET status='sent', attempts=attempts+1, last_attempt_at=CURRENT_TIMESTAMP WHERE id=?",  # noqa: E501
                         (r.get("id"),),
                     )
@@ -166,7 +165,7 @@ class ReminderService:
                 failed += 1
                 logger.log(logging.ERROR, f"Reminder send failed: {e}")
                 try:
-                    self.db.execute_query(
+                    self.db.execute_non_query(
                         "UPDATE reminders SET attempts=attempts+1, last_attempt_at=CURRENT_TIMESTAMP WHERE id=?",
                         (r.get("id"),),
                     )
@@ -176,7 +175,7 @@ class ReminderService:
 
     def cancel_reminder(self, reminder_id: int) -> bool:
         try:
-            self.db.execute_query(
+            self.db.execute_non_query(
                 "UPDATE reminders SET status='cancelled', updated_at=CURRENT_TIMESTAMP WHERE id=?",
                 (reminder_id,),
             )

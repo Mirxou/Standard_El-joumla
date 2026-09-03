@@ -402,7 +402,7 @@ class UIAdaptationService:
         try:
             if self.db_manager:
                 query = "DELETE FROM ui_interactions WHERE user_id = ?"
-                self.db_manager.execute_query(query, (target_user,), commit=True)
+                self.db_manager.execute_non_query(query, (target_user,))
 
             # Clear cache
             self.elements_cache.clear()
@@ -459,7 +459,7 @@ class UIAdaptationService:
                     context,
                 )
 
-                self.db_manager.execute_query(query, params, commit=True)
+                self.db_manager.execute_insert(query, params)
 
             # Clear buffer
             self.interactions_buffer.clear()

@@ -235,7 +235,7 @@ class QuoteHistoryDialog(BaseDialog):
         row = self.table.currentRow()
         if row < 0:
             return None
-        return int(self.table.item(row, 0).text())
+        item = self.table.item(row, 0); return int(item.text()) if item else None
 
     def _on_load(self):
         quote_id = self._get_selected_id()
@@ -287,10 +287,10 @@ class QuoteHistoryDialog(BaseDialog):
         # Let's verify we can get data.
         # We can query the quote details from the table for basic info
         row = self.table.currentRow()
-        customer = self.table.item(row, 1).text()
-        date_str = self.table.item(row, 2).text()
+        item = self.table.item(row, 1); customer = item.text() if item else ""
+        item = self.table.item(row, 2); date_str = item.text() if item else ""
         try:
-            total_val = float(self.table.item(row, 4).text().replace(",", ""))
+            item = self.table.item(row, 4); total_val = float(item.text().replace(",", "")) if item else 0.0
         except (ValueError, TypeError, AttributeError):
             total_val = 0.0
 

@@ -253,7 +253,7 @@ class SupplierManagementDialog(BaseDialog):
 
             if reply == QMessageBox.StandardButton.Yes:
                 # Soft delete instead of hard delete
-                self.db_manager.execute_query(
+                self.db_manager.execute_non_query(
                     "UPDATE suppliers SET is_active = 0, updated_at = datetime('now') WHERE id = ?",
                     (supplier_id,),
                 )

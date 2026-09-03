@@ -178,7 +178,7 @@ class CountDetailsDialog(BaseDialog):
 
                     if self.count_id and row_idx < len(self.count_items):
                         # تحديث منتج موجود
-                        self.db.execute_query(
+                        self.db.execute_non_query(
                             "UPDATE count_products SET counted_quantity = ?, notes = ? WHERE id = ?",
                             (counted_qty, notes, self.count_items[row_idx]),
                         )

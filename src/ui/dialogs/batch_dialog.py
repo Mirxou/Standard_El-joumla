@@ -357,7 +357,7 @@ class BatchDialog(BaseDialog):
                     WHERE id = ?
                 """
 
-                self.db_manager.execute_query(
+                self.db_manager.execute_non_query(
                     query,
                     (
                         batch_data["batch_number"],

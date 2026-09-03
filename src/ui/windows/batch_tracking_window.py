@@ -575,7 +575,7 @@ class BatchTrackingWindow(QMainWindow):
                     SET status = ?, updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
                 """
-                self.db_manager.execute_query(
+                self.db_manager.execute_non_query(
                     update_query,
                     (BatchStatus.DAMAGED.value, batch.id),
                 )

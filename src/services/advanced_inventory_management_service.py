@@ -578,7 +578,7 @@ class AdvancedInventoryManagementService:
                         DELETE FROM inventory_items
                         WHERE product_id = ? AND warehouse_id = ? AND batch_id = ?
                     """
-                    self.db.execute_query(query, (product_id, warehouse_id, batch_id))
+                    self.db.execute_non_query(query, (product_id, warehouse_id, batch_id))
                 else:
                     # تحديث الكمية
                     query = """
@@ -586,7 +586,7 @@ class AdvancedInventoryManagementService:
                         SET quantity = ?
                         WHERE product_id = ? AND warehouse_id = ? AND batch_id = ?
                     """
-                    self.db.execute_query(query, (new_quantity, product_id, warehouse_id, batch_id))
+                    self.db.execute_non_query(query, (new_quantity, product_id, warehouse_id, batch_id))
             else:
                 # إدراج دفعة جديدة (للنقل بين المستودعات)
                 # نحتاج للبيانات من المعاملة السابقة
@@ -604,7 +604,7 @@ class AdvancedInventoryManagementService:
                 SET current_stock = current_stock + ?
                 WHERE id = ?
             """
-            self.db.execute_query(query, (quantity_change, product_id))
+            self.db.execute_non_query(query, (quantity_change, product_id))
 
         except Exception as e:
             self.logger.error(f"Error updating product stock: {e}", exc_info=True)
@@ -618,7 +618,7 @@ class AdvancedInventoryManagementService:
                 (product_id, warehouse_id, batch_id, quantity, unit_cost, expiry_date, location, status, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
-            self.db.execute_query(
+            self.db.execute_insert(
                 inventory_query,
                 (
                     inventory_data["product_id"],
@@ -649,7 +649,7 @@ class AdvancedInventoryManagementService:
                  warehouse_from, warehouse_to, performed_by, notes, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
-            self.db.execute_query(
+            self.db.execute_insert(
                 transaction_query,
                 (
                     transaction_data["transaction_id"],

@@ -196,7 +196,7 @@ class CPQService:
         """حفظ عرض الأسعار في قاعدة البيانات"""
         try:
             # Insert quote header
-            result = self.db_manager.execute_query(
+            quote_id = self.db_manager.execute_insert(
                 """INSERT INTO quotes
                    (customer_id, quote_number, total_amount, status, valid_until, notes, created_at)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
@@ -211,12 +211,10 @@ class CPQService:
                 ),
             )
 
-            quote_id = result.lastrowid if result else None
-
             if quote_id:
                 # Insert quote items
                 for item in quote.items:
-                    self.db_manager.execute_query(
+                    self.db_manager.execute_insert(
                         """INSERT INTO quote_items
                            (quote_id, product_id, quantity, unit_price, discount_percentage, line_total)
                            VALUES (?, ?, ?, ?, ?, ?)""",
@@ -285,7 +283,7 @@ class CPQService:
                 item = QuoteItem(
                     product_id=item_data[2],  # product_id
                     quantity=item_data[3],  # quantity
-                    unit_price=Decimal(str(item_data[4])),  # unit_price
+                    unit_price=Decimal(str(item_data[4] or 0)),  # unit_price
                     discount_percentage=Decimal(str(item_data[5] or 0)),  # discount_percentage
                 )
                 items.append(item)
@@ -309,7 +307,7 @@ class CPQService:
     def approve_quote(self, quote_id: int, approved_by: str) -> bool:
         """اعتماد عرض الأسعار"""
         try:
-            self.db_manager.execute_query(
+            self.db_manager.execute_non_query(
                 """UPDATE quotes
                    SET status = 'approved', approved_by = ?, approved_at = ?
                    WHERE id = ?""",
@@ -324,7 +322,7 @@ class CPQService:
     def reject_quote(self, quote_id: int, rejected_by: str, reason: str) -> bool:
         """رفض عرض الأسعار"""
         try:
-            self.db_manager.execute_query(
+            self.db_manager.execute_non_query(
                 """UPDATE quotes
                    SET status = 'rejected', rejected_by = ?, rejected_at = ?, rejection_reason = ?
                    WHERE id = ?""",
@@ -344,7 +342,7 @@ class CPQService:
                 return None
 
             # Create sale record
-            sale_result = self.db_manager.execute_query(
+            sale_id = self.db_manager.execute_insert(
                 """INSERT INTO sales
                    (customer_id, total_amount, status, created_by, created_at, quote_id)
                    VALUES (?, ?, ?, ?, ?, ?)""",
@@ -358,12 +356,10 @@ class CPQService:
                 ),
             )
 
-            sale_id = sale_result.lastrowid if sale_result else None
-
             if sale_id:
                 # Create sale items
                 for item in quote.items:
-                    self.db_manager.execute_query(
+                    self.db_manager.execute_insert(
                         """INSERT INTO sale_items
                            (sale_id, product_id, quantity, unit_price, discount_percentage, line_total)
                            VALUES (?, ?, ?, ?, ?, ?)""",
@@ -378,7 +374,7 @@ class CPQService:
                     )
 
                 # Update quote status
-                self.db_manager.execute_query(
+                self.db_manager.execute_non_query(
                     "UPDATE quotes SET status = 'converted', converted_at = ? WHERE id = ?",
                     (datetime.now(), quote_id),
                 )

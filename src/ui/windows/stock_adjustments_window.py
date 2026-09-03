@@ -584,7 +584,7 @@ class StockAdjustmentsWindow(QMainWindow):
             if not selected_product:
                 return
 
-            qty_before = Decimal(str(selected_product["current_stock"]))
+            qty_before = Decimal(str(selected_product["current_stock"] or 0))
             qty_counted = Decimal(str(new_qty_spin.value()))
             adjustment_qty = qty_counted - qty_before
             unit_cost = Decimal(str(selected_product["cost_price"] or 0))

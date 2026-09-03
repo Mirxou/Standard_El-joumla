@@ -36,7 +36,7 @@ class InventoryCountService:
         """
 
         count.created_at = datetime.now()
-        count_id = self.db.execute_query(
+        count_id = self.db.execute_insert(
             query,
             (
                 count.count_number,
@@ -148,7 +148,7 @@ class InventoryCountService:
         """
 
         count.updated_at = datetime.now()
-        result = self.db.execute_query(
+        result = self.db.execute_non_query(
             query,
             (
                 count.count_date,
@@ -175,10 +175,10 @@ class InventoryCountService:
             return False
 
         # حذف العناصر أولاً
-        self.db.execute_query("DELETE FROM count_items WHERE count_id = ?", (count_id,))
+        self.db.execute_non_query("DELETE FROM count_items WHERE count_id = ?", (count_id,))
 
         # حذف الجرد
-        result = self.db.execute_query("DELETE FROM physical_counts WHERE id = ?", (count_id,))
+        result = self.db.execute_non_query("DELETE FROM physical_counts WHERE id = ?", (count_id,))
         return result > 0
 
     def start_count(self, count_id: int) -> bool:
@@ -242,7 +242,7 @@ class InventoryCountService:
         """
 
         item.created_at = datetime.now()
-        return self.db.execute_query(
+        return self.db.execute_insert(
             query,
             (
                 item.count_id,
@@ -293,7 +293,7 @@ class InventoryCountService:
             WHERE id = ?
         """
 
-        result = self.db.execute_query(
+        result = self.db.execute_non_query(
             query,
             (
                 item.counted_quantity,
@@ -340,8 +340,8 @@ class InventoryCountService:
                 product_code=row["sku"],
                 product_name=row["name"],
                 product_barcode=row["barcode"],
-                system_quantity=Decimal(str(row["current_stock"])),
-                unit_cost=Decimal(str(row["cost_price"])),
+                system_quantity=Decimal(str(row["current_stock"] or 0)),
+                unit_cost=Decimal(str(row["cost_price"] or 0)),
                 location=location,
             )
             item.system_value = item.system_quantity * item.unit_cost
@@ -375,7 +375,7 @@ class InventoryCountService:
         adjustment.created_at = datetime.now()
         adjustment.calculate_after_quantity()
 
-        return self.db.execute_query(
+        return self.db.execute_insert(
             query,
             (
                 adjustment.adjustment_number,
@@ -485,7 +485,7 @@ class InventoryCountService:
             """
 
             adjustment.updated_at = datetime.now()
-            self.db.execute_query(
+            self.db.execute_non_query(
                 query,
                 (
                     adjustment.status.value,
@@ -518,7 +518,7 @@ class InventoryCountService:
             """
 
             adjustment.updated_at = datetime.now()
-            self.db.execute_query(
+            self.db.execute_non_query(
                 query,
                 (
                     adjustment.status.value,
@@ -547,7 +547,7 @@ class InventoryCountService:
         """
 
         now = datetime.now()
-        self.db.execute_query(query, (adjustment.adjustment_quantity, now, adjustment.product_id))
+        self.db.execute_non_query(query, (adjustment.adjustment_quantity, now, adjustment.product_id))
 
         # تسجيل حركة المخزون (سجل التدقيق)
         try:
@@ -557,7 +557,7 @@ class InventoryCountService:
                     reference_type, notes, user_id, created_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """
-            self.db.execute_query(
+            self.db.execute_insert(
                 movement_query,
                 (
                     adjustment.product_id,
@@ -581,7 +581,7 @@ class InventoryCountService:
             WHERE id = ?
         """
 
-        self.db.execute_query(
+        self.db.execute_non_query(
             update_query,
             (adjustment.status.value, adjustment.applied_at, now, adjustment.id),
         )
@@ -724,12 +724,12 @@ class InventoryCountService:
             product_code=row["product_code"],
             product_name=row["product_name"],
             product_barcode=row.get("product_barcode"),
-            system_quantity=Decimal(str(row["system_quantity"])),
+            system_quantity=Decimal(str(row["system_quantity"] or 0)),
             counted_quantity=(
                 Decimal(str(row["counted_quantity"])) if row.get("counted_quantity") is not None else None
             ),
             variance_quantity=Decimal(str(row.get("variance_quantity", 0) or 0)),
-            unit_cost=Decimal(str(row["unit_cost"])),
+            unit_cost=Decimal(str(row["unit_cost"] or 0)),
             system_value=Decimal(str(row.get("system_value", 0) or 0)),
             counted_value=Decimal(str(row.get("counted_value", 0) or 0)),
             variance_value=Decimal(str(row.get("variance_value", 0) or 0)),
@@ -753,10 +753,10 @@ class InventoryCountService:
             product_id=row["product_id"],
             product_code=row["product_code"],
             product_name=row["product_name"],
-            quantity_before=Decimal(str(row["quantity_before"])),
-            adjustment_quantity=Decimal(str(row["adjustment_quantity"])),
+            quantity_before=Decimal(str(row["quantity_before"] or 0)),
+            adjustment_quantity=Decimal(str(row["adjustment_quantity"] or 0)),
             quantity_after=Decimal(str(row.get("quantity_after", 0) or 0)),
-            unit_cost=Decimal(str(row["unit_cost"])),
+            unit_cost=Decimal(str(row["unit_cost"] or 0)),
             adjustment_value=Decimal(str(row.get("adjustment_value", 0) or 0)),
             location=row.get("location"),
             batch_number=row.get("batch_number"),

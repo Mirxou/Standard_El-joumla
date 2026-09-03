@@ -1321,7 +1321,7 @@ class ReportsWindow(QMainWindow):
                 product_sales = {}
                 for item in report_data.data:
                     product = item.get("المنتج", "غير محدد")
-                    amount = float(item.get("المبلغ", 0))
+                    amount = float(item.get("المبلغ", 0) or 0)
                     product_sales[product] = product_sales.get(product, 0) + amount
 
                 # إضافة البيانات للرسم
@@ -1350,8 +1350,8 @@ class ReportsWindow(QMainWindow):
 
             # إضافة إحصائيات حسب نوع التقرير
             if self.current_report_type == ReportType.SALES_SUMMARY:
-                total_sales = sum(float(item.get("المبلغ", 0)) for item in report_data.data)  # noqa: F841
-                total_quantity = sum(int(item.get("الكمية", 0)) for item in report_data.data)  # noqa: F841
+                total_sales = sum(float(item.get("المبلغ", 0) or 0) for item in report_data.data)  # noqa: F841
+                total_quantity = sum(int(item.get("الكمية", 0) or 0) for item in report_data.data)  # noqa: F841
 
                 (
                     total_sales / len(report_data.data)

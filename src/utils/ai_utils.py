@@ -9,7 +9,7 @@ def aggregate_daily_sales(sales_data: List[Dict[str, Any]]) -> Dict[str, float]:
     for sale in sales_data:
         date_str = str(sale.get("sale_date", "")).split(" ")[0]
         if date_str:
-            daily_totals[date_str] += float(sale.get("total_amount", 0.0))
+            daily_totals[date_str] += float(sale.get("total_amount", 0.0) or 0.0)
     return dict(daily_totals)
 
 

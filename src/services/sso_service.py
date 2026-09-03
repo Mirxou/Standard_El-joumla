@@ -270,9 +270,8 @@ class SSOService:
                 company_id,
             )
 
-            result = self.db_manager.execute_query(query, values)
-            if result:
-                provider_id = result.lastrowid
+            provider_id = self.db_manager.execute_insert(query, values)
+            if provider_id:
                 self.logger.info(f"✅ تم إنشاء مزود SSO: {provider.name} (ID: {provider_id})")
                 return provider_id
 
@@ -350,8 +349,8 @@ class SSOService:
                 query += " AND company_id = ?"
                 params.append(company_id)
 
-            result = self.db_manager.execute_query(query, tuple(params))
-            if result and (hasattr(result, "rowcount") and result.rowcount > 0 or not hasattr(result, "rowcount")):
+            result = self.db_manager.execute_non_query(query, tuple(params))
+            if result > 0:
                 self.logger.info(f"✅ تم تحديث مزود SSO: {provider.name} (ID: {provider.id})")
                 return True
 
@@ -373,8 +372,8 @@ class SSOService:
                 query += " AND company_id = ?"
                 params.append(company_id)
 
-            result = self.db_manager.execute_query(query, tuple(params))
-            if result and (hasattr(result, "rowcount") and result.rowcount > 0 or not hasattr(result, "rowcount")):
+            result = self.db_manager.execute_non_query(query, tuple(params))
+            if result > 0:
                 self.logger.info(f"✅ تم حذف مزود SSO: ID={provider_id}")
                 return True
 

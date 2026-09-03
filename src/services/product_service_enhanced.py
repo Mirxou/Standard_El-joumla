@@ -305,8 +305,8 @@ class ProductService:
                 query = "DELETE FROM products WHERE id = ?"
                 params = (product_id,)
 
-            result = self.db_manager.execute_query(query, params)
-            if result and result.rowcount > 0:
+            result = self.db_manager.execute_non_query(query, params)
+            if result > 0:
                 if self.logger:
                     self.logger.info(f"تم حذف المنتج ID: {product_id}")
                 return True
@@ -596,11 +596,7 @@ class ProductService:
                 tier.description,
             )
 
-            self.db_manager.execute_query(query, params)
-            try:
-                return self.db_manager.get_last_insert_id()
-            except Exception:
-                return None
+            return self.db_manager.execute_insert(query, params)
 
         except Exception as e:
             if self.logger:

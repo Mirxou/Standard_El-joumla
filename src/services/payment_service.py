@@ -98,7 +98,7 @@ class PaymentService:
                 amount DECIMAL(15,2) NOT NULL DEFAULT 0.00,
                 paid_amount DECIMAL(15,2) NOT NULL DEFAULT 0.00,
                 remaining_amount DECIMAL(15,2) NOT NULL DEFAULT 0.00,
-                status TEXT NOT NULL DEFAULT 'معلق',
+                status TEXT NOT NULL DEFAULT 'pending',
                 notes TEXT,
                 created_at DATETIME NOT NULL,
                 updated_at DATETIME NOT NULL,
@@ -941,8 +941,7 @@ class PaymentService:
                     (s.final_amount - COALESCE(s.paid_amount, 0)) as remaining
                 FROM sales s
                 LEFT JOIN customers c ON s.customer_id = c.id
-                WHERE s.status NOT IN ('مدفوعة', 'paid', 'ملغية', 'cancelled',
-                                        'مسودة', 'draft', 'مرتجعة', 'returned')
+                WHERE s.status NOT IN ('paid', 'cancelled', 'draft', 'returned')
                   AND (s.final_amount - COALESCE(s.paid_amount, 0)) > 0
                   AND s.is_active = 1
                 """
@@ -963,8 +962,7 @@ class PaymentService:
                     (p.final_amount - COALESCE(p.paid_amount, 0)) as remaining
                 FROM purchases p
                 LEFT JOIN suppliers sup ON p.supplier_id = sup.id
-                WHERE p.status NOT IN ('مدفوعة', 'paid', 'ملغية', 'cancelled',
-                                        'مرتجعة', 'returned')
+                WHERE p.status NOT IN ('paid', 'cancelled', 'returned')
                   AND (p.final_amount - COALESCE(p.paid_amount, 0)) > 0
                   AND p.is_active = 1
                 """
@@ -1360,7 +1358,7 @@ class PaymentService:
                 for row in results:
                     # C3 FIX: استخدام أسماء الأعمدة بدلاً من الفهرس
                     payment_type = row.get("payment_type")
-                    transaction_count = int(row.get("transaction_count", 0))
+                    transaction_count = int(row.get("transaction_count", 0) or 0)
                     total_amount = Decimal(str(row.get("total_amount") or 0))
                     avg_amount = Decimal(str(row.get("avg_amount") or 0))
                     payment_method = row.get("payment_method")
@@ -1589,7 +1587,7 @@ class PaymentService:
             for row in results:
                 # C3 FIX: استخدام أسماء الأعمدة بدلاً من الفهرس
                 payment_type = row.get("payment_type")
-                transaction_count = int(row.get("transaction_count", 0))
+                transaction_count = int(row.get("transaction_count", 0) or 0)
                 total_amount = Decimal(str(row.get("total_amount") or 0))
                 avg_amount = Decimal(str(row.get("avg_amount") or 0))
                 min_amount = Decimal(str(row.get("min_amount") or 0))

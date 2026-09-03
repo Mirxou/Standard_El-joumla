@@ -58,65 +58,15 @@ def _fetch_all_helper(db_manager, query, params=()) -> List[Any]:
 
 def _execute_insert(db_manager, query, params=()) -> Optional[int]:
     """Safely execute insert query and return insert ID"""
-    if hasattr(db_manager, "execute_insert"):
-        try:
-            res = db_manager.execute_insert(query, params)
-            return res
-        except Exception as e:
-            raise e
-
-    if hasattr(db_manager, "get_last_insert_id"):
-        try:
-            if hasattr(db_manager, "execute_query"):
-                db_manager.execute_query(query, params)
-            elif hasattr(db_manager, "execute_non_query"):
-                db_manager.execute_non_query(query, params)
-
-            res_id = db_manager.get_last_insert_id()
-            return res_id
-        except Exception as e:
-            raise e
-
-    if hasattr(db_manager, "execute_query"):
-        try:
-            res = db_manager.execute_query(query, params)
-            if hasattr(res, "lastrowid"):
-                lri = res.lastrowid
-                return lri
-            return res
-        except Exception as e:
-            raise e
-
-    if hasattr(db_manager, "execute_non_query"):
-        try:
-            res = db_manager.execute_non_query(query, params)
-            return res
-        except Exception as e:
-            raise e
-
-    return 1
+    return db_manager.execute_insert(query, params)
 
 
 def _execute_non_query(db_manager, query, params=()) -> int:
     """Safely execute non-query statement and return row count or success code"""
-    if hasattr(db_manager, "execute_non_query"):
-        try:
-            res = db_manager.execute_non_query(query, params)
-            return res
-        except Exception as e:
-            raise e
-
-    if hasattr(db_manager, "execute_query"):
-        try:
-            res = db_manager.execute_query(query, params)
-            if hasattr(res, "rowcount"):
-                rc = res.rowcount
-                return rc
-            return res if isinstance(res, int) else 1
-        except Exception as e:
-            raise e
-
-    return 1
+    res = db_manager.execute_non_query(query, params)
+    if isinstance(res, dict):
+        return res.get('rowcount', 1) or 1
+    return res if isinstance(res, int) else 1
 
 
 def _log_error(logger, msg):

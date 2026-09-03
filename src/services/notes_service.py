@@ -28,7 +28,7 @@ class NotesService:
         is_pinned: bool = False,
     ) -> Dict[str, Any]:
         try:
-            self.db.execute_query(
+            note_id = self.db.execute_insert(
                 """
                 INSERT INTO invoice_notes (sale_id, note_text, created_by, is_internal, is_pinned)
                 VALUES (?, ?, ?, ?, ?)
@@ -41,7 +41,6 @@ class NotesService:
                     1 if is_pinned else 0,
                 ),
             )
-            note_id = self.db.get_last_insert_id()
             return {"success": True, "id": note_id}
         except Exception as e:
             logger.log(logging.ERROR, f"Failed to add note: {e}")
@@ -66,7 +65,7 @@ class NotesService:
 
     def pin_note(self, note_id: int, pinned: bool = True) -> bool:
         try:
-            self.db.execute_query(
+            self.db.execute_non_query(
                 "UPDATE invoice_notes SET is_pinned = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 (1 if pinned else 0, note_id),
             )
@@ -77,7 +76,7 @@ class NotesService:
 
     def delete_note(self, note_id: int) -> bool:
         try:
-            self.db.execute_query("DELETE FROM invoice_notes WHERE id = ?", (note_id,))
+            self.db.execute_non_query("DELETE FROM invoice_notes WHERE id = ?", (note_id,))
             return True
         except Exception as e:
             logger.log(logging.ERROR, f"Failed to delete note: {e}")

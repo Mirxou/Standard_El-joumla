@@ -41,9 +41,7 @@ class SecurityService:
         try:
             now = datetime.now()
             q = "INSERT INTO roles (name, permissions, created_at, updated_at) VALUES (?, ?, ?, ?)"
-            res = self.db.execute_query(q, (name, ",".join(permissions), now, now))
-            if isinstance(res, dict):
-                return res.get('lastrowid')
+            return self.db.execute_insert(q, (name, ",".join(permissions), now, now))
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في إنشاء الدور: {e}")
@@ -52,7 +50,7 @@ class SecurityService:
     def assign_role_to_user(self, user_id: int, role_id: int) -> bool:
         try:
             q = "INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)"
-            self.db.execute_query(q, (user_id, role_id, datetime.now()))
+            self.db.execute_insert(q, (user_id, role_id, datetime.now()))
             return True
         except Exception as e:
             if self.logger:
@@ -76,7 +74,7 @@ class SecurityService:
     def audit_log(self, actor: str, action: str, details: str = "") -> None:
         try:
             q = "INSERT INTO audit_logs (actor, action, details, created_at) VALUES (?, ?, ?, ?)"
-            self.db.execute_query(q, (actor, action, details, datetime.now()))
+            self.db.execute_insert(q, (actor, action, details, datetime.now()))
         except Exception as e:
             if self.logger:
                 self.logger.error(f"فشل تسجيل السجل التدقيقي: {e}")
@@ -88,7 +86,7 @@ class SecurityService:
         secret = pyotp.random_base32()
         now = datetime.now().isoformat()
         try:
-            self.db.execute_query(
+            self.db.execute_insert(
                 "REPLACE INTO user_2fa (user_id, secret, enabled_at) VALUES (?, ?, ?)",
                 (user_id, secret, now),
             )
@@ -170,7 +168,7 @@ class SecurityService:
         user_agent: Optional[str] = None,
     ) -> None:
         try:
-            self.db.execute_query(
+            self.db.execute_insert(
                 "INSERT INTO login_attempts (username, ip_address, user_agent, "
                 "success, created_at) VALUES (?, ?, ?, ?, ?)",
                 (

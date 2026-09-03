@@ -246,7 +246,7 @@ class NotificationChecker(QThread):
                 AND s.due_date <= ?
                 AND s.due_date >= date('now')
                 AND (s.paid_amount < s.total_amount)
-                AND s.status NOT IN ('ملغية','مرتجعة')
+                AND s.status NOT IN ('cancelled','returned')
                 AND s.is_deleted = 0
                 ORDER BY s.due_date
                 LIMIT 5

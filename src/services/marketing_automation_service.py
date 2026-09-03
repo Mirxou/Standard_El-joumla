@@ -45,7 +45,7 @@ class MarketingAutomationService:
         for idx, step in enumerate(steps):
             scheduled = base_date + timedelta(days=sum(s["delay_days"] for s in steps[: idx + 1]))
             q = """INSERT INTO automated_campaigns (campaign_name, customer_id, sequence_step, subject, content, scheduled_date) VALUES (?, ?, ?, ?, ?, ?)"""  # noqa: E501
-            self.db.execute_query(
+            self.db.execute_insert(
                 q,
                 (
                     campaign_name,
@@ -66,7 +66,7 @@ class MarketingAutomationService:
             # هنا مكان التكامل مع خدمة البريد الإلكتروني الفعلية
             # send_email(row['customer_id'], row['subject'], row['content'])
             uq = """UPDATE automated_campaigns SET sent=1, sent_at=CURRENT_TIMESTAMP WHERE id=?"""
-            self.db.execute_query(uq, (row["id"],))
+            self.db.execute_non_query(uq, (row["id"],))
             if self.logger:
                 self.logger.info(
                     f'تم إرسال رسالة حملة {row["campaign_name"]} للعميل {row["customer_id"]} (الخطوة {row["sequence_step"]})'  # noqa: E501

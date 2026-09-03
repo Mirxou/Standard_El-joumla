@@ -31,8 +31,8 @@ class WholesaleQuoteService:
             "id": product_data["id"],
             "name": product_data["name"],
             "sku": product_data.get("sku", ""),
-            "wholesale_price": float(product_data.get("wholesale_price", 0)),
-            "cost_price": float(product_data.get("cost_price", 0)),
+            "wholesale_price": float(product_data.get("wholesale_price", 0) or 0),
+            "cost_price": float(product_data.get("cost_price", 0) or 0),
             "quantity": quantity,
         }
         self._recalc_item(item)
@@ -193,7 +193,7 @@ class WholesaleQuoteService:
             (invoice_number, customer_name, total_amount, final_amount,
              payment_method, status, sale_date, created_at,
              paid_amount, remaining_amount, discount_amount, tax_amount)
-            VALUES (?, ?, ?, ?, 'نقدي', 'paid', DATE('now'), DATETIME('now'), ?, 0, 0, 0)
+            VALUES (?, ?, ?, ?, 'cash', 'paid', DATE('now'), DATETIME('now'), ?, 0, 0, 0)
         """
         try:
             sale_id = self.db.execute_update(

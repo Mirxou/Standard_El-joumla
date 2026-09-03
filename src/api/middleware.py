@@ -231,7 +231,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         # تسجيل في قاعدة البيانات (إذا كان متاحاً)
         if self.db_manager and user_id:
             try:
-                self.db_manager.execute_query(
+                self.db_manager.execute_non_query(
                     """
                     INSERT INTO api_logs
                     (method, path, ip_address, user_id, status_code, process_time, created_at)

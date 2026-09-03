@@ -475,7 +475,7 @@ class ShippingService:
                 provider_response,
             )
 
-            self.db_manager.execute_query(query, values)
+            self.db_manager.execute_insert(query, values)
             self.logger.info(f"✅ تم حفظ شحنة: {shipment_id}")
 
         except Exception as e:

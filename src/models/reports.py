@@ -36,7 +36,7 @@ class ReportManager:
             SELECT SUM(total_amount) as total_sales, SUM(paid_amount) as collected_cash
             FROM sales
             WHERE date(sale_date) BETWEEN date(?) AND date(?)
-            AND status IN ('CONFIRMED', 'PAID', 'PARTIALLY_PAID', 'مؤكدة', 'مدفوعة', 'مدفوعة جزئياً')
+            AND status IN ('confirmed', 'paid', 'partially_paid')
             """
             sales_result = self.db_manager.fetch_one(sales_query, (start_date, end_date))
             if sales_result:
@@ -58,7 +58,7 @@ class ReportManager:
             JOIN sales s ON si.sale_id = s.id
             JOIN products p ON si.product_id = p.id
             WHERE date(s.sale_date) BETWEEN date(?) AND date(?)
-            AND s.status IN ('CONFIRMED', 'PAID', 'PARTIALLY_PAID', 'مؤكدة', 'مدفوعة', 'مدفوعة جزئياً')
+            AND s.status IN ('confirmed', 'paid', 'partially_paid')
             """
             cogs_result = self.db_manager.fetch_one(cogs_query, (start_date, end_date))
             if cogs_result:
@@ -105,7 +105,7 @@ class ReportManager:
                    COUNT(id) as orders_count
             FROM sales
             WHERE date(sale_date) >= date(?)
-            AND status IN ('CONFIRMED', 'PAID', 'PARTIALLY_PAID', 'مؤكدة', 'مدفوعة', 'مدفوعة جزئياً')
+            AND status IN ('confirmed', 'paid', 'partially_paid')
             GROUP BY date(sale_date)
             ORDER BY day ASC
             """
@@ -129,7 +129,7 @@ class ReportManager:
             FROM sale_items si
             JOIN sales s ON si.sale_id = s.id
             JOIN products p ON si.product_id = p.id
-            WHERE s.status IN ('CONFIRMED', 'PAID', 'PARTIALLY_PAID', 'مؤكدة', 'مدفوعة', 'مدفوعة جزئياً')
+            WHERE s.status IN ('confirmed', 'paid', 'partially_paid')
             GROUP BY p.id
             ORDER BY profit DESC
             LIMIT ?

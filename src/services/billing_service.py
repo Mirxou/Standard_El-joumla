@@ -35,11 +35,7 @@ class BillingService:
             if due_days and isinstance(due_days, int) and due_days > 0:
                 due = now + timedelta(days=due_days)
             q = "INSERT INTO invoices (sale_id, customer_id, amount, status, issued_at, due_at) VALUES (?, ?, ?, ?, ?, ?)"  # noqa: E501
-            self.db.execute_query(q, (sale_id, customer_id, float(total), "unpaid", now, due))
-            try:
-                invoice_id = self.db.get_last_insert_id()
-            except Exception:
-                invoice_id = None
+            invoice_id = self.db.execute_insert(q, (sale_id, customer_id, float(total), "unpaid", now, due))
 
             if invoice_id:
                 if self.logger:
@@ -70,7 +66,7 @@ class BillingService:
             # Try invoice-oriented payments table first
             try:
                 q = "INSERT INTO payments (invoice_id, amount, method, reference, paid_at) VALUES (?, ?, ?, ?, ?)"
-                self.db.execute_query(q, (invoice_id, float(amount), method, reference, now))
+                self.db.execute_insert(q, (invoice_id, float(amount), method, reference, now))
             except Exception as e:
                 # Fallback to core payments schema (payment_type, entity_id,
                 # amount, payment_method, reference_number, payment_date, status,
@@ -95,7 +91,7 @@ class BillingService:
                         now,
                         now,
                     )
-                    self.db.execute_query(q2, params2)
+                    self.db.execute_insert(q2, params2)
                 else:
                     raise
             # Update invoice status — handle partial payments properly
@@ -113,7 +109,7 @@ class BillingService:
 
                     # Update paid_amount on the invoice
                     try:
-                        self.db.execute_query(
+                        self.db.execute_non_query(
                             "UPDATE invoices SET paid_amount = ? WHERE id = ?",
                             (new_paid, invoice_id),
                         )
@@ -121,12 +117,12 @@ class BillingService:
                         pass  # Column may not exist yet
 
                     if new_paid >= invoice_amount:
-                        self.db.execute_query(
+                        self.db.execute_non_query(
                             "UPDATE invoices SET status = ?, paid_at = ? WHERE id = ?",
                             ("paid", now, invoice_id),
                         )
                     elif new_paid > 0:
-                        self.db.execute_query(
+                        self.db.execute_non_query(
                             "UPDATE invoices SET status = ? WHERE id = ?",
                             ("partially_paid", invoice_id),
                         )
@@ -169,12 +165,12 @@ class BillingService:
             # sub_row: dict with keys (id, customer_id, amount, frequency_days)
             now = datetime.now()
             q = "INSERT INTO invoices (sale_id, customer_id, amount, status, issued_at) VALUES (?, ?, ?, ?, ?)"
-            res = self.db.execute_query(
+            res = self.db.execute_insert(
                 q, (None, sub_row.get('customer_id'),
                     float(sub_row.get('amount', 0)), "unpaid", now)
             )
-            if isinstance(res, dict):
-                return res.get('lastrowid')
+            if res is not None:
+                return res
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في توليد فاتورة للاشتراك: {e}")

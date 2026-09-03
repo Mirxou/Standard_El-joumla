@@ -199,7 +199,7 @@ class AnalyticsDashboardWindow(QMainWindow):
                     date = (  # noqa: F841
                         datetime.fromisoformat(item["date"]) if isinstance(item["date"], str) else item["date"]
                     )  # noqa: F841
-                    chart_data.append((idx, float(item["total_amount"])))
+                    chart_data.append((idx, float(item.get("total_amount") or 0)))
 
                 self.sales_trends_chart.clear()
                 self.sales_trends_chart.add_series("المبيعات", chart_data)

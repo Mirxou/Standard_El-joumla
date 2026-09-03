@@ -543,20 +543,14 @@ class PurchaseManager:
                     purchase.user_id,
                 )
 
-                # استخدام execute_query أولاً ثم execute_insert
+                # استخدام execute_insert للحصول على lastrowid مباشرة
                 purchase_id = None
                 try:
-                    result = self.db_manager.execute_query(
+                    purchase_id = self.db_manager.execute_insert(
                         query, params
                     )
-                    if result and hasattr(result, 'lastrowid'):
-                        purchase_id = result.lastrowid
-                except (AttributeError, TypeError):
-                    purchase_id = (
-                        self.db_manager.execute_insert(
-                            query, params
-                        )
-                    )
+                except Exception:
+                    purchase_id = None
 
                 if purchase_id:
                     purchase.id = purchase_id
@@ -670,12 +664,9 @@ class PurchaseManager:
             item.notes,
         )
         try:
-            result = self.db_manager.execute_query(
+            return self.db_manager.execute_insert(
                 query, params
             )
-            if result and hasattr(result, 'lastrowid'):
-                return result.lastrowid
-            return None
         except Exception:
             return None
 
@@ -791,14 +782,14 @@ class PurchaseManager:
                 id=row[0] if len(row) > 0 else None,
                 invoice_number=row[1] if len(row) > 1 else "",
                 supplier_id=row[2] if len(row) > 2 else 0,
-                total_amount=Decimal(str(row[3] if len(row) > 3 else 0)),
+                total_amount=Decimal(str(row[3] or 0 if len(row) > 3 else 0)),
                 purchase_date=self._parse_date(row[6] if len(row) > 6 else None),
                 user_id=row[7] if len(row) > 7 else None,
                 notes=row[8] if len(row) > 8 else None,
                 status=row[15] if len(row) > 15 else PurchaseStatus.PENDING.value,
                 payment_status=row[16] if len(row) > 16 else PaymentStatus.UNPAID.value,
-                paid_amount=Decimal(str(row[21] if len(row) > 21 else 0)),
-                remaining_amount=Decimal(str(row[22] if len(row) > 22 else 0)),
+                paid_amount=Decimal(str(row[21] or 0 if len(row) > 21 else 0)),
+                remaining_amount=Decimal(str(row[22] or 0 if len(row) > 22 else 0)),
                 created_at=self._parse_datetime(row[10] if len(row) > 10 else None),
                 updated_at=self._parse_datetime(row[11] if len(row) > 11 else None),
             )
@@ -870,9 +861,9 @@ class PurchaseManager:
             id=row[0] if len(row) > 0 else None,
             purchase_id=row[1] if len(row) > 1 else None,
             product_id=row[2] if len(row) > 2 else 0,
-            quantity_ordered=Decimal(str(row[3] if len(row) > 3 else 0)),
-            unit_cost=Decimal(str(row[4] if len(row) > 4 else 0)),
-            total_amount=Decimal(str(row[5] if len(row) > 5 else 0)),
+            quantity_ordered=Decimal(str(row[3] or 0 if len(row) > 3 else 0)),
+            unit_cost=Decimal(str(row[4] or 0 if len(row) > 4 else 0)),
+            total_amount=Decimal(str(row[5] or 0 if len(row) > 5 else 0)),
             expiry_date=self._parse_date(row[6] if len(row) > 6 else None),
             batch_number=row[7] if len(row) > 7 else None,
         )
@@ -994,15 +985,7 @@ class PurchaseManager:
                 purchase.user_id,
                 purchase.id,
             )
-            # استخدام execute_query أولاً ثم execute_non_query
-            try:
-                self.db_manager.execute_query(
-                    query, params
-                )
-            except (AttributeError, TypeError):
-                self.db_manager.execute_non_query(
-                    query, params
-                )
+            self.db_manager.execute_non_query(query, params)
 
             # تحديث عناصر المشتريات
             for item in purchase.items:

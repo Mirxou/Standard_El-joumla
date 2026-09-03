@@ -145,17 +145,9 @@ class ProductManager:
     def _execute_non_query(self, query: str, params: tuple = ()) -> int:
         """تنفيذ استعلام غير استعلامي (INSERT/UPDATE/DELETE)"""
         try:
-            if hasattr(self.db_manager, "execute_non_query"):
-                return self.db_manager.execute_non_query(query, params)
-        except Exception:
-            pass
-        # fallback: execute_query + rowcount
-        try:
-            res = self.db_manager.execute_query(query, params)
-            if hasattr(res, "rowcount"):
-                val = res.rowcount
-                if isinstance(val, int):
-                    return val
+            res = self.db_manager.execute_non_query(query, params)
+            if isinstance(res, dict):
+                return res.get('rowcount', 1) or 1
             if isinstance(res, int):
                 return res
             return 1

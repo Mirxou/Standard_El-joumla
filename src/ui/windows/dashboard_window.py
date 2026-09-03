@@ -913,7 +913,7 @@ class LowStockDialog(QDialog):
             self.table.setItem(row, 1, barcode_item)
 
             # المخزون الحالي
-            current_stock = float(product.get("current_stock", 0))
+            current_stock = float(product.get("current_stock", 0) or 0)
             stock_item = QTableWidgetItem(f"{current_stock:,.0f}")
             if current_stock == 0:
                 stock_item.setForeground(QColor("#F44336"))  # أحمر للنفاد
@@ -922,7 +922,7 @@ class LowStockDialog(QDialog):
             self.table.setItem(row, 2, stock_item)
 
             # الحد الأدنى
-            min_stock = float(product.get("min_stock", 0))
+            min_stock = float(product.get("min_stock", 0) or 0)
             min_item = QTableWidgetItem(f"{min_stock:,.0f}")
             self.table.setItem(row, 3, min_item)
 
@@ -936,12 +936,12 @@ class LowStockDialog(QDialog):
             self.table.setItem(row, 4, status_item)
 
             # سعر التكلفة
-            cost = float(product.get("cost_price", 0))
+            cost = float(product.get("cost_price", 0) or 0)
             cost_item = QTableWidgetItem(f"{cost:,.2f} د.ج")
             self.table.setItem(row, 5, cost_item)
 
             # سعر البيع
-            selling = float(product.get("selling_price", 0))
+            selling = float(product.get("selling_price", 0) or 0)
             selling_item = QTableWidgetItem(f"{selling:,.2f} د.ج")
             self.table.setItem(row, 6, selling_item)
 
@@ -965,9 +965,9 @@ class LowStockDialog(QDialog):
                     "id": product.get("id"),
                     "name": product.get("name"),
                     "barcode": product.get("barcode", ""),
-                    "min_stock": float(product.get("min_stock", 0)),
-                    "current_stock": float(product.get("current_stock", 0)),
-                    "cost_price": float(product.get("cost_price", 0)),
+                    "min_stock": float(product.get("min_stock", 0) or 0),
+                    "current_stock": float(product.get("current_stock", 0) or 0),
+                    "cost_price": float(product.get("cost_price", 0) or 0),
                 }
             )
 

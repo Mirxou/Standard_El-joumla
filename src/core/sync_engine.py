@@ -275,7 +275,7 @@ class SyncEngine:
                         last_synced_at = CURRENT_TIMESTAMP
                     WHERE sync_settings_id = ? AND entity_type = ? AND entity_id = ?
                 """
-                self.db_manager.execute_query(
+                self.db_manager.execute_non_query(
                     query,
                     (
                         local_version,
@@ -296,7 +296,7 @@ class SyncEngine:
                         local_hash, remote_hash, last_synced_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 """
-                self.db_manager.execute_query(
+                self.db_manager.execute_insert(
                     query,
                     (
                         sync_settings_id,

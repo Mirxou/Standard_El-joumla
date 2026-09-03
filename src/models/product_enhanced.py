@@ -494,9 +494,8 @@ class ProductVariantManager:
                 now,
             )
 
-            self.db_manager.execute_query(query, params)
+            variant_id = self.db_manager.execute_insert(query, params)
             try:
-                variant_id = self.db_manager.get_last_insert_id()
                 if variant_id and self.logger:
                     self.logger.info(f"تم إنشاء متغير منتج جديد - SKU: {variant.sku} (ID: {variant_id})")
                 return variant_id
@@ -586,9 +585,8 @@ class BundleProductManager:
                 float(bundle_item.unit_price),
             )
 
-            self.db_manager.execute_query(query, params)
+            item_id = self.db_manager.execute_insert(query, params)
             try:
-                item_id = self.db_manager.get_last_insert_id()
                 if item_id and self.logger:
                     self.logger.info(f"تم إضافة منتج إلى حزمة - ID: {item_id}")
                 return item_id
@@ -630,9 +628,8 @@ class ProductLabelManager:
                 label.is_active,
             )
 
-            self.db_manager.execute_query(query, params)
+            label_id = self.db_manager.execute_insert(query, params)
             try:
-                label_id = self.db_manager.get_last_insert_id()
                 if label_id and self.logger:
                     self.logger.info(f"تم إضافة علامة للمنتج - ID: {label_id}")
                 return label_id

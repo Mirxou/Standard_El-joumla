@@ -237,7 +237,7 @@ class PricingService:
             total_purchases = Decimal(str(customer["total_purchases"]))
             new_tier = self.calculate_pricing_tier(total_purchases)
 
-            self.db_manager.execute_query(
+            self.db_manager.execute_non_query(
                 "UPDATE customers SET pricing_tier = ? WHERE id = ?",
                 (new_tier, customer_id),
             )
@@ -264,11 +264,10 @@ class PricingService:
     def create_price_list(self, name: str, description: Optional[str] = None) -> Optional[int]:
         """إنشاء قائمة أسعار جديدة"""
         try:
-            result = self.db_manager.execute_query(
+            return self.db_manager.execute_insert(
                 """INSERT INTO price_lists (name, description) VALUES (?, ?)""",
                 (name, description),
             )
-            return result.lastrowid if result else None
 
         except Exception as e:
             self.logger.error(f"خطأ في إنشاء قائمة الأسعار: {str(e)}")
@@ -283,7 +282,7 @@ class PricingService:
     ) -> bool:
         """إضافة عنصر إلى قائمة الأسعار"""
         try:
-            self.db_manager.execute_query(
+            self.db_manager.execute_insert(
                 """INSERT INTO price_list_items
                    (price_list_id, product_id, custom_price, discount_percentage)
                    VALUES (?, ?, ?, ?)""",

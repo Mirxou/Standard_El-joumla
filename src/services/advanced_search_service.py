@@ -449,8 +449,8 @@ class AdvancedSearchService:
     def delete_filter(self, filter_id: int) -> bool:
         """حذف فلتر"""
         sql = "DELETE FROM saved_filters WHERE id = ?"
-        result = self.db.execute_query(sql, (filter_id,))
-        return (result.get('rowcount', 0) > 0) if isinstance(result, dict) else bool(result)
+        result = self.db.execute_non_query(sql, (filter_id,))
+        return result > 0
 
     # ==================== Helper Methods ====================
     def get_available_fields(self, entity: SearchEntity) -> List[Dict[str, str]]:

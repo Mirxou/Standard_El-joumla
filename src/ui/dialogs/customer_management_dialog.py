@@ -244,7 +244,7 @@ class CustomerManagementDialog(BaseDialog):
                     return
 
             # Soft-delete: تعطيل العميل بدلاً من حذفه
-            self.db_manager.execute_query(
+            self.db_manager.execute_non_query(
                 "UPDATE customers SET is_active = 0 WHERE id = ?", (customer_id,)
             )
             self.load_customers()

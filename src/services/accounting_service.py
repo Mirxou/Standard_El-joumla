@@ -237,7 +237,7 @@ class AccountingService:
                 debit = Decimal(str(line.get("debit_amount", 0) or 0))
                 credit = Decimal(str(line.get("credit_amount", 0) or 0))
                 diff = debit - credit
-                self.db.execute_query(
+                self.db.execute_non_query(
                     "UPDATE chart_of_accounts SET current_balance = current_balance + ? WHERE id = ?",
                     (float(diff), aid),
                 )
@@ -428,7 +428,7 @@ class AccountingService:
                 float(account.current_balance),
                 account.id,
             )
-            self.db.execute_query(query, params)
+            self.db.execute_non_query(query, params)
             # H3 FIX: إزالة الكود القديم من code_index قبل إضافة الجديد
             # (إذا تم تغيير account_code)
             for code, acc in list(self.coa.code_index.items()):
@@ -455,7 +455,7 @@ class AccountingService:
                 raise ValueError(f"لا يمكن حذف حساب مرتبط بـ {count} سطر قيد. قم بتعطيله بدلاً من ذلك.")
 
             # حذف من قاعدة البيانات
-            self.db.execute_query(
+            self.db.execute_non_query(
                 "DELETE FROM chart_of_accounts WHERE id = ?",
                 (account_id,),
             )
@@ -483,7 +483,7 @@ class AccountingService:
             if is_posted:
                 raise ValueError("هذا القيد مرحل مسبقاً")
 
-            self.db.execute_query(
+            self.db.execute_non_query(
                 "UPDATE general_journal SET is_posted = 1 WHERE id = ?",
                 (journal_id,),
             )

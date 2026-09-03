@@ -118,10 +118,10 @@ class CacheStatsPanel(QWidget):
     def _current_selected_cache(self) -> str:
         rows = self.caches_table.selectionModel().selectedRows() if self.caches_table.selectionModel() else []
         if rows:
-            return self.caches_table.item(rows[0].row(), 0).text()
+            item = self.caches_table.item(rows[0].row(), 0); return item.text() if item else ""
         # افتراضي: أول ذاكرة
         if self.caches_table.rowCount() > 0:
-            return self.caches_table.item(0, 0).text()
+            item = self.caches_table.item(0, 0); return item.text() if item else ""
         return ""
 
     def _update_top_items(self):

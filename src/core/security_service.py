@@ -308,7 +308,7 @@ class AdvancedSecurityService:
         # حفظ في قاعدة البيانات (إذا كانت متاحة)
         if self.db:
             try:
-                self.db.execute_query(
+                self.db.execute_insert(
                     """
                     INSERT INTO user_sessions
                     (session_token, user_id, username, created_at, expires_at, ip_address, user_agent)
@@ -398,7 +398,7 @@ class AdvancedSecurityService:
         # تحديث في قاعدة البيانات
         if self.db:
             try:
-                self.db.execute_query(
+                self.db.execute_non_query(
                     "UPDATE user_sessions SET is_active = 0, ended_at = ? WHERE session_token = ?",
                     (datetime.now().isoformat(), session_token),
                 )
@@ -429,12 +429,12 @@ class AdvancedSecurityService:
         # تحديث في قاعدة البيانات
         if self.db:
             try:
-                cursor = self.db.execute_query(
+                result = self.db.execute_non_query(
                     "UPDATE user_sessions SET is_active = 0, ended_at = ? WHERE user_id = ? AND is_active = 1",
                     (datetime.now().isoformat(), user_id),
                 )
-                if cursor and hasattr(cursor, "rowcount"):
-                    count = max(count, cursor.rowcount)
+                if isinstance(result, dict):
+                    count = max(count, result.get("rowcount", 0))
             except Exception:
                 logging.getLogger(__name__).warning("Ignored exception in security_service.py")
 
@@ -525,7 +525,7 @@ class AdvancedSecurityService:
             return
 
         try:
-            self.db.execute_query(
+            self.db.execute_insert(
                 """
                 INSERT INTO security_audit_log
                 (event_type, user_id, username, description, ip_address, severity, created_at)

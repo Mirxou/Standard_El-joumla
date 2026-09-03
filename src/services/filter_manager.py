@@ -83,10 +83,8 @@ class FilterManager:
         ]
 
         try:
-            self.db.execute_query(query, params)
-            # Get last inserted ID
-            result = self.db.execute_query("SELECT last_insert_rowid() as id")
-            return int(result[0]["id"]) if result else 0
+            filter_id = self.db.execute_insert(query, params)
+            return int(filter_id) if filter_id else 0
         except Exception as e:
             print(f"Error saving filter: {e}")
             return 0
@@ -108,7 +106,7 @@ class FilterManager:
         ]
 
         try:
-            self.db.execute_query(query, params)
+            self.db.execute_non_query(query, params)
             return True
         except Exception as e:
             print(f"Error updating filter: {e}")
@@ -118,7 +116,7 @@ class FilterManager:
         """حذف فلتر"""
         query = "DELETE FROM saved_filters WHERE id = ?"
         try:
-            self.db.execute_query(query, [filter_id])
+            self.db.execute_non_query(query, [filter_id])
             return True
         except Exception:
             return False
@@ -198,7 +196,7 @@ class FilterManager:
             WHERE id = ?
         """
         try:
-            self.db.execute_query(query, [filter_id])
+            self.db.execute_non_query(query, [filter_id])
             return True
         except Exception:
             return False

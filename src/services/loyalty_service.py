@@ -130,7 +130,7 @@ class LoyaltySystem:
         points = int(purchase_amount * self.POINTS_PER_CURRENCY)
 
         # تحديث الرصيد
-        self.db.execute_query(
+        self.db.execute_insert(
             """
             INSERT INTO loyalty_balance (customer_id, total_points, lifetime_points)
             VALUES (?, ?, ?)
@@ -143,7 +143,7 @@ class LoyaltySystem:
         )
 
         # تسجيل المعاملة
-        self.db.execute_query(
+        self.db.execute_insert(
             """
             INSERT INTO loyalty_transactions
             (customer_id, points, transaction_type, order_id, notes)
@@ -188,7 +188,7 @@ class LoyaltySystem:
         discount_amount = points * self.REDEMPTION_RATE
 
         # خصم النقاط
-        self.db.execute_query(
+        self.db.execute_non_query(
             """
             UPDATE loyalty_balance
             SET total_points = total_points - ?,
@@ -199,7 +199,7 @@ class LoyaltySystem:
         )
 
         # تسجيل المعاملة
-        self.db.execute_query(
+        self.db.execute_insert(
             """
             INSERT INTO loyalty_transactions
             (customer_id, points, transaction_type, order_id, notes)
@@ -294,7 +294,7 @@ class LoyaltySystem:
                 break
 
         # تحديث في قاعدة البيانات
-        result = self.db.execute_query(  # noqa: F841
+        self.db.execute_non_query(
             """
             UPDATE loyalty_balance
             SET tier = ?,
@@ -321,7 +321,7 @@ class LoyaltySystem:
         valid_from = datetime.now().strftime("%Y-%m-%d")
         valid_to = (datetime.now() + timedelta(days=valid_days)).strftime("%Y-%m-%d")
 
-        self.db.execute_query(
+        self.db.execute_insert(
             """
             INSERT INTO loyalty_offers
             (title, description, tier_required, discount_percentage, points_required, valid_from, valid_to)

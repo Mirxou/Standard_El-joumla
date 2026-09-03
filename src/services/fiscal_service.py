@@ -39,13 +39,13 @@ class FiscalService:
         try:
             if tap_rate is not None:
                 self.tap_rate = tap_rate
-                self.db.execute_query(
+                self.db.execute_insert(
                     "INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)",
                     ("fiscal_tap_rate", str(tap_rate)),
                 )
             if timbre_rate is not None:
                 self.timbre_rate = timbre_rate
-                self.db.execute_query(
+                self.db.execute_insert(
                     "INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)",
                     ("fiscal_timbre_rate", str(timbre_rate)),
                 )
@@ -70,8 +70,8 @@ class FiscalService:
             (start_date, end_date),
         )
 
-        total_turnover = sum(float(row.get('total_amount', 0)) for row in sales)
-        total_vat_collected = sum(float(row.get('tax_amount', 0)) for row in sales)
+        total_turnover = sum(float(row.get('total_amount', 0) or 0) for row in sales)
+        total_vat_collected = sum(float(row.get('tax_amount', 0) or 0) for row in sales)
 
         # Algerian Tax Rules (2025)
         # TAP & Timbre rates are configurable via settings or constructor

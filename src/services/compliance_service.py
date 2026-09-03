@@ -286,9 +286,8 @@ class ComplianceService:
                 datetime.now().isoformat(),
             )
 
-            result = self.db_manager.execute_query(query, values)
-            if result:
-                log_id = result.lastrowid
+            log_id = self.db_manager.execute_insert(query, values)
+            if log_id:
                 self.logger.debug(f"✅ تم تسجيل حدث تدقيق: {action} على {entity_type} (ID: {log_id})")
                 return log_id
 
@@ -388,9 +387,8 @@ class ComplianceService:
                 rule.created_by,
             )
 
-            result = self.db_manager.execute_query(query, values)
-            if result:
-                rule_id = result.lastrowid
+            rule_id = self.db_manager.execute_insert(query, values)
+            if rule_id:
                 self.logger.info(f"✅ تم إنشاء قاعدة امتثال: {rule.name} (ID: {rule_id})")
                 return rule_id
 
@@ -469,8 +467,8 @@ class ComplianceService:
                 query += " AND company_id = ?"
                 params.append(company_id)
 
-            result = self.db_manager.execute_query(query, tuple(params))
-            if result and (hasattr(result, "rowcount") and result.rowcount > 0 or not hasattr(result, "rowcount")):
+            result = self.db_manager.execute_non_query(query, tuple(params))
+            if result > 0:
                 self.logger.info(f"✅ تم تحديث قاعدة امتثال: {rule.name} (ID: {rule.id})")
                 return True
 
@@ -492,8 +490,8 @@ class ComplianceService:
                 query += " AND company_id = ?"
                 params.append(company_id)
 
-            result = self.db_manager.execute_query(query, tuple(params))
-            if result and (hasattr(result, "rowcount") and result.rowcount > 0 or not hasattr(result, "rowcount")):
+            result = self.db_manager.execute_non_query(query, tuple(params))
+            if result > 0:
                 self.logger.info(f"✅ تم حذف قاعدة امتثال: ID={rule_id}")
                 return True
 
@@ -816,11 +814,7 @@ class ComplianceService:
                 check.checked_by,
             )
 
-            result = self.db_manager.execute_query(query, values)
-            if result:
-                return result.lastrowid
-
-            return None
+            return self.db_manager.execute_insert(query, values)
 
         except Exception as e:
             self.logger.error(f"❌ خطأ في حفظ فحص امتثال: {e}", exc_info=True)

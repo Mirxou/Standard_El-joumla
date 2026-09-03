@@ -191,44 +191,7 @@ class UserManager:
                 user.created_by,
             )
 
-            user_id = None
-
-            # محاولة الإدخال عبر الطرق المختلفة لقاعدة البيانات
-            if hasattr(self.db_manager, "execute_insert"):
-                try:
-                    res = self.db_manager.execute_insert(query, params)
-                    if res is not None:
-                        user_id = res
-                except Exception:
-                    pass
-
-            if user_id is None and hasattr(self.db_manager, "execute_non_query"):
-                try:
-                    res_non = self.db_manager.execute_non_query(query, params)
-                    if res_non == 0:
-                        if self.logger:
-                            self.logger.error("Failed to insert user (0 rows affected)")
-                        return None
-                    if hasattr(self.db_manager, "get_last_insert_id"):
-                        user_id = self.db_manager.get_last_insert_id()
-                except Exception:
-                    pass
-
-            if user_id is None:
-                try:
-                    res_q = self.db_manager.execute_query(query, params)
-                    if res_q is not None:
-                        if hasattr(res_q, "lastrowid") and res_q.lastrowid:
-                            user_id = res_q.lastrowid
-                        elif hasattr(res_q, "last_insert_id") and res_q.last_insert_id:
-                            user_id = res_q.last_insert_id
-                        elif isinstance(res_q, int):
-                            user_id = res_q
-                except Exception:
-                    pass
-
-            if user_id is None and hasattr(self.db_manager, "get_last_insert_id"):
-                user_id = self.db_manager.get_last_insert_id()
+            user_id = self.db_manager.execute_insert(query, params)
 
             if not user_id:
                 if self.logger:
@@ -331,13 +294,11 @@ class UserManager:
                 user.notes,
                 user.id,
             )
-            res = self.db_manager.execute_query(query, params)
+            res = self.db_manager.execute_non_query(query, params)
             if res is None:
                 return False
-            rowcount = getattr(res, "rowcount", 1)
-            if not isinstance(rowcount, int):
-                rowcount = 1
-            if rowcount > 0 or res:
+            rowcount = res.get('rowcount', 1) if isinstance(res, dict) else 1
+            if rowcount > 0:
                 self._save_user_permissions(user.id, user.permissions)
                 return True
             return False
@@ -350,13 +311,11 @@ class UserManager:
         try:
             if not self._save_user_permissions(user_id, set()):
                 return False
-            res = self.db_manager.execute_query("DELETE FROM users WHERE id = ?", (user_id,))
+            res = self.db_manager.execute_non_query("DELETE FROM users WHERE id = ?", (user_id,))
             if res is None:
                 return False
-            rowcount = getattr(res, "rowcount", 1)
-            if not isinstance(rowcount, int):
-                rowcount = 1
-            return rowcount > 0 or bool(res)
+            rowcount = res.get('rowcount', 1) if isinstance(res, dict) else 1
+            return rowcount > 0
         except Exception as e:
             if self.logger:
                 self.logger.error(f"Error deleting user: {e}")
@@ -381,11 +340,9 @@ class UserManager:
             WHERE id = ?
             """
             params = (new_hash, new_salt, now, user_id)
-            res = self.db_manager.execute_query(query, params)
-            rowcount = getattr(res, "rowcount", 1)
-            if not isinstance(rowcount, int):
-                rowcount = 1
-            if rowcount > 0 or res:
+            res = self.db_manager.execute_non_query(query, params)
+            rowcount = res.get('rowcount', 1) if isinstance(res, dict) else 1
+            if rowcount > 0:
                 if self.logger:
                     self.logger.info(f"Changed password for user {user_id}")
                 return True
@@ -409,11 +366,9 @@ class UserManager:
             WHERE id = ?
             """
             params = (new_hash, new_salt, now, user_id)
-            res = self.db_manager.execute_query(query, params)
-            rowcount = getattr(res, "rowcount", 1)
-            if not isinstance(rowcount, int):
-                rowcount = 1
-            return rowcount > 0 or bool(res)
+            res = self.db_manager.execute_non_query(query, params)
+            rowcount = res.get('rowcount', 1) if isinstance(res, dict) else 1
+            return rowcount > 0
         except Exception as e:
             if self.logger:
                 self.logger.error(f"Error resetting password: {e}")
@@ -427,11 +382,9 @@ class UserManager:
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """
-            res = self.db_manager.execute_query(query, (user_id,))
-            rowcount = getattr(res, "rowcount", 1)
-            if not isinstance(rowcount, int):
-                rowcount = 1
-            return rowcount > 0 or bool(res)
+            res = self.db_manager.execute_non_query(query, (user_id,))
+            rowcount = res.get('rowcount', 1) if isinstance(res, dict) else 1
+            return rowcount > 0
         except Exception as e:
             if self.logger:
                 self.logger.error(f"Error unlocking user: {e}")
@@ -468,7 +421,7 @@ class UserManager:
         """تحديث وقت آخر دخول"""
         try:
             val = timestamp or datetime.now()
-            self.db_manager.execute_query(
+            self.db_manager.execute_non_query(
                 "UPDATE users SET last_login = ? WHERE id = ?",
                 (val.isoformat() if hasattr(val, "isoformat") else val, user_id),
             )
@@ -486,7 +439,7 @@ class UserManager:
         try:
             self.db_manager.execute_non_query("DELETE FROM user_permissions WHERE user_id = ?", (user_id,))
             for perm in permissions:
-                self.db_manager.execute_query(
+                self.db_manager.execute_insert(
                     "INSERT INTO user_permissions (user_id, permission) VALUES (?, ?)",
                     (user_id, perm),
                 )
@@ -509,7 +462,7 @@ class UserManager:
     def _update_failed_attempts(self, user_id: int, attempts: int, locked: bool):
         try:
             query = "UPDATE users SET failed_login_attempts = ?, is_locked = ? WHERE id = ?"
-            self.db_manager.execute_query(query, (attempts, 1 if locked else 0, user_id))
+            self.db_manager.execute_non_query(query, (attempts, 1 if locked else 0, user_id))
         except Exception as e:
             if self.logger:
                 self.logger.error(f"Error updating failed attempts: {e}")

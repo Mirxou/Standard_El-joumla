@@ -157,9 +157,8 @@ class ScheduledReportsService:
                 report.created_by,
             )
 
-            result = self.db_manager.execute_query(query, values)
-            if result:
-                report_id = result.lastrowid
+            report_id = self.db_manager.execute_insert(query, values)
+            if report_id:
                 self.logger.info(f"✅ تم إنشاء تقرير مجدول: {report.name} (ID: {report_id})")
                 return report_id
 
@@ -247,8 +246,8 @@ class ScheduledReportsService:
                 query += " AND company_id = ?"
                 params.append(company_id)
 
-            result = self.db_manager.execute_query(query, tuple(params))
-            if result and (hasattr(result, "rowcount") and result.rowcount > 0 or not hasattr(result, "rowcount")):
+            result = self.db_manager.execute_non_query(query, tuple(params))
+            if result > 0:
                 self.logger.info(f"✅ تم تحديث تقرير مجدول: {report.name} (ID: {report.id})")
                 return True
 
@@ -270,8 +269,8 @@ class ScheduledReportsService:
                 query += " AND company_id = ?"
                 params.append(company_id)
 
-            result = self.db_manager.execute_query(query, tuple(params))
-            if result and (hasattr(result, "rowcount") and result.rowcount > 0 or not hasattr(result, "rowcount")):
+            result = self.db_manager.execute_non_query(query, tuple(params))
+            if result > 0:
                 self.logger.info(f"✅ تم حذف تقرير مجدول: ID={report_id}")
                 return True
 
@@ -520,7 +519,7 @@ class ScheduledReportsService:
                 WHERE id = ?
             """
 
-            self.db_manager.execute_query(
+            self.db_manager.execute_non_query(
                 query,
                 (
                     now.isoformat(),

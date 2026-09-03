@@ -61,8 +61,7 @@ class RecurringInvoiceService:
             description,
             next_date,
         )
-        res = self.db.execute_query(q, params)
-        return res.get('lastrowid') if isinstance(res, dict) else None
+        return self.db.execute_insert(q, params)
 
     def get_active_subscriptions(self) -> List[Dict[str, Any]]:
         q = """SELECT * FROM recurring_invoices WHERE is_active = 1 AND (end_date IS NULL OR end_date >= DATE('now'))"""
@@ -107,8 +106,8 @@ class RecurringInvoiceService:
                     invoice_number, customer_id, total_amount, discount_amount,
                     final_amount, payment_method, status, paid_amount,
                     remaining_amount, sale_date, notes, created_at, updated_at
-                ) VALUES (?, ?, ?, 0, ?, 'نقدي', 'pending', 0, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"""  # noqa: E501
-                self.db.execute_query(
+                ) VALUES (?, ?, ?, 0, ?, 'cash', 'pending', 0, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"""  # noqa: E501
+                self.db.execute_insert(
                     q,
                     (
                         invoice_number,
@@ -123,7 +122,7 @@ class RecurringInvoiceService:
                 # تحديث الاشتراك
                 new_next = self._calc_next_date(next_date, sub["frequency"])
                 uq = """UPDATE recurring_invoices SET last_invoice_date=?, next_invoice_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=?"""  # noqa: E501
-                self.db.execute_query(uq, (today, new_next, sub["id"]))
+                self.db.execute_non_query(uq, (today, new_next, sub["id"]))
                 if self.logger:
                     self.logger.info(
                         f'تم إنشاء فاتورة دورية {invoice_number}'

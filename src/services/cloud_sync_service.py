@@ -119,9 +119,8 @@ class CloudSyncService:
                 settings.created_by,
             )
 
-            result = self.db_manager.execute_query(query, values)
-            if result:
-                settings_id = result.lastrowid
+            settings_id = self.db_manager.execute_insert(query, values)
+            if settings_id:
                 self.logger.info(f"✅ تم إنشاء إعدادات مزامنة: {settings.name} (ID: {settings_id})")
                 return settings_id
 
@@ -217,8 +216,8 @@ class CloudSyncService:
                 query += " AND company_id = ?"
                 params.append(company_id)
 
-            result = self.db_manager.execute_query(query, tuple(params))
-            if result and (hasattr(result, "rowcount") and result.rowcount > 0 or not hasattr(result, "rowcount")):
+            result = self.db_manager.execute_non_query(query, tuple(params))
+            if result > 0:
                 self.logger.info(f"✅ تم تحديث إعدادات المزامنة: {settings.name} (ID: {settings.id})")
                 return True
 
@@ -240,9 +239,9 @@ class CloudSyncService:
                 query += " AND company_id = ?"
                 params.append(company_id)
 
-            result = self.db_manager.execute_query(query, tuple(params))
+            result = self.db_manager.execute_non_query(query, tuple(params))
 
-            if result and (hasattr(result, "rowcount") and result.rowcount > 0 or not hasattr(result, "rowcount")):
+            if result > 0:
                 self.logger.info(f"✅ تم حذف إعدادات المزامنة: ID={settings_id}")
                 return True
 
@@ -632,7 +631,7 @@ class CloudSyncService:
                 result.data_size_bytes,
             )
 
-            self.db_manager.execute_query(query, values)
+            self.db_manager.execute_insert(query, values)
 
         except Exception as e:
             self.logger.error(f"❌ خطأ في تسجيل المزامنة: {e}", exc_info=True)
@@ -645,7 +644,7 @@ class CloudSyncService:
                 SET last_sync_at = CURRENT_TIMESTAMP
                 WHERE id = ?
             """
-            self.db_manager.execute_query(query, (settings_id,))
+            self.db_manager.execute_non_query(query, (settings_id,))
         except Exception as e:
             self.logger.error(f"❌ خطأ في تحديث آخر مزامنة: {e}", exc_info=True)
 

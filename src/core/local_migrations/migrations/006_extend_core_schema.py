@@ -32,7 +32,7 @@ def upgrade(db):
         ("city", "TEXT"),
         ("country", "TEXT DEFAULT 'الجزائر'"),
         ("commercial_register", "TEXT"),
-        ("payment_terms", "TEXT DEFAULT 'نقدي'"),
+        ("payment_terms", "TEXT DEFAULT 'cash'"),
         ("credit_limit", "REAL DEFAULT 0.0"),
         ("current_balance", "REAL DEFAULT 0.0"),
     ]

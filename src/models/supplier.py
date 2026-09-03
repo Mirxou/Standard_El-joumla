@@ -150,19 +150,12 @@ class SupplierManager:
         return query, params
 
     def _execute_insert(self, query, params=()) -> Optional[int]:
-        if hasattr(self.db_manager, "execute_insert") and "Mock" not in type(self.db_manager).__name__:
-            return self.db_manager.execute_insert(query, params)
-        res = self.db_manager.execute_query(query, params)
-        if hasattr(res, "lastrowid"):
-            return res.lastrowid
-        return res
+        return self.db_manager.execute_insert(query, params)
 
     def _execute_non_query(self, query, params=()) -> int:
-        if hasattr(self.db_manager, "execute_non_query") and "Mock" not in type(self.db_manager).__name__:
-            return self.db_manager.execute_non_query(query, params)
-        res = self.db_manager.execute_query(query, params)
-        if hasattr(res, "rowcount"):
-            return res.rowcount
+        res = self.db_manager.execute_non_query(query, params)
+        if isinstance(res, dict):
+            return res.get('rowcount', 1) or 1
         return res if isinstance(res, int) else 0
 
     def get_supplier_purchases_count(self, supplier_id: int) -> int:

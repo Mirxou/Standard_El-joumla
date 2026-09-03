@@ -2304,10 +2304,10 @@ class MainWindow(QMainWindow):
                 (SELECT COALESCE(SUM(selling_price * current_stock), 0) FROM products WHERE COALESCE(is_active, 1) = 1) as total_stock_value,  # noqa: E501
                 (SELECT COUNT(*) FROM products WHERE current_stock < min_stock AND current_stock > 0 AND COALESCE(is_active, 1) = 1) as low_stock_items,  # noqa: E501
                 (SELECT COUNT(*) FROM products WHERE current_stock <= 0 AND COALESCE(is_active, 1) = 1) as out_of_stock_items,  # noqa: E501
-                (SELECT COUNT(*) FROM sales WHERE status != 'ملغية' AND status != 'cancelled') as total_sales_count,
-                (SELECT COALESCE(SUM(total_amount), 0) FROM sales WHERE status != 'ملغية' AND status != 'cancelled') as total_sales_amount,  # noqa: E501
-                (SELECT COALESCE(SUM(paid_amount), 0) FROM sales WHERE status != 'ملغية' AND status != 'cancelled') as total_paid_amount,  # noqa: E501
-                (SELECT COALESCE(SUM(total_amount - paid_amount), 0) FROM sales WHERE status != 'ملغية' AND status != 'cancelled') as total_remaining_amount  # noqa: E501
+                (SELECT COUNT(*) FROM sales WHERE status != 'cancelled') as total_sales_count,
+                (SELECT COALESCE(SUM(total_amount), 0) FROM sales WHERE status != 'cancelled') as total_sales_amount,  # noqa: E501
+                (SELECT COALESCE(SUM(paid_amount), 0) FROM sales WHERE status != 'cancelled') as total_paid_amount,  # noqa: E501
+                (SELECT COALESCE(SUM(total_amount - paid_amount), 0) FROM sales WHERE status != 'cancelled') as total_remaining_amount  # noqa: E501
             """
 
             row = None
@@ -2362,7 +2362,7 @@ class MainWindow(QMainWindow):
                     FROM sale_items si
                     JOIN sales s ON si.sale_id = s.id
                     JOIN products p ON si.product_id = p.id
-                    WHERE s.status NOT IN ('ملغية', 'cancelled', 'draft')
+                    WHERE s.status NOT IN ('cancelled', 'draft')
                 """
                 profit_result = None
                 if hasattr(self.db_manager, "execute_query"):
@@ -2404,7 +2404,7 @@ class MainWindow(QMainWindow):
                 daily_revenue_query = """
                     SELECT COALESCE(SUM(total_amount), 0)
                     FROM sales WHERE DATE(sale_date) = DATE('now')
-                      AND status NOT IN ('ملغية', 'cancelled', 'draft')
+                      AND status NOT IN ('cancelled', 'draft')
                 """
                 daily_rev_result = self._db_fetch_one(daily_revenue_query)
                 daily_revenue = float(daily_rev_result[0]) if daily_rev_result else 0.0
@@ -2415,7 +2415,7 @@ class MainWindow(QMainWindow):
                 # متوسط السلة
                 basket_query = """
                     SELECT AVG(final_amount) FROM sales
-                    WHERE status NOT IN ('cancelled', 'draft', 'ملغية')
+                    WHERE status NOT IN ('cancelled', 'draft')
                       AND final_amount > 0
                 """
                 basket_result = self._db_fetch_one(basket_query)
@@ -2427,7 +2427,7 @@ class MainWindow(QMainWindow):
                            (julianday('now') - julianday(MIN(sale_date)) + 1)
                     FROM sales
                     WHERE sale_date >= date('now', '-30 days')
-                      AND status NOT IN ('ملغية', 'cancelled', 'draft')
+                      AND status NOT IN ('cancelled', 'draft')
                 """
                 avg_daily_result = self._db_fetch_one(avg_daily_query)
                 avg_daily_sales = float(avg_daily_result[0]) if avg_daily_result and avg_daily_result[0] else 0.0
@@ -2440,13 +2440,13 @@ class MainWindow(QMainWindow):
                         WHERE sale_date >= date('now', 'start of month', '-1 month')
                           AND sale_date <  date('now', 'start of month')
                           AND customer_id IS NOT NULL AND customer_id != ''
-                          AND status NOT IN ('ملغية', 'cancelled', 'draft')
+                          AND status NOT IN ('cancelled', 'draft')
                     ),
                     this_month AS (
                         SELECT DISTINCT customer_id FROM sales
                         WHERE sale_date >= date('now', 'start of month')
                           AND customer_id IS NOT NULL AND customer_id != ''
-                          AND status NOT IN ('ملغية', 'cancelled', 'draft')
+                          AND status NOT IN ('cancelled', 'draft')
                     )
                     SELECT
                         (SELECT COUNT(*) FROM last_month) as last_m,
@@ -2468,7 +2468,7 @@ class MainWindow(QMainWindow):
                     FROM sale_items si
                     JOIN products p ON si.product_id = p.id
                     JOIN sales s ON si.sale_id = s.id
-                    WHERE s.status NOT IN ('ملغية', 'cancelled', 'draft')
+                    WHERE s.status NOT IN ('cancelled', 'draft')
                 """
                 turnover_result = self._db_fetch_one(turnover_query)
                 if turnover_result and turnover_result[0] and turnover_result[1]:
@@ -2494,7 +2494,6 @@ class MainWindow(QMainWindow):
                     COALESCE(SUM(total_amount), 0) as daily_total
                 FROM sales
                 WHERE sale_date >= date('now', '-7 days')
-                  AND status != 'ملغية'
                   AND status != 'cancelled'
                 GROUP BY date(sale_date)
                 ORDER BY date(sale_date) ASC
@@ -2661,7 +2660,7 @@ class MainWindow(QMainWindow):
                 sales_query = """
                 SELECT COALESCE(SUM(total_amount), 0) as total_sales, COUNT(*) as sales_count
                 FROM sales
-                WHERE DATE(sale_date) BETWEEN ? AND ? AND status NOT IN ('ملغية', 'cancelled', 'مسودة', 'مرتجعة')
+                WHERE DATE(sale_date) BETWEEN ? AND ? AND status NOT IN ('cancelled', 'draft', 'returned')
                 """
                 sales_result = self.db_manager.fetch_one(sales_query, (start_date.isoformat(), end_date.isoformat()))
                 if sales_result and isinstance(sales_result, dict):
@@ -2696,7 +2695,7 @@ class MainWindow(QMainWindow):
                 FROM sale_items si
                 JOIN sales s ON si.sale_id = s.id
                 JOIN products p ON si.product_id = p.id
-                WHERE DATE(s.sale_date) BETWEEN ? AND ? AND s.status NOT IN ('ملغية', 'cancelled', 'مسودة', 'مرتجعة')
+                WHERE DATE(s.sale_date) BETWEEN ? AND ? AND s.status NOT IN ('cancelled', 'draft', 'returned')
                 """
                 profit_result = self.db_manager.fetch_one(profit_query, (start_date.isoformat(), end_date.isoformat()))
                 if profit_result and isinstance(profit_result, dict):
@@ -2974,7 +2973,7 @@ class MainWindow(QMainWindow):
                         COALESCE(SUM(s.total_amount), 0) as total_spent
                     FROM customers c
                     LEFT JOIN sales s ON c.id = s.customer_id
-                    WHERE DATE(s.sale_date) BETWEEN ? AND ? AND s.status NOT IN ('ملغية', 'cancelled', 'مسودة', 'مرتجعة')
+                    WHERE DATE(s.sale_date) BETWEEN ? AND ? AND s.status NOT IN ('cancelled', 'draft', 'returned')
                     GROUP BY c.id, c.name
                     HAVING purchase_count > 0
                     ORDER BY total_spent DESC
@@ -2993,7 +2992,7 @@ class MainWindow(QMainWindow):
                     FROM products p
                     JOIN sale_items si ON p.id = si.product_id
                     JOIN sales s ON si.sale_id = s.id
-                    WHERE DATE(s.sale_date) BETWEEN ? AND ? AND s.status NOT IN ('ملغية', 'cancelled', 'مسودة', 'مرتجعة')
+                    WHERE DATE(s.sale_date) BETWEEN ? AND ? AND s.status NOT IN ('cancelled', 'draft', 'returned')
                     GROUP BY p.id, p.name
                     ORDER BY total_sales DESC
                     LIMIT 10
@@ -3005,7 +3004,7 @@ class MainWindow(QMainWindow):
                     sales_query = """
                     SELECT COALESCE(SUM(total_amount), 0) as total_sales, COUNT(*) as sales_count
                     FROM sales
-                    WHERE DATE(sale_date) BETWEEN ? AND ? AND status NOT IN ('ملغية', 'cancelled', 'مسودة', 'مرتجعة')
+                    WHERE DATE(sale_date) BETWEEN ? AND ? AND status NOT IN ('cancelled', 'draft', 'returned')
                     """
                     sales_result = self.db_manager.fetch_one(
                         sales_query, (start_date.isoformat(), end_date.isoformat())
@@ -3024,7 +3023,7 @@ class MainWindow(QMainWindow):
                     customers_query_stats = """
                     SELECT COUNT(DISTINCT customer_id) as active_customers
                     FROM sales
-                    WHERE DATE(sale_date) BETWEEN ? AND ? AND status NOT IN ('ملغية', 'cancelled', 'مسودة', 'مرتجعة')
+                    WHERE DATE(sale_date) BETWEEN ? AND ? AND status NOT IN ('cancelled', 'draft', 'returned')
                     """
                     customers_result = self.db_manager.fetch_one(
                         customers_query_stats,
@@ -3100,7 +3099,7 @@ class MainWindow(QMainWindow):
             sales_query = """
             SELECT COALESCE(SUM(total_amount), 0) as total_sales, COUNT(*) as sales_count
             FROM sales
-            WHERE DATE(sale_date) BETWEEN ? AND ? AND status NOT IN ('ملغية', 'cancelled', 'مسودة', 'مرتجعة')
+            WHERE DATE(sale_date) BETWEEN ? AND ? AND status NOT IN ('cancelled', 'draft', 'returned')
             """
             sales_result = self.db_manager.fetch_one(sales_query, (start_date.isoformat(), end_date.isoformat()))
             if sales_result and isinstance(sales_result, dict):
@@ -3132,7 +3131,7 @@ class MainWindow(QMainWindow):
             FROM sale_items si
             JOIN sales s ON si.sale_id = s.id
             JOIN products p ON si.product_id = p.id
-            WHERE DATE(s.sale_date) BETWEEN ? AND ? AND s.status NOT IN ('ملغية', 'cancelled', 'مسودة', 'مرتجعة')
+            WHERE DATE(s.sale_date) BETWEEN ? AND ? AND s.status NOT IN ('cancelled', 'draft', 'returned')
             """
             profit_result = self.db_manager.fetch_one(profit_query, (start_date.isoformat(), end_date.isoformat()))
             if profit_result and isinstance(profit_result, dict):
@@ -3641,7 +3640,7 @@ class MainWindow(QMainWindow):
                         COALESCE(SUM(total_amount), 0) as total_revenue,
                         COALESCE(SUM(paid_amount), 0) as total_paid
                     FROM sales
-                    WHERE status != 'ملغية' AND status != 'cancelled'
+                    WHERE status != 'cancelled'
                     """
                     kpi_result = self.db_manager.execute_query(kpi_query)
                     if kpi_result and len(kpi_result) > 0:
@@ -3671,7 +3670,7 @@ class MainWindow(QMainWindow):
                     FROM products p
                     JOIN sale_items si ON p.id = si.product_id
                     JOIN sales s ON si.sale_id = s.id
-                    WHERE s.status != 'ملغية' AND s.status != 'cancelled'
+                    WHERE s.status != 'cancelled'
                     GROUP BY p.id, p.name
                     ORDER BY total_sales DESC
                     LIMIT 5
@@ -3734,7 +3733,6 @@ class MainWindow(QMainWindow):
                             COALESCE(SUM(total_amount), 0) as daily_total
                         FROM sales
                         WHERE sale_date >= date('now', '-7 days')
-                          AND status != 'ملغية'
                           AND status != 'cancelled'
                         GROUP BY date(sale_date)
                         ORDER BY date(sale_date) ASC
@@ -3788,7 +3786,7 @@ class MainWindow(QMainWindow):
                         expense_query = """
                             SELECT COALESCE(SUM(total_amount), 0)
                             FROM purchases
-                            WHERE status NOT IN ('ملغية', 'cancelled')
+                            WHERE status != 'cancelled'
                         """
                         expense_result = None
                         if hasattr(self.db_manager, "execute_query"):

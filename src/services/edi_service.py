@@ -233,9 +233,8 @@ class EDIService:
                 partner.created_by,
             )
 
-            result = self.db_manager.execute_query(query, values)
-            if result:
-                partner_id = result.lastrowid
+            partner_id = self.db_manager.execute_insert(query, values)
+            if partner_id:
                 self.logger.info(f"✅ تم إنشاء شريك EDI: {partner.name} (ID: {partner_id})")
                 return partner_id
 
@@ -343,8 +342,8 @@ class EDIService:
                 company_id,
             )
 
-            result = self.db_manager.execute_query(query, values)
-            if result and (hasattr(result, "rowcount") and result.rowcount > 0 or not hasattr(result, "rowcount")):
+            result = self.db_manager.execute_non_query(query, values)
+            if result > 0:
                 self.logger.info(f"✅ تم تحديث شريك EDI: {partner.name} (ID: {partner.id})")
                 return True
 
@@ -360,9 +359,9 @@ class EDIService:
             company_id = self.tenant_isolation.get_current_company_id() if self.tenant_isolation else None
 
             query = "DELETE FROM edi_partners WHERE id = ? AND company_id = ?"
-            result = self.db_manager.execute_query(query, (partner_id, company_id))
+            result = self.db_manager.execute_non_query(query, (partner_id, company_id))
 
-            if result and (hasattr(result, "rowcount") and result.rowcount > 0 or not hasattr(result, "rowcount")):
+            if result > 0:
                 self.logger.info(f"✅ تم حذف شريك EDI: ID={partner_id}")
                 return True
 
@@ -415,9 +414,8 @@ class EDIService:
                 document.created_by,
             )
 
-            result = self.db_manager.execute_query(query, values)
-            if result:
-                doc_id = result.lastrowid
+            doc_id = self.db_manager.execute_insert(query, values)
+            if doc_id:
                 self.logger.info(
                     f"✅ تم إنشاء مستند EDI: {document.document_type} - {document.document_number} (ID: {doc_id})"
                 )
@@ -684,9 +682,8 @@ class EDIService:
                 company_id,
             )
 
-            result = self.db_manager.execute_query(query, values)
-            if result:
-                mapping_id = result.lastrowid
+            mapping_id = self.db_manager.execute_insert(query, values)
+            if mapping_id:
                 self.logger.info(f"✅ تم إنشاء EDI Mapping: {name} (ID: {mapping_id})")
                 return mapping_id
 

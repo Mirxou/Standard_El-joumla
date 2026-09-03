@@ -238,8 +238,7 @@ class WebhookService:
                 now,
             )
 
-            self.db_manager.execute_query(query, params)
-            webhook_id = self.db_manager.get_last_insert_id()
+            webhook_id = self.db_manager.execute_insert(query, params)
 
             if self.logger:
                 self.logger.info(f"✅ تم إنشاء Webhook جديد: {name} (ID: {webhook_id})")
@@ -420,7 +419,7 @@ class WebhookService:
                 WHERE id = ? AND company_id = ?
             """
 
-            self.db_manager.execute_query(query, tuple(params))
+            self.db_manager.execute_non_query(query, tuple(params))
 
             if self.logger:
                 self.logger.info(f"✅ تم تحديث Webhook: {webhook_id}")
@@ -444,7 +443,7 @@ class WebhookService:
                 company_id = self._get_company_id()
 
             query = "DELETE FROM webhooks WHERE id = ? AND company_id = ?"
-            self.db_manager.execute_query(query, (webhook_id, company_id))
+            self.db_manager.execute_non_query(query, (webhook_id, company_id))
 
             if self.logger:
                 self.logger.info(f"✅ تم حذف Webhook: {webhook_id}")
@@ -621,7 +620,7 @@ class WebhookService:
                 datetime.now(),
             )
 
-            self.db_manager.execute_query(query, params)
+            self.db_manager.execute_insert(query, params)
 
         except Exception as e:
             if self.logger:

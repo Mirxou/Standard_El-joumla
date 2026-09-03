@@ -285,7 +285,7 @@ class SalesService:
                     COALESCE(SUM(remaining_amount), 0) as total_outstanding,
                     COALESCE(SUM(discount_amount), 0) as total_discounts
                 FROM sales
-                WHERE sale_date = ? AND status NOT IN ('cancelled', 'ملغية')
+                WHERE sale_date = ? AND status != 'cancelled'
             """
             row = self.db_manager.fetch_one(query, (target_date.isoformat(),))
 
@@ -320,8 +320,7 @@ class SalesService:
             return None
 
         query = "INSERT INTO pos_sessions (user_id, opening_cash, status) VALUES (?, ?, 'active')"
-        result = self.db_manager.execute_query(query, (user_id, opening_cash))
-        session_id = getattr(result, "lastrowid", None) if result else None
+        session_id = self.db_manager.execute_insert(query, (user_id, opening_cash))
 
         if session_id is None:
             self.logger.warning("Could not retrieve session ID after POS session insert")
@@ -343,7 +342,7 @@ class SalesService:
             return False
 
         query = "UPDATE pos_sessions SET closing_cash = ?, status = 'closed' WHERE id = ?"
-        self.db_manager.execute_query(query, (closing_cash, self.current_session.id))
+        self.db_manager.execute_non_query(query, (closing_cash, self.current_session.id))
 
         self.current_session.is_active = False
         self.current_session.closing_cash = closing_cash
@@ -718,7 +717,6 @@ class SalesService:
             FROM sales
             WHERE sale_date = ?
               AND status != 'cancelled'
-              AND status != 'ملغية'
         """
         row = self.db_manager.fetch_one(query, (target_date.isoformat(),))
 

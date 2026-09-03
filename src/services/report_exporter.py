@@ -1738,8 +1738,7 @@ class ReportExporter:
                 FROM sales s
                 LEFT JOIN customers c ON s.customer_id = c.id
                 WHERE s.is_active = 1
-                  AND s.status NOT IN ('مدفوعة', 'paid', 'ملغية', 'cancelled',
-                                       'مسودة', 'draft', 'مرتجعة', 'returned')
+                  AND s.status NOT IN ('paid', 'cancelled', 'draft', 'returned')
                   AND (s.final_amount - COALESCE(s.paid_amount, 0)) > 0
             """
             params = []
@@ -1895,7 +1894,7 @@ class ReportExporter:
                 FROM purchases p
                 LEFT JOIN suppliers sup ON p.supplier_id = sup.id
                 WHERE p.is_active = 1
-                  AND p.status NOT IN ('مدفوعة', 'paid', 'ملغية', 'cancelled', 'مرتجعة', 'returned')
+                  AND p.status NOT IN ('paid', 'cancelled', 'returned')
                   AND (COALESCE(p.final_amount, p.total_amount) - COALESCE(p.paid_amount, 0)) > 0
             """
             params = []
@@ -2041,7 +2040,7 @@ class ReportExporter:
                     p.payment_method,
                     SUM(COALESCE(p.base_amount, p.amount)) as daily_amount
                 FROM payments p
-                WHERE p.payment_status = 'مكتمل'
+                WHERE p.payment_status = 'completed'
             """
 
             params = []
@@ -2138,7 +2137,7 @@ class ReportExporter:
                     MIN(p.amount) as min_amount,
                     MAX(p.amount) as max_amount
                 FROM payments p
-                WHERE p.payment_status = 'مكتمل'
+                WHERE p.payment_status = 'completed'
             """
 
             params = []
@@ -2214,7 +2213,7 @@ class ReportExporter:
                     COUNT(CASE WHEN p.payment_type = 'دفعة عميل' THEN 1 END) as customer_payments,
                     COUNT(CASE WHEN p.payment_type = 'دفعة مورد' THEN 1 END) as supplier_payments
                 FROM payments p
-                WHERE p.payment_status = 'مكتمل'
+                WHERE p.payment_status = 'completed'
             """
 
             params = []

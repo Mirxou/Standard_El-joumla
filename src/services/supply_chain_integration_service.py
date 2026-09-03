@@ -498,7 +498,7 @@ class SupplyChainIntegrationService:
                  created_by, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """
-            self.db.execute_query(
+            self.db.execute_insert(
                 query,
                 (
                     po_data["po_id"],
@@ -525,7 +525,7 @@ class SupplyChainIntegrationService:
                     (po_id, product_id, quantity, unit_price, status)
                     VALUES (?, ?, ?, ?, 'pending')
                 """
-                self.db.execute_query(
+                self.db.execute_insert(
                     query,
                     (
                         po_id,
@@ -569,7 +569,7 @@ class SupplyChainIntegrationService:
         """تحديث حالة أمر الشراء"""
         try:
             query = "UPDATE purchase_orders SET status = ?, approved_by = ? WHERE po_id = ?"
-            self.db.execute_query(query, (status, updated_by, po_id))
+            self.db.execute_non_query(query, (status, updated_by, po_id))
 
         except Exception as e:
             self.logger.error(f"Error updating purchase order status: {e}", exc_info=True)
@@ -578,7 +578,7 @@ class SupplyChainIntegrationService:
         """تحديث تاريخ التسليم"""
         try:
             query = "UPDATE purchase_orders SET actual_delivery = ? WHERE po_id = ?"
-            self.db.execute_query(query, (delivery_date.isoformat(), po_id))
+            self.db.execute_non_query(query, (delivery_date.isoformat(), po_id))
 
         except Exception as e:
             self.logger.error(f"Error updating purchase order delivery: {e}", exc_info=True)
@@ -602,7 +602,7 @@ class SupplyChainIntegrationService:
                 SET status = ?, received_quantity = ?
                 WHERE po_id = ? AND product_id = ?
             """
-            self.db.execute_query(query, (status, received_quantity, po_id, product_id))
+            self.db.execute_non_query(query, (status, received_quantity, po_id, product_id))
 
         except Exception as e:
             self.logger.error(f"Error updating PO item status: {e}", exc_info=True)
@@ -626,7 +626,7 @@ class SupplyChainIntegrationService:
 
                 # تحديث في قاعدة البيانات
                 query = "UPDATE suppliers SET reliability_score = ? WHERE supplier_id = ?"
-                self.db.execute_query(query, (new_score, supplier_id))
+                self.db.execute_non_query(query, (new_score, supplier_id))
 
                 # تحديث في الذاكرة
                 if supplier_id in self.suppliers:

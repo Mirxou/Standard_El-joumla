@@ -133,7 +133,7 @@ class CategoryFormDialog(BaseDialog):
                     name = ?, description = ?, is_active = ?, updated_at = datetime('now')
                 WHERE id = ?
                 """
-                self.db_manager.execute_query(query, (name, description, is_active, self.category_id))
+                self.db_manager.execute_non_query(query, (name, description, is_active, self.category_id))
                 self.notify.show_success("نجاح", "تم تحديث الفئة بنجاح")
             else:
                 # إضافة جديدة
@@ -141,7 +141,7 @@ class CategoryFormDialog(BaseDialog):
                 INSERT INTO categories (name, description, is_active, created_at, updated_at)
                 VALUES (?, ?, ?, datetime('now'), datetime('now'))
                 """
-                self.db_manager.execute_query(query, (name, description, is_active))
+                self.db_manager.execute_insert(query, (name, description, is_active))
                 self.notify.show_success("نجاح", "تم إضافة الفئة بنجاح")
 
             self.accept()

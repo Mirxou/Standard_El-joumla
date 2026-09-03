@@ -496,9 +496,8 @@ class ReturnManager:
                 ),
             )
 
-            result = self.db_manager.execute_query(query, params)
-            if result and hasattr(result, "lastrowid"):
-                return_id = result.lastrowid
+            return_id = self.db_manager.execute_insert(query, params)
+            if return_id:
                 return_invoice.id = return_id
 
                 # Insert Items
@@ -525,7 +524,7 @@ class ReturnManager:
                 float(item.quantity_returned),
                 float(item.unit_price),
             )
-            self.db_manager.execute_query(query, params)
+            self.db_manager.execute_insert(query, params)
         except Exception as e:
             if self.logger:
                 self.logger.error(f"Error creating return item: {e}")

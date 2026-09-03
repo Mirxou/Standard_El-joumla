@@ -773,7 +773,7 @@ class SaleManager:
             )
             cost_row = cursor.fetchone()
             if cost_row:
-                item.cost_price = Decimal(str(cost_row[0]))
+                item.cost_price = Decimal(str(cost_row[0] or 0))
 
             # جلب الدفعة بنظام FEFO (الأقرب للانتهاء أولاً)
             cursor.execute(
@@ -989,7 +989,7 @@ class SaleManager:
                     break
 
                 batch_id = batch[0]
-                available = float(batch[1])
+                available = float(batch[1] or 0)
                 deduct = min(available, remaining_to_deduct)
 
                 cursor.execute("""
@@ -1023,12 +1023,12 @@ class SaleManager:
                 else item.quantity
             )
             try:
-                self.db_manager.execute_query(
+                self.db_manager.execute_non_query(
                     "UPDATE products SET current_stock = "
                     "current_stock + ? WHERE id = ?",
                     (qty_change, item.product_id),
                 )
-                self.db_manager.execute_query(
+                self.db_manager.execute_non_query(
                     "UPDATE batches SET quantity = quantity + ? WHERE id = ?",
                     (qty_change, item.batch_id),
                 )
@@ -1641,11 +1641,11 @@ class SaleManager:
                 "updated_at = CURRENT_TIMESTAMP "
                 "WHERE id = ?"
             )
-            result = self.db_manager.execute_query(
+            result = self.db_manager.execute_non_query(
                 query, (status_str, sale_id)
             )
-            if hasattr(result, 'rowcount'):
-                return result.rowcount > 0
+            if isinstance(result, dict):
+                return result.get('rowcount', 0) > 0
             return True
         except Exception as e:
             if self.logger:
@@ -1799,11 +1799,11 @@ class SaleManager:
         try:
             row = self.db_manager.fetch_one(
                 "SELECT COUNT(*), "
-                "SUM(CASE WHEN status = 'مدفوعة' "
+                "SUM(CASE WHEN status = 'paid' "
                 "THEN 1 ELSE 0 END), "
-                "SUM(CASE WHEN status = 'ملغية' "
+                "SUM(CASE WHEN status = 'cancelled' "
                 "THEN 1 ELSE 0 END), "
-                "SUM(CASE WHEN status = 'مرتجعة' "
+                "SUM(CASE WHEN status = 'returned' "
                 "THEN 1 ELSE 0 END), "
                 "SUM(total_amount), SUM(paid_amount), "
                 "SUM(discount_amount), SUM(tax_amount) "
@@ -1928,20 +1928,20 @@ class SaleManager:
 
             if soft_delete:
                 query = (
-                    "UPDATE sales SET status = 'ملغية', is_deleted = 1, "
+                    "UPDATE sales SET status = 'cancelled', is_deleted = 1, "
                     "updated_at = CURRENT_TIMESTAMP "
                     "WHERE id = ?"
                 )
-                self.db_manager.execute_query(
+                self.db_manager.execute_non_query(
                     query, (sale_id,)
                 )
             else:
-                self.db_manager.execute_query(
+                self.db_manager.execute_non_query(
                     "DELETE FROM sale_items "
                     "WHERE sale_id = ?",
                     (sale_id,),
                 )
-                self.db_manager.execute_query(
+                self.db_manager.execute_non_query(
                     "DELETE FROM sales WHERE id = ?",
                     (sale_id,),
                 )

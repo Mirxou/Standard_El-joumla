@@ -791,7 +791,7 @@ class ReturnFormDialog(QDialog):
         p = products[0]
         product_id = p["id"] if isinstance(p, dict) else p[0]
         product_name = p["name"] if isinstance(p, dict) else p[1]
-        price = Decimal(str(p["selling_price"] if isinstance(p, dict) else p[3]))
+        price = Decimal(str((p["selling_price"] or 0) if isinstance(p, dict) else (p[3] or 0)))
 
         item = ReturnItem(
             product_id=product_id,

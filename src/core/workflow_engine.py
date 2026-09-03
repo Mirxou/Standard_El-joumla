@@ -380,7 +380,7 @@ class WorkflowEngine:
                 WHERE id = ?
             """
             now = datetime.now()
-            self.db_manager.execute_query(query, (ApprovalStatus.APPROVED.value, comments, now, now, approval_id))
+            self.db_manager.execute_non_query(query, (ApprovalStatus.APPROVED.value, comments, now, now, approval_id))
 
             # تسجيل في التاريخ
             self._add_history(
@@ -421,7 +421,7 @@ class WorkflowEngine:
                 WHERE id = ?
             """
             now = datetime.now()
-            self.db_manager.execute_query(query, (ApprovalStatus.REJECTED.value, comments, now, now, approval_id))
+            self.db_manager.execute_non_query(query, (ApprovalStatus.REJECTED.value, comments, now, now, approval_id))
 
             # تحديث حالة المثيل
             instance_query = """
@@ -429,7 +429,7 @@ class WorkflowEngine:
                 SET status = ?, completed_at = ?, completed_by = ?, updated_at = ?
                 WHERE id = ?
             """
-            self.db_manager.execute_query(
+            self.db_manager.execute_non_query(
                 instance_query,
                 (
                     WorkflowStatus.REJECTED.value,
@@ -501,7 +501,7 @@ class WorkflowEngine:
                         deadline, created_at, updated_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """
-                self.db_manager.execute_query(
+                self.db_manager.execute_insert(
                     query,
                     (
                         instance_id,
@@ -611,7 +611,7 @@ class WorkflowEngine:
                     SET current_step_id = ?, updated_at = ?
                     WHERE id = ?
                 """
-                self.db_manager.execute_query(query, (next_step.id, datetime.now(), instance_id))
+                self.db_manager.execute_non_query(query, (next_step.id, datetime.now(), instance_id))
 
                 # إنشاء موافقات للخطوة التالية
                 self._create_approvals_for_step(instance_id, next_step)
@@ -626,7 +626,7 @@ class WorkflowEngine:
                     WHERE id = ?
                 """
                 now = datetime.now()
-                self.db_manager.execute_query(query, (WorkflowStatus.APPROVED.value, now, now, instance_id))
+                self.db_manager.execute_non_query(query, (WorkflowStatus.APPROVED.value, now, now, instance_id))
 
                 # تسجيل في التاريخ
                 self._add_history(instance_id, None, "completed", instance.initiated_by)
@@ -706,7 +706,7 @@ class WorkflowEngine:
                     performed_at, details
                 ) VALUES (?, ?, ?, ?, ?, ?)
             """
-            self.db_manager.execute_query(
+            self.db_manager.execute_insert(
                 query,
                 (instance_id, step_id, action, performed_by, datetime.now(), details),
             )

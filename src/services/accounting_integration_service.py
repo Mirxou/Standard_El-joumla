@@ -412,7 +412,7 @@ class AccountingIntegrationService:
                 synced_at,
             )
 
-            self.db_manager.execute_query(query, values)
+            self.db_manager.execute_insert(query, values)
             self.logger.info(f"✅ تم حفظ مزامنة: {entity_type} - {entity_id}")
 
         except Exception as e:

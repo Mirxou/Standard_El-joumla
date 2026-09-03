@@ -40,12 +40,11 @@ class SupportService:
 
     def create_ticket(self, user_id: int, subject: str, description: str, priority: str = "normal") -> int:
         q = """INSERT INTO support_tickets (user_id, subject, description, priority) VALUES (?, ?, ?, ?)"""
-        res = self.db.execute_query(q, (user_id, subject, description, priority))
-        return res.get('lastrowid') if isinstance(res, dict) else None
+        return self.db.execute_insert(q, (user_id, subject, description, priority))
 
     def update_ticket_status(self, ticket_id: int, status: str):
         q = """UPDATE support_tickets SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?"""
-        self.db.execute_query(q, (status, ticket_id))
+        self.db.execute_non_query(q, (status, ticket_id))
 
     def list_tickets(self, user_id: Optional[int] = None) -> List[Dict[str, Any]]:
         if user_id:
@@ -58,7 +57,7 @@ class SupportService:
 
     def add_knowledge(self, question: str, answer: str, tags: Optional[str] = None):
         q = """INSERT INTO knowledge_base (question, answer, tags) VALUES (?, ?, ?)"""
-        self.db.execute_query(q, (question, answer, tags))
+        self.db.execute_insert(q, (question, answer, tags))
 
     def search_knowledge(self, keyword: str) -> List[Dict[str, Any]]:
         q = """SELECT * FROM knowledge_base WHERE question LIKE ? OR answer LIKE ? OR tags LIKE ?"""

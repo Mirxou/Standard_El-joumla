@@ -381,7 +381,7 @@ class DatabaseManager:
                 total_amount DECIMAL(10,2) NOT NULL,
                 discount_amount DECIMAL(10,2) DEFAULT 0,
                 final_amount DECIMAL(10,2) NOT NULL,
-                payment_method TEXT DEFAULT 'نقدي',
+                payment_method TEXT DEFAULT 'cash',
                 sale_date DATE DEFAULT CURRENT_DATE,
                 user_id INTEGER,
                 notes TEXT,
@@ -865,7 +865,7 @@ class DatabaseManager:
                 ("customer_name", "TEXT"),
                 ("customer_phone", "TEXT"),
                 ("due_date", "DATE"),
-                ("status", "TEXT DEFAULT 'مؤكدة'"),
+                ("status", "TEXT DEFAULT 'confirmed'"),
                 ("subtotal", "DECIMAL(10,2) DEFAULT 0"),
                 ("discount_percentage", "DECIMAL(5,2) DEFAULT 0"),
                 ("tax_amount", "DECIMAL(10,2) DEFAULT 0"),
@@ -887,8 +887,8 @@ class DatabaseManager:
                 ("supplier_invoice_number", "TEXT"),
                 ("expected_delivery_date", "DATE"),
                 ("received_date", "DATE"),
-                ("status", "TEXT DEFAULT 'معلقة'"),
-                ("payment_status", "TEXT DEFAULT 'غير مدفوعة'"),
+                ("status", "TEXT DEFAULT 'pending'"),
+                ("payment_status", "TEXT DEFAULT 'unpaid'"),
                 ("payment_terms", "TEXT"),
                 ("subtotal_amount", "DECIMAL(10,2) DEFAULT 0"),
                 ("tax_amount", "DECIMAL(10,2) DEFAULT 0"),
@@ -933,7 +933,7 @@ class DatabaseManager:
                 ("currency", "TEXT DEFAULT 'DZD'"),
                 ("exchange_rate", "DECIMAL(10,4) DEFAULT 1.0"),
                 ("amount_in_base_currency", "DECIMAL(15,2) DEFAULT 0"),
-                ("payment_status", "TEXT DEFAULT 'مكتمل'"),
+                ("payment_status", "TEXT DEFAULT 'completed'"),
                 ("due_date", "DATE"),
                 ("customer_id", "INTEGER"),
                 ("supplier_id", "INTEGER"),
@@ -968,17 +968,17 @@ class DatabaseManager:
             # Cash sales are considered fully paid; others are considered unpaid
             self.connection.execute("""
                 UPDATE sales SET
-                    status = COALESCE(status, 'مؤكدة'),
+                    status = COALESCE(status, 'confirmed'),
                     paid_amount = COALESCE(paid_amount,
-                        CASE WHEN payment_method IN ('نقدي', 'cash') THEN total_amount ELSE 0 END),
+                        CASE WHEN payment_method IN ('cash') THEN total_amount ELSE 0 END),
                     remaining_amount = COALESCE(remaining_amount,
-                        CASE WHEN payment_method IN ('نقدي', 'cash') THEN 0 ELSE total_amount END)
+                        CASE WHEN payment_method IN ('cash') THEN 0 ELSE total_amount END)
                 WHERE paid_amount IS NULL OR remaining_amount IS NULL
             """)
             self.connection.execute("""
                 UPDATE purchases SET
-                    status = COALESCE(status, 'معلقة'),
-                    payment_status = COALESCE(payment_status, 'غير مدفوعة'),
+                    status = COALESCE(status, 'pending'),
+                    payment_status = COALESCE(payment_status, 'unpaid'),
                     paid_amount = COALESCE(paid_amount, 0),
                     remaining_amount = COALESCE(remaining_amount, total_amount)
             """)

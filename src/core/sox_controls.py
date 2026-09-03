@@ -185,7 +185,7 @@ class SOXControlsManager:
                         frequency, is_critical, test_procedure, expected_result
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """
-                self.db_manager.execute_query(
+                self.db_manager.execute_insert(
                     query,
                     (
                         control_data["control_id"],
@@ -260,7 +260,7 @@ class SOXControlsManager:
                 WHERE control_id = ?
             """
 
-            result = self.db_manager.execute_query(
+            result = self.db_manager.execute_non_query(
                 query,
                 (
                     test_result,

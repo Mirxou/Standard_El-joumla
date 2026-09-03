@@ -68,11 +68,7 @@ class CategoryManager:
                 now,
             )
 
-            if hasattr(self.db_manager, "execute_insert"):
-                result = self.db_manager.execute_insert(query, params)
-            else:
-                res = self.db_manager.execute_query(query, params)
-                result = getattr(res, "lastrowid", None) or getattr(res, "last_insert_id", None)
+            result = self.db_manager.execute_insert(query, params)
 
             if result:
                 if self.logger:

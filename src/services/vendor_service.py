@@ -31,7 +31,7 @@ class VendorService:
                 vendor_data.get("phone"),
                 vendor_data.get("email"),
                 vendor_data.get("address"),
-                vendor_data.get("payment_terms", "نقدي"),
+                vendor_data.get("payment_terms", "cash"),
                 float(vendor_data.get("credit_limit") or 0),
                 now,
                 now,
@@ -80,7 +80,7 @@ class VendorService:
             params = (
                 po_number,
                 vendor_id,
-                "مسودة",
+                "draft",
                 total,
                 now,
                 now,
@@ -100,7 +100,7 @@ class VendorService:
                 )
                 qty = float(it.get("quantity", 1))
                 cost = float(it.get("unit_cost", 0))
-                self.db.execute_query(q_item, (po_id, it.get("product_id"), qty, cost, qty * cost, now))
+                self.db.execute_insert(q_item, (po_id, it.get("product_id"), qty, cost, qty * cost, now))
 
             if self.logger:
                 self.logger.info(f"تم إنشاء أمر شراء {po_number} (ID={po_id}) للمورد {vendor_id}، المجموع={total}")
@@ -114,7 +114,7 @@ class VendorService:
         try:
             now = datetime.now()
             # تحديث حالة أمر الشراء في purchase_orders
-            self.db.execute_query(
+            self.db.execute_non_query(
                 "UPDATE purchase_orders SET status = ?, delivery_date = ?, updated_at = ? WHERE id = ?",
                 ("received", now, now, purchase_id),
             )
@@ -123,7 +123,7 @@ class VendorService:
                 # تحديث الكمية المستلمة في purchase_order_items
                 pid = it.get("product_id")
                 qty = float(it.get("quantity", 1))
-                self.db.execute_query(
+                self.db.execute_non_query(
                     "UPDATE purchase_order_items SET quantity_received = ?, actual_delivery_date = ? WHERE purchase_order_id = ? AND product_id = ?",  # noqa: E501
                     (qty, now, purchase_id, pid),
                 )

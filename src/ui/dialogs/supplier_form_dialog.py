@@ -224,7 +224,7 @@ class SupplierFormDialog(BaseDialog):
                     address = ?, is_active = ?, updated_at = datetime('now')
                 WHERE id = ?
                 """
-                self.db_manager.execute_query(
+                self.db_manager.execute_non_query(
                     query,
                     (
                         name,
@@ -249,7 +249,7 @@ class SupplierFormDialog(BaseDialog):
                     is_active, created_at, updated_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
                 """
-                self.db_manager.execute_query(
+                self.db_manager.execute_insert(
                     query,
                     (
                         name,

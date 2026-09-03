@@ -414,7 +414,7 @@ class PaymentGatewayService:
                 error_message,
             )
 
-            self.db_manager.execute_query(query, values)
+            self.db_manager.execute_insert(query, values)
             self.logger.info(f"✅ تم حفظ معاملة: {transaction_id}")
 
         except Exception as e:

@@ -248,7 +248,7 @@ class UserService:
         self.active_sessions[session_id] = session
 
         # حفظ الجلسة في قاعدة البيانات
-        self.db.execute_query(
+        self.db.execute_insert(
             """
             INSERT INTO user_sessions (session_id, user_id, login_time, last_activity, ip_address, user_agent)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -279,7 +279,7 @@ class UserService:
             self.active_sessions[session_id] = session
 
             # تحديث في قاعدة البيانات
-            self.db.execute_query(
+            self.db.execute_non_query(
                 """
                 UPDATE user_sessions
                 SET last_activity = ?
@@ -349,7 +349,7 @@ class UserService:
                 del self.active_sessions[session_id]
 
             # تحديث في قاعدة البيانات
-            self.db.execute_query(
+            self.db.execute_non_query(
                 """
                 UPDATE user_sessions
                 SET status = 'terminated'
@@ -395,7 +395,7 @@ class UserService:
             session.last_activity = datetime.now()
 
             # تحديث في قاعدة البيانات
-            self.db.execute_query(
+            self.db.execute_non_query(
                 """
                 UPDATE user_sessions
                 SET last_activity = ?
@@ -456,7 +456,7 @@ class UserService:
     ):
         """تسجيل محاولة تسجيل الدخول"""
         try:
-            self.db.execute_query(
+            self.db.execute_insert(
                 """
                 INSERT INTO login_attempts (username, ip_address, success, failure_reason)
                 VALUES (?, ?, ?, ?)
@@ -628,7 +628,7 @@ class UserService:
 
             # تنظيف قاعدة البيانات أيضاً
             cutoff_time = datetime.now() - timedelta(minutes=self.security_settings.session_timeout_minutes)
-            self.db.execute_query(
+            self.db.execute_non_query(
                 """
                 UPDATE user_sessions
                 SET status = 'expired'
@@ -652,7 +652,7 @@ class UserService:
                     setattr(self.security_settings, setting_name, setting_value)
                 # حفظ في قاعدة البيانات
                 if hasattr(self, "db") and self.db:
-                    self.db.execute_query(
+                    self.db.execute_insert(
                         """
                         INSERT OR REPLACE INTO security_settings (setting_key, setting_value, updated_at)
                         VALUES (?, ?, ?)
