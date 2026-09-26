@@ -104,12 +104,12 @@ class CustomTitleBar(QWidget):
         self.start_pos = None
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.LeftButton and self.parent:
             self.start_pos = event.globalPosition().toPoint() - self.parent.frameGeometry().topLeft()
             event.accept()
 
     def mouseMoveEvent(self, event):
-        if self.start_pos and event.buttons() == Qt.LeftButton:
+        if self.start_pos and event.buttons() == Qt.LeftButton and self.parent:
             new_pos = event.globalPosition().toPoint() - self.start_pos
             self.parent.move(new_pos)
             event.accept()
@@ -124,13 +124,17 @@ class CustomTitleBar(QWidget):
             event.accept()
 
     def minimize_window(self):
-        self.parent.showMinimized()
+        if self.parent:
+            self.parent.showMinimized()
 
     def maximize_restore_window(self):
+        if not self.parent:
+            return
         if self.parent.isMaximized():
             self.parent.showNormal()
         else:
             self.parent.showMaximized()
 
     def close_window(self):
-        self.parent.close()
+        if self.parent:
+            self.parent.close()

@@ -29,7 +29,7 @@ try:
 except ImportError:
     pd = None
 
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 class PredictionResult:
     """Prediction result container"""
 
-    prediction: Union[float, np.ndarray]
+    prediction: Any  # float or np.ndarray if numpy available
     confidence: float
     confidence_interval: Tuple[float, float]
     model_used: str
@@ -53,9 +53,9 @@ class PredictionResult:
 class ForecastResult:
     """Forecast result container"""
 
-    forecast: pd.DataFrame
+    forecast: Any  # pd.DataFrame if pandas available, else dict
     model_accuracy: float
-    confidence_intervals: pd.DataFrame
+    confidence_intervals: Any  # pd.DataFrame if pandas available, else dict
     seasonality_detected: bool
     trend_direction: str
     forecast_period: str

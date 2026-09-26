@@ -1,4 +1,4 @@
-﻿"""
+"""
 Unit Tests for ExceptionHandler
 اختبارات وحدة ExceptionHandler
 """

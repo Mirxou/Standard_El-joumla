@@ -347,7 +347,7 @@ class DashboardService:
         rows = self.db.execute_query(q, [start, end])
         series = ChartSeries(name="المبيعات اليومية", color="#2196F3")
         for r in rows:
-            series.points.append(TimeSeriesPoint(label=str(r["d"]), value=float(r["total"])))
+            series.points.append(TimeSeriesPoint(label=str(r["d"]), value=float(r["total"] or 0)))
         return series
 
     def _top_products(
@@ -382,7 +382,7 @@ class DashboardService:
             value = list(rows[0].values())[0]
             if value is None:
                 return 0.0
-            return float(value)
+            return float(value or 0)
         except (ValueError, TypeError):
             self.logger.warning("_scalar conversion error for query: %s", query[:80])
             return 0.0

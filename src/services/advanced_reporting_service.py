@@ -503,7 +503,7 @@ class AdvancedReportingService:
                     SELECT SUM(total_amount) as total_sales
                     FROM sales
                     WHERE status = 'completed' {date_condition}
-                """,
+                """,  # SQL_SAFE: date_condition is hardcoded "" or "AND DATE(created_at) = ?"
                     params,
                 )
 
@@ -551,7 +551,7 @@ class AdvancedReportingService:
                     SELECT COUNT(*) as order_count
                     FROM sales
                     WHERE status = 'completed' {date_condition}
-                """,
+                """,  # SQL_SAFE: date_condition is hardcoded "" or "AND DATE(created_at) = ?"
                     params,
                 )
 
@@ -589,7 +589,7 @@ class AdvancedReportingService:
                     SELECT AVG(total_amount) as avg_order_value
                     FROM sales
                     WHERE status = 'completed' {date_condition}
-                """,
+                """,  # SQL_SAFE: date_condition is hardcoded "" or "AND DATE(created_at) = ?"
                     params,
                 )
 

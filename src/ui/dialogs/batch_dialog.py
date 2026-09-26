@@ -277,7 +277,7 @@ class BatchDialog(BaseDialog):
 
         # السعر
         if self.batch.unit_cost:
-            self.unit_cost_spin.setValue(float(self.batch.unit_cost))
+            self.unit_cost_spin.setValue(float(self.batch.unit_cost or 0))
 
         # الحالة
         index = self.status_combo.findData(self.batch.status)
@@ -362,16 +362,16 @@ class BatchDialog(BaseDialog):
                     (
                         batch_data["batch_number"],
                         batch_data["product_id"],
-                        float(batch_data["initial_quantity"]),
-                        float(batch_data["current_quantity"]),
-                        float(batch_data["reserved_quantity"]),
+                        float(batch_data["initial_quantity"] or 0),
+                        float(batch_data["current_quantity"] or 0),
+                        float(batch_data["reserved_quantity"] or 0),
                         batch_data["manufacturing_date"].strftime("%Y-%m-%d"),
                         batch_data["expiry_date"].strftime("%Y-%m-%d"),
                         batch_data["supplier_id"],
                         batch_data["warehouse_location"],
                         batch_data["rack_number"],
                         batch_data["bin_number"],
-                        (float(batch_data["unit_cost"]) if batch_data["unit_cost"] else None),
+                        (float(batch_data["unit_cost"] or 0) if batch_data["unit_cost"] else None),
                         batch_data["status"],
                         ",".join(batch_data["serial_numbers"]),
                         batch_data["notes"],

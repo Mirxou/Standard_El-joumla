@@ -5,17 +5,28 @@
 توفر وظائف تنبؤية مبسطة تعتمد على بيانات محلية (لا تتطلب مكتبات خارجية)
 """
 
+import logging
 import statistics
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import Any, Dict, List
+
+from src.utils.db_helpers import retry_with_backoff
+
+
+_log = logging.getLogger(__name__)
 
 
 class AIService:
-    """خدمة بسيطة للتنبؤ والتحليل"""
+    """خدمة بسيطة للتنبؤ والتحليل مع دعم retry وfallback"""
+
+    # Default fallback results for when AI operations fail
+    _FALLBACK_FORECAST = []
+    _FALLBACK_INSIGHT = {}
 
     def __init__(self, db_manager, logger=None):
         self.db = db_manager
-        self.logger = logger
+        self.logger = logger or _log
 
     def demand_forecast_linear_regression(
         self,
@@ -32,14 +43,20 @@ class AIService:
             end = datetime.now()
             start = end - timedelta(days=days)
             q = "SELECT DATE(created_at), SUM(quantity) FROM stock_movements WHERE product_id = ? AND movement_type = ? AND created_at >= ? GROUP BY DATE(created_at) ORDER BY DATE(created_at)"  # noqa: E501
-            rows = self.db.fetch_all(q, (product_id, "بيع", start))
+            rows = retry_with_backoff(
+                lambda: self.db.fetch_all(q, (product_id, "بيع", start)),
+                max_retries=2,
+                base_delay=0.5,
+                exceptions=(Exception,),
+                logger=self.logger,
+            )
 
             if not rows or len(rows) < seasonal_period:
                 # لا يمكن حساب الموسمية ببيانات قليلة، العودة إلى التنبؤ البسيط
                 return self._simple_linear_regression_forecast(rows, forecast_days)
 
-            dates = [datetime.strptime(r["DATE(created_at)"], "%Y-%m-%d") for r in rows]
-            y = [float(r["SUM(quantity)"] or 0) for r in rows]
+            dates = [datetime.strptime(r.get('DATE(created_at)', ''), "%Y-%m-%d") for r in rows if r.get('DATE(created_at)')]
+            y = [float(r.get('SUM(quantity)') or 0) for r in rows]
 
             # 1. حساب المؤشرات الموسمية (للأسبوع)
             seasonal_indices = self._calculate_seasonal_indices(dates, y, seasonal_period)
@@ -86,7 +103,8 @@ class AIService:
                 forecast.append(
                     {
                         "date": future_date.strftime("%Y-%m-%d"),
-                        "predicted_quantity": max(0, round(final_forecast, 2)),
+                        # PRECISION: Use Decimal quantize for money rounding instead of round()
+                        "predicted_quantity": max(0, float(Decimal(str(final_forecast)).quantize(Decimal("0.01")))),
                     }
                 )
 
@@ -95,7 +113,7 @@ class AIService:
         except Exception as e:
             if self.logger:
                 self.logger.error(f"خطأ في التنبؤ الخطي المعزز بالموسمية للمنتج {product_id}: {e}")
-            return []
+            return self._FALLBACK_FORECAST
 
     def _calculate_seasonal_indices(self, dates: List[datetime], y: List[float], period: int) -> Dict[int, float]:
         """حساب المؤشرات الموسمية لأيام الأسبوع"""
@@ -117,10 +135,10 @@ class AIService:
         if not rows or len(rows) < 2:
             return []
 
-        dates = [datetime.strptime(r["DATE(created_at)"], "%Y-%m-%d") for r in rows]
+        dates = [datetime.strptime(r.get('DATE(created_at)', ''), "%Y-%m-%d") for r in rows if r.get('DATE(created_at)')]
         start_date = dates[0]
         x = [(d - start_date).days for d in dates]
-        y = [float(r["SUM(quantity)"] or 0) for r in rows]
+        y = [float(r.get('SUM(quantity)') or 0) for r in rows]
 
         n = len(x)
         sum_x, sum_y = sum(x), sum(y)
@@ -143,7 +161,8 @@ class AIService:
             forecast.append(
                 {
                     "date": future_date.strftime("%Y-%m-%d"),
-                    "predicted_quantity": max(0, round(predicted_qty, 2)),
+                    # PRECISION: Use Decimal quantize for money rounding instead of round()
+                    "predicted_quantity": max(0, float(Decimal(str(predicted_qty)).quantize(Decimal("0.01")))),
                 }
             )
         return forecast
@@ -155,8 +174,14 @@ class AIService:
             start = end - timedelta(days=days)
             # افترض أن هناك جدول stock_movements حيث الحركة من نوع بيع
             q = "SELECT DATE(created_at), SUM(quantity) FROM stock_movements WHERE product_id = ? AND movement_type = ? AND created_at >= ? GROUP BY DATE(created_at) ORDER BY DATE(created_at)"  # noqa: E501
-            rows = self.db.fetch_all(q, (product_id, "بيع", start))
-            daily = [r["SUM(quantity)"] or 0 for r in rows]
+            rows = retry_with_backoff(
+                lambda: self.db.fetch_all(q, (product_id, "بيع", start)),
+                max_retries=2,
+                base_delay=0.5,
+                exceptions=(Exception,),
+                logger=self.logger,
+            )
+            daily = [r.get('SUM(quantity)') or 0 for r in rows]
             if not daily:
                 return 0.0
             # حساب متوسط متحرك بسيط آخر نافذة
@@ -175,9 +200,15 @@ class AIService:
             end = datetime.now()
             start = end - timedelta(days=days)
             q = "SELECT DATE(created_at), SUM(quantity) FROM stock_movements WHERE product_id = ? AND movement_type = ? AND created_at >= ? GROUP BY DATE(created_at) ORDER BY DATE(created_at)"  # noqa: E501
-            rows = self.db.fetch_all(q, (product_id, "بيع", start))
-            daily = [r["SUM(quantity)"] or 0 for r in rows]
-            dates = [r["DATE(created_at)"] for r in rows]
+            rows = retry_with_backoff(
+                lambda: self.db.fetch_all(q, (product_id, "بيع", start)),
+                max_retries=2,
+                base_delay=0.5,
+                exceptions=(Exception,),
+                logger=self.logger,
+            )
+            daily = [r.get('SUM(quantity)') or 0 for r in rows]
+            dates = [r.get('DATE(created_at)', '') for r in rows]
             if not daily or len(daily) < 2:
                 return []
             mean = statistics.mean(daily)
@@ -206,8 +237,8 @@ class AIService:
                 q_sales += " AND created_at <= ?"
                 params.append(end_date)
             row = self.db.fetch_one(q_sales, tuple(params))
-            total_revenue = float(row["SUM(total_amount)"] or 0)
-            orders = int(row["COUNT(*)"] or 0)
+            total_revenue = float(row.get('SUM(total_amount)') or 0)
+            orders = int(row.get('COUNT(*)') or 0)
             return {
                 "total_revenue": total_revenue,
                 "orders_count": orders,
@@ -241,8 +272,10 @@ class AIService:
             """
             high_refund_sales = self.db.fetch_all(q_refunds, (start,))
             for sale in high_refund_sales:
-                sale_id = sale["id"]
-                product_name = sale["name"]
+                sale_id = sale.get("id")
+                product_name = sale.get("name", "")
+                if sale_id is None:
+                    continue
                 if sale_id not in flagged_sales:
                     self._flag_sale_for_review(sale_id)
                     flagged_sales.add(sale_id)
@@ -259,16 +292,18 @@ class AIService:
             """
             suspicious_customers = self.db.fetch_all(q_customers, (start, high_sales_count))
             for cust in suspicious_customers:
-                customer_id = cust["customer_id"]
-                customer_name = cust["name"]
-                refund_count = cust["refund_count"]
+                customer_id = cust.get("customer_id")
+                customer_name = cust.get("name", "")
+                refund_count = cust.get("refund_count", 0)
+                if customer_id is None:
+                    continue
                 # ضع علامة على آخر معاملة مرتجعة لهذا العميل
                 q_last_refund = (
                     "SELECT id FROM sales WHERE customer_id = ? AND type = 'refund' ORDER BY created_at DESC LIMIT 1"
                 )
                 last_sale = self.db.fetch_one(q_last_refund, (customer_id,))
-                if last_sale and last_sale["id"] not in flagged_sales:
-                    sale_id = last_sale["id"]
+                if last_sale and last_sale.get("id") not in flagged_sales:
+                    sale_id = last_sale.get("id")
                     self._flag_sale_for_review(sale_id)
                     flagged_sales.add(sale_id)
                     actions_taken.append(
@@ -290,7 +325,7 @@ class AIService:
         try:
             # التحقق من أن الحالة الحالية ليست نهائية (مثل ملغاة)
             current_status = self.db.fetch_one("SELECT status FROM sales WHERE id = ?", (sale_id,))
-            if current_status and current_status["status"] not in ["canceled", "under_review"]:
+            if current_status and current_status.get("status") not in ["canceled", "under_review"]:
                 self.db.execute("UPDATE sales SET status = 'under_review' WHERE id = ?", (sale_id,))
                 if self.logger:
                     self.logger.info(f"Sale {sale_id} flagged for fraud review.")
@@ -331,8 +366,8 @@ class AIService:
                 q = "SELECT name, stock_quantity, reorder_level FROM products WHERE stock_quantity < reorder_level ORDER BY stock_quantity ASC LIMIT 5"  # noqa: E501
                 low_stock_products = self.db.fetch_all(q)
                 response["data"] = [
-                    {"name": r["name"], "quantity": r["stock_quantity"],
-                     "reorder_level": r["reorder_level"]}
+                    {"name": r.get("name", ""), "quantity": r.get("stock_quantity", 0),
+                     "reorder_level": r.get("reorder_level", 0)}
                     for r in low_stock_products
                 ]
                 if not low_stock_products:
@@ -353,7 +388,7 @@ class AIService:
                     LIMIT 5
                 """
                 top_products = self.db.fetch_all(q)
-                response["data"] = [{"name": r["name"], "total_sold": r["total_sold"]} for r in top_products]
+                response["data"] = [{"name": r.get("name", ""), "total_sold": r.get("total_sold", 0)} for r in top_products]
                 response["message"] = "المنتجات الأكثر مبيعاً هي:"
                 return response
 

@@ -5,6 +5,7 @@
 يضمن فصل البيانات بين الشركات المختلفة
 """
 
+import re
 import threading
 from contextlib import contextmanager
 from typing import List, Optional
@@ -102,13 +103,21 @@ class TenantIsolationManager:
             # إذا لم تكن هناك شركة محددة، لا نضيف فلتر
             return query
 
+        # SQL_INJECTION: company_id was directly interpolated into SQL string.
+        # Fixed: validate that company_id is an integer to prevent injection.
+        if not isinstance(company_id, int):
+            raise ValueError(f"company_id must be an integer, got {type(company_id).__name__}")
+
         # تحديد اسم العمود
         if table_alias:
+            # SQL_SAFE: table_alias is internally controlled caller argument, not user input.
+            # Validate it contains only safe identifier characters.
+            if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', table_alias):
+                raise ValueError(f"Invalid table alias: {table_alias}")
             column_name = f"{table_alias}.company_id"
         else:
-            # محاولة العثور على اسم الجدول من الاستعلام
-            # هذا بسيط - قد نحتاج إلى تحسينه لاحقاً
             column_name = "company_id"
+        # SQL_SAFE: column_name is now validated or hardcoded, not user input.
 
         # إضافة فلتر WHERE أو AND
         query_upper = query.upper().strip()

@@ -36,7 +36,7 @@ except ImportError:
     KEYBOARD_AVAILABLE = False
 
 try:
-    pass
+    import mouse
 
     MOUSE_AVAILABLE = True
 except ImportError:
@@ -152,11 +152,12 @@ class RoboticProcessAutomationSystem:
 
     def _setup_logging(self):
         """إعداد نظام التسجيل"""
-        self.logger.setLevel(logging.INFO)
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter("%(asctime)s - RPA - %(levelname)s - %(message)s")
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
+        if not self.logger.handlers:
+            self.logger.setLevel(logging.INFO)
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter("%(asctime)s - RPA - %(levelname)s - %(message)s")
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
 
     def create_script(self, name: str, description: str, rpa_type: RPAType) -> str:
         """إنشاء سكريبت RPA جديد"""
@@ -589,28 +590,31 @@ class RoboticProcessAutomationSystem:
         operation = params.get("operation", "read")
         file_path = params.get("file_path", "")
 
-        if operation == "read":
-            with open(file_path, "r", encoding="utf-8") as f:
-                content = f.read()
-            return {
-                "status": "read",
-                "file_path": file_path,
-                "content_length": len(content),
-            }
-        elif operation == "write":
-            content = params.get("content", "")
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(content)
-            return {
-                "status": "written",
-                "file_path": file_path,
-                "content_length": len(content),
-            }
-        elif operation == "copy":
-            import shutil
+        try:
+            if operation == "read":
+                with open(file_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                return {
+                    "status": "read",
+                    "file_path": file_path,
+                    "content_length": len(content),
+                }
+            elif operation == "write":
+                content = params.get("content", "")
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(content)
+                return {
+                    "status": "written",
+                    "file_path": file_path,
+                    "content_length": len(content),
+                }
+            elif operation == "copy":
+                import shutil
 
-            dest_path = params.get("dest_path", "")
-            shutil.copy2(file_path, dest_path)
-            return {"status": "copied", "from": file_path, "to": dest_path}
-        else:
-            return {"status": "unknown_operation", "operation": operation}
+                dest_path = params.get("dest_path", "")
+                shutil.copy2(file_path, dest_path)
+                return {"status": "copied", "from": file_path, "to": dest_path}
+            else:
+                return {"status": "unknown_operation", "operation": operation}
+        except (OSError, IOError) as e:
+            return {"status": "error", "error": str(e)}

@@ -44,7 +44,7 @@ class ProductService:
         Handles both dict and tuple row formats returned by different DB backends.
         """
         try:
-            rows = self.db_manager.fetch_all(f"PRAGMA table_info({table})")
+            rows = self.db_manager.fetch_all(f"PRAGMA table_info({table})")  # SQL_SAFE: table is internal parameter, not user input
             if not rows:
                 return set()
             cols = set()
@@ -77,9 +77,9 @@ class ProductService:
                 ),
                 "unit": product.unit,
                 # map base_price -> selling_price if selling_price exists in schema
-                "cost_price": (float(product.cost_price) if product.cost_price is not None else None),
+                "cost_price": (float(product.cost_price or 0) if product.cost_price is not None else None),
                 "selling_price": (
-                    float(product.base_price) if getattr(product, "base_price", None) is not None else None
+                    float(product.base_price or 0) if getattr(product, "base_price", None) is not None else None
                 ),
                 "pricing_policy": getattr(product, "pricing_policy", None),
                 "current_stock": product.current_stock,
@@ -113,7 +113,7 @@ class ProductService:
                 return None
 
             placeholders = ",".join(["?"] * len(insert_cols))
-            query = f"INSERT INTO products ({', '.join(insert_cols)}) VALUES ({placeholders})"
+            query = f"INSERT INTO products ({', '.join(insert_cols)}) VALUES ({placeholders})"  # SQL_SAFE: insert_cols from ALLOWED_PRODUCT_COLUMNS whitelist
             product_id = self.db_manager.execute_insert(query, tuple(insert_vals))
             if product_id:
                 product.id = product_id
@@ -241,7 +241,7 @@ class ProductService:
                     else None
                 ),
                 "unit": product.unit,
-                "cost_price": float(product.cost_price) if product.cost_price is not None else None,
+                "cost_price": float(product.cost_price or 0) if product.cost_price is not None else None,
                 "pricing_policy": getattr(product, "pricing_policy", None),
                 "current_stock": product.current_stock,
                 "reserved_stock": getattr(product, "reserved_stock", None),
@@ -258,7 +258,7 @@ class ProductService:
             }
 
             # Handle base_price / selling_price: write to whichever columns exist
-            base_price_val = float(product.base_price) if getattr(product, "base_price", None) is not None else None
+            base_price_val = float(product.base_price or 0) if getattr(product, "base_price", None) is not None else None
             selling_price_val = base_price_val  # same value, different column name
             if base_price_val is not None:
                 col_map["base_price"] = base_price_val
@@ -280,7 +280,7 @@ class ProductService:
                 return False
 
             update_vals.append(product.id)
-            query = f"UPDATE products SET {', '.join(update_parts)} WHERE id = ?"
+            query = f"UPDATE products SET {', '.join(update_parts)} WHERE id = ?"  # SQL_SAFE: update_parts from ALLOWED_PRODUCT_COLUMNS whitelist; id parameterized
 
             self.db_manager.execute_non_query(query, tuple(update_vals))
             if self.logger:
@@ -295,13 +295,58 @@ class ProductService:
 
     def delete_product(self, product_id: int, soft_delete: bool = True) -> bool:
         """حذف منتج"""
+        # Reference checks prevent orphaned records and FK violations.
+        # Hard delete checks sale_items, purchase_items, stock_movements.
+        # Soft delete checks for open orders referencing this product.
         try:
+            # Check for related sales
+            sales_row = self.db_manager.fetch_one(
+                "SELECT COUNT(*) as cnt FROM sale_items WHERE product_id = ?",
+                (product_id,)
+            )
+            if sales_row:
+                sales_count = sales_row.get("cnt", 0)
+                if sales_count and int(sales_count) > 0:
+                    if self.logger:
+                        self.logger.warning(
+                            f"Cannot delete product {product_id}: has {sales_count} sale item references"
+                        )
+                    return False
+
+            # Check for related purchase orders
+            po_row = self.db_manager.fetch_one(
+                "SELECT COUNT(*) as cnt FROM purchase_items WHERE product_id = ?",
+                (product_id,)
+            )
+            if po_row:
+                po_count = po_row.get("cnt", 0)
+                if po_count and int(po_count) > 0:
+                    if self.logger:
+                        self.logger.warning(
+                            f"Cannot delete product {product_id}: has {po_count} purchase item references"
+                        )
+                    return False
+
+            # Check for stock movements
+            movements_row = self.db_manager.fetch_one(
+                "SELECT COUNT(*) as cnt FROM stock_movements WHERE product_id = ?",
+                (product_id,)
+            )
+            if movements_row:
+                movements_count = movements_row.get("cnt", 0)
+                if movements_count and int(movements_count) > 0 and not soft_delete:
+                    if self.logger:
+                        self.logger.warning(
+                            f"Cannot hard delete product {product_id}: has {movements_count} stock movement records"
+                        )
+                    return False
+
             if soft_delete:
                 # حذف ناعم - تعطيل المنتج فقط
                 query = "UPDATE products SET is_active = 0, updated_at = ? WHERE id = ?"
                 params = (datetime.now(), product_id)
             else:
-                # حذف صلب - حذف نهائي
+                # حذف صلب - حذف نهائي (only allowed if no references)
                 query = "DELETE FROM products WHERE id = ?"
                 params = (product_id,)
 
@@ -589,8 +634,8 @@ class ProductService:
                 tier.product_id,
                 tier.min_quantity,
                 tier.max_quantity,
-                float(tier.price),
-                float(tier.discount_percent),
+                float(tier.price or 0),
+                float(tier.discount_percent or 0),
                 tier.valid_from,
                 tier.valid_until,
                 tier.description,

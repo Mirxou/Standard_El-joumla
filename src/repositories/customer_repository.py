@@ -8,6 +8,7 @@ Repository للعملاء
 from typing import Any, Dict, List, Optional
 
 from src.core.local_database_manager import LocalDatabaseManager
+from src.utils.db_helpers import escape_like_wildcards
 
 from .base_repository import BaseRepository
 
@@ -49,7 +50,7 @@ class CustomerRepository(BaseRepository):
             ORDER BY name
             LIMIT ?
             """,
-            (f"%{name}%", limit),
+            (f"%{escape_like_wildcards(name)}%", limit),
         )
 
     def update_balance(self, customer_id: int, amount: float) -> bool:

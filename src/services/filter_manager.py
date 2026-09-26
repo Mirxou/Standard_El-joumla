@@ -9,10 +9,14 @@
 """
 
 import json
+import logging
+import sqlite3
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional
 
 from ..core.database_manager import DatabaseManager
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -54,7 +58,7 @@ class FilterManager:
         """
         try:
             self.db.execute_query(create_query)
-        except Exception:
+        except sqlite3.OperationalError:
             pass  # Table might already exist
 
     # ==================== إدارة الفلاتر ====================
@@ -85,9 +89,9 @@ class FilterManager:
         try:
             filter_id = self.db.execute_insert(query, params)
             return int(filter_id) if filter_id else 0
-        except Exception as e:
-            print(f"Error saving filter: {e}")
-            return 0
+        except (sqlite3.Error, ValueError) as e:
+            logger.error(f"Error saving filter: {e}")
+            return 0  # On error: returns 0
 
     def update_filter(self, filter_id: int, filter_obj: SavedFilter) -> bool:
         """تحديث فلتر محفوظ"""
@@ -108,9 +112,9 @@ class FilterManager:
         try:
             self.db.execute_non_query(query, params)
             return True
-        except Exception as e:
-            print(f"Error updating filter: {e}")
-            return False
+        except (sqlite3.Error, ValueError) as e:
+            logger.error(f"Error updating filter: {e}")
+            return False  # On error: returns False
 
     def delete_filter(self, filter_id: int) -> bool:
         """حذف فلتر"""
@@ -118,8 +122,8 @@ class FilterManager:
         try:
             self.db.execute_non_query(query, [filter_id])
             return True
-        except Exception:
-            return False
+        except sqlite3.Error:
+            return False  # On error: returns False
 
     def get_filter(self, filter_id: int) -> Optional[SavedFilter]:
         """الحصول على فلتر محدد"""
@@ -129,7 +133,7 @@ class FilterManager:
         if results:
             row = results[0]
             return SavedFilter(
-                id=int(row["id"]),
+                id=int(row["id"] or 0),
                 name=str(row["name"]),
                 description=str(row.get("description", "")),
                 filter_type=str(row["filter_type"]),
@@ -175,7 +179,7 @@ class FilterManager:
         for row in results:
             filters.append(
                 SavedFilter(
-                    id=int(row["id"]),
+                    id=int(row["id"] or 0),
                     name=str(row["name"]),
                     description=str(row.get("description", "")),
                     filter_type=str(row["filter_type"]),
@@ -198,8 +202,8 @@ class FilterManager:
         try:
             self.db.execute_non_query(query, [filter_id])
             return True
-        except Exception:
-            return False
+        except sqlite3.Error:
+            return False  # On error: returns False
 
     # ==================== فلاتر سريعة مدمجة ====================
 
@@ -301,6 +305,6 @@ class FilterManager:
                     count += 1
 
             return count
-        except Exception as e:
-            print(f"Error importing filters: {e}")
-            return 0
+        except (sqlite3.Error, ValueError, json.JSONDecodeError) as e:
+            logger.error(f"Error importing filters: {e}")
+            return 0  # On error: returns 0

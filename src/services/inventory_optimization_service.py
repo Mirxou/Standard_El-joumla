@@ -3,6 +3,7 @@ Inventory Optimization Service - خدمة تحسين المخزون
 تحليل ABC، الأرصدة الآمنة، توصيات إعادة الطلب
 """
 
+import logging
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 import math
@@ -26,6 +27,7 @@ class InventoryOptimizationService:
 
     def __init__(self, db_manager: DatabaseManager):
         self.db = db_manager
+        self.logger = logging.getLogger(__name__)
 
     # ============================================================================
     # تحليل ABC
@@ -66,14 +68,14 @@ class InventoryOptimizationService:
                 return []
 
             # حساب الإجمالي الكلي
-            total_value = sum(Decimal(str(row["total_value"])) for row in rows)
+            total_value = sum(Decimal(str(row.get("total_value", 0) or 0)) for row in rows)
 
             # إنشاء نتائج التحليل
             results = []
             cumulative_percentage = Decimal("0")
 
             for rank, row in enumerate(rows, 1):
-                sales_value = Decimal(str(row["total_value"]))
+                sales_value = Decimal(str(row.get("total_value", 0) or 0))
                 percentage = (sales_value / total_value * 100) if total_value > 0 else Decimal("0")
                 cumulative_percentage += percentage
 
@@ -88,24 +90,24 @@ class InventoryOptimizationService:
                 # حساب الأيام منذ آخر بيع
                 last_sale = None
                 days_since = None
-                if row["last_sale_date"]:
-                    last_sale = date.fromisoformat(row["last_sale_date"])
+                if row.get("last_sale_date"):
+                    last_sale = date.fromisoformat(row.get("last_sale_date"))
                     days_since = (date.today() - last_sale).days
 
                 result = ABCAnalysisResult(
-                    product_id=row["product_id"],
-                    product_code=row["product_code"],
-                    product_name=row["product_name"],
-                    annual_sales_quantity=Decimal(str(row["total_quantity"])),
+                    product_id=row.get("product_id", 0),
+                    product_code=row.get("product_code", ""),
+                    product_name=row.get("product_name", ""),
+                    annual_sales_quantity=Decimal(str(row.get("total_quantity", 0) or 0)),
                     annual_sales_value=sales_value,
-                    average_unit_price=Decimal(str(row["avg_price"])),
-                    current_stock=Decimal(str(row["current_stock"] or 0)),
-                    stock_value=Decimal(str(row["stock_value"] or 0)),
+                    average_unit_price=Decimal(str(row.get("avg_price", 0) or 0)),
+                    current_stock=Decimal(str(row.get("current_stock", 0) or 0)),
+                    stock_value=Decimal(str(row.get("stock_value", 0) or 0)),
                     abc_category=category,
                     percentage_of_total_value=percentage,
                     cumulative_percentage=cumulative_percentage,
                     rank=rank,
-                    sales_frequency=row["sale_count"],
+                    sales_frequency=row.get("sale_count", 0),
                     last_sale_date=last_sale,
                     days_since_last_sale=days_since,
                     analysis_date=date.today(),
@@ -119,7 +121,7 @@ class InventoryOptimizationService:
             return results
 
         except Exception as e:
-            print(f"Error in ABC analysis: {e}")
+            self.logger.error(f"Error in ABC analysis: {e}")
             return []
 
     def get_abc_summary(self, results: List[ABCAnalysisResult]) -> Dict[str, Any]:
@@ -150,9 +152,9 @@ class InventoryOptimizationService:
 
         # حساب النسب
         if summary["total_value"] > 0:
-            summary["category_a_percentage"] = float((summary["category_a_value"] / summary["total_value"]) * 100)
-            summary["category_b_percentage"] = float((summary["category_b_value"] / summary["total_value"]) * 100)
-            summary["category_c_percentage"] = float((summary["category_c_value"] / summary["total_value"]) * 100)
+            summary["category_a_percentage"] = float(((summary["category_a_value"] or 0) / (summary["total_value"] or 1)) * 100)
+            summary["category_b_percentage"] = float(((summary["category_b_value"] or 0) / (summary["total_value"] or 1)) * 100)
+            summary["category_c_percentage"] = float(((summary["category_c_value"] or 0) / (summary["total_value"] or 1)) * 100)
 
         return summary
 
@@ -179,8 +181,8 @@ class InventoryOptimizationService:
 
             params = (
                 config.product_id,
-                float(config.reorder_point),
-                float(config.safety_stock),
+                float(config.reorder_point or 0),
+                float(config.safety_stock or 0),
                 float(config.maximum_stock),
                 float(config.minimum_stock),
                 float(config.average_daily_demand),
@@ -198,7 +200,7 @@ class InventoryOptimizationService:
             return config
 
         except Exception as e:
-            raise Exception(f"Failed to create safety stock config: {e}")
+            raise RuntimeError(f"Failed to create safety stock config: {e}") from e
 
     def get_safety_stock_config(self, product_id: int) -> Optional[SafetyStockConfig]:
         """جلب إعدادات الأرصدة الآمنة لمنتج"""
@@ -225,7 +227,7 @@ class InventoryOptimizationService:
             return None
 
         except Exception as e:
-            print(f"Error getting safety stock config: {e}")
+            self.logger.error(f"Error getting safety stock config: {e}")
             return None
 
     def update_safety_stock_config(self, config: SafetyStockConfig):
@@ -253,8 +255,8 @@ class InventoryOptimizationService:
             """
 
             params = (
-                float(config.reorder_point),
-                float(config.safety_stock),
+                float(config.reorder_point or 0),
+                float(config.safety_stock or 0),
                 float(config.maximum_stock),
                 float(config.minimum_stock),
                 float(config.average_daily_demand),
@@ -271,7 +273,7 @@ class InventoryOptimizationService:
             self.db.execute_update(query, params)
 
         except Exception as e:
-            raise Exception(f"Failed to update safety stock config: {e}")
+            raise RuntimeError(f"Failed to update safety stock config: {e}") from e
 
     def get_all_safety_stock_configs(self, status_filter: Optional[str] = None) -> List[SafetyStockConfig]:
         """جلب جميع إعدادات الأرصدة الآمنة"""
@@ -303,7 +305,7 @@ class InventoryOptimizationService:
             return configs
 
         except Exception as e:
-            print(f"Error getting safety stock configs: {e}")
+            self.logger.error(f"Error getting safety stock configs: {e}")
             return []
 
     def calculate_demand_statistics(self, product_id: int, days: int = 90) -> Dict[str, Decimal]:
@@ -343,11 +345,12 @@ class InventoryOptimizationService:
                     """
                     daily_rows = self.db.execute_query(daily_query, (product_id, start_date))
                     if daily_rows and len(daily_rows) > 1:
-                        daily_quantities = [float(r["daily_qty"]) for r in daily_rows]
+                        daily_quantities = [float(r.get("daily_qty", 0) or 0) for r in daily_rows]
                         std_dev = Decimal(str(self._calculate_standard_deviation(daily_quantities)))
                     else:
                         std_dev = Decimal("0")
-                except Exception:
+                except Exception as e:
+                    self.logger.debug(f"Error computing daily std_dev: {e}")
                     std_dev = Decimal("0")
 
                 return {
@@ -365,7 +368,7 @@ class InventoryOptimizationService:
             }
 
         except Exception as e:
-            print(f"Error calculating demand statistics: {e}")
+            self.logger.error(f"Error calculating demand statistics: {e}")
             return {}
 
     def auto_configure_safety_stock(self, product_id: int, lead_time_days: int = 7) -> SafetyStockConfig:
@@ -388,7 +391,7 @@ class InventoryOptimizationService:
                 product_id=product_id,
                 product_code=product.get("product_code") or product.get("code") or product.get("barcode") or "",
                 product_name=product.get("name", ""),
-                current_stock=Decimal(str(product["stock_quantity"] or 0)),
+                current_stock=Decimal(str(product.get("stock_quantity", 0) or 0)),
                 average_daily_demand=stats.get("average_daily_demand", Decimal("1")),
                 lead_time_days=lead_time_days,
                 service_level=Decimal("95"),
@@ -404,7 +407,7 @@ class InventoryOptimizationService:
 
             # حساب EOQ
             annual_demand = stats.get("total_demand", Decimal("0")) * (365 / 90)
-            config.calculate_economic_order_quantity(annual_demand, Decimal(str(product["cost_price"] or 100)))
+            config.calculate_economic_order_quantity(annual_demand, Decimal(str(product.get("cost_price", 100) or 100)))
 
             config.update_reorder_status()
             config.calculate_suggested_order()
@@ -412,7 +415,7 @@ class InventoryOptimizationService:
             return config
 
         except Exception as e:
-            raise Exception(f"Failed to auto-configure safety stock: {e}")
+            raise RuntimeError(f"Failed to auto-configure safety stock: {e}") from e
 
     # ============================================================================
     # توصيات إعادة الطلب
@@ -479,7 +482,7 @@ class InventoryOptimizationService:
             return recommendations
 
         except Exception as e:
-            print(f"Error generating reorder recommendations: {e}")
+            self.logger.error(f"Error generating reorder recommendations: {e}")
             return []
 
     # ============================================================================
@@ -489,6 +492,9 @@ class InventoryOptimizationService:
     def create_batch(self, batch: ProductBatch) -> ProductBatch:
         """إنشاء دفعة جديدة"""
         try:
+            # COLUMN_CHECK: product_batches table not in base schema; ensure it exists
+            self._ensure_product_batches_table()
+
             batch.available_quantity = batch.current_quantity - batch.reserved_quantity
             batch.total_cost = batch.initial_quantity * batch.unit_cost
             batch.update_status()
@@ -522,8 +528,8 @@ class InventoryOptimizationService:
                 batch.supplier_id,
                 batch.supplier_name,
                 batch.purchase_order_number,
-                float(batch.unit_cost),
-                float(batch.total_cost),
+                float(batch.unit_cost or 0),
+                float(batch.total_cost or 0),
                 batch.status,
                 batch.notes,
                 batch.quality_check_passed,
@@ -535,7 +541,7 @@ class InventoryOptimizationService:
             return batch
 
         except Exception as e:
-            raise Exception(f"Failed to create batch: {e}")
+            raise RuntimeError(f"Failed to create batch: {e}") from e
 
     def get_batches_by_product(self, product_id: int, include_expired: bool = False) -> List[ProductBatch]:
         """جلب الدفعات حسب المنتج"""
@@ -564,7 +570,7 @@ class InventoryOptimizationService:
             return batches
 
         except Exception as e:
-            print(f"Error getting batches: {e}")
+            self.logger.error(f"Error getting batches: {e}")
             return []
 
     def get_expiring_batches(self, days: int = 30) -> List[ProductBatch]:
@@ -602,7 +608,7 @@ class InventoryOptimizationService:
             return batches
 
         except Exception as e:
-            print(f"Error getting expiring batches: {e}")
+            self.logger.error(f"Error getting expiring batches: {e}")
             return []
 
     # ============================================================================
@@ -622,3 +628,37 @@ class InventoryOptimizationService:
         if hasattr(row, "keys"):
             return {key: row[key] for key in row.keys()}
         return row
+
+    def _ensure_product_batches_table(self):
+        """Ensure product_batches table exists (not in base schema)"""  # COLUMN_CHECK
+        try:
+            self.db.execute_query("""
+                CREATE TABLE IF NOT EXISTS product_batches (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    product_id INTEGER NOT NULL,
+                    batch_number TEXT NOT NULL,
+                    serial_numbers TEXT,
+                    initial_quantity REAL DEFAULT 0,
+                    current_quantity REAL DEFAULT 0,
+                    reserved_quantity REAL DEFAULT 0,
+                    available_quantity REAL DEFAULT 0,
+                    manufacturing_date DATE,
+                    expiry_date DATE,
+                    received_date DATE,
+                    warehouse_location TEXT,
+                    rack_number TEXT,
+                    bin_number TEXT,
+                    supplier_id INTEGER,
+                    supplier_name TEXT,
+                    purchase_order_number TEXT,
+                    unit_cost DECIMAL(10,2) DEFAULT 0,
+                    total_cost DECIMAL(10,2) DEFAULT 0,
+                    status TEXT DEFAULT 'active',
+                    notes TEXT,
+                    quality_check_passed BOOLEAN DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+        except Exception as e:
+            self.logger.debug(f"product_batches table may already exist: {e}")

@@ -229,8 +229,8 @@ class PerformanceService:
             # حجم كل جدول
             table_sizes = {}
             for table in tables:
-                size_result = self.db.execute_query(f"SELECT COUNT(*) as count FROM {table}")
-                table_sizes[table] = size_result[0]["count"] if size_result else 0
+                size_result = self.db.execute_query(f"SELECT COUNT(*) as count FROM {table}")  # SQL_SAFE: table from _get_all_tables (sqlite_master)
+                table_sizes[table] = size_result[0].get("count", 0) if size_result else 0
 
             analysis["table_sizes"] = table_sizes
             analysis["total_records"] = sum(table_sizes.values())
@@ -249,10 +249,10 @@ class PerformanceService:
 
             # مساحة غير مستخدمة
             freelist = self.db.execute_query("PRAGMA freelist_count")
-            analysis["freelist_pages"] = freelist[0]["freelist_count"] if freelist else 0
+            analysis["freelist_pages"] = freelist[0].get("freelist_count", 0) if freelist else 0
 
             page_size = self.db.execute_query("PRAGMA page_size")
-            analysis["page_size"] = page_size[0]["page_size"] if page_size else 0
+            analysis["page_size"] = page_size[0].get("page_size", 0) if page_size else 0
 
             # حساب المساحة القابلة للاستعادة
             if analysis["freelist_pages"] > 0 and analysis["page_size"] > 0:
@@ -279,33 +279,38 @@ class PerformanceService:
     def get_table_statistics(self, table_name: str) -> Dict[str, Any]:
         """إحصائيات جدول معين"""
         try:
+            # Validate table_name against known tables to prevent SQL injection
+            valid_tables = self._get_all_tables()
+            if table_name not in valid_tables:
+                return {"success": False, "error": f"Table '{table_name}' not found or invalid"}
+
             stats = {}
 
             # عدد السجلات
-            count_result = self.db.execute_query(f"SELECT COUNT(*) as count FROM {table_name}")
-            stats["record_count"] = count_result[0]["count"] if count_result else 0
+            count_result = self.db.execute_query(f"SELECT COUNT(*) as count FROM {table_name}")  # SQL_SAFE: table_name from internal _get_all_tables
+            stats["record_count"] = count_result[0].get("count", 0) if count_result else 0
 
             # معلومات الجدول
-            table_info = self.db.execute_query(f"PRAGMA table_info({table_name})")
+            table_info = self.db.execute_query(f"PRAGMA table_info({table_name})")  # SQL_SAFE: table_name from _get_all_tables (internal)
             stats["columns"] = [
                 {
-                    "name": col["name"],
-                    "type": col["type"],
-                    "not_null": bool(col["notnull"]),
-                    "default": col["dflt_value"],
-                    "primary_key": bool(col["pk"]),
+                    "name": col.get("name", ""),
+                    "type": col.get("type", ""),
+                    "not_null": bool(col.get("notnull", 0)),
+                    "default": col.get("dflt_value"),
+                    "primary_key": bool(col.get("pk", 0)),
                 }
                 for col in table_info
             ]
             stats["column_count"] = len(table_info)
 
             # الفهارس
-            index_list = self.db.execute_query(f"PRAGMA index_list({table_name})")
+            index_list = self.db.execute_query(f"PRAGMA index_list({table_name})")  # SQL_SAFE: table_name from _get_all_tables (internal)
             stats["indexes"] = [
                 {
-                    "name": idx["name"],
-                    "unique": bool(idx["unique"]),
-                    "origin": idx["origin"],
+                    "name": idx.get("name", ""),
+                    "unique": bool(idx.get("unique", 0)),
+                    "origin": idx.get("origin", ""),
                 }
                 for idx in index_list
             ]
@@ -321,12 +326,12 @@ class PerformanceService:
     def _get_all_tables(self) -> List[str]:
         """الحصول على قائمة جميع الجداول"""
         result = self.db.execute_query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-        return [row["name"] for row in result]
+        return [row.get("name", "") for row in result if row.get("name")]
 
     def _get_all_indexes(self) -> List[str]:
         """الحصول على قائمة جميع الفهارس"""
         result = self.db.execute_query("SELECT name FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'")
-        return [row["name"] for row in result]
+        return [row.get("name", "") for row in result if row.get("name")]
 
     def _get_pragma_settings(self) -> Dict[str, Any]:
         """الحصول على إعدادات PRAGMA"""
@@ -343,7 +348,7 @@ class PerformanceService:
 
         for pragma in pragma_commands:
             try:
-                result = self.db.execute_query(f"PRAGMA {pragma}")
+                result = self.db.execute_query(f"PRAGMA {pragma}")  # SQL_SAFE: pragma from hardcoded list above
                 if result:
                     settings[pragma] = result[0].get(pragma, result[0].get(list(result[0].keys())[0]))
             except Exception:
@@ -462,7 +467,7 @@ class PerformanceService:
             if self.cache:
                 cache_stats = self.cache.get_all_stats()
                 if "_totals" in cache_stats:
-                    metrics.cache_hit_rate = cache_stats["_totals"]["overall_hit_rate"]
+                    metrics.cache_hit_rate = cache_stats.get("_totals", {}).get("overall_hit_rate", 0.0)
 
         except Exception:
             logging.getLogger(__name__).warning("Ignored exception in performance_service.py")

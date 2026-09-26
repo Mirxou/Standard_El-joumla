@@ -144,11 +144,12 @@ class WorkflowAutomationManager:
 
     def _setup_logging(self):
         """إعداد نظام التسجيل"""
-        self.logger.setLevel(logging.INFO)
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter("%(asctime)s - Workflow Manager - %(levelname)s - %(message)s")
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
+        if not self.logger.handlers:
+            self.logger.setLevel(logging.INFO)
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter("%(asctime)s - Workflow Manager - %(levelname)s - %(message)s")
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
 
     def _register_default_handlers(self):
         """تسجيل معالجات المهام الافتراضية"""

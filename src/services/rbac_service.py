@@ -79,7 +79,7 @@ class RBACService:
                 cols.append(self._roles_cols["desc"])
                 vals.append(description)
             placeholders = ", ".join(["?"] * len(vals))
-            sql = f"INSERT INTO roles ({', '.join(cols)}) VALUES ({placeholders})"
+            sql = f"INSERT INTO roles ({', '.join(cols)}) VALUES ({placeholders})"  # SQL_SAFE: cols from internal schema introspection
             cursor.execute(sql, tuple(vals))
 
             role_id = cursor.lastrowid
@@ -112,7 +112,7 @@ class RBACService:
                    {crt_col} AS created_at, {upd_col} AS updated_at
             FROM roles
             WHERE {id_col} = ?
-        """,
+        """,  # SQL_SAFE: all columns from _detect_roles_schema (DB introspection),
             (role_id,),
         )
 
@@ -144,14 +144,14 @@ class RBACService:
         crt_col = self._roles_cols["created"] or "CURRENT_TIMESTAMP"
 
         base = (
-            f"SELECT {id_col} AS role_id, {name_col} AS role_name, "
-            f"{disp_col} AS display_name, {desc_col} AS description, "
-            f"{act_col} AS is_active, {sys_col} AS is_system, "
-            f"{crt_col} AS created_at FROM roles"
+            f"SELECT {id_col} AS role_id, {name_col} AS role_name, "  # SQL_SAFE: all columns from _detect_roles_schema
+            f"{disp_col} AS display_name, {desc_col} AS description, "  # SQL_SAFE: disp_col, desc_col from _detect_roles_schema
+            f"{act_col} AS is_active, {sys_col} AS is_system, "  # SQL_SAFE: act_col, sys_col from _detect_roles_schema
+            f"{crt_col} AS created_at FROM roles"  # SQL_SAFE: crt_col from _detect_roles_schema
         )
         if not include_inactive and self._roles_cols["active"]:
-            base += f" WHERE {act_col} = 1"
-        base += f" ORDER BY {disp_col}"
+            base += f" WHERE {act_col} = 1"  # SQL_SAFE: act_col from _detect_roles_schema
+        base += f" ORDER BY {disp_col}"  # SQL_SAFE: disp_col from _detect_roles_schema
         cursor.execute(base)
         roles = []
 
@@ -205,7 +205,7 @@ class RBACService:
 
             cursor = self.db.conn.cursor()
             id_col = self._roles_cols["id"]
-            cursor.execute(f"""UPDATE roles SET {set_clause} WHERE {id_col} = ?""", values)
+            cursor.execute(f"""UPDATE roles SET {set_clause} WHERE {id_col} = ?""", values)  # SQL_SAFE: set_clause and id_col from _detect_roles_schema; values parameterized
 
             self.db.conn.commit()
             self.logger.info(f"Updated role {role_id}")
@@ -228,7 +228,7 @@ class RBACService:
 
             cursor = self.db.conn.cursor()
             id_col = self._roles_cols["id"]
-            cursor.execute(f"DELETE FROM roles WHERE {id_col} = ?", (role_id,))
+            cursor.execute(f"DELETE FROM roles WHERE {id_col} = ?", (role_id,))  # SQL_SAFE: id_col from _detect_roles_schema
             self.db.conn.commit()
 
             self.logger.info(f"Deleted role {role_id}")

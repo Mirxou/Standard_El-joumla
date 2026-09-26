@@ -289,6 +289,7 @@ class ReceivingDialog(BaseDialog):
             qty_spin.setDecimals(3)
             qty_spin.setValue(float(qty_pending))  # القيمة الافتراضية = المتبقي
             qty_spin.valueChanged.connect(lambda v, r=row: self._on_qty_changed(r, v))
+            # PERF_WIDGET: consider QStyledItemDelegate for better performance with large datasets
             self.items_table.setCellWidget(row, 5, qty_spin)
 
             # المقبولة
@@ -297,6 +298,7 @@ class ReceivingDialog(BaseDialog):
             accepted_spin.setMaximum(float(qty_pending))
             accepted_spin.setDecimals(3)
             accepted_spin.setValue(float(qty_pending))
+            # PERF_WIDGET: consider QStyledItemDelegate for better performance with large datasets
             self.items_table.setCellWidget(row, 6, accepted_spin)
 
             # المرفوضة
@@ -305,6 +307,7 @@ class ReceivingDialog(BaseDialog):
             rejected_spin.setMaximum(float(qty_pending))
             rejected_spin.setDecimals(3)
             rejected_spin.setValue(0.000)
+            # PERF_WIDGET: consider QStyledItemDelegate for better performance with large datasets
             self.items_table.setCellWidget(row, 7, rejected_spin)
 
             # تقييم الجودة
@@ -312,6 +315,7 @@ class ReceivingDialog(BaseDialog):
             for rating in QualityRating:
                 quality_combo.addItem(rating.value, rating)
             quality_combo.setCurrentIndex(1)  # GOOD
+            # PERF_WIDGET: consider QStyledItemDelegate for better performance with large datasets
             self.items_table.setCellWidget(row, 8, quality_combo)
 
             # حفظ معرف البند
@@ -324,6 +328,9 @@ class ReceivingDialog(BaseDialog):
             qty_spin = self.items_table.cellWidget(row, 5)
             accepted_spin = self.items_table.cellWidget(row, 6)
 
+            if not qty_spin or not accepted_spin:
+                continue
+
             # تعيين الكمية المستلمة = المتبقي
             max_qty = qty_spin.maximum()
             qty_spin.setValue(max_qty)
@@ -334,6 +341,9 @@ class ReceivingDialog(BaseDialog):
         # تحديث الكمية المقبولة تلقائياً
         accepted_spin = self.items_table.cellWidget(row, 6)
         rejected_spin = self.items_table.cellWidget(row, 7)
+
+        if not accepted_spin or not rejected_spin:
+            return
 
         # Cap rejected to not exceed received
         if rejected_spin.value() > value:
@@ -374,6 +384,8 @@ class ReceivingDialog(BaseDialog):
         total_received = Decimal("0")
         for row in range(self.items_table.rowCount()):
             qty_spin = self.items_table.cellWidget(row, 5)
+            if not qty_spin:
+                continue
             total_received += Decimal(str(qty_spin.value()))
 
         if total_received == 0:
@@ -382,9 +394,14 @@ class ReceivingDialog(BaseDialog):
 
         # التحقق من أن المقبولة + المرفوضة = المستلمة
         for row in range(self.items_table.rowCount()):
-            received = Decimal(str(self.items_table.cellWidget(row, 5).value()))
-            accepted = Decimal(str(self.items_table.cellWidget(row, 6).value()))
-            rejected = Decimal(str(self.items_table.cellWidget(row, 7).value()))
+            qty_spin = self.items_table.cellWidget(row, 5)
+            acc_spin = self.items_table.cellWidget(row, 6)
+            rej_spin = self.items_table.cellWidget(row, 7)
+            if not qty_spin or not acc_spin or not rej_spin:
+                continue
+            received = Decimal(str(qty_spin.value()))
+            accepted = Decimal(str(acc_spin.value()))
+            rejected = Decimal(str(rej_spin.value()))
 
             if accepted + rejected != received:
                 self.notify.show_warning(
@@ -428,9 +445,15 @@ class ReceivingDialog(BaseDialog):
         # البنود
         items = []
         for row in range(self.items_table.rowCount()):
-            po_item_id = self.items_table.item(row, 0).data(Qt.UserRole)
+            _item0 = self.items_table.item(row, 0)
+            if not _item0:
+                continue
+            po_item_id = _item0.data(Qt.UserRole)
 
-            qty_received = Decimal(str(self.items_table.cellWidget(row, 5).value()))
+            qty_spin = self.items_table.cellWidget(row, 5)
+            if not qty_spin:
+                continue
+            qty_received = Decimal(str(qty_spin.value()))
 
             # تخطى البنود التي لم يتم استلامها
             if qty_received == 0:
@@ -472,12 +495,12 @@ class ReceivingDialog(BaseDialog):
                 product_code=product_code,
                 quantity_ordered=qty_ordered,
                 quantity_received=qty_received,
-                quantity_accepted=Decimal(str(self.items_table.cellWidget(row, 6).value())),
-                quantity_rejected=Decimal(str(self.items_table.cellWidget(row, 7).value())),
-                quality_rating=self.items_table.cellWidget(row, 8).currentData(),
+                quantity_accepted=Decimal(str(self.items_table.cellWidget(row, 6).value() if self.items_table.cellWidget(row, 6) else 0)),
+                quantity_rejected=Decimal(str(self.items_table.cellWidget(row, 7).value() if self.items_table.cellWidget(row, 7) else 0)),
+                quality_rating=(self.items_table.cellWidget(row, 8).currentData() if self.items_table.cellWidget(row, 8) else None),
                 inspection_status=(
                     InspectionStatus.PASSED
-                    if self.items_table.cellWidget(row, 8).currentIndex() <= 2
+                    if self.items_table.cellWidget(row, 8) and self.items_table.cellWidget(row, 8).currentIndex() <= 2
                     else InspectionStatus.FAILED
                 ),
                 inspection_date=data["receiving_date"],
@@ -531,6 +554,7 @@ class ReceivingDialog(BaseDialog):
             qty_spin.setMaximum(float(pending_qty))
             qty_spin.setDecimals(3)
             qty_spin.setValue(float(pending_qty))
+            # PERF_WIDGET: consider QStyledItemDelegate for better performance with large datasets
             self.items_table.setCellWidget(row, 5, qty_spin)
 
             accepted_spin = QDoubleSpinBox()
@@ -538,6 +562,7 @@ class ReceivingDialog(BaseDialog):
             accepted_spin.setMaximum(float(pending_qty))
             accepted_spin.setDecimals(3)
             accepted_spin.setValue(float(pending_qty))
+            # PERF_WIDGET: consider QStyledItemDelegate for better performance with large datasets
             self.items_table.setCellWidget(row, 6, accepted_spin)
 
             rejected_spin = QDoubleSpinBox()
@@ -545,12 +570,14 @@ class ReceivingDialog(BaseDialog):
             rejected_spin.setMaximum(float(pending_qty))
             rejected_spin.setDecimals(3)
             rejected_spin.setValue(0.0)
+            # PERF_WIDGET: consider QStyledItemDelegate for better performance with large datasets
             self.items_table.setCellWidget(row, 7, rejected_spin)
 
             quality_combo = QComboBox()
             for rating in QualityRating:
                 quality_combo.addItem(rating.value, rating)
             quality_combo.setCurrentIndex(1)
+            # PERF_WIDGET: consider QStyledItemDelegate for better performance with large datasets
             self.items_table.setCellWidget(row, 8, quality_combo)
 
             self.items_table.item(row, 0).setData(Qt.UserRole, prod_id)
@@ -565,25 +592,29 @@ class ReceivingDialog(BaseDialog):
             qty_spin = QDoubleSpinBox()
             qty_spin.setMinimum(0.000)
             qty_spin.setMaximum(999999.0)
-            qty_spin.setValue(float(quantity))
+            qty_spin.setValue(float(quantity or 0))
+            # PERF_WIDGET: consider QStyledItemDelegate for better performance with large datasets
             self.items_table.setCellWidget(row, 5, qty_spin)
 
             accepted_spin = QDoubleSpinBox()
             accepted_spin.setMinimum(0.000)
             accepted_spin.setMaximum(999999.0)
-            accepted_spin.setValue(float(quantity))
+            accepted_spin.setValue(float(quantity or 0))
+            # PERF_WIDGET: consider QStyledItemDelegate for better performance with large datasets
             self.items_table.setCellWidget(row, 6, accepted_spin)
 
             rejected_spin = QDoubleSpinBox()
             rejected_spin.setMinimum(0.000)
             rejected_spin.setMaximum(999999.0)
             rejected_spin.setValue(0.0)
+            # PERF_WIDGET: consider QStyledItemDelegate for better performance with large datasets
             self.items_table.setCellWidget(row, 7, rejected_spin)
 
             quality_combo = QComboBox()
             for rating in QualityRating:
                 quality_combo.addItem(rating.value, rating)
             quality_combo.setCurrentIndex(1)
+            # PERF_WIDGET: consider QStyledItemDelegate for better performance with large datasets
             self.items_table.setCellWidget(row, 8, quality_combo)
 
             self.items_table.setItem(row, 0, QTableWidgetItem("Product"))
@@ -595,14 +626,14 @@ class ReceivingDialog(BaseDialog):
         qty_spin = self.items_table.cellWidget(row, 5)
         if qty_spin:
             # Respect existing maximum cap if set
-            max_val = max(float(quantity), qty_spin.maximum())
+            max_val = max(float(quantity or 0), qty_spin.maximum())
             qty_spin.setMaximum(max_val)
-            qty_spin.setValue(float(quantity))
+            qty_spin.setValue(float(quantity or 0))
         accepted_spin = self.items_table.cellWidget(row, 6)
         if accepted_spin:
-            max_acc = max(float(quantity), accepted_spin.maximum())
+            max_acc = max(float(quantity or 0), accepted_spin.maximum())
             accepted_spin.setMaximum(max_acc)
-            accepted_spin.setValue(float(quantity))
+            accepted_spin.setValue(float(quantity or 0))
         return True
 
     def get_received_items(self):

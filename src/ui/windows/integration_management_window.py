@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
 from src.core.database_manager import DatabaseManager
 from src.services.integration_service import Integration, IntegrationService
 from src.ui.styles.design_tokens import C
+from src.utils.db_helpers import safe_int
 from src.utils.logger import setup_logger
 
 project_root = Path(__file__).parent.parent.parent.parent
@@ -183,7 +184,9 @@ class IntegrationManagementWindow(QMainWindow):
         if not id_cell:
             QMessageBox.warning(self, "تحذير", "لم يتم العثور على التكامل")
             return
-        integration_id = int(id_cell.text())
+        integration_id = safe_int(id_cell.text(), default=-1)
+        if integration_id <= 0:
+            return
 
         integration = self.integration_service.get_integration(integration_id)
         if not integration:
@@ -207,7 +210,9 @@ class IntegrationManagementWindow(QMainWindow):
         if not id_cell or not name_cell:
             QMessageBox.warning(self, "تحذير", "لم يتم العثور على بيانات التكامل")
             return
-        integration_id = int(id_cell.text())
+        integration_id = safe_int(id_cell.text(), default=-1)
+        if integration_id <= 0:
+            return
         integration_name = name_cell.text()
 
         reply = QMessageBox.question(
@@ -236,7 +241,9 @@ class IntegrationManagementWindow(QMainWindow):
         if not id_cell:
             QMessageBox.warning(self, "تحذير", "لم يتم العثور على التكامل")
             return
-        integration_id = int(id_cell.text())
+        integration_id = safe_int(id_cell.text(), default=-1)
+        if integration_id <= 0:
+            return
 
         integration = self.integration_service.get_integration(integration_id)
         if not integration:

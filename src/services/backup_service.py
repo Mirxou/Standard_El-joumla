@@ -105,7 +105,8 @@ class BackupService:
             try:
                 with open(db_backup_path, "rb") as _fdb:
                     metadata["database_checksum_sha256"] = hashlib.sha256(_fdb.read()).hexdigest()
-            except Exception:
+            except Exception as e:
+                logging.getLogger(__name__).debug(f"Failed to compute DB checksum: {e}")
                 metadata["database_checksum_sha256"] = None
 
             metadata_path = backup_path / "metadata.json"
@@ -148,7 +149,8 @@ class BackupService:
                 try:
                     with open(enc_path, "rb") as _fenc:
                         metadata["encrypted_payload_checksum_sha256"] = hashlib.sha256(_fenc.read()).hexdigest()
-                except Exception:
+                except Exception as e:
+                    logging.getLogger(__name__).debug(f"Failed to compute encrypted payload checksum: {e}")
                     metadata["encrypted_payload_checksum_sha256"] = None
 
             # تسجيل النسخة الاحتياطية في قاعدة البيانات
@@ -268,8 +270,8 @@ class BackupService:
                                 "success": False,
                                 "error": "فشل التحقق من سلامة قاعدة البيانات (بصمة غير مطابقة)",
                             }
-                    except Exception:
-                        logging.getLogger(__name__).warning("Ignored exception in backup_service.py")
+                    except Exception as e:
+                        logging.getLogger(__name__).debug(f"Checksum verification skipped during restore: {e}")
 
                     shutil.copy2(db_backup, self.db.db_path)
 
@@ -323,7 +325,8 @@ class BackupService:
                         "encrypted": True,
                     }
                 )
-            except Exception:
+            except Exception as e:
+                logging.getLogger(__name__).debug(f"Skipping encrypted zip backup: {e}")
                 continue
         for zip_file in self.backup_dir.glob("backup_*.zip"):
             try:
@@ -334,7 +337,8 @@ class BackupService:
                         metadata["file_path"] = str(zip_file)
                         metadata["file_size"] = os.path.getsize(zip_file)
                         backups.append(metadata)
-            except Exception:
+            except Exception as e:
+                logging.getLogger(__name__).debug(f"Skipping zip backup: {e}")
                 continue
 
         # البحث عن النسخ غير المضغوطة
@@ -351,7 +355,8 @@ class BackupService:
                         "encrypted": True,
                     }
                 )
-            except Exception:
+            except Exception as e:
+                logging.getLogger(__name__).debug(f"Skipping enc backup: {e}")
                 continue
         for backup_dir in self.backup_dir.glob("backup_*"):
             if backup_dir.is_dir():
@@ -363,7 +368,8 @@ class BackupService:
                             metadata["file_path"] = str(backup_dir)
                             metadata["file_size"] = sum(f.stat().st_size for f in backup_dir.rglob("*") if f.is_file())
                             backups.append(metadata)
-                    except Exception:
+                    except Exception as e:
+                        logging.getLogger(__name__).debug(f"Skipping folder backup: {e}")
                         continue
 
         # الترتيب حسب التاريخ (الأحدث أولاً)
@@ -385,7 +391,8 @@ class BackupService:
                 return True
 
             return False
-        except Exception:
+        except Exception as e:
+            logging.getLogger(__name__).debug(f"delete_backup failed: {e}")
             return False
 
     def cleanup_old_backups(self, keep_count: int = 10, keep_days: int = 30) -> int:
@@ -401,11 +408,12 @@ class BackupService:
 
         for backup in backups_to_delete:
             try:
-                backup_date = datetime.fromisoformat(backup["timestamp"])
+                backup_date = datetime.fromisoformat(backup.get("timestamp", ""))
                 if backup_date < cutoff_date:
-                    if self.delete_backup(backup["backup_name"]):
+                    if self.delete_backup(backup.get("backup_name", "")):
                         deleted_count += 1
-            except Exception:
+            except Exception as e:
+                logging.getLogger(__name__).debug(f"Skipping old backup: {e}")
                 continue
 
         return deleted_count
@@ -472,8 +480,8 @@ class BackupService:
             if self._config_path.exists():
                 with open(self._config_path, "r", encoding="utf-8") as f:
                     return json.load(f)
-        except Exception:
-            logging.getLogger(__name__).warning("Ignored exception in backup_service.py")
+        except Exception as e:
+            logging.getLogger(__name__).debug(f"Failed to load backup config: {e}")
         # Default config
         return {"encryption": {"enabled": False}}
 
@@ -481,9 +489,8 @@ class BackupService:
         try:
             with open(self._config_path, "w", encoding="utf-8") as f:
                 json.dump(self._config, f, ensure_ascii=False, indent=2)
-        except Exception:
-            logging.getLogger(__name__).warning("Ignored exception in backup_service.py")
-
+        except Exception as e:
+            logging.getLogger(__name__).debug(f"Failed to save backup config: {e}")
     # ==================== Auto Backup ====================
 
     def enable_auto_backup(self, interval_hours: int = 24, keep_count: int = 10) -> bool:
@@ -541,7 +548,7 @@ class BackupService:
             for table in tables:
                 if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', str(table)):
                     continue
-                result = self.db.execute_query(f"SELECT * FROM {table}")
+                result = self.db.execute_query(f"SELECT * FROM {table}")  # SQL_SAFE: table validated by regex above
                 data[table] = result
                 total_records += len(result)
 
@@ -569,8 +576,9 @@ class BackupService:
         """الحصول على إصدار قاعدة البيانات"""
         try:
             result = self.db.execute_query("SELECT value FROM system_settings WHERE key = 'db_version'")
-            return result[0]["value"] if result else "1.0"
-        except Exception:
+            return result[0].get("value", "1.0") if result else "1.0"
+        except Exception as e:
+            logging.getLogger(__name__).debug(f"Failed to get DB version: {e}")
             return "1.0"
 
     def _log_backup(self, metadata: Dict[str, Any]):
@@ -588,9 +596,8 @@ class BackupService:
                     metadata["timestamp"],
                 ],
             )
-        except Exception:
-            logging.getLogger(__name__).warning("Ignored exception in backup_service.py")
-
+        except Exception as e:
+            logging.getLogger(__name__).debug(f"Failed to log backup: {e}")
     def _log_restore(self, backup_name: str, metadata: Dict[str, Any]):
         """تسجيل عملية الاستعادة"""
         try:
@@ -600,9 +607,8 @@ class BackupService:
                    VALUES (?, ?)""",
                 [backup_name, datetime.now().isoformat()],
             )
-        except Exception:
-            logging.getLogger(__name__).warning("Ignored exception in backup_service.py")
-
+        except Exception as e:
+            logging.getLogger(__name__).debug(f"Failed to log restore: {e}")
     def get_backup_statistics(self) -> Dict[str, Any]:
         """إحصائيات النسخ الاحتياطي"""
         backups = self.list_backups(limit=1000)
@@ -621,6 +627,7 @@ class BackupService:
         return {
             "total_backups": len(backups),
             "total_size": total_size,
+            # PRECISION: round() on file size (not money) is acceptable
             "total_size_mb": round(total_size / (1024 * 1024), 2),
             "oldest_backup": backups[-1]["timestamp"],
             "newest_backup": backups[0]["timestamp"],

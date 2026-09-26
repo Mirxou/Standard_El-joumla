@@ -29,7 +29,7 @@ try:
 except ImportError:
     pd = None
 
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

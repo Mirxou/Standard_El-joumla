@@ -106,6 +106,7 @@ from src.ui.windows.ai_predictions_window import AIPredictionsWindow
 from src.ui.windows.warehouse_management_window import WarehouseManagementWindow
 from src.ui.windows.workflow_designer_window import WorkflowDesignerWindow
 from src.utils.i18n_api import I18n
+from src.utils.db_helpers import escape_like_wildcards
 
 # Import pandas for high-performance data handling
 try:
@@ -133,7 +134,12 @@ class DataLoaderWorker(QThread):
     def run(self):
         """تنفيذ عملية التحميل في الخلفية"""
         try:
+            # RESOURCE-LEAK-FIX: check for interruption request
+            if self.isInterruptionRequested():
+                return
             data = self.loader_func(*self.args, **self.kwargs)
+            if self.isInterruptionRequested():
+                return
             self.data_loaded.emit(data if data else [])
         except Exception as e:
             import traceback
@@ -191,6 +197,9 @@ class InventoryDataLoaderThread(QThread):
     def run(self):
         """تحميل البيانات مباشرة من SQLite في الخلفية"""
         try:
+            # RESOURCE-LEAK-FIX: check for interruption request
+            if self.isInterruptionRequested():
+                return
             # إرسال رسالة التقدم
             self.progress_updated.emit("جاري الاتصال بقاعدة البيانات...")
 
@@ -242,7 +251,7 @@ class InventoryDataLoaderThread(QThread):
             # إضافة مرشحات
             if self.search_term:
                 query += " AND (p.name LIKE ? OR p.barcode LIKE ?)"
-                search_pattern = f"%{self.search_term}%"
+                search_pattern = f"%{escape_like_wildcards(self.search_term)}%"
                 params.extend([search_pattern, search_pattern])
 
             if self.category_id:
@@ -339,7 +348,8 @@ class InventoryDataLoaderThread(QThread):
                 )
 
                 # إرسال البيانات
-                self.data_loaded.emit(df)
+                if not self.isInterruptionRequested():  # RESOURCE-LEAK-FIX: check before emitting
+                    self.data_loaded.emit(df)
             else:
                 # Fallback: إذا لم يكن Pandas متاحاً
                 self.progress_updated.emit("خطأ: Pandas غير متاح")
@@ -363,7 +373,7 @@ class SalesDataLoaderThread(QThread):
     """خيط محسّن لتحميل بيانات المبيعات مباشرة من SQLite باستخدام Pandas"""
 
     data_loaded = Signal(object)  # يرسل DataFrame
-    summary_loaded = Signal(object)  # يرسل قاموس الملخص
+    summary_loaded = Signal(object)  # يرسل قاموس الملخص  # NOTE: dead signal - defined but never emitted in run()
     error_occurred = Signal(str)
 
     def __init__(
@@ -400,6 +410,9 @@ class SalesDataLoaderThread(QThread):
 
     def run(self):
         try:
+            # RESOURCE-LEAK-FIX: check for interruption request
+            if self.isInterruptionRequested():
+                return
             conn = self._connect()
 
             # بناء الاستعلام الرئيسي
@@ -422,7 +435,7 @@ class SalesDataLoaderThread(QThread):
 
             if self.search_term:
                 query += " AND (s.invoice_number LIKE ? OR c.name LIKE ?)"
-                search_pattern = f"%{self.search_term}%"
+                search_pattern = f"%{escape_like_wildcards(self.search_term)}%"
                 params.extend([search_pattern, search_pattern])
 
             if self.status:
@@ -441,7 +454,8 @@ class SalesDataLoaderThread(QThread):
             if PANDAS_AVAILABLE:
                 df = pd.read_sql_query(query, conn, params=params if params else None)
                 df["actions"] = ""  # إضافة عمود الإجراءات
-                self.data_loaded.emit(df)
+                if not self.isInterruptionRequested():  # RESOURCE-LEAK-FIX: check before emitting
+                    self.data_loaded.emit(df)
             else:
                 self.error_occurred.emit("Pandas غير متاح — يرجى تثبيت pandas لتحميل بيانات المبيعات")
 
@@ -2321,11 +2335,13 @@ class MainWindow(QMainWindow):
                     self.config_manager.get_database_path() if self.config_manager else "database.db"
                 )
                 conn = sqlite3.connect(db_path, timeout=5.0)
-                conn.execute("PRAGMA query_only=true")
-                cursor = conn.cursor()
-                cursor.execute(query_stats)
-                row = cursor.fetchone()
-                conn.close()
+                try:
+                    conn.execute("PRAGMA query_only=true")
+                    cursor = conn.cursor()
+                    cursor.execute(query_stats)
+                    row = cursor.fetchone()
+                finally:
+                    conn.close()
             if not row:
                 return
 
@@ -2529,7 +2545,7 @@ class MainWindow(QMainWindow):
 
                     for day_str in all_days:
                         amount = sales_by_date.get(day_str, 0.0)
-                        chart_amounts.append(float(amount))
+                        chart_amounts.append(float(amount or 0))
 
                     if self.logger:
                         self.logger.debug(
@@ -2908,11 +2924,11 @@ class MainWindow(QMainWindow):
                         """
                         sales = self.db_manager.fetch_all(query)
                         for sale in sales:
-                            sale_id = sale["id"]
-                            sale_date = sale["sale_date"]
-                            total = sale["total_amount"]
-                            status = sale["status"]
-                            username = sale["username"]
+                            sale_id = sale.get("id")
+                            sale_date = sale.get("sale_date")
+                            total = sale.get("total_amount", 0)
+                            status = sale.get("status", "")
+                            username = sale.get("username", "")
                             date_str = (
                                 sale_date.strftime("%Y-%m-%d")
                                 if hasattr(sale_date, "strftime")
@@ -2941,11 +2957,11 @@ class MainWindow(QMainWindow):
                         """
                         purchases = self.db_manager.fetch_all(query)
                         for purchase in purchases:
-                            pur_id = purchase["id"]
-                            pur_date = purchase["purchase_date"]
-                            total = purchase["total_amount"]
-                            status = purchase["status"]
-                            username = purchase["username"]
+                            pur_id = purchase.get("id")
+                            pur_date = purchase.get("purchase_date")
+                            total = purchase.get("total_amount", 0)
+                            status = purchase.get("status", "")
+                            username = purchase.get("username", "")
                             date_str = (
                                 pur_date.strftime("%Y-%m-%d") if hasattr(pur_date, "strftime") else str(pur_date)[:10]
                             )
@@ -3294,10 +3310,10 @@ class MainWindow(QMainWindow):
                 table.clearSpans()
                 table.setRowCount(len(customers))
                 for row, customer_row in enumerate(customers):
-                    customer_row["id"]
-                    name = customer_row["name"]
-                    count = customer_row["purchase_count"]
-                    total = customer_row["total_spent"]
+                    customer_row.get("id")
+                    name = customer_row.get("name", "")
+                    count = customer_row.get("purchase_count", 0)
+                    total = customer_row.get("total_spent", 0)
                     items = [
                         QTableWidgetItem(f"#{row + 1}"),
                         QTableWidgetItem(name or "-"),
@@ -3328,10 +3344,10 @@ class MainWindow(QMainWindow):
                 table.clearSpans()
                 table.setRowCount(len(products))
                 for row, product_row in enumerate(products):
-                    product_row["id"]
-                    name = product_row["name"]
-                    quantity = product_row["total_quantity"]
-                    sales = product_row["total_sales"]
+                    product_row.get("id")
+                    name = product_row.get("name", "")
+                    quantity = product_row.get("total_quantity", 0)
+                    sales = product_row.get("total_sales", 0)
                     items = [
                         QTableWidgetItem(f"#{row + 1}"),
                         QTableWidgetItem(name or "-"),
@@ -3408,11 +3424,11 @@ class MainWindow(QMainWindow):
                     """
                     sales = self.db_manager.fetch_all(query)
                     for sale in sales:
-                        sale_id = sale["id"]
-                        sale_date = sale["sale_date"]
-                        total = sale["total_amount"]
-                        status = sale["status"]
-                        username = sale["username"]
+                        sale_id = sale.get("id")
+                        sale_date = sale.get("sale_date")
+                        total = sale.get("total_amount", 0)
+                        status = sale.get("status", "")
+                        username = sale.get("username", "")
                         date_str = (
                             sale_date.strftime("%Y-%m-%d") if hasattr(sale_date, "strftime") else str(sale_date)[:10]
                         )
@@ -3442,11 +3458,11 @@ class MainWindow(QMainWindow):
                     """
                     purchases = self.db_manager.fetch_all(query)
                     for purchase in purchases:
-                        pur_id = purchase["id"]
-                        pur_date = purchase["purchase_date"]
-                        total = purchase["total_amount"]
-                        status = purchase["status"]
-                        username = purchase["username"]
+                        pur_id = purchase.get("id")
+                        pur_date = purchase.get("purchase_date")
+                        total = purchase.get("total_amount", 0)
+                        status = purchase.get("status", "")
+                        username = purchase.get("username", "")
                         date_str = (
                             pur_date.strftime("%Y-%m-%d") if hasattr(pur_date, "strftime") else str(pur_date)[:10]
                         )
@@ -4975,7 +4991,7 @@ class MainWindow(QMainWindow):
                     if self.logger:
                         self.logger.info(f"طلب حذف/إلغاء الفاتورة {sale_id}")
                     if hasattr(self, "sales_service") and self.sales_service:
-                        success = self.sales_service.cancel_sale(sale_id)
+                        success = self.sales_service.cancel_sale(sale_id, user_id=self.current_user_id if hasattr(self, 'current_user_id') else None)
                         if success:
                             QMessageBox.information(self, "نجاح", f"تم إلغاء الفاتورة رقم {sale_id} بنجاح")
                         else:
@@ -5201,7 +5217,7 @@ class MainWindow(QMainWindow):
                 df = data
             elif isinstance(data, dict) and "sales" in data:
                 # البيانات من DataLoaderWorker القديم (dict)
-                sales_list = data["sales"]
+                sales_list = data.get("sales", [])
                 summary = data.get("summary")
                 df = pd.DataFrame(sales_list) if sales_list else pd.DataFrame()
             else:
@@ -5622,9 +5638,9 @@ class MainWindow(QMainWindow):
                 f"<h3>فاتورة شراء {purchase.invoice_number}</h3>"
                 f"<p>المورد: <b>{getattr(purchase, 'supplier_name', '') or 'غير محدد'}</b></p>"
                 f"<p>التاريخ: {purchase.purchase_date}</p>"
-                f"<p>القيمة الإجمالية: {float(purchase.total_amount):,.2f} د.ج</p>"
-                f"<p>المدفوع: {float(purchase.paid_amount):,.2f} د.ج</p>"
-                f"<p>المتبقي: {float(purchase.remaining_amount):,.2f} د.ج</p>"
+                f"<p>القيمة الإجمالية: {float(purchase.total_amount or 0):,.2f} د.ج</p>"
+                f"<p>المدفوع: {float(purchase.paid_amount or 0):,.2f} د.ج</p>"
+                f"<p>المتبقي: {float(purchase.remaining_amount or 0):,.2f} د.ج</p>"
                 f"<p>حالة الاستلام: {purchase.status}</p>"
                 f"<p>حالة الدفع: {purchase.payment_status}</p>"
             )
@@ -5807,11 +5823,11 @@ class MainWindow(QMainWindow):
                 total = product.get("total") or product.get("total_revenue") or 0
 
                 self.top_products_table.setItem(row, 0, QTableWidgetItem(str(name)))
-                qty_item = QTableWidgetItem(f"{float(qty):,.0f}")
+                qty_item = QTableWidgetItem(f"{float(qty or 0):,.0f}")
                 qty_item.setTextAlignment(Qt.AlignCenter)
                 self.top_products_table.setItem(row, 1, qty_item)
 
-                total_item = QTableWidgetItem(f"{float(total):,.2f}")
+                total_item = QTableWidgetItem(f"{float(total or 0):,.2f}")
                 total_item.setTextAlignment(Qt.AlignCenter)
                 self.top_products_table.setItem(row, 2, total_item)
         except (ValueError, TypeError, AttributeError) as e:
@@ -5826,7 +5842,7 @@ class MainWindow(QMainWindow):
                 label = entry.get("label", "")
                 value = entry.get("value", 0)
                 self.payment_distribution_table.setItem(row, 0, QTableWidgetItem(str(label)))
-                value_item = QTableWidgetItem(f"{float(value):,.2f}")
+                value_item = QTableWidgetItem(f"{float(value or 0):,.2f}")
                 value_item.setTextAlignment(Qt.AlignCenter)
                 self.payment_distribution_table.setItem(row, 1, value_item)
         except (ValueError, TypeError, AttributeError) as e:
@@ -5963,7 +5979,7 @@ class MainWindow(QMainWindow):
     def _get_kpi_value(self, kpis, key: str) -> float:
         for kpi in kpis:
             if getattr(kpi, "key", "") == key:
-                return float(getattr(kpi, "value", 0))
+                return float(getattr(kpi, "value", 0) or 0)
         return 0.0
 
     def _qdate_to_date(self, qdate: QDate) -> date:
@@ -5989,7 +6005,7 @@ class MainWindow(QMainWindow):
                 revenue_data["revenue"] = [
                     {
                         "day": str(row.get("day", "")),
-                        "total": float(row.get("total", 0)),
+                        "total": float(row.get("total", 0) or 0),
                     }
                     for row in sales_rows
                 ]
@@ -6008,7 +6024,7 @@ class MainWindow(QMainWindow):
                 revenue_data["expenses"] = [
                     {
                         "day": str(row.get("day", "")),
-                        "total": float(row.get("total", 0)),
+                        "total": float(row.get("total", 0) or 0),
                     }
                     for row in purchases_rows
                 ]
@@ -6097,9 +6113,9 @@ class MainWindow(QMainWindow):
                 return "0.00"
             # If already a number
             if isinstance(value, (int, float)):
-                amount = float(value)
+                amount = float(value or 0)
             else:
-                amount = float(str(value).replace(",", "").replace(" ", ""))
+                amount = float(str(value).replace(",", "").replace(" ", "") or 0)
             return "{:,.2f}".format(amount)
         except Exception:
             return "0.00"
@@ -6124,7 +6140,7 @@ class MainWindow(QMainWindow):
             if value is None:
                 return default
             if isinstance(value, (int, float)):
-                return float(value)
+                return float(value or 0)
             # محاولة تحويل من string
             value_str = str(value).strip().replace(",", "").replace(" ", "")
             if not value_str:
@@ -8856,7 +8872,7 @@ class MainWindow(QMainWindow):
             if saved_vid and saved_pid:
                 for i in range(self.printer_combo.count()):
                     p_data = self.printer_combo.itemData(i)
-                    if p_data and p_data["vendor_id"] == saved_vid and p_data["product_id"] == saved_pid:
+                    if p_data and p_data.get("vendor_id") == saved_vid and p_data.get("product_id") == saved_pid:
                         self.printer_combo.setCurrentIndex(i)
                         break
         except Exception:
@@ -8880,9 +8896,9 @@ class MainWindow(QMainWindow):
             from PySide6.QtCore import QSettings
 
             s = QSettings("StandardElJoumla", "ERP")
-            s.setValue("printer/vendor_id", selected_data["vendor_id"])
-            s.setValue("printer/product_id", selected_data["product_id"])
-            s.setValue("printer/name", selected_data["name"])
+            s.setValue("printer/vendor_id", selected_data.get("vendor_id", 0))
+            s.setValue("printer/product_id", selected_data.get("product_id", 0))
+            s.setValue("printer/name", selected_data.get("name", ""))
 
             QMessageBox.information(self, "نجاح", f"تم حفظ الطابعة بنجاح:\n{selected_data['namef']}")
         except Exception:
@@ -9178,13 +9194,13 @@ class MainWindow(QMainWindow):
                         generated_data.append(result)
                         table.setRowCount(row + 1)
                         values = [
-                            result["period"],
-                            f"{result['turnover_ht']:,.2f}",
-                            f"{result['turnover_ttc']:,.2f}",
-                            f"{result['vat_collected']:,.2f}",
-                            f"{result['tap_amount']:,.2f}",
-                            f"{result['timbre_amount']:,.2f}",
-                            f"{result['total_to_pay']:,.2f}",
+                            result.get("period", ""),
+                            f"{result.get('turnover_ht', 0):,.2f}",
+                            f"{result.get('turnover_ttc', 0):,.2f}",
+                            f"{result.get('vat_collected', 0):,.2f}",
+                            f"{result.get('tap_amount', 0):,.2f}",
+                            f"{result.get('timbre_amount', 0):,.2f}",
+                            f"{result.get('total_to_pay', 0):,.2f}",
                         ]
                         for col, val in enumerate(values):
                             table.setItem(row, col, QTableWidgetItem(str(val)))
@@ -9217,9 +9233,9 @@ class MainWindow(QMainWindow):
                         ])
                         for r in generated_data:
                             writer.writerow([
-                                r["period"], r["turnover_ht"], r["turnover_ttc"],
-                                r["vat_collected"], r["tap_amount"], r["timbre_amount"],
-                                r["total_to_pay"],
+                                r.get("period", ""), r.get("turnover_ht", 0), r.get("turnover_ttc", 0),
+                                r.get("vat_collected", 0), r.get("tap_amount", 0), r.get("timbre_amount", 0),
+                                r.get("total_to_pay", 0),
                             ])
                     QMessageBox.information(dialog, "تم", f"تم الحفظ بنجاح:\n{path}")
                 except Exception as exc:
@@ -9906,11 +9922,17 @@ class MainWindow(QMainWindow):
         file_path, filter_used = QFileDialog.getSaveFileName(
             self,
             "تصدير المنتجات",
-            "products_export",
+            "products_export.csv",
             "CSV Files (*.csv);;Excel Files (*.xlsx)",
         )
         if file_path:
             try:
+                # Ensure file has correct extension if user typed name without one
+                if not file_path.endswith((".csv", ".xlsx")):
+                    if "xlsx" in filter_used:
+                        file_path += ".xlsx"
+                    else:
+                        file_path += ".csv"
                 if (
                     hasattr(self.inventory_model, "_data")
                     and self.inventory_model._data is not None

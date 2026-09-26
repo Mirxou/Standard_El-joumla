@@ -667,7 +667,10 @@ class AdvancedReportsWindow(QMainWindow):
 
     def _export_pdf(self):
         """تصدير إلى PDF"""
-        file_path, _ = QFileDialog.getSaveFileName(self, "حفظ التقرير كـ PDF", "", "PDF Files (*.pdf)")
+        file_path, _ = QFileDialog.getSaveFileName(self, "حفظ التقرير كـ PDF", "report.pdf", "PDF Files (*.pdf)")
+        # Ensure .pdf extension
+        if file_path and not file_path.lower().endswith(".pdf"):
+            file_path += ".pdf"
 
         if file_path:
             try:
@@ -679,7 +682,10 @@ class AdvancedReportsWindow(QMainWindow):
 
     def _export_excel(self):
         """تصدير إلى Excel"""
-        file_path, _ = QFileDialog.getSaveFileName(self, "حفظ التقرير كـ Excel", "", "Excel Files (*.xlsx)")
+        file_path, _ = QFileDialog.getSaveFileName(self, "حفظ التقرير كـ Excel", "report.xlsx", "Excel Files (*.xlsx)")
+        # Ensure .xlsx extension
+        if file_path and not file_path.lower().endswith(".xlsx"):
+            file_path += ".xlsx"
 
         if file_path:
             try:

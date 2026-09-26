@@ -110,7 +110,7 @@ class ReturnService:
                     (return_invoice.return_reason.name
                      if isinstance(return_invoice.return_reason, ReturnReason)
                      else str(return_invoice.return_reason or '')),
-                    float(return_invoice.total_amount),
+                    float(return_invoice.total_amount or 0),
                     (return_invoice.status.name
                      if isinstance(return_invoice.status, ReturnStatus)
                      else str(return_invoice.status or 'approved')),
@@ -135,8 +135,8 @@ class ReturnService:
                     (
                         return_id,
                         item.product_id,
-                        float(item.quantity_returned),
-                        float(item.unit_price),
+                        float(item.quantity_returned or 0),
+                        float(item.unit_price or 0),
                     ),
                 )
                 item.id = cursor.lastrowid
@@ -231,7 +231,7 @@ class ReturnService:
                     (return_invoice.return_reason.name
                      if isinstance(return_invoice.return_reason, ReturnReason)
                      else str(return_invoice.return_reason or '')),
-                    float(return_invoice.total_amount),
+                    float(return_invoice.total_amount or 0),
                     (return_invoice.status.name
                      if isinstance(return_invoice.status, ReturnStatus)
                      else str(return_invoice.status or 'approved')),
@@ -257,8 +257,8 @@ class ReturnService:
                     (
                         return_invoice.id,
                         item.product_id,
-                        float(item.quantity_returned),
-                        float(item.unit_price),
+                        float(item.quantity_returned or 0),
+                        float(item.unit_price or 0),
                     ),
                 )
 
@@ -345,7 +345,7 @@ class ReturnService:
                 item_cursor = self.db.connection.cursor()
                 item_cursor.execute(
                     "SELECT * FROM return_items WHERE return_id = ?",
-                    (return_data["id"],),
+                    (return_data.get("id"),),
                 )
                 items_rows = item_cursor.fetchall()
                 items_columns = [desc[0] for desc in item_cursor.description]
@@ -441,7 +441,7 @@ class ReturnService:
                 SET current_stock = current_stock + ?
                 WHERE id = ?
             """,
-                (float(quantity), product_id),
+                (float(quantity or 0), product_id),
             )
             logger.info(f"تم إعادة {quantity} من المنتج {product_id} للمخزون (بانتظار الالتزام)")
             return True

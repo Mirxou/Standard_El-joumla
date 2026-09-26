@@ -1423,7 +1423,7 @@ class ProductDialog(BaseDialog):
     def select_image(self, event=None):
         """اختيار صورة للمنتج"""
         try:
-            file_dialog = QFileDialog()
+            file_dialog = QFileDialog(self)  # MEMORY: parent=self ensures dialog is destroyed with parent
             file_path, _ = file_dialog.getOpenFileName(
                 self,
                 "اختيار صورة المنتج",
@@ -1512,6 +1512,7 @@ class ProductDialog(BaseDialog):
         Args:
             image_path: مسار الصورة (نسبي أو مطلق)
         """
+        # VALIDATION: consider validating image_path is within expected product images directory
         try:
             if not image_path:
                 return

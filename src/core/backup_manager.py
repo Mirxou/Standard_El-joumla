@@ -279,10 +279,12 @@ class BackupManager:
 
             # التحقق من النسخة المستعادة
             conn = sqlite3.connect(target)
-            cursor = conn.cursor()
-            cursor.execute("PRAGMA integrity_check")
-            result = cursor.fetchone()[0]
-            conn.close()
+            try:
+                cursor = conn.cursor()
+                cursor.execute("PRAGMA integrity_check")
+                result = cursor.fetchone()[0]
+            finally:
+                conn.close()  # RESOURCE-LEAK-FIX: use try/finally to ensure close
 
             if result != "ok":
                 # استعادة النسخة السابقة

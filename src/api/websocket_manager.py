@@ -14,6 +14,12 @@ from fastapi import WebSocket
 
 logger = logging.getLogger(__name__)
 
+# Configuration constants
+MAX_CONNECTIONS_PER_ROOM = 200  # DoS protection: max connections per room
+MAX_TOTAL_CONNECTIONS = 1000   # DoS protection: max total connections across all rooms
+MAX_MESSAGE_SIZE = 65536       # 64KB max message size
+ALLOWED_ORIGINS: Optional[Set[str]] = None  # None = allow all; set to restrict
+
 
 class MessageType(Enum):
     """نوع الرسالة"""
@@ -33,6 +39,19 @@ class WebSocketManager:
         self.user_connections: Dict[int, Set[WebSocket]] = {}
         self.logger = logger
 
+    def _total_connections(self) -> int:
+        """Total number of active WebSocket connections across all rooms"""
+        return sum(len(conns) for conns in self.active_connections.values())
+
+    def _validate_origin(self, websocket: WebSocket) -> bool:
+        """Validate WebSocket origin for CSRF/CORS protection"""
+        if ALLOWED_ORIGINS is None:
+            return True  # No restriction configured
+        origin = websocket.headers.get("origin", "")
+        if not origin:
+            return True  # Non-browser clients may not send origin
+        return origin in ALLOWED_ORIGINS
+
     async def connect(self, websocket: WebSocket, room: str = "default", user_id: Optional[int] = None):
         """
         الاتصال بـ WebSocket
@@ -41,7 +60,26 @@ class WebSocketManager:
             websocket: WebSocket connection
             room: Room name (للـ broadcasting)
             user_id: User ID (لإرسال رسائل شخصية)
+
+        Raises:
+            ConnectionRefusedError: If connection limits exceeded or origin invalid
         """
+        # Origin validation (CORS for WebSocket)
+        if not self._validate_origin(websocket):
+            self.logger.warning(f"WebSocket rejected: invalid origin")
+            raise ConnectionRefusedError("Invalid origin")
+
+        # DoS protection: check connection limits BEFORE accepting
+        total = self._total_connections()
+        if total >= MAX_TOTAL_CONNECTIONS:
+            self.logger.warning(f"WebSocket rejected: total connections limit ({MAX_TOTAL_CONNECTIONS}) reached")
+            raise ConnectionRefusedError(f"Total connections limit ({MAX_TOTAL_CONNECTIONS}) exceeded")
+
+        room_count = len(self.active_connections.get(room, set()))
+        if room_count >= MAX_CONNECTIONS_PER_ROOM:
+            self.logger.warning(f"WebSocket rejected: room '{room}' connections limit ({MAX_CONNECTIONS_PER_ROOM}) reached")
+            raise ConnectionRefusedError(f"Room connections limit ({MAX_CONNECTIONS_PER_ROOM}) exceeded")
+
         await websocket.accept()
 
         # إضافة إلى Room
@@ -55,11 +93,11 @@ class WebSocketManager:
                 self.user_connections[user_id] = set()
             self.user_connections[user_id].add(websocket)
 
-        self.logger.info(f"✅ WebSocket متصل: room={room}, user_id={user_id}")
+        self.logger.info(f"✅ WebSocket متصل: room={room}, user_id={user_id}, total_connections={self._total_connections()}")
 
     def disconnect(self, websocket: WebSocket, room: str = "default", user_id: Optional[int] = None):
         """
-        قطع الاتصال بـ WebSocket
+        قطع الاتصال بـ WebSocket مع تنظيف الموارد
 
         Args:
             websocket: WebSocket connection
@@ -72,13 +110,35 @@ class WebSocketManager:
             if not self.active_connections[room]:
                 del self.active_connections[room]
 
-        # إزالة من User Connections
+        # إزالة من User Connections - also clean up if user_id wasn't provided
         if user_id and user_id in self.user_connections:
             self.user_connections[user_id].discard(websocket)
             if not self.user_connections[user_id]:
                 del self.user_connections[user_id]
+        else:
+            # Resource cleanup: remove websocket from ALL user connections
+            # (handles case where user_id wasn't tracked or changed)
+            for uid in list(self.user_connections.keys()):
+                if websocket in self.user_connections[uid]:
+                    self.user_connections[uid].discard(websocket)
+                    if not self.user_connections[uid]:
+                        del self.user_connections[uid]
 
-        self.logger.info(f"❌ WebSocket منقطع: room={room}, user_id={user_id}")
+        # Resource cleanup: also remove from any other rooms
+        for r in list(self.active_connections.keys()):
+            if r != room and websocket in self.active_connections[r]:
+                self.active_connections[r].discard(websocket)
+                if not self.active_connections[r]:
+                    del self.active_connections[r]
+
+        # Ensure websocket is properly closed
+        try:
+            import asyncio
+            asyncio.get_event_loop().create_task(websocket.close())
+        except Exception:
+            pass  # Already closed or loop unavailable
+
+        self.logger.info(f"❌ WebSocket منقطع: room={room}, user_id={user_id}, total_connections={self._total_connections()}")
 
     async def send_personal_message(self, message: Dict[str, Any], websocket: WebSocket):
         """

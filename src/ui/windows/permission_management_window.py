@@ -31,6 +31,7 @@ from ...core.database_manager import DatabaseManager
 from ...models.permission import ResourceType
 from ...services.audit_service import AuditService
 from ...services.permission_service import PermissionService
+from ...utils.db_helpers import safe_int
 from ...ui.styles.design_tokens import C as Colors
 
 
@@ -506,7 +507,9 @@ class PermissionManagementWindow(QMainWindow):
         if not cell:
             QMessageBox.warning(self, "تحذير", "لم يتم العثور على الدور")
             return
-        role_id = int(cell.text())
+        role_id = safe_int(cell.text(), default=-1)
+        if role_id <= 0:
+            return
         QMessageBox.information(self, "تعديل", f"سيتم تعديل الدور {role_id}")
 
     def delete_selected_role(self):

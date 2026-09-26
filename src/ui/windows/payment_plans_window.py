@@ -503,8 +503,10 @@ class PaymentPlansWindow(QMainWindow):
 
         if has_selection:
             row = self.plans_table.currentRow()
-            plan_id = self.plans_table.item(row, 0).data(Qt.UserRole)
-            self.current_plan = self.service.get_payment_plan(plan_id)
+            plan_item = self.plans_table.item(row, 0)
+            plan_id = plan_item.data(Qt.UserRole) if plan_item else None
+            if plan_id is not None:
+                self.current_plan = self.service.get_payment_plan(plan_id)
 
     def create_new_plan(self):
         """إنشاء خطة جديدة"""

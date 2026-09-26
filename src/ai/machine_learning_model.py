@@ -62,20 +62,26 @@ class SalesPredictionModel:
             "bias": self.bias,
             "is_trained": self.is_trained,
         }
-        with open(path, "w") as f:
-            json.dump(data, f)
-        return {"success": True}
+        try:
+            with open(path, "w") as f:
+                json.dump(data, f)
+            return {"success": True}
+        except (OSError, IOError) as e:
+            return {"success": False, "error": str(e)}
 
     def load_model(self, path: str) -> Dict[str, Any]:
         """تحميل النموذج"""
         import json
 
-        with open(path, "r") as f:
-            data = json.load(f)
-        self.weights = data.get("weights")
-        self.bias = data.get("bias")
-        self.is_trained = data.get("is_trained", False)
-        return {"success": True}
+        try:
+            with open(path, "r") as f:
+                data = json.load(f)
+            self.weights = data.get("weights")
+            self.bias = data.get("bias")
+            self.is_trained = data.get("is_trained", False)
+            return {"success": True}
+        except (OSError, IOError, json.JSONDecodeError) as e:
+            return {"success": False, "error": str(e)}
 
     def train(self, sales_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         """تدريب النموذج"""
@@ -266,7 +272,10 @@ class SalesPredictionModel:
         monthly_totals = defaultdict(list)
 
         for date_str, amount in daily_sales.items():
-            date = datetime.fromisoformat(date_str)
+            try:
+                date = datetime.fromisoformat(date_str)
+            except (ValueError, TypeError):
+                continue
             month = date.month
             monthly_totals[month].append(amount)
 

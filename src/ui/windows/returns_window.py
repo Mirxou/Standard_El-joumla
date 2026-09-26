@@ -349,7 +349,7 @@ class ReturnsWindow(QMainWindow):
                 self.returns_table.setItem(row, 3, QTableWidgetItem(date_str))
 
                 # المبلغ
-                amount_item = QTableWidgetItem(f"{float(ret.total_amount):,.2f}")
+                amount_item = QTableWidgetItem(f"{float(ret.total_amount or 0):,.2f}")
                 amount_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
                 self.returns_table.setItem(row, 4, amount_item)
 
@@ -423,9 +423,9 @@ class ReturnsWindow(QMainWindow):
             self.items_table.insertRow(row)
 
             self.items_table.setItem(row, 0, QTableWidgetItem(item.product_name))
-            self.items_table.setItem(row, 1, QTableWidgetItem(str(float(item.quantity_returned))))
+            self.items_table.setItem(row, 1, QTableWidgetItem(str(float(item.quantity_returned or 0))))
             self.items_table.setItem(row, 2, QTableWidgetItem(str(float(item.quantity_original))))
-            self.items_table.setItem(row, 3, QTableWidgetItem(f"{float(item.unit_price):,.2f}"))
+            self.items_table.setItem(row, 3, QTableWidgetItem(f"{float(item.unit_price or 0):,.2f}"))
             self.items_table.setItem(
                 row,
                 4,
@@ -448,7 +448,7 @@ class ReturnsWindow(QMainWindow):
         self.credit_note_label.setText(ret.credit_note_number or "-")
 
         # المجموع
-        self.total_label.setText(f"{float(ret.total_amount):,.2f} دج")
+        self.total_label.setText(f"{float(ret.total_amount or 0):,.2f} دج")
 
     def _clear_details(self):
         """مسح التفاصيل"""
@@ -789,9 +789,9 @@ class ReturnFormDialog(QDialog):
             return
         # اختر أول نتيجة (يمكن توسيعه لاختيار متعدد لاحقاً)
         p = products[0]
-        product_id = p["id"] if isinstance(p, dict) else p[0]
-        product_name = p["name"] if isinstance(p, dict) else p[1]
-        price = Decimal(str((p["selling_price"] or 0) if isinstance(p, dict) else (p[3] or 0)))
+        product_id = p.get("id") if isinstance(p, dict) else p[0]
+        product_name = p.get("name", "") if isinstance(p, dict) else p[1]
+        price = Decimal(str((p.get("selling_price", 0) or 0) if isinstance(p, dict) else (p[3] or 0)))
 
         item = ReturnItem(
             product_id=product_id,

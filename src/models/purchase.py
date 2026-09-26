@@ -11,6 +11,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 from typing import Any, Dict, List, Optional
+import logging
 
 from src.core.database_manager import DatabaseManager
 from src.utils.logger import setup_logger
@@ -139,7 +140,7 @@ class PurchaseItem:
             try:
                 self.expiry_date = date.fromisoformat(self.expiry_date)
             except ValueError:
-                pass
+                logging.getLogger(__name__).warning(f"Ignored ValueError parsing expiry_date: {self.expiry_date}")
 
         if self.id is None:
             self.calculate_totals()
@@ -147,11 +148,11 @@ class PurchaseItem:
     @property
     def quantity(self) -> float:
         """لضمان التوافق التنازلي مع الكود القديم"""
-        return float(self.quantity_ordered)
+        return float(self.quantity_ordered or 0)
 
     @quantity.setter
     def quantity(self, value):
-        self.quantity_ordered = Decimal(str(value))
+        self.quantity_ordered = Decimal(str(value or 0))
 
     @property
     def total_cost(self) -> Decimal:
@@ -160,7 +161,7 @@ class PurchaseItem:
 
     @total_cost.setter
     def total_cost(self, value):
-        self.total_amount = Decimal(str(value))
+        self.total_amount = Decimal(str(value or 0))
 
     @property
     def net_amount(self) -> Decimal:
@@ -188,17 +189,17 @@ class PurchaseItem:
             "purchase_id": self.purchase_id,
             "product_id": self.product_id,
             "product_name": self.product_name,
-            "quantity_ordered": float(self.quantity_ordered),
-            "quantity_received": float(self.quantity_received),
-            "unit_cost": float(self.unit_cost),
-            "discount_percent": float(self.discount_percent),
-            "tax_percent": float(self.tax_percent),
-            "subtotal": float(self.subtotal),
-            "discount_amount": float(self.discount_amount),
-            "tax_amount": float(self.tax_amount),
-            "total_amount": float(self.total_amount),
-            "net_amount": float(self.subtotal - self.discount_amount),
-            "pending_quantity": float(self.pending_quantity),
+            "quantity_ordered": float(self.quantity_ordered or 0),
+            "quantity_received": float(self.quantity_received or 0),
+            "unit_cost": float(self.unit_cost or 0),
+            "discount_percent": float(self.discount_percent or 0),
+            "tax_percent": float(self.tax_percent or 0),
+            "subtotal": float(self.subtotal or 0),
+            "discount_amount": float(self.discount_amount or 0),
+            "tax_amount": float(self.tax_amount or 0),
+            "total_amount": float(self.total_amount or 0),
+            "net_amount": float((self.subtotal or 0) - (self.discount_amount or 0)),
+            "pending_quantity": float(self.pending_quantity or 0),
             "is_fully_received": self.is_fully_received,
             "batch_number": self.batch_number,
             "expiry_date": self.expiry_date.isoformat() if isinstance(self.expiry_date, date) else self.expiry_date,
@@ -265,19 +266,19 @@ class Purchase:
             try:
                 self.purchase_date = date.fromisoformat(self.purchase_date)
             except ValueError:
-                pass
+                logging.getLogger(__name__).warning("Ignored ValueError parsing purchase_date")
 
         if isinstance(self.expected_delivery_date, str) and self.expected_delivery_date:
             try:
                 self.expected_delivery_date = date.fromisoformat(self.expected_delivery_date)
             except ValueError:
-                pass
+                logging.getLogger(__name__).warning("Ignored ValueError parsing expected_delivery_date")
 
         if isinstance(self.actual_delivery_date, str) and self.actual_delivery_date:
             try:
                 self.actual_delivery_date = date.fromisoformat(self.actual_delivery_date)
             except ValueError:
-                pass
+                logging.getLogger(__name__).warning("Ignored ValueError parsing actual_delivery_date")
 
     def __setattr__(self, name, value):
         if name == "status":
@@ -405,17 +406,17 @@ class Purchase:
             "status": self.status,
             "payment_status": self.payment_status,
             "payment_method": self.payment_method,
-            "subtotal_amount": float(self.subtotal_amount),
-            "discount_amount": float(self.discount_amount),
-            "tax_amount": float(self.tax_amount),
-            "shipping_cost": float(self.shipping_cost),
-            "total_amount": float(self.total_amount),
-            "paid_amount": float(self.paid_amount),
-            "remaining_amount": float(self.remaining_amount),
+            "subtotal_amount": float(self.subtotal_amount or 0),
+            "discount_amount": float(self.discount_amount or 0),
+            "tax_amount": float(self.tax_amount or 0),
+            "shipping_cost": float(self.shipping_cost or 0),
+            "total_amount": float(self.total_amount or 0),
+            "paid_amount": float(self.paid_amount or 0),
+            "remaining_amount": float(self.remaining_amount or 0),
             "currency_id": self.currency_id,
-            "exchange_rate": float(self.exchange_rate),
-            "base_amount": float(self.base_amount),
-            "converted_amount": float(self.converted_amount),
+            "exchange_rate": float(self.exchange_rate or 0),
+            "base_amount": float(self.base_amount or 0),
+            "converted_amount": float(self.converted_amount or 0),
             "notes": self.notes,
             "items_count": self.items_count,
             "total_quantity_ordered": float(
@@ -529,16 +530,16 @@ class PurchaseManager:
                     purchase.status,
                     purchase.payment_status,
                     purchase.payment_terms,
-                    float(purchase.subtotal_amount),
-                    float(purchase.tax_amount),
-                    float(purchase.shipping_cost),
-                    float(purchase.total_amount),
-                    float(purchase.paid_amount),
-                    float(purchase.remaining_amount),
+                    float(purchase.subtotal_amount or 0),
+                    float(purchase.tax_amount or 0),
+                    float(purchase.shipping_cost or 0),
+                    float(purchase.total_amount or 0),
+                    float(purchase.paid_amount or 0),
+                    float(purchase.remaining_amount or 0),
                     purchase.currency_id,
-                    float(purchase.exchange_rate),
-                    float(purchase.base_amount),
-                    float(purchase.converted_amount),
+                    float(purchase.exchange_rate or 0),
+                    float(purchase.base_amount or 0),
+                    float(purchase.converted_amount or 0),
                     purchase.notes,
                     purchase.user_id,
                 )
@@ -651,14 +652,14 @@ class PurchaseManager:
             item.purchase_id,
             item.product_id,
             item.batch_id,
-            float(item.quantity_ordered),
-            float(item.quantity_received),
-            float(item.unit_cost),
-            float(item.discount_percent),
-            float(item.discount_amount),
-            float(item.tax_percent),
-            float(item.tax_amount),
-            float(item.total_amount),
+            float(item.quantity_ordered or 0),
+            float(item.quantity_received or 0),
+            float(item.unit_cost or 0),
+            float(item.discount_percent or 0),
+            float(item.discount_amount or 0),
+            float(item.tax_percent or 0),
+            float(item.tax_amount or 0),
+            float(item.total_amount or 0),
             item.expiry_date,
             item.batch_number,
             item.notes,
@@ -892,9 +893,9 @@ class PurchaseManager:
             "invoice_number": gv("invoice_number", 1, ""),
             "supplier_name": gv("supplier_name", 2, ""),
             "purchase_date": p_date_str,
-            "total_amount": float(Decimal(str(gv("total_amount", 4, 0)))),
-            "paid_amount": float(Decimal(str(gv("paid_amount", 5, 0)))),
-            "remaining_amount": float(Decimal(str(gv("remaining_amount", 6, 0)))),
+            "total_amount": float(Decimal(str(gv("total_amount", 4, 0) or 0))),
+            "paid_amount": float(Decimal(str(gv("paid_amount", 5, 0) or 0))),
+            "remaining_amount": float(Decimal(str(gv("remaining_amount", 6, 0) or 0))),
             "status": gv("status", 7, ""),
             "payment_status": gv("payment_status", 8, ""),
         }
@@ -971,16 +972,16 @@ class PurchaseManager:
                 purchase.status,
                 purchase.payment_status,
                 purchase.payment_terms,
-                float(purchase.subtotal_amount),
-                float(purchase.tax_amount),
-                float(purchase.shipping_cost),
-                float(purchase.total_amount),
-                float(purchase.paid_amount),
-                float(purchase.remaining_amount),
+                float(purchase.subtotal_amount or 0),
+                float(purchase.tax_amount or 0),
+                float(purchase.shipping_cost or 0),
+                float(purchase.total_amount or 0),
+                float(purchase.paid_amount or 0),
+                float(purchase.remaining_amount or 0),
                 purchase.currency_id,
-                float(purchase.exchange_rate),
-                float(purchase.base_amount),
-                float(purchase.converted_amount),
+                float(purchase.exchange_rate or 0),
+                float(purchase.base_amount or 0),
+                float(purchase.converted_amount or 0),
                 purchase.notes,
                 purchase.user_id,
                 purchase.id,
@@ -1010,14 +1011,14 @@ class PurchaseManager:
         WHERE id = ?
         """
         params = (
-            float(item.quantity_ordered),
-            float(item.quantity_received),
-            float(item.unit_cost),
-            float(item.discount_percent),
-            float(item.discount_amount),
-            float(item.tax_percent),
-            float(item.tax_amount),
-            float(item.total_amount),
+            float(item.quantity_ordered or 0),
+            float(item.quantity_received or 0),
+            float(item.unit_cost or 0),
+            float(item.discount_percent or 0),
+            float(item.discount_amount or 0),
+            float(item.tax_percent or 0),
+            float(item.tax_amount or 0),
+            float(item.total_amount or 0),
             item.expiry_date,
             item.batch_number,
             item.notes,
@@ -1166,7 +1167,7 @@ class PurchaseManager:
 
             for rec in items_received:
                 item_id = rec.get("item_id")
-                qty_rec = Decimal(str(rec.get("quantity_received", 0)))
+                qty_rec = Decimal(str(rec.get("quantity_received", 0) or 0))
                 if item_id in item_lookup:
                     item = item_lookup[item_id]
                     item.quantity_received += qty_rec
@@ -1202,7 +1203,7 @@ class PurchaseManager:
     ):
         try:
             query = "UPDATE products SET current_stock = current_stock + ? WHERE id = ?"
-            self.db_manager.execute_non_query(query, (float(quantity), product_id))
+            self.db_manager.execute_non_query(query, (float(quantity or 0), product_id))
 
             if batch_number:
                 row = self.db_manager.fetch_one(
@@ -1213,7 +1214,7 @@ class PurchaseManager:
                     self.db_manager.execute_non_query(
                         "UPDATE batches SET quantity = quantity + ?, cost_price = ?, "
                         "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                        (float(quantity), float(unit_cost), row.get("id") if isinstance(row, dict) else row[0])
+                        (float(quantity or 0), float(unit_cost or 0), row.get("id") if isinstance(row, dict) else row[0])
                     )
                 else:
                     self.db_manager.execute_insert(
@@ -1221,7 +1222,7 @@ class PurchaseManager:
                 (product_id, batch_number, quantity,
                  cost_price, expiry_date, created_at, updated_at)
                            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""",
-                        (product_id, batch_number, float(quantity), float(unit_cost), expiry_date)
+                        (product_id, batch_number, float(quantity or 0), float(unit_cost or 0), expiry_date)
                     )
             else:
                 default_batch = f"PUR-{date.today().strftime('%Y%m%d')}"
@@ -1230,7 +1231,7 @@ class PurchaseManager:
                 (product_id, batch_number, quantity,
                  cost_price, expiry_date, created_at, updated_at)
                        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""",
-                    (product_id, default_batch, float(quantity), float(unit_cost), expiry_date)
+                    (product_id, default_batch, float(quantity or 0), float(unit_cost or 0), expiry_date)
                 )
 
             # تسجيل حركة المخزون للمراجعة والتدقيق (audit trail)
@@ -1239,7 +1240,7 @@ class PurchaseManager:
                 self.db_manager.execute_non_query(
                     """INSERT INTO stock_movements (product_id, movement_type, quantity, reference_type, notes)
                        VALUES (?, 'in', ?, 'purchase_receive', 'استلام مشتريات - مسار قديم (بدون فحص جودة)')""",
-                    (product_id, float(quantity))
+                    (product_id, float(quantity or 0))
                 )
             except Exception as mov_err:
                 if self.logger:
@@ -1270,7 +1271,8 @@ class PurchaseManager:
             total = float(_v(1))
             paid = float(_v(2))
             remaining = float(_v(3))
-            avg = total / count if count > 0 else 0.0
+            # PRECISION: avg_purchase_value should use Decimal for money division
+            avg = float(Decimal(str(total)) / Decimal(str(count))) if count > 0 else 0.0
             return {
                 "total_purchases": count,
                 "total_amount": total,

@@ -621,15 +621,15 @@ class AdvancedInventoryManagementService:
             self.db.execute_insert(
                 inventory_query,
                 (
-                    inventory_data["product_id"],
-                    inventory_data["warehouse_id"],
-                    inventory_data["batch_id"],
-                    inventory_data["quantity"],
-                    inventory_data["unit_cost"],
-                    inventory_data["expiry_date"],
-                    inventory_data["location"],
-                    inventory_data["status"],
-                    inventory_data["created_at"],
+                    inventory_data.get("product_id"),
+                    inventory_data.get("warehouse_id"),
+                    inventory_data.get("batch_id", ""),
+                    inventory_data.get("quantity", 0),
+                    inventory_data.get("unit_cost", 0),
+                    inventory_data.get("expiry_date"),
+                    inventory_data.get("location", ""),
+                    inventory_data.get("status", "active"),
+                    inventory_data.get("created_at"),
                 ),
             )
 
@@ -652,17 +652,17 @@ class AdvancedInventoryManagementService:
             self.db.execute_insert(
                 transaction_query,
                 (
-                    transaction_data["transaction_id"],
-                    transaction_data["product_id"],
-                    transaction_data["transaction_type"],
-                    transaction_data["quantity"],
-                    transaction_data["unit_cost"],
-                    transaction_data["reference_id"],
+                    transaction_data.get("transaction_id"),
+                    transaction_data.get("product_id"),
+                    transaction_data.get("transaction_type", ""),
+                    transaction_data.get("quantity", 0),
+                    transaction_data.get("unit_cost", 0),
+                    transaction_data.get("reference_id", ""),
                     transaction_data.get("warehouse_from"),
                     transaction_data.get("warehouse_to"),
-                    transaction_data["performed_by"],
-                    transaction_data["notes"],
-                    transaction_data["created_at"],
+                    transaction_data.get("performed_by"),
+                    transaction_data.get("notes", ""),
+                    transaction_data.get("created_at"),
                 ),
             )
 
@@ -727,18 +727,19 @@ class AdvancedInventoryManagementService:
             expiring_items = self.get_expiring_items(self.expiry_warning_days, warehouse_id)
 
             for item in expiring_items:
+                days_until = item.get("days_until_expiry", 30)
                 severity = (
                     "critical"
-                    if item["days_until_expiry"] <= 7
-                    else "high" if item["days_until_expiry"] <= 14 else "medium"
+                    if days_until <= 7
+                    else "high" if days_until <= 14 else "medium"
                 )
 
                 alert = InventoryAlert(
-                    alert_id=f"EXPIRY_{item['product_id']}_{item['batch_id']}",
-                    product_id=item["product_id"],
+                    alert_id=f"EXPIRY_{item.get('product_id', 0)}_{item.get('batch_id', '')}",
+                    product_id=item.get("product_id", 0),
                     alert_type="expiry_warning",
                     severity=severity,
-                    message=f"ينتهي صلاحية {item['product_name']} (دفعة {item['batch_id']}) خلال {item['days_until_expiry']} يوم",  # noqa: E501
+                    message=f"ينتهي صلاحية {item.get('product_name', '')} (دفعة {item.get('batch_id', '')}) خلال {days_until} يوم",  # noqa: E501
                     suggested_action=(
                         "ترتيب بيع المنتج أو التخلص منه" if severity == "critical" else "مراجعة خطة البيع"
                     ),
@@ -872,10 +873,10 @@ class AdvancedInventoryManagementService:
     def _calculate_inventory_optimization(self, product: Dict[str, Any]) -> Optional[InventoryOptimization]:
         """حساب تحسين مخزون منتج محدد"""
         try:
-            product_id = product["id"]
-            current_stock = product["current_stock"]
-            product["min_stock"]
-            max_stock = product["max_stock"]
+            product_id = product.get("id", 0)
+            current_stock = product.get("current_stock", 0)
+            product.get("min_stock", 0)
+            max_stock = product.get("max_stock", 0)
 
             # الحصول على تنبؤ الطلب
             forecast = self.prediction_service.forecast_demand(product_id, days_ahead=90)
@@ -899,19 +900,19 @@ class AdvancedInventoryManagementService:
             expected_savings = Decimal("0")
             if current_stock < reorder_point:
                 # تكلفة نقص المخزون
-                stockout_cost = (reorder_point - current_stock) * product["selling_price"] * Decimal("0.1")
+                stockout_cost = (reorder_point - current_stock) * product.get("selling_price", 0) * Decimal("0.1")
                 expected_savings = -stockout_cost  # توفير سلبي = خسارة
             elif current_stock > max_stock:
                 # تكلفة الزيادة في المخزون
-                holding_cost = (current_stock - optimal_stock) * product["selling_price"] * Decimal("0.05")
+                holding_cost = (current_stock - optimal_stock) * product.get("selling_price", 0) * Decimal("0.05")
                 expected_savings = holding_cost
 
             return InventoryOptimization(
                 product_id=product_id,
                 current_stock=current_stock,
                 optimal_stock=int(optimal_stock),
-                reorder_point=int(reorder_point),
-                safety_stock=int(safety_stock),
+                reorder_point=int(reorder_point or 0),
+                safety_stock=int(safety_stock or 0),
                 recommended_action=recommended_action,
                 expected_savings=expected_savings,
                 confidence_score=forecast.confidence_score,
@@ -1012,10 +1013,10 @@ class AdvancedInventoryManagementService:
 
                 warehouse_info = {
                     "warehouse_id": wh_id,
-                    "name": wh_data["name"],
-                    "location": wh_data["location"],
-                    "capacity": wh_data["capacity"],
-                    "status": wh_data["status"],
+                    "name": wh_data.get("name", ""),
+                    "location": wh_data.get("location", ""),
+                    "capacity": wh_data.get("capacity", 0),
+                    "status": wh_data.get("status", "active"),
                     **summary,
                     **valuation,
                 }

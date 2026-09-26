@@ -58,5 +58,5 @@ def test_generate_mfa_secret_and_qr_code(mfa_service: MFAService):
 
         # 3. التأكد من أن السر الجديد قد تم حفظه في قاعدة البيانات بالشكل المشفر
         mfa_service.db_manager.update_user_mfa_secret.assert_called_once_with(
-            user_id=1, secret="encrypted_TESTSECRET1234567890"
+            user_id=1, secret="encrypted_TESTSECRET1234567890"  # TEST ONLY
         )

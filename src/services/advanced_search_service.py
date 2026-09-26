@@ -20,6 +20,7 @@ from ..models.search import (
     SearchSuggestion,
     SortDirection,
 )
+from ..utils.db_helpers import escape_like_wildcards
 
 
 class AdvancedSearchService:
@@ -208,7 +209,7 @@ class AdvancedSearchService:
 
         # Base query
         fields_str = ", ".join(config["fields"])
-        sql = f"SELECT {fields_str} FROM {config['table']} WHERE 1=1"
+        sql = f"SELECT {fields_str} FROM {config['table']} WHERE 1=1"  # SQL_SAFE: table and fields from ENTITY_TABLES constant
         params = []
 
         # Active filter
@@ -225,9 +226,9 @@ class AdvancedSearchService:
                     keyword_conditions.append(f"LOWER({field}) LIKE LOWER(?)")
 
                 if query.whole_word:
-                    params.append(f"{query.keyword}")
+                    params.append(escape_like_wildcards(query.keyword))
                 else:
-                    params.append(f"%{query.keyword}%")
+                    params.append(f"%{escape_like_wildcards(query.keyword)}%")
 
             if keyword_conditions:
                 sql += f" AND ({' OR '.join(keyword_conditions)})"
@@ -250,7 +251,7 @@ class AdvancedSearchService:
                     direction = "ASC" if sort.direction == SortDirection.ASC else "DESC"
                     order_parts.append(f"{sort.field} {direction}")
             if order_parts:
-                sql += f" ORDER BY {', '.join(order_parts)}"
+                sql += f" ORDER BY {', '.join(order_parts)}"  # SQL_SAFE: order_parts validated against config['fields'] whitelist
             else:
                 # إذا لم يكن هناك حقول صالحة، استخدم الترتيب الافتراضي
                 sql += " ORDER BY id DESC"
@@ -259,7 +260,15 @@ class AdvancedSearchService:
             sql += " ORDER BY id DESC"
 
         # Pagination
-        sql += f" LIMIT {query.limit} OFFSET {query.offset}"
+        # SQL_INJECTION: query.limit and query.offset were directly interpolated.
+        # Fixed: int-validate to prevent injection.
+        safe_limit = int(query.limit) if isinstance(query.limit, (int, float)) else 50
+        safe_offset = int(query.offset) if isinstance(query.offset, (int, float)) else 0
+        if safe_limit < 1:
+            safe_limit = 50
+        if safe_offset < 0:
+            safe_offset = 0
+        sql += f" LIMIT {safe_limit} OFFSET {safe_offset}"  # SQL_SAFE: int-validated
 
         return sql, params
 
@@ -272,7 +281,7 @@ class AdvancedSearchService:
         config = self.ENTITY_TABLES.get(query.entity)
         if config:
             fields_str = ", ".join(config["fields"])
-            sql = sql.replace(f"SELECT {fields_str}", "SELECT COUNT(*) as total")
+            sql = sql.replace(f"SELECT {fields_str}", "SELECT COUNT(*) as total")  # SQL_SAFE: fields_str from ENTITY_TABLES constant
         return sql
 
     def _build_filter_clause(self, filt: SearchFilter) -> tuple[str, List[Any]]:
@@ -290,13 +299,13 @@ class AdvancedSearchService:
         elif op == FilterOperator.NOT_EQUALS:
             return f"{field} != ?", [val]
         elif op == FilterOperator.CONTAINS:
-            return f"{field} LIKE ?", [f"%{val}%"]
+            return f"{field} LIKE ?", [f"%{escape_like_wildcards(str(val))}%"]
         elif op == FilterOperator.NOT_CONTAINS:
-            return f"{field} NOT LIKE ?", [f"%{val}%"]
+            return f"{field} NOT LIKE ?", [f"%{escape_like_wildcards(str(val))}%"]
         elif op == FilterOperator.STARTS_WITH:
-            return f"{field} LIKE ?", [f"{val}%"]
+            return f"{field} LIKE ?", [f"{escape_like_wildcards(str(val))}%"]
         elif op == FilterOperator.ENDS_WITH:
-            return f"{field} LIKE ?", [f"%{val}"]
+            return f"{field} LIKE ?", [f"%{escape_like_wildcards(str(val))}"]
         elif op == FilterOperator.GREATER_THAN:
             return f"{field} > ?", [val]
         elif op == FilterOperator.LESS_THAN:
@@ -346,19 +355,19 @@ class AdvancedSearchService:
                 WHERE LOWER({display_field}) LIKE LOWER(?)
                 AND is_active = 1
                 LIMIT ?
-            """
+            """  # SQL_SAFE: display_field and table_name from ENTITY_TABLES constant
         else:
             sql = f"""
                 SELECT DISTINCT {display_field} as text
                 FROM {table_name}
                 WHERE LOWER({display_field}) LIKE LOWER(?)
                 LIMIT ?
-            """
+            """  # SQL_SAFE: display_field and table_name from ENTITY_TABLES constant
 
-        results = self.db.execute_query(sql, [f"{keyword}%", limit])
+        results = self.db.execute_query(sql, [f"{escape_like_wildcards(keyword)}%", limit])
 
         for row in results:
-            suggestions.append(SearchSuggestion(text=row["text"], entity=entity, score=1.0))
+            suggestions.append(SearchSuggestion(text=row.get("text", ""), entity=entity, score=1.0))
 
         return suggestions
 
@@ -398,16 +407,16 @@ class AdvancedSearchService:
 
         row = result[0]
         return SavedFilter(
-            id=row["id"],
-            name=row["name"],
+            id=row.get("id"),
+            name=row.get("name", ""),
             description=row.get("description"),
-            entity=SearchEntity[row["entity"]],
-            query_data=row["query_data"],
+            entity=SearchEntity[row.get("entity", "PRODUCTS")],
+            query_data=row.get("query_data", "{}"),
             is_default=bool(row.get("is_default", 0)),
             is_shared=bool(row.get("is_shared", 0)),
             created_by=row.get("created_by"),
-            created_at=(datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None),
-            updated_at=(datetime.fromisoformat(row["updated_at"]) if row.get("updated_at") else None),
+            created_at=(datetime.fromisoformat(row.get("created_at")) if row.get("created_at") else None),
+            updated_at=(datetime.fromisoformat(row.get("updated_at")) if row.get("updated_at") else None),
         )
 
     def list_saved_filters(
@@ -433,11 +442,11 @@ class AdvancedSearchService:
         for row in results:
             filters.append(
                 SavedFilter(
-                    id=row["id"],
-                    name=row["name"],
+                    id=row.get("id"),
+                    name=row.get("name", ""),
                     description=row.get("description"),
-                    entity=SearchEntity[row["entity"]],
-                    query_data=row["query_data"],
+                    entity=SearchEntity[row.get("entity", "PRODUCTS")],
+                    query_data=row.get("query_data", "{}"),
                     is_default=bool(row.get("is_default", 0)),
                     is_shared=bool(row.get("is_shared", 0)),
                     created_by=row.get("created_by"),

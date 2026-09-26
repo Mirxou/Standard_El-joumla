@@ -52,7 +52,7 @@ class Webhook:
             "is_active": self.is_active,
             "retry_count": self.retry_count,
             "timeout_seconds": self.timeout_seconds,
-            "secret_key": self.secret_key,
+            "secret_key": "***" if self.secret_key else None,  # Mask sensitive data
             "priority": self.priority,
             "rate_limit_per_minute": self.rate_limit_per_minute,
             "company_id": self.company_id,
@@ -691,9 +691,9 @@ class WebhookService:
         """تحويل Row إلى Webhook"""
         return Webhook(
             id=row.get("id"),
-            name=row["name"],
-            url=row["url"],
-            event_type=row["event_type"],
+            name=row.get("name", ""),
+            url=row.get("url", ""),
+            event_type=row.get("event_type", ""),
             http_method=row.get("http_method", "POST"),
             headers=row.get("headers"),
             payload_template=row.get("payload_template"),
@@ -713,8 +713,8 @@ class WebhookService:
         """تحويل Row إلى WebhookLog"""
         return WebhookLog(
             id=row.get("id"),
-            webhook_id=row["webhook_id"],
-            event_type=row["event_type"],
+            webhook_id=row.get("webhook_id", 0),
+            event_type=row.get("event_type", ""),
             entity_id=row.get("entity_id"),
             payload=row.get("payload", ""),
             response_status=row.get("response_status"),

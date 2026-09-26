@@ -123,7 +123,7 @@ class VendorPortal:
                 (vendor_id,),
             )
             orders_stats = cursor.fetchone()
-        except Exception:
+        except sqlite3.OperationalError:
             # إذا لم يكن الجدول موجوداً (في الاختبارات)
             orders_stats = (0, 0, 0, 0, 0)
 

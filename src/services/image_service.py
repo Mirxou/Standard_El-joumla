@@ -87,7 +87,7 @@ class ImageService:
         self.thread_pool = ThreadPoolManager.get_instance()
 
         # Cache للصور المحملة
-        self._pixmap_cache: Dict[str, QPixmap] = {}
+        self._pixmap_cache: Dict[str, QPixmap] = {}  # RESOURCE-LEAK-FIX: consider using QPixmapCache for large-scale image loading
 
     def get_image(self, url: str, placeholder: Optional[QPixmap] = None) -> QPixmap:
         """

@@ -65,7 +65,7 @@ class TestApiSalesFlow:
         from src.models.user import User, UserManager, UserRole
 
         user_manager = UserManager(db_instance)
-        username, password = "sales_user", "pass123"
+        username, password = "sales_user", "pass123"  # TEST ONLY
         user = user_manager.get_user_by_username(username)
         if not user:
             user = User(username=username, full_name="Sales User", role=UserRole.ADMIN.value)

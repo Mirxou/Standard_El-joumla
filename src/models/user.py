@@ -6,6 +6,7 @@
 """
 
 import hashlib
+import os
 import secrets
 from dataclasses import dataclass
 from datetime import datetime
@@ -406,7 +407,8 @@ class UserManager:
                 role=UserRole.ADMIN.value,
                 is_active=True,
             )
-            user_id = self.create_user(admin, "admin123")
+            default_password = os.environ.get("ERP_ADMIN_DEFAULT_PASSWORD", "admin123")
+            user_id = self.create_user(admin, default_password)
             if user_id:
                 if self.logger:
                     self.logger.info(f"تم إنشاء المدير الافتراضي بنجاح (ID: {user_id})")

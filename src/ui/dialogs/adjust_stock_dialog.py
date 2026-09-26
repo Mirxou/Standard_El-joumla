@@ -99,7 +99,7 @@ class AdjustStockDialog(BaseDialog):
             self.new_quantity_spin.setValue(0)
             return
         self.current_stock_label.setText(str(product.current_stock))
-        self.new_quantity_spin.setValue(float(product.current_stock))
+        self.new_quantity_spin.setValue(float(product.current_stock or 0))
 
     def _handle_save(self):
         product = self.product_combo.currentData()

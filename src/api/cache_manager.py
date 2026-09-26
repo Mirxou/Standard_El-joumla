@@ -35,6 +35,8 @@ class RedisCacheManager:
             redis_url: عنوان Redis (افتراضي: من متغير البيئة)
         """
         self.redis_url = redis_url or os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+        # CONFIG: Default redis://localhost:6379/0 is for local development.
+        # In production, REDIS_URL env var must be set explicitly.
         self.client: Optional[redis.Redis] = None
         self.enabled = False
 

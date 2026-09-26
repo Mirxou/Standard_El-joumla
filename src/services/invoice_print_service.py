@@ -230,19 +230,19 @@ class InvoicePrintService:
                     "name": item.get("name", "منتج غير محدد"),
                     "barcode": item.get("barcode", ""),
                     "qty": item.get("quantity", item.get("qty", 0)),
-                    "price": float(item.get("price", item.get("unit_price", 0))),
-                    "discount": float(item.get("discount", item.get("discount_amount", 0))),
-                    "total": float(item.get("total", item.get("total_price", 0))),
+                    "price": float(item.get("price", item.get("unit_price", 0)) or 0),
+                    "discount": float(item.get("discount", item.get("discount_amount", 0)) or 0),
+                    "total": float(item.get("total", item.get("total_price", 0)) or 0),
                 }
             )
 
         # تنسيق المبالغ
-        subtotal = float(data.get("subtotal", data.get("total", 0)))
-        discount = float(data.get("discount", 0))
-        tax = float(data.get("tax", 0))
-        grand_total = float(data.get("total", data.get("grand_total", subtotal)))
-        paid = float(data.get("paid", data.get("paid_amount", 0)))
-        remaining = float(data.get("remaining", data.get("remaining_amount", grand_total - paid)))
+        subtotal = float(data.get("subtotal", data.get("total", 0)) or 0)
+        discount = float(data.get("discount", 0) or 0)
+        tax = float(data.get("tax", 0) or 0)
+        grand_total = float(data.get("total", data.get("grand_total", subtotal)) or 0)
+        paid = float(data.get("paid", data.get("paid_amount", 0)) or 0)
+        remaining = float(data.get("remaining", data.get("remaining_amount", grand_total - paid)) or 0)
 
         # الحصول على معرف الفاتورة
         invoice_id = data.get("id", data.get("invoice_number", data.get("invoice_id", "000")))

@@ -62,7 +62,7 @@ class PricingService:
             السعر النهائي بعد تطبيق جميع الخصومات
         """
         try:
-            quantity = Decimal(str(quantity))
+            quantity = Decimal(str(quantity or 0))
 
             # 1. Check Contract Pricing (highest priority)
             if customer.contract_id:
@@ -105,7 +105,7 @@ class PricingService:
 
             # Choose price based on customer type
             if customer_type in ["wholesale", "vip"] and wholesale_price:
-                return Decimal(str(wholesale_price))
+                return Decimal(str(wholesale_price or 0))
             else:
                 return Decimal(str(retail_price or 0))
 
@@ -234,7 +234,7 @@ class PricingService:
             if not customer:
                 return False
 
-            total_purchases = Decimal(str(customer["total_purchases"]))
+            total_purchases = Decimal(str(customer["total_purchases"] or 0))
             new_tier = self.calculate_pricing_tier(total_purchases)
 
             self.db_manager.execute_non_query(

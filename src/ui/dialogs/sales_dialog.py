@@ -991,7 +991,7 @@ class SalesDialog(BaseDialog):
 
     def add_product_to_cart(self, product_data):
         """إضافة منتج للسلة (تحديث الذاكرة + الجدول) - مع التحقق من المخزون"""
-        product_id = product_data["id"]
+        product_id = product_data.get("id", 0)
         available_stock = int(product_data.get("current_stock") or 0)
 
         # الإصلاح 2: التحقق من المخزون قبل الإضافة
@@ -1001,7 +1001,7 @@ class SalesDialog(BaseDialog):
                 self.i18n.get_message("warning"),
                 self.i18n.get_message(
                     "product_out_of_stock",
-                    product=product_data["name"],
+                    product=product_data.get("name", ""),
                     stock=available_stock,
                 ),
             )
@@ -1045,10 +1045,10 @@ class SalesDialog(BaseDialog):
         # 🚫 القاعدة 1: استخدام Decimal للأموال والكميات لتفادي أخطاء التقريب
         item = {
             "id": product_id,
-            "name": product_data["name"],
+            "name": product_data.get("name", ""),
             "stock": available_stock,
             "unit": product_data.get("unit", "قطعة"),
-            "price": to_decimal(product_data["selling_price"]),
+            "price": to_decimal(product_data.get("selling_price", 0)),
             "qty": to_decimal(1),
             "discount": to_decimal(0),  # الإصلاح 3: الخصم صفر افتراضياً
             "total": to_decimal(0),  # سيحسب فوراً
@@ -1269,7 +1269,7 @@ class SalesDialog(BaseDialog):
 
     def on_tax_rate_changed(self, value):
         """معالجة تغيير نسبة الضريبة"""
-        self.tax_rate = Decimal(str(value))
+        self.tax_rate = Decimal(str(value or 0))
         self.calculate_invoice_totals()
 
     def _on_payment_btn_clicked(self, key: str):
@@ -1296,7 +1296,7 @@ class SalesDialog(BaseDialog):
         except Exception:
             self.paid_amount = to_decimal(0)
         # تحديث paid_amount_spin للتوافق
-        self.paid_amount_spin.setValue(float(self.paid_amount))
+        self.paid_amount_spin.setValue(float(self.paid_amount or 0))
         self.calculate_invoice_totals()
 
     def _on_pay_full(self):
@@ -1322,7 +1322,7 @@ class SalesDialog(BaseDialog):
         try:
             current_val = to_decimal(self.paid_amount_input.text() or "0")
             if abs(current_val - self.paid_amount) > Decimal("0.001"):
-                self.paid_amount_input.setText(f"{float(self.paid_amount):.2f}")
+                self.paid_amount_input.setText(f"{float(self.paid_amount or 0):.2f}")
         except Exception:
             logging.getLogger(__name__).warning("Ignored exception in sales_dialog.py")
         self.calculate_invoice_totals()
@@ -1495,7 +1495,8 @@ class SalesDialog(BaseDialog):
                     limit_card_layout = self.card_limit.layout()
 
                     if balance_card_layout and balance_card_layout.count() >= 2:
-                        balance_label = balance_card_layout.itemAt(1).widget()
+                        _b_item = balance_card_layout.itemAt(1)
+                        balance_label = _b_item.widget() if _b_item else None
                         if balance_label:
                             balance_label.setText(balance)
                             # تلوين الرصيد حسب الحالة
@@ -1505,7 +1506,8 @@ class SalesDialog(BaseDialog):
                                 balance_label.setStyleSheet(f"color: {C.ACCENT_TEAL}; font-weight: bold; font-size: 14px;")
 
                     if limit_card_layout and limit_card_layout.count() >= 2:
-                        limit_label = limit_card_layout.itemAt(1).widget()
+                        _l_item = limit_card_layout.itemAt(1)
+                        limit_label = _l_item.widget() if _l_item else None
                         if limit_label:
                             limit_label.setText(limit)
             except Exception as e:
@@ -1516,13 +1518,15 @@ class SalesDialog(BaseDialog):
             limit_card_layout = self.card_limit.layout()
 
             if balance_card_layout and balance_card_layout.count() >= 2:
-                balance_label = balance_card_layout.itemAt(1).widget()
+                _b_item = balance_card_layout.itemAt(1)
+                balance_label = _b_item.widget() if _b_item else None
                 if balance_label:
                     currency_symbol = self.i18n.get_message("currency_symbol")
                     balance_label.setText(f"0.00 {currency_symbol}")
 
             if limit_card_layout and limit_card_layout.count() >= 2:
-                limit_label = limit_card_layout.itemAt(1).widget()
+                _l_item = limit_card_layout.itemAt(1)
+                limit_label = _l_item.widget() if _l_item else None
                 if limit_label:
                     currency_symbol = self.i18n.get_message("currency_symbol")
                     limit_label.setText(f"0.00 {currency_symbol}")
@@ -1592,13 +1596,13 @@ class SalesDialog(BaseDialog):
             # تحديث نسبة الضريبة من الفاتورة
             if self.sale.tax_percentage:
                 self.tax_rate = self.sale.tax_percentage
-                self.tax_rate_spin.setValue(float(self.tax_rate))
+                self.tax_rate_spin.setValue(float(self.tax_rate or 0))
 
             # تحديث المبلغ المدفوع
             if self.sale.paid_amount:
                 self.paid_amount = self.sale.paid_amount
-                self.paid_amount_spin.setValue(float(self.paid_amount))
-                self.paid_amount_input.setText(f"{float(self.paid_amount):.2f}")
+                self.paid_amount_spin.setValue(float(self.paid_amount or 0))
+                self.paid_amount_input.setText(f"{float(self.paid_amount or 0):.2f}")
 
             # تحديث حالة الفاتورة
             if self.sale.status:
@@ -1746,7 +1750,7 @@ class SalesDialog(BaseDialog):
                     sale_id=None,
                     product_id=item["id"],
                     product_name=item["name"],
-                    quantity=Decimal(str(item["qty"])),
+                    quantity=Decimal(str(item["qty"] or 0)),
                     unit_price=item["price"],
                     discount_percentage=discount_pct,
                     total_price=item["total"],
@@ -2055,6 +2059,18 @@ class SalesDialog(BaseDialog):
             if reply == QMessageBox.No:
                 event.ignore()
                 return
+
+        # MEMORY: stop any running worker threads to prevent leaks
+        for attr in ('thread', 'cancel_thread'):
+            thread = getattr(self, attr, None)
+            if thread and isinstance(thread, QThread):
+                if thread.isRunning():
+                    thread.quit()
+                    if not thread.wait(2000):
+                        thread.terminate()
+                        thread.wait(500)
+                thread.deleteLater()
+                setattr(self, attr, None)
 
         super().closeEvent(event)
 

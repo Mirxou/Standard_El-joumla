@@ -83,7 +83,7 @@ class SalesTableModel(QAbstractTableModel):
                     # تنسيق الأرقام المالية
                     if col in (3, 4, 5):  # المبالغ المالية
                         try:
-                            return f"{float(value):,.2f}" if pd.notna(value) and str(value).strip() else "0.00"
+                            return f"{float(value or 0):,.2f}" if pd.notna(value) and str(value).strip() else "0.00"
                         except (ValueError, TypeError):
                             return "0.00"
                     # تنسيق التاريخ
@@ -126,7 +126,7 @@ class SalesTableModel(QAbstractTableModel):
             elif col == 5:  # المبلغ المتبقي
                 try:
                     remaining = (
-                        float(self._data.iloc[row]["remaining_amount"])
+                        float(self._data.iloc[row]["remaining_amount"] or 0)
                         if "remaining_amount" in self._data.columns
                         and pd.notna(self._data.iloc[row]["remaining_amount"])
                         else 0
@@ -143,7 +143,7 @@ class SalesTableModel(QAbstractTableModel):
             if col == 0:  # في عمود رقم الفاتورة نخزن sale_id
                 try:
                     return (
-                        int(self._data.iloc[row]["id"])
+                        int(self._data.iloc[row]["id"] or 0)
                         if "id" in self._data.columns and pd.notna(self._data.iloc[row]["id"])
                         else None
                     )

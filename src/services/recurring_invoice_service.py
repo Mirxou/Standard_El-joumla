@@ -4,6 +4,7 @@
 تدعم إنشاء فواتير متكررة تلقائياً للعملاء حسب جدول زمني محدد (شهري/سنوي)
 """
 
+import logging
 import uuid
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
@@ -13,7 +14,7 @@ from typing import Any, Dict, List, Optional
 class RecurringInvoiceService:
     def __init__(self, db_manager, logger=None):
         self.db = db_manager
-        self.logger = logger
+        self.logger = logger or logging.getLogger(__name__)
         self._init_table()
 
     def _init_table(self):
@@ -82,7 +83,7 @@ class RecurringInvoiceService:
                 (f"{prefix}%",),
             )
             if row:
-                last_num = row.get("invoice_number") if isinstance(row, dict) else row[0]
+                last_num = row.get("invoice_number")
                 try:
                     seq = int(last_num.split("-")[-1]) + 1
                 except (ValueError, IndexError):
@@ -90,7 +91,7 @@ class RecurringInvoiceService:
             else:
                 seq = 1
             return f"{prefix}{seq:04d}"
-        except Exception:
+        except (ValueError, TypeError, OSError):
             return f"INV-{uuid.uuid4().hex[:12].upper()}"
 
     def generate_due_invoices(self):
@@ -98,7 +99,11 @@ class RecurringInvoiceService:
         subs = self.get_active_subscriptions()
         today = datetime.now().date()
         for sub in subs:
-            next_date = datetime.strptime(sub["next_invoice_date"], "%Y-%m-%d").date()
+            next_date_str = sub.get("next_invoice_date")
+            if not next_date_str:
+                self.logger.warning(f"Skipping subscription {sub.get('id')}: missing next_invoice_date")
+                continue
+            next_date = datetime.strptime(next_date_str, "%Y-%m-%d").date()
             if next_date <= today:
                 # إنشاء الفاتورة في جدول sales (الجدول الرئيسي للمبيعات)
                 invoice_number = self._generate_invoice_number()
@@ -111,24 +116,23 @@ class RecurringInvoiceService:
                     q,
                     (
                         invoice_number,
-                        sub["customer_id"],
-                        sub["amount"],
-                        sub["amount"],
-                        sub["amount"],
+                        sub.get("customer_id"),
+                        float(sub.get("amount", 0) or 0),
+                        float(sub.get("amount", 0) or 0),
+                        float(sub.get("amount", 0) or 0),
                         today,
-                        sub["description"],
+                        sub.get("description"),
                     ),
                 )
                 # تحديث الاشتراك
-                new_next = self._calc_next_date(next_date, sub["frequency"])
+                new_next = self._calc_next_date(next_date, sub.get("frequency", "monthly"))
                 uq = """UPDATE recurring_invoices SET last_invoice_date=?, next_invoice_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=?"""  # noqa: E501
-                self.db.execute_non_query(uq, (today, new_next, sub["id"]))
-                if self.logger:
-                    self.logger.info(
-                        f'تم إنشاء فاتورة دورية {invoice_number}'
-                        f' للعميل {sub["customer_id"]}'
-                        f' بمبلغ {sub["amount"]} ليوم {today}'
-                    )
+                self.db.execute_non_query(uq, (today, new_next, sub.get("id")))
+                self.logger.info(
+                    f'تم إنشاء فاتورة دورية {invoice_number}'
+                    f' للعميل {sub.get("customer_id")}'
+                    f' بمبلغ {sub.get("amount", 0)} ليوم {today}'
+                )
 
     def _calc_next_date(self, last, freq: str) -> str:
         """حساب التاريخ التالي باستخدام relativedelta للحساب التقويمي الصحيح.

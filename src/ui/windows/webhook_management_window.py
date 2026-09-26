@@ -43,6 +43,7 @@ from PySide6.QtWidgets import (
 from src.core.database_manager import DatabaseManager
 from src.services.webhook_service import Webhook, WebhookService
 from src.ui.styles.design_tokens import C
+from src.utils.db_helpers import safe_int
 from src.utils.logger import setup_logger
 
 project_root = Path(__file__).parent.parent.parent.parent
@@ -75,7 +76,7 @@ class WebhookManagementWindow(QMainWindow):
         self.load_statistics()
 
         # Timer لتحديث السجلات كل 30 ثانية
-        self.refresh_timer = QTimer()
+        self.refresh_timer = QTimer(self)  # MEMORY: parent=self ensures timer is destroyed with window
         self.refresh_timer.timeout.connect(self.load_webhook_logs)
         # self.refresh_timer.start(30000)  # 🔥 معطّل لمنع التجميد
 
@@ -361,7 +362,9 @@ class WebhookManagementWindow(QMainWindow):
         id_cell = self.webhooks_table.item(row, 0)
         if not id_cell:
             return None
-        webhook_id = int(id_cell.text())
+        webhook_id = safe_int(id_cell.text(), default=-1)
+        if webhook_id <= 0:
+            return None
 
         return self.webhook_service.get_webhook(webhook_id)
 
@@ -608,7 +611,9 @@ class WebhookManagementWindow(QMainWindow):
         id_cell = self.logs_table.item(row, 0)
         if not id_cell:
             return
-        log_id = int(id_cell.text())
+        log_id = safe_int(id_cell.text(), default=-1)
+        if log_id <= 0:
+            return
 
         # الحصول على السجلات
         logs = self.webhook_service.get_webhook_logs(limit=10000)

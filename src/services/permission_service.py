@@ -217,7 +217,7 @@ class PermissionService:
                 if perm:
                     self.db.execute_update(
                         "INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)",
-                        [role_id, perm[0]["id"]],
+                        [role_id, perm[0].get("id")],
                     )
 
         # دور موظف المبيعات
@@ -246,7 +246,7 @@ class PermissionService:
                 if perm:
                     self.db.execute_update(
                         "INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)",
-                        [role_id, perm[0]["id"]],
+                        [role_id, perm[0].get("id")],
                     )
 
     def create_role(self, role: Role) -> int:
@@ -280,21 +280,21 @@ class PermissionService:
 
         role_data = result[0]
         role = Role(
-            id=role_data["id"],
-            name=role_data["name"],
-            code=role_data["code"],
+            id=role_data.get("id", 0),
+            name=role_data.get("name", ""),
+            code=role_data.get("code", ""),
             description=role_data.get("description", ""),
             is_system=bool(role_data.get("is_system", False)),
             is_active=bool(role_data.get("is_active", True)),
             created_at=(
-                role_data["created_at"]
+                role_data.get("created_at")
                 if isinstance(role_data.get("created_at"), datetime)
-                else (datetime.fromisoformat(role_data["created_at"]) if role_data.get("created_at") else None)
+                else (datetime.fromisoformat(role_data.get("created_at", "")) if role_data.get("created_at") else None)
             ),
             updated_at=(
-                role_data["updated_at"]
+                role_data.get("updated_at")
                 if isinstance(role_data.get("updated_at"), datetime)
-                else (datetime.fromisoformat(role_data["updated_at"]) if role_data.get("updated_at") else None)
+                else (datetime.fromisoformat(role_data.get("updated_at", "")) if role_data.get("updated_at") else None)
             ),
         )
 
@@ -337,14 +337,14 @@ class PermissionService:
         roles = []
         for row in result:
             role = Role(
-                id=row["id"],
-                name=row["name"],
-                code=row["code"],
+                id=row.get("id", 0),
+                name=row.get("name", ""),
+                code=row.get("code", ""),
                 description=row.get("description", ""),
                 is_system=bool(row.get("is_system", False)),
                 is_active=bool(row.get("is_active", True)),
-                created_at=(datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None),
-                updated_at=(datetime.fromisoformat(row["updated_at"]) if row.get("updated_at") else None),
+                created_at=(datetime.fromisoformat(row.get("created_at", "")) if row.get("created_at") else None),
+                updated_at=(datetime.fromisoformat(row.get("updated_at", "")) if row.get("updated_at") else None),
             )
             role.permissions = self.get_role_permissions(role.id)
             roles.append(role)
@@ -398,20 +398,20 @@ class PermissionService:
     def _user_from_row(self, row: Dict[str, Any]) -> User:
         """تحويل صف من قاعدة البيانات إلى كائن User"""
         user = User(
-            id=row["id"],
-            username=row["username"],
-            full_name=row["full_name"],
+            id=row.get("id", 0),
+            username=row.get("username", ""),
+            full_name=row.get("full_name", ""),
             email=row.get("email", ""),
             phone=row.get("phone", ""),
-            password_hash=row["password_hash"],
+            password_hash=row.get("password_hash", ""),
             role_id=row.get("role_id"),
-            status=UserStatus[row["status"]],
-            last_login=(datetime.fromisoformat(row["last_login"]) if row.get("last_login") else None),
+            status=UserStatus[row.get("status", "ACTIVE")],
+            last_login=(datetime.fromisoformat(row.get("last_login", "")) if row.get("last_login") else None),
             failed_login_attempts=row.get("failed_login_attempts", 0),
             is_locked=bool(row.get("is_locked", False)),
-            locked_until=(datetime.fromisoformat(row["locked_until"]) if row.get("locked_until") else None),
-            created_at=(datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None),
-            updated_at=(datetime.fromisoformat(row["updated_at"]) if row.get("updated_at") else None),
+            locked_until=(datetime.fromisoformat(row.get("locked_until", "")) if row.get("locked_until") else None),
+            created_at=(datetime.fromisoformat(row.get("created_at", "")) if row.get("created_at") else None),
+            updated_at=(datetime.fromisoformat(row.get("updated_at", "")) if row.get("updated_at") else None),
         )
 
         # تحميل الدور

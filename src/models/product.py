@@ -47,11 +47,11 @@ class Product:
             if value is None:
                 setattr(self, field, Decimal("0.00"))
             elif isinstance(value, (int, float, str)):
-                setattr(self, field, Decimal(str(value)))
+                setattr(self, field, Decimal(str(value or 0)))
         if self.current_stock is None:
             self.current_stock = 0.0
         elif isinstance(self.current_stock, (int, float, str)):
-            self.current_stock = float(self.current_stock)
+            self.current_stock = float(self.current_stock or 0)
 
     @property
     def profit_margin(self) -> Decimal:
@@ -65,7 +65,7 @@ class Product:
 
     @property
     def stock_value(self) -> Decimal:
-        return self.cost_price * Decimal(str(self.current_stock))
+        return self.cost_price * Decimal(str(self.current_stock or 0))
 
     @property
     def is_low_stock(self) -> bool:
@@ -81,10 +81,10 @@ class Product:
             "category_id": self.category_id,
             "category_name": self.category_name,
             "unit": self.unit,
-            "cost_price": float(self.cost_price),
-            "selling_price": float(self.selling_price),
-            "wholesale_price": float(self.wholesale_price),
-            "vip_price": float(self.vip_price),
+            "cost_price": float(self.cost_price or 0),
+            "selling_price": float(self.selling_price or 0),
+            "wholesale_price": float(self.wholesale_price or 0),
+            "vip_price": float(self.vip_price or 0),
             "min_wholesale_qty": self.min_wholesale_qty,
             "min_stock": self.min_stock,
             "current_stock": self.current_stock,
@@ -93,9 +93,9 @@ class Product:
             "is_active": self.is_active,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "profit_margin": float(self.profit_margin),
-            "profit_amount": float(self.profit_amount),
-            "stock_value": float(self.stock_value),
+            "profit_margin": float(self.profit_margin or 0),
+            "profit_amount": float(self.profit_amount or 0),
+            "stock_value": float(self.stock_value or 0),
             "is_low_stock": self.is_low_stock,
         }
 
@@ -158,6 +158,17 @@ class ProductManager:
     def create_product(self, product: Product) -> Optional[int]:
         """إنشاء منتج جديد"""
         try:
+            # Constraint: barcode must be unique (DB-level UNIQUE constraint).
+            # Validate at app level to give a clear error instead of SQLite IntegrityError.
+            if product.barcode:
+                existing = self.db_manager.fetch_one(
+                    "SELECT id FROM products WHERE barcode = ?", (product.barcode,)
+                )
+                if existing:
+                    if self.logger:
+                        self.logger.warning(f"Cannot create product: barcode '{product.barcode}' already exists (id={existing.get('id') if isinstance(existing, dict) else existing[0]})")
+                    return None
+
             category_id = product.category_id
             if category_id:
                 res = self.db_manager.fetch_one("SELECT id FROM categories WHERE id = ?", (category_id,))
@@ -180,13 +191,13 @@ class ProductManager:
                 product.barcode,
                 category_id,
                 product.unit,
-                float(product.cost_price),
-                float(product.selling_price),
-                float(product.wholesale_price),
-                float(product.vip_price),
+                float(product.cost_price or 0),
+                float(product.selling_price or 0),
+                float(product.wholesale_price or 0),
+                float(product.vip_price or 0),
                 product.min_wholesale_qty,
                 product.min_stock,
-                float(product.current_stock),
+                float(product.current_stock or 0),
                 product.description,
                 product.image_path,
                 1 if product.is_active else 0,
@@ -302,6 +313,17 @@ class ProductManager:
     def update_product(self, product: Product) -> bool:
         """تحديث منتج"""
         try:
+            # Constraint: barcode must be unique — check on update too
+            if product.barcode:
+                existing = self.db_manager.fetch_one(
+                    "SELECT id FROM products WHERE barcode = ? AND id != ?",
+                    (product.barcode, product.id),
+                )
+                if existing:
+                    if self.logger:
+                        self.logger.warning(f"Cannot update product {product.id}: barcode '{product.barcode}' already used by another product")
+                    return False
+
             category_id = product.category_id
             if category_id:
                 res = self.db_manager.fetch_one("SELECT id FROM categories WHERE id = ?", (category_id,))
@@ -324,13 +346,13 @@ class ProductManager:
                 product.barcode,
                 category_id,
                 product.unit,
-                float(product.cost_price),
-                float(product.selling_price),
-                float(product.wholesale_price),
-                float(product.vip_price),
+                float(product.cost_price or 0),
+                float(product.selling_price or 0),
+                float(product.wholesale_price or 0),
+                float(product.vip_price or 0),
                 product.min_wholesale_qty,
                 product.min_stock,
-                float(product.current_stock),
+                float(product.current_stock or 0),
                 product.description,
                 product.image_path,
                 1 if product.is_active else 0,
@@ -361,7 +383,7 @@ class ProductManager:
             if quantity < 0:
                 return False
             query = "UPDATE products SET current_stock = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-            return self._execute_non_query(query, (float(quantity), product_id)) > 0
+            return self._execute_non_query(query, (float(quantity or 0), product_id)) > 0
         except Exception as e:
             if self.logger:
                 self.logger.error(f"Error updating stock {product_id}: {e}")
@@ -375,6 +397,27 @@ class ProductManager:
         except Exception as e:
             if self.logger:
                 self.logger.error(f"Error adjusting relative stock {product_id}: {e}")
+            return False
+
+    def deduct_stock_atomic(self, product_id: int, quantity: float) -> bool:
+        """خصم مخزون ذري مع حماية TOCTOU — يمنع المخزون السالب.
+
+        Uses conditional SQL: UPDATE ... SET current_stock = current_stock - ?
+        WHERE ... AND current_stock >= ?
+        Returns False if stock insufficient (rowcount == 0).
+        """
+        try:
+            if quantity < 0:
+                return False
+            query = (
+                "UPDATE products SET current_stock = current_stock - ?, "
+                "updated_at = CURRENT_TIMESTAMP "
+                "WHERE id = ? AND current_stock >= ?"
+            )
+            return self._execute_non_query(query, (float(quantity), product_id, float(quantity))) > 0
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Error atomic deducting stock {product_id}: {e}")
             return False
 
     def get_low_stock_products(self) -> List[Product]:
@@ -451,7 +494,7 @@ class ProductManager:
                 unit=get_val("unit", 5, "قطعة"),
                 cost_price=Decimal(str(get_val("cost_price", 6, 0))),
                 selling_price=Decimal(str(get_val("selling_price", 7, 0))),
-                wholesale_price=Decimal(str(get_val("wholesale_price", 8, 0))),
+                wholesale_price=Decimal(str(get_val("wholesale_price", 8, 0) or 0)),
                 vip_price=Decimal(str(get_val("vip_price", 9, 0))),
                 min_wholesale_qty=get_val("min_wholesale_qty", 10, 10),
                 min_stock=get_val("min_stock", 11, 0),

@@ -101,7 +101,7 @@ class ReturnItem:
             if value is None:
                 setattr(self, field_name, Decimal("0"))
             elif isinstance(value, (int, float, str)):
-                setattr(self, field_name, Decimal(str(value)))
+                setattr(self, field_name, Decimal(str(value or 0)))
 
         # تحويل السبب
         if isinstance(self.return_reason, str):
@@ -236,7 +236,7 @@ class ReturnInvoice:
             if value is None:
                 setattr(self, field_name, Decimal("0"))
             elif isinstance(value, (int, float, str)):
-                setattr(self, field_name, Decimal(str(value)))
+                setattr(self, field_name, Decimal(str(value or 0)))
 
         # تحويل الأنواع والحالات
         if isinstance(self.return_type, str):
@@ -488,7 +488,7 @@ class ReturnManager:
                     if isinstance(return_invoice.return_reason, ReturnReason)
                     else str(return_invoice.return_reason or "")
                 ),
-                float(return_invoice.total_amount),
+                float(return_invoice.total_amount or 0),
                 (
                     return_invoice.status.value
                     if isinstance(return_invoice.status, ReturnStatus)
@@ -521,8 +521,8 @@ class ReturnManager:
             params = (
                 item.return_id,
                 item.product_id,
-                float(item.quantity_returned),
-                float(item.unit_price),
+                float(item.quantity_returned or 0),
+                float(item.unit_price or 0),
             )
             self.db_manager.execute_insert(query, params)
         except Exception as e:

@@ -582,6 +582,7 @@ async def login(
 async def logout(
     response: Response,
     request: Request,
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """
     تسجيل الخروج ومسح الـ cookies
@@ -592,6 +593,9 @@ async def logout(
 
     Returns:
         رسالة نجاح
+
+    SECURITY NOTE: JWT tokens remain valid until natural expiry since they are stateless.
+    For full session invalidation, implement a token blacklist/revocation mechanism.
     """
     # تحديد إذا كنا في Production
     is_production = request.app.title != "Development Server"
@@ -602,6 +606,11 @@ async def logout(
 
         # مسح refresh_token cookie
         response.delete_cookie(key="refresh_token", path="/")
+
+    # Log the logout event for audit trail
+    user_id = current_user.get("user_id") if current_user else None
+    username = current_user.get("username") if current_user else None
+    logger.info(f"User logged out: {username} (ID: {user_id})")
 
     return {"message": "تم تسجيل الخروج بنجاح"}
 
@@ -657,10 +666,12 @@ async def get_users(
     """
     الحصول على قائمة المستخدمين (للمدراء فقط)
     """
-    if current_user.get("role") != "مدير" and current_user.get("role_id") != 1:
-        # Check permission or role roughly for now
-        # raise HTTPException(status_code=403, detail="ليس لديك صلاحية")
-        pass  # Allow for development/testing
+    # SECURITY: Enforce admin-only access — removed permissive `pass` bypass
+    if current_user.get("role_id") != 1:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="ليس لديك صلاحية للوصول إلى هذه البيانات",
+        )
 
     users = user_manager.get_all_users(active_only=active_only)
 
@@ -1579,7 +1590,7 @@ async def download_invoice_pdf(
                 "items": [
                     {
                         "product_name": item.product_name,
-                        "quantity": float(item.quantity),
+                        "quantity": float(item.quantity or 0),
                         "unit_price": str(item.unit_price),
                         "discount": str(item.discount),
                         "total_amount": str(item.total_amount)
@@ -1651,11 +1662,11 @@ async def create_sale(
             payment_method=(
                 PaymentMethod(sale_data.payment_method) if sale_data.payment_method else PaymentMethod.CASH
             ),
-            discount_amount=Decimal(str(sale_data.discount_amount)),
+            discount_amount=Decimal(str(sale_data.discount_amount or 0)),
             discount_percentage=Decimal(str(sale_data.discount_percentage)),
-            tax_amount=Decimal(str(sale_data.tax_amount)),
+            tax_amount=Decimal(str(sale_data.tax_amount or 0)),
             tax_percentage=Decimal(str(sale_data.tax_percentage)),
-            paid_amount=Decimal(str(sale_data.paid_amount)),
+            paid_amount=Decimal(str(sale_data.paid_amount or 0)),
             currency_id=sale_data.currency_id,
             notes=sale_data.notes,
             created_by=current_user.get("user_id"),
@@ -1671,7 +1682,7 @@ async def create_sale(
             item = SaleItem(
                 product_id=item_data.product_id,
                 quantity=item_data.quantity,
-                unit_price=Decimal(str(item_data.unit_price)),
+                unit_price=Decimal(str(item_data.unit_price or 0)),
                 discount_amount=Decimal(str(item_data.discount_amount or 0)),
                 discount_percentage=Decimal(str(item_data.discount_percentage or 0)),
                 tax_amount=Decimal(str(item_data.tax_amount or 0)),
@@ -1765,15 +1776,15 @@ async def update_sale(
         if sale_data.payment_method is not None:
             sale.payment_method = PaymentMethod(sale_data.payment_method)
         if sale_data.discount_amount is not None:
-            sale.discount_amount = Decimal(str(sale_data.discount_amount))
+            sale.discount_amount = Decimal(str(sale_data.discount_amount or 0))
         if sale_data.discount_percentage is not None:
             sale.discount_percentage = Decimal(str(sale_data.discount_percentage))
         if sale_data.tax_amount is not None:
-            sale.tax_amount = Decimal(str(sale_data.tax_amount))
+            sale.tax_amount = Decimal(str(sale_data.tax_amount or 0))
         if sale_data.tax_percentage is not None:
             sale.tax_percentage = Decimal(str(sale_data.tax_percentage))
         if sale_data.paid_amount is not None:
-            sale.paid_amount = Decimal(str(sale_data.paid_amount))
+            sale.paid_amount = Decimal(str(sale_data.paid_amount or 0))
         if sale_data.currency_id is not None:
             sale.currency_id = sale_data.currency_id
         if sale_data.notes is not None:
@@ -2180,9 +2191,9 @@ async def create_purchase(
             status=purchase_data.status or PurchaseStatus.PENDING.value,
             payment_status=purchase_data.payment_status or PurchasePaymentStatus.UNPAID.value,
             payment_terms=purchase_data.payment_terms or "نقدي",
-            discount_amount=Decimal(str(purchase_data.discount_amount)),
+            discount_amount=Decimal(str(purchase_data.discount_amount or 0)),
             shipping_cost=Decimal(str(purchase_data.shipping_cost)),
-            paid_amount=Decimal(str(purchase_data.paid_amount)),
+            paid_amount=Decimal(str(purchase_data.paid_amount or 0)),
             currency_id=purchase_data.currency_id,
             notes=purchase_data.notes,
             created_by=current_user.get("user_id"),
@@ -2197,8 +2208,8 @@ async def create_purchase(
         for item_data in purchase_data.items:
             item = PurchaseItem(
                 product_id=item_data.product_id,
-                quantity_ordered=Decimal(str(item_data.quantity_ordered)),
-                unit_cost=Decimal(str(item_data.unit_cost)),
+                quantity_ordered=Decimal(str(item_data.quantity_ordered or 0)),
+                unit_cost=Decimal(str(item_data.unit_cost or 0)),
                 discount_percent=Decimal(str(item_data.discount_percent or 0)),
                 discount_amount=Decimal(str(item_data.discount_amount or 0)),
                 tax_percent=Decimal(str(item_data.tax_percent or 15.0)),
@@ -2300,11 +2311,11 @@ async def update_purchase(
         if purchase_data.payment_terms is not None:
             purchase.payment_terms = purchase_data.payment_terms
         if purchase_data.discount_amount is not None:
-            purchase.discount_amount = Decimal(str(purchase_data.discount_amount))
+            purchase.discount_amount = Decimal(str(purchase_data.discount_amount or 0))
         if purchase_data.shipping_cost is not None:
             purchase.shipping_cost = Decimal(str(purchase_data.shipping_cost))
         if purchase_data.paid_amount is not None:
-            purchase.paid_amount = Decimal(str(purchase_data.paid_amount))
+            purchase.paid_amount = Decimal(str(purchase_data.paid_amount or 0))
         if purchase_data.currency_id is not None:
             purchase.currency_id = purchase_data.currency_id
         if purchase_data.notes is not None:
@@ -2418,7 +2429,7 @@ async def delete_purchase(
 @router.get("/notifications", tags=["Notifications"])
 async def get_notifications(
     unread_only: bool = False,
-    limit: int = 50,
+    limit: int = Query(default=50, ge=1, le=500, description="الحد الأقصى للإشعارات"),
     current_user: Dict[str, Any] = Depends(get_current_user),
     db_manager: DatabaseManager = Depends(get_db_manager),
 ):
@@ -2528,19 +2539,67 @@ async def mark_notification_read(
 
 
 @router.websocket("/ws/{room}")
-async def websocket_room_endpoint(websocket: WebSocket, room: str):
+async def websocket_room_endpoint(
+    websocket: WebSocket,
+    room: str,
+    token: Optional[str] = Query(None, description="JWT token for authentication"),
+):
     """
     WebSocket endpoint لـ Room محدد
 
     Args:
         room: Room name
+        token: JWT token for authentication (required)
+
+    SECURITY: Authentication is required — unauthenticated connections are rejected.
     """
     ws_manager = get_websocket_manager()
-    await ws_manager.connect(websocket, room=room)
+    user_id = None
+
+    # SECURITY: Require authentication (matching /ws and /ws/data-updates patterns)
+    if not token:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    try:
+        from src.api.app import auth_manager
+
+        if not auth_manager:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        payload = auth_manager.verify_token(token, token_type="access")
+        if not payload:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+        user_id = int(payload.get("sub") or 0)
+    except Exception as e:
+        logger.warning(f"Invalid token in WebSocket /ws/{{room}} connection: {e}")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    # Connection limit check (DoS protection)
+    try:
+        await ws_manager.connect(websocket, room=room, user_id=user_id)
+    except ConnectionRefusedError as e:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=str(e))
+        return
+
+    # Simple rate limiter state
+    _msg_count = 0
+    _msg_limit = 100  # max messages per connection per minute (approximate)
 
     try:
         while True:
             data = await websocket.receive_json()
+            _msg_count += 1
+
+            # Rate limiting: disconnect if client sends too many messages
+            if _msg_count > _msg_limit:
+                logger.warning(f"WebSocket rate limit exceeded in room {room}, disconnecting")
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Rate limit exceeded")
+                break
+
             message_type = data.get("type", "unknown")
 
             if message_type == "ping":
@@ -2549,11 +2608,11 @@ async def websocket_room_endpoint(websocket: WebSocket, room: str):
                 )
 
     except WebSocketDisconnect:
-        ws_manager.disconnect(websocket, room=room)
+        ws_manager.disconnect(websocket, room=room, user_id=user_id)
         logger.info(f"WebSocket منقطع من room: {room}")
     except Exception as e:
         logger.log(logging.ERROR, f"خطأ في WebSocket room {room}: {e}", exc_info=True)
-        ws_manager.disconnect(websocket, room=room)
+        ws_manager.disconnect(websocket, room=room, user_id=user_id)
 
 
 # ==================== Reports Routes ====================
@@ -2612,7 +2671,7 @@ async def create_return(
 
 @router.get("/returns", tags=["Returns"])
 async def list_returns(
-    limit: int = 100,
+    limit: int = Query(default=100, ge=1, le=1000, description="الحد الأقصى للمرتجعات"),
     current_user: Dict[str, Any] = Depends(get_current_user),
     return_manager: "ReturnManager" = Depends(get_return_manager),
 ):
@@ -2654,7 +2713,7 @@ async def get_sales_trends(
 
 @router.get("/reports/charts/top-products", tags=["Reports"])
 async def get_top_products(
-    limit: int = 5,
+    limit: int = Query(default=5, ge=1, le=100, description="عدد المنتجات الأعلى"),
     current_user: Dict[str, Any] = Depends(get_current_user),
     report_manager: "ReportManager" = Depends(get_report_manager),
 ):
@@ -2685,7 +2744,7 @@ async def get_inventory_analytics(
 )
 async def get_inventory_transactions(
     product_id: Optional[int] = Query(None, description="معرف المنتج للمفلترة"),
-    limit: int = Query(100, description="عدد الحركات المطلوب"),
+    limit: int = Query(default=100, ge=1, le=1000, description="عدد الحركات المطلوب"),
     inventory_service: "InventoryService" = Depends(get_inventory_service),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
@@ -2822,7 +2881,7 @@ async def get_scheduled_reports(
 
 @router.get("/ai/forecast", tags=["AI"])
 async def get_ai_forecast(
-    period: int = 7,
+    period: int = Query(default=7, ge=1, le=365, description="عدد الأيام للتنبؤ بها"),
     product_id: Optional[int] = None,
     current_user: Dict[str, Any] = Depends(get_current_user),
     db_manager: DatabaseManager = Depends(get_db_manager),
@@ -2962,11 +3021,17 @@ async def get_devices(
     db_manager: DatabaseManager = Depends(get_db_manager),
 ):
     """
-    الحصول على قائمة بجميع الأجهزة المتصلة
+    الحصول على قائمة بجميع الأجهزة المتصلة (للمدراء فقط)
 
     Returns:
         قائمة بالأجهزة مع معلوماتها
     """
+    # SECURITY: Admin-only endpoint — enforce role check
+    if current_user.get("role_id") != 1:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="ليس لديك صلاحية المسؤول",
+        )
     try:
         # محاولة جلب الأجهزة من جدول user_sessions (إذا كان موجوداً)
         devices = []
@@ -3045,7 +3110,7 @@ async def trigger_sync(
     db_manager: DatabaseManager = Depends(get_db_manager),
 ):
     """
-    إرسال أمر Sync لجهاز محدد
+    إرسال أمر Sync لجهاز محدد (للمدراء فقط)
 
     Args:
         device_id: معرف الجهاز
@@ -3053,6 +3118,12 @@ async def trigger_sync(
     Returns:
         نتيجة إرسال الأمر
     """
+    # SECURITY: Admin-only endpoint — enforce role check
+    if current_user.get("role_id") != 1:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="ليس لديك صلاحية المسؤول",
+        )
     try:
         # محاولة إرسال الأمر عبر WebSocket
         ws_manager = get_websocket_manager()
@@ -3176,14 +3247,22 @@ async def websocket_endpoint(
         if not payload:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
-        user_id = int(payload.get("sub"))
+        user_id = int(payload.get("sub") or 0)
     except Exception as e:
         logger.warning(f"Invalid token in WebSocket connection: {e}")
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
-    # الاتصال
-    await ws_manager.connect(websocket, room=room, user_id=user_id)
+    # الاتصال (مع DoS protection)
+    try:
+        await ws_manager.connect(websocket, room=room, user_id=user_id)
+    except ConnectionRefusedError as e:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=str(e))
+        return
+
+    # Rate limiter
+    _msg_count = 0
+    _msg_limit = 100  # max messages per connection
 
     try:
         # إرسال رسالة ترحيبية
@@ -3200,6 +3279,13 @@ async def websocket_endpoint(
         while True:
             try:
                 data = await websocket.receive_json()
+                _msg_count += 1
+
+                # Rate limiting
+                if _msg_count > _msg_limit:
+                    logger.warning(f"WebSocket rate limit exceeded, disconnecting")
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Rate limit exceeded")
+                    break
 
                 # معالجة الرسائل الواردة (مثل ping/pong)
                 if data.get("type") == "ping":
@@ -3227,15 +3313,48 @@ async def websocket_endpoint(
 
 
 @router.websocket("/ws/data-updates")
-async def websocket_data_updates(websocket: WebSocket):
+async def websocket_data_updates(
+    websocket: WebSocket,
+    token: Optional[str] = Query(None, description="JWT token for authentication"),
+):
     """
     WebSocket endpoint مخصص لتحديثات البيانات
-    للاستخدام من Desktop App
+    للاستخدام من Desktop App (يتطلب مصادقة)
     """
     ws_manager = get_websocket_manager()
 
-    # الاتصال في room خاص بالبيانات
-    await ws_manager.connect(websocket, room="data_updates")
+    # SECURITY: Require authentication — matching the /ws endpoint pattern
+    if not token:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    try:
+        from src.api.app import auth_manager
+
+        if not auth_manager:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        payload = auth_manager.verify_token(token, token_type="access")
+        if not payload:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+        user_id = int(payload.get("sub") or 0)
+    except Exception as e:
+        logger.warning(f"Invalid token in data-updates WebSocket connection: {e}")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    # الاتصال في room خاص بالبيانات (مع DoS protection)
+    try:
+        await ws_manager.connect(websocket, room="data_updates", user_id=user_id)
+    except ConnectionRefusedError as e:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=str(e))
+        return
+
+    # Rate limiter
+    _msg_count = 0
+    _msg_limit = 100  # max messages per connection
 
     try:
         await websocket.send_json(
@@ -3252,6 +3371,14 @@ async def websocket_data_updates(websocket: WebSocket):
             try:
                 # استقبال ping messages
                 data = await websocket.receive_json()
+                _msg_count += 1
+
+                # Rate limiting
+                if _msg_count > _msg_limit:
+                    logger.warning("WebSocket data-updates rate limit exceeded, disconnecting")
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Rate limit exceeded")
+                    break
+
                 if data.get("type") == "ping":
                     await websocket.send_json({"type": "pong", "timestamp": datetime.now().isoformat()})
             except WebSocketDisconnect:
@@ -3265,7 +3392,7 @@ async def websocket_data_updates(websocket: WebSocket):
     except Exception as e:
         logger.log(logging.ERROR, f"Data-updates WebSocket error: {e}")
     finally:
-        ws_manager.disconnect(websocket, room="data_updates")
+        ws_manager.disconnect(websocket, room="data_updates", user_id=user_id)
 
 
 # Export

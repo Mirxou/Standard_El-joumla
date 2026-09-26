@@ -102,14 +102,14 @@ class CountDetailsDialog(BaseDialog):
             if rows:
                 row = rows[0]
                 self.count_data = {
-                    "id": row["id"],
-                    "number": row["count_number"],
-                    "date": row["count_date"],
-                    "location": row["location_id"],
-                    "notes": row["notes"],
-                    "status": row["status"],
+                    "id": row.get("id"),
+                    "number": row.get("count_number"),
+                    "date": row.get("count_date"),
+                    "location": row.get("location_id"),
+                    "notes": row.get("notes"),
+                    "status": row.get("status"),
                 }
-                self.count_number_label.setText(str(row["count_number"]))
+                self.count_number_label.setText(str(row.get("count_number", "")))
                 self.load_products()
         except Exception as e:
             self.notify.show_error("خطأ", f"خطأ في تحميل بيانات الجرد: {str(e)}")
@@ -142,18 +142,18 @@ class CountDetailsDialog(BaseDialog):
 
             for row_idx, row in enumerate(rows):
                 # المنتج
-                self.products_table.setItem(row_idx, 0, QTableWidgetItem(str(row["name"])))
+                self.products_table.setItem(row_idx, 0, QTableWidgetItem(str(row.get("name", ""))))
                 # الرمز
-                self.products_table.setItem(row_idx, 1, QTableWidgetItem(str(row["code"])))
+                self.products_table.setItem(row_idx, 1, QTableWidgetItem(str(row.get("code", ""))))
                 # الكمية في النظام
-                system_qty = row["current_stock"] or 0
+                system_qty = row.get("current_stock") or 0
                 self.products_table.setItem(row_idx, 2, QTableWidgetItem(str(system_qty)))
                 # الكمية المحسوبة
                 spinbox = QSpinBox()
-                spinbox.setValue(row["counted_quantity"] or 0)
+                spinbox.setValue(row.get("counted_quantity") or 0)
                 self.products_table.setCellWidget(row_idx, 3, spinbox)
                 # الفرق
-                difference = (row["counted_quantity"] or 0) - system_qty
+                difference = (row.get("counted_quantity") or 0) - system_qty
                 diff_item = QTableWidgetItem(str(difference))
                 if difference != 0:
                     diff_item.setBackground(QColor(255, 200, 200))
@@ -161,7 +161,7 @@ class CountDetailsDialog(BaseDialog):
                 # الملاحظات
                 self.products_table.setItem(row_idx, 5, QTableWidgetItem(str(row.get("notes") or "")))
 
-                self.count_items.append(row["id"])
+                self.count_items.append(row.get("id"))
         except Exception as e:
             self.notify.show_warning("تحذير", f"خطأ في تحميل المنتجات: {str(e)}")
 

@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QWidget
 
-logger = logging.getLogger("telemetry")
+logger = logging.getLogger(__name__)
 
 
 class WindowTelemetry(QObject):

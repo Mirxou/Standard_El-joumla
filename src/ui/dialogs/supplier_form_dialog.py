@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 
 from src.ui.widgets.base_dialog import BaseDialog
 from src.ui.widgets.quantum_notification import NotificationManager
+from src.utils.db_helpers import validate_email, validate_phone
 
 from ...utils.i18n_api import I18n
 
@@ -172,6 +173,22 @@ class SupplierFormDialog(BaseDialog):
             )
             return
 
+        # VALIDATION: validate phone format
+        if phone and not validate_phone(phone):
+            self.notify.show_warning(
+                self.i18n.get_message("warning"),
+                "رقم الهاتف غير صالح. يجب أن يحتوي على 7 أرقام على الأقل",
+            )
+            return
+
+        # VALIDATION: validate email format
+        if email and not validate_email(email):
+            self.notify.show_warning(
+                self.i18n.get_message("warning"),
+                "البريد الإلكتروني غير صالح",
+            )
+            return
+
         # التحقق من تكرار رقم الهاتف
         try:
             dup_query = "SELECT id, name FROM suppliers WHERE phone = ? AND id != ?"
@@ -185,7 +202,7 @@ class SupplierFormDialog(BaseDialog):
                 )
                 return
         except Exception:
-            pass
+            import logging; logging.getLogger(__name__).debug("Phone duplicate check skipped")
 
         # التحقق من تكرار البريد الإلكتروني
         if email:
@@ -205,7 +222,7 @@ class SupplierFormDialog(BaseDialog):
                     )
                     return
             except Exception:
-                pass
+                import logging; logging.getLogger(__name__).debug("Email duplicate check skipped")
 
         # Email format validation (optional field)
         if email and '@' not in email:

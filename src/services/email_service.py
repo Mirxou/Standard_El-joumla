@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional
 from jinja2 import BaseLoader, Environment, select_autoescape
 
 from src.services.print_service import PrintService
+from src.utils.db_helpers import retry_with_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,12 @@ class EmailService:
         cfg_lower = {k.lower(): v for k, v in cfg.items()}
 
         self.smtp_host = cfg_lower.get("smtp_host", os.getenv("SMTP_HOST", "localhost"))
+        # CONFIG: Default SMTP host "localhost" is for local development.
+        # In production, SMTP_HOST env var must be set to actual SMTP server.
+
+        # CONFIG: SMTP connection timeout — default 30s to prevent hanging on
+        # unreachable SMTP servers. Can be overridden via SMTP_TIMEOUT env var.
+        self.smtp_timeout = int(cfg_lower.get("smtp_timeout", os.getenv("SMTP_TIMEOUT", "30")))
 
         port_val = cfg_lower.get("smtp_port")
         if port_val is None:
@@ -147,24 +154,34 @@ class EmailService:
                 )
 
         try:
-            # إرسال عبر SMTP
+            # إرسال عبر SMTP مع retry
             context = ssl.create_default_context()
             logger.info(f"Sending email to {all_rcpts} via {self.smtp_host}:{self.smtp_port}")
-            if self.smtp_tls and self.smtp_port == 465:
-                with smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, context=context) as server:
-                    self._smtp_login(server)
-                    server.send_message(msg, from_addr=self.smtp_from, to_addrs=all_rcpts)
-            else:
-                with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
-                    server.ehlo()
-                    if self.smtp_tls:
-                        server.starttls(context=context)
+
+            def _do_send():
+                if self.smtp_tls and self.smtp_port == 465:
+                    with smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, context=context, timeout=self.smtp_timeout) as server:
+                        self._smtp_login(server)
+                        server.send_message(msg, from_addr=self.smtp_from, to_addrs=all_rcpts)
+                else:
+                    with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=self.smtp_timeout) as server:
                         server.ehlo()
-                    self._smtp_login(server)
-                    server.send_message(msg, from_addr=self.smtp_from, to_addrs=all_rcpts)
+                        if self.smtp_tls:
+                            server.starttls(context=context)
+                            server.ehlo()
+                        self._smtp_login(server)
+                        server.send_message(msg, from_addr=self.smtp_from, to_addrs=all_rcpts)
+
+            retry_with_backoff(
+                _do_send,
+                max_retries=3,
+                base_delay=1.0,
+                exceptions=(smtplib.SMTPException, OSError, TimeoutError),
+                logger=logger,
+            )
             return {"success": True, "recipients": all_rcpts}
-        except Exception as e:
-            logger.warning(f"Failed to send email: {e}")
+        except (smtplib.SMTPException, OSError, ValueError, TimeoutError) as e:
+            logger.warning(f"Failed to send email to {all_rcpts} after retries: {e}")
             return {"success": False, "error": str(e)}
 
     def _smtp_login(self, server: smtplib.SMTP) -> None:

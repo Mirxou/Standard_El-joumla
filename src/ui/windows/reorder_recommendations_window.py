@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 
 from ...core.database_manager import DatabaseManager
 from ...models.inventory_optimization import ReorderRecommendation
+from ...utils.db_helpers import safe_int
 from ...services.inventory_optimization_service import InventoryOptimizationService
 
 
@@ -276,6 +277,7 @@ class ReorderRecommendationsWindow(QMainWindow):
             create_po_btn.clicked.connect(lambda checked, r=rec: self.create_single_purchase_order(r))
             actions_layout.addWidget(create_po_btn)
 
+            # PERF: consider using delegate instead of setCellWidget for large datasets
             self.table.setCellWidget(row, 13, actions_widget)
 
     def update_summary(self):
@@ -316,8 +318,9 @@ class ReorderRecommendationsWindow(QMainWindow):
             # فلتر الأولوية
             if priority and show:
                 priority_item = self.table.item(row, 0)
-                if priority_item and int(priority_item.text()) != priority:
-                    show = False
+                if priority_item:
+                    if safe_int(priority_item.text()) != priority:
+                        show = False
 
             self.table.setRowHidden(row, not show)
 

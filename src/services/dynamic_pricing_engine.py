@@ -233,7 +233,7 @@ class DynamicPricingEngine:
                 elif current_stock <= min_stock * Decimal("1.5"):
                     confidence = min(
                         1.0,
-                        float((min_stock * Decimal("1.5") - current_stock) / (min_stock * Decimal("1.5"))),
+                        float(((min_stock * Decimal("1.5") - current_stock) / (min_stock * Decimal("1.5"))) or 0),
                     )
                     signals.append(
                         PricingSignal(
@@ -250,7 +250,7 @@ class DynamicPricingEngine:
                 elif current_stock > min_stock * Decimal("3"):
                     confidence = min(
                         1.0,
-                        float((current_stock - min_stock * Decimal("3")) / (min_stock * Decimal("3"))),
+                        float(((current_stock - min_stock * Decimal("3")) / (min_stock * Decimal("3"))) or 0),
                     )
                     signals.append(
                         PricingSignal(
@@ -587,7 +587,7 @@ class DynamicPricingEngine:
 
             return {
                 "product_id": product_id,
-                "base_price": float(base_price),
+                "base_price": float(base_price or 0),
                 "adjustments": {
                     "inventory": float(inventory_adj),
                     "demand": float(demand_adj),
@@ -723,7 +723,7 @@ class DynamicPricingEngine:
 
             return {
                 "product_id": product_id,
-                "base_price": float(base_price),
+                "base_price": float(base_price or 0),
                 "inventory_adjustment": float(inventory_adj),
                 "demand_adjustment": float(demand_adj),
                 "time_adjustment": float(time_adj),

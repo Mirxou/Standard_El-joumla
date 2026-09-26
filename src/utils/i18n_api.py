@@ -38,14 +38,24 @@ class I18n:
         if locale in self._messages and key in self._messages[locale]:
             message = self._messages[locale][key]
             if kwargs:
-                return message.format(**kwargs)
+                try:
+                    return message.format(**kwargs)
+                except (KeyError, ValueError):
+                    logging.getLogger(__name__).warning(
+                        "Failed to format message key=%s locale=%s", key, locale
+                    )
             return message
 
         # Fallback to default
         if self._default_locale in self._messages and key in self._messages[self._default_locale]:
             message = self._messages[self._default_locale][key]
             if kwargs:
-                return message.format(**kwargs)
+                try:
+                    return message.format(**kwargs)
+                except (KeyError, ValueError):
+                    logging.getLogger(__name__).warning(
+                        "Failed to format message key=%s locale=%s", key, self._default_locale
+                    )
             return message
 
         return key

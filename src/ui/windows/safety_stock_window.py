@@ -245,6 +245,7 @@ class SafetyStockWindow(QMainWindow):
                 # زر الإجراءات
                 actions_btn = QPushButton("✏️ تعديل")
                 actions_btn.clicked.connect(lambda checked, c=config: self.edit_configuration(c))
+                # PERF: consider using delegate instead of setCellWidget for large datasets
                 self.table.setCellWidget(row, 14, actions_btn)
 
             # تحديث الملخص
@@ -317,7 +318,9 @@ class SafetyStockWindow(QMainWindow):
                 product_rows = self.service.db.execute_query(query)
                 count = 0
                 for row in product_rows:
-                    product_id = row[0] if isinstance(row, (list, tuple)) else row["product_id"]
+                    product_id = row[0] if isinstance(row, (list, tuple)) else row.get("product_id")
+                    if product_id is None:
+                        continue  # تخطي الصفوف بدون product_id
                     try:
                         self.service.auto_configure_safety_stock(int(product_id))
                         count += 1

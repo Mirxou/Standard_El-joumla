@@ -32,7 +32,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-logger = logging.getLogger("window_state_manager")
+logger = logging.getLogger(__name__)
 
 
 class WindowStateManager(QObject):

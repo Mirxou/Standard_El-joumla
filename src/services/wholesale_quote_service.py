@@ -1,8 +1,11 @@
 from datetime import datetime
+import logging
 from typing import Any, Dict, List
 
 from ..core.database_manager import DatabaseManager
 from ..utils.db_helpers import get_value
+
+logger = logging.getLogger(__name__)
 
 
 class WholesaleQuoteService:
@@ -145,7 +148,7 @@ class WholesaleQuoteService:
             self.items = items_data
             return True
         except Exception as e:
-            print(f"Error loading quote {quote_id}: {e}")
+            logger.error(f"Error loading quote {quote_id}: {e}")
             return False
 
     def delete_quote(self, quote_id: int) -> bool:
@@ -156,7 +159,8 @@ class WholesaleQuoteService:
         try:
             self.db.execute_update(sql, [quote_id])
             return True
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error deleting quote {quote_id}: {e}")
             return False
 
     def convert_to_sale(self, quote_id: int) -> str:
@@ -212,23 +216,23 @@ class WholesaleQuoteService:
 
             # 4. Insert Items & Update Stock
             for item in items:
-                p_id = item["id"]
-                qty = item["quantity"]
-                price = item["wholesale_price"]
-                total = item["total_val"]
+                p_id = item.get("id")
+                qty = item.get("quantity", 0)
+                price = item.get("wholesale_price", 0)
+                total = item.get("total_val", 0)
 
                 # Enrich with cost/profit if available in item data
                 cost = item.get("cost_price", 0)
                 profit = item.get("total_profit", 0)
 
                 # Find Batch (Simple Logic: Pick batch with positive stock or just latest)
-                # In a full system, this would be FIFO. Here we satisfy the constraint.
-                sql_batch = "SELECT id FROM product_batches WHERE product_id = ? ORDER BY current_quantity DESC LIMIT 1"
+                # COLUMN_CHECK: using 'batches' table (in base schema) instead of non-existent 'product_batches'
+                sql_batch = "SELECT id FROM batches WHERE product_id = ? AND quantity > 0 ORDER BY id DESC LIMIT 1"
                 batch_row = self.db.fetch_one(sql_batch, [p_id])
                 if batch_row:
                     batch_id = get_value(batch_row, 'id')
                     # Update Batch Qty
-                    sql_update_batch = "UPDATE product_batches SET current_quantity = current_quantity - ? WHERE id = ?"
+                    sql_update_batch = "UPDATE batches SET quantity = quantity - ? WHERE id = ?"
                     self.db.execute_update(sql_update_batch, [qty, batch_id])
                 else:
                     # Fallback: Validation should arguably fail here if strict,
@@ -250,10 +254,15 @@ class WholesaleQuoteService:
                 """
                 self.db.execute_update(sql_item, [sale_id, p_id, batch_id, qty, price, total, cost, profit])
 
-                # Update Stock (Product Level)
-                sql_stock = "UPDATE products SET current_stock = current_stock - ? WHERE id = ?"
-                self.db.execute_update(sql_stock, [qty, p_id])
+                # Update Stock (Product Level) — TOCTOU FIX: conditional SQL prevents negative stock
+                sql_stock = "UPDATE products SET current_stock = current_stock - ? WHERE id = ? AND current_stock >= ?"
+                result = self.db.execute_update(sql_stock, [qty, p_id, qty])
+                # Check rowcount to detect insufficient stock
+                rowcount = result if isinstance(result, int) else 0
+                if rowcount == 0:
+                    raise Exception(f"Insufficient stock for product {p_id} (needed {qty})")
 
             return invoice_number
         except Exception as e:
+            logger.error(f"Failed to convert quote to sale: {e}")
             raise Exception(f"Failed to convert quote to sale: {e}") from e

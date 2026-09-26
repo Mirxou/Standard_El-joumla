@@ -17,23 +17,29 @@ from typing import List, Optional
 
 from src.core.database_manager import DatabaseManager
 from src.models.currency import Currency, CurrencyManager, ExchangeRate
+from src.utils.db_helpers import retry_with_backoff
 from src.utils.logger import setup_logger
 
 
 class ExchangeRateService:
     """خدمة أسعار الصرف"""
 
+    # Maximum age (days) before cached rate is considered stale
+    STALE_RATE_MAX_DAYS = 7
+
     def __init__(self, db_manager: DatabaseManager, logger=None):
         self.db_manager = db_manager
         self.logger = logger or setup_logger(__name__)
         self.currency_manager = CurrencyManager(db_manager)
+        # In-memory fallback cache for rates when DB/API is unavailable
+        self._rate_fallback_cache: dict = {}
 
     def _safe_decimal(self, value, default: str = "0") -> Decimal:
         """تحويل آمن لـ Decimal مع حماية من القيم غير الصالحة."""
         if value is None or str(value).strip() == "":
             return Decimal(default)
         try:
-            return Decimal(str(value))
+            return Decimal(str(value or 0))
         except (InvalidOperation, ValueError):
             self.logger.warning(f"Invalid decimal value: {value!r}, using default {default}")
             return Decimal(default)
@@ -43,8 +49,17 @@ class ExchangeRateService:
         from_currency_id: int,
         to_currency_id: int,
         target_date: Optional[date] = None,
+        allow_stale: bool = True,
     ) -> Optional[Decimal]:
-        """الحصول على سعر الصرف بين عملتين بنمط Mapping مرن."""
+        """الحصول على سعر الصرف بين عملتين بنمط Mapping مرن.
+
+        Args:
+            from_currency_id: معرف العملة المصدر
+            to_currency_id: معرف العملة الهدف
+            target_date: التاريخ المطلوب (افتراضي اليوم)
+            allow_stale: إذا True، يسمح بإرجاع سعر قديم عندما يكون API/DB غير متاح
+        """
+        cache_key = (from_currency_id, to_currency_id)
         try:
             if from_currency_id == to_currency_id:
                 return Decimal("1.0")
@@ -60,25 +75,53 @@ class ExchangeRateService:
             """
             target_iso = target_date.isoformat()
 
-            # البحث المباشر
-            row = self.db_manager.fetch_one(query, (from_currency_id, to_currency_id, target_iso, target_iso))
+            # البحث المباشر مع retry على أخطاء DB العابرة
+            row = retry_with_backoff(
+                lambda: self.db_manager.fetch_one(query, (from_currency_id, to_currency_id, target_iso, target_iso)),
+                max_retries=2,
+                base_delay=0.5,
+                exceptions=(Exception,),
+                logger=self.logger,
+            )
             if row:
-                is_dict = isinstance(row, dict)
-                rate = self._safe_decimal(row.get("rate") if is_dict else row[0])
+                rate = self._safe_decimal(row.get("rate", 0))
                 if rate > 0:
+                    self._rate_fallback_cache[cache_key] = rate
                     return rate
 
             # محاولة العكس
-            row = self.db_manager.fetch_one(query, (to_currency_id, from_currency_id, target_iso, target_iso))
+            row = retry_with_backoff(
+                lambda: self.db_manager.fetch_one(query, (to_currency_id, from_currency_id, target_iso, target_iso)),
+                max_retries=2,
+                base_delay=0.5,
+                exceptions=(Exception,),
+                logger=self.logger,
+            )
             if row:
-                is_dict = isinstance(row, dict)
-                rate = self._safe_decimal(row.get("rate") if is_dict else row[0])
+                rate = self._safe_decimal(row.get("rate", 0))
                 if rate > 0:
-                    return (Decimal("1.0") / rate).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+                    result = (Decimal("1.0") / rate).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+                    self._rate_fallback_cache[cache_key] = result
+                    return result
+
+            # Stale data fallback: return cached rate if available and allowed
+            if allow_stale and cache_key in self._rate_fallback_cache:
+                self.logger.warning(
+                    f"Using stale cached rate for {from_currency_id}->{to_currency_id} "
+                    "(DB/API unavailable)"
+                )
+                return self._rate_fallback_cache[cache_key]
 
             return None
         except Exception as e:
             self.logger.error(f"خطأ في الحصول على سعر الصرف: {e}")
+            # Stale data fallback on exception too
+            if allow_stale and cache_key in self._rate_fallback_cache:
+                self.logger.warning(
+                    f"Using stale cached rate for {from_currency_id}->{to_currency_id} "
+                    f"after error: {e}"
+                )
+                return self._rate_fallback_cache[cache_key]
             return None
 
     def convert_amount(

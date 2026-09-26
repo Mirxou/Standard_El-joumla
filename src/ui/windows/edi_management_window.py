@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
 from src.core.database_manager import DatabaseManager
 from src.services.edi_service import EDIDocument, EDIPartner, EDIService
 from src.ui.styles.design_tokens import C
+from src.utils.db_helpers import safe_int
 from src.utils.logger import setup_logger
 
 project_root = Path(__file__).parent.parent.parent.parent
@@ -68,7 +69,7 @@ class EDIManagementWindow(QMainWindow):
         self.load_documents()
 
         # Timer لتحديث المستندات كل 30 ثانية
-        self.refresh_timer = QTimer()
+        self.refresh_timer = QTimer(self)  # MEMORY: parent=self ensures timer is destroyed with window
         self.refresh_timer.timeout.connect(self.load_documents)
         # self.refresh_timer.start(30000)  # 🔥 معطّل لمنع التجميد
 
@@ -314,7 +315,9 @@ class EDIManagementWindow(QMainWindow):
         if not id_cell:
             QMessageBox.warning(self, "تحذير", "لم يتم العثور على الشريك")
             return
-        partner_id = int(id_cell.text())
+        partner_id = safe_int(id_cell.text(), default=-1)
+        if partner_id <= 0:
+            return
 
         partner = self.edi_service.get_partner(partner_id)
         if not partner:
@@ -338,7 +341,9 @@ class EDIManagementWindow(QMainWindow):
         if not id_cell or not name_cell:
             QMessageBox.warning(self, "تحذير", "لم يتم العثور على بيانات الشريك")
             return
-        partner_id = int(id_cell.text())
+        partner_id = safe_int(id_cell.text(), default=-1)
+        if partner_id <= 0:
+            return
         partner_name = name_cell.text()
 
         reply = QMessageBox.question(
@@ -403,7 +408,9 @@ class EDIManagementWindow(QMainWindow):
         if not id_cell:
             QMessageBox.warning(self, "تحذير", "لم يتم العثور على المستند")
             return
-        doc_id = int(id_cell.text())
+        doc_id = safe_int(id_cell.text(), default=-1)
+        if doc_id <= 0:
+            return
 
         doc = self.edi_service.get_document(doc_id)
         if not doc:
@@ -417,6 +424,13 @@ class EDIManagementWindow(QMainWindow):
         """تحديث البيانات"""
         self.load_partners()
         self.load_documents()
+
+    def closeEvent(self, event):
+        """تنظيف الموارد عند إغلاق النافذة"""
+        # MEMORY: stop refresh_timer to prevent callbacks after close
+        if hasattr(self, 'refresh_timer') and self.refresh_timer.isActive():
+            self.refresh_timer.stop()
+        super().closeEvent(event)
 
     # --- Stubs for Testing ---
     def validate_edi_message(self, *args, **kwargs):

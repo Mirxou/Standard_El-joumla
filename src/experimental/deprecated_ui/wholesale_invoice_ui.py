@@ -17,6 +17,7 @@ focusing on speed, information density, and data visibility.
 """
 
 import sys
+import warnings
 
 from PySide6.QtCore import QSize
 from PySide6.QtGui import QIcon, Qt
@@ -37,6 +38,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+warnings.warn("This module is deprecated", DeprecationWarning, stacklevel=2)
 
 
 class InsightCard(QFrame):
@@ -83,6 +86,11 @@ class WholesaleInvoiceWindow(QDialog):
     """
 
     def __init__(self, parent=None):
+        warnings.warn(
+            "WholesaleInvoiceWindow is deprecated; use SalesDialog instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if not QApplication.instance():
             self._app_ref = QApplication([])
         super().__init__(parent)

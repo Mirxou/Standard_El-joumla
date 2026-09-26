@@ -17,9 +17,12 @@ Features:
 import base64
 import hashlib
 import json
+import warnings
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, Optional
+
+warnings.warn("This module is deprecated", DeprecationWarning, stacklevel=2)
 
 
 @dataclass
@@ -143,6 +146,8 @@ class EInvoiceGenerator:
 
         return qr_encoded
 
+    # SECURITY: XML generation uses string interpolation without escaping.
+    # This is an XML injection vulnerability. Do not use in production.
     def convert_to_xml(self, invoice_data: Dict) -> str:
         """
         تحويل الفاتورة إلى XML
@@ -254,6 +259,11 @@ class RecurringInvoiceManager:
         Args:
             db_manager: مدير قاعدة البيانات
         """
+        warnings.warn(
+            "RecurringInvoiceManager is deprecated; use RecurringInvoiceService instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.db = db_manager
         self._create_tables()
 

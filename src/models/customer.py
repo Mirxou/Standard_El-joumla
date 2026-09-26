@@ -62,7 +62,7 @@ class Customer:
         ]:
             value = getattr(self, field)
             if value is not None and isinstance(value, (int, float, str)):
-                setattr(self, field, Decimal(str(value)))
+                setattr(self, field, Decimal(str(value or 0)))
 
     @property
     def available_credit(self) -> Decimal:
@@ -534,7 +534,7 @@ class CustomerManager:
                     d = {"last_purchase_date": None, "total_purchases": 0.0, "purchases_count": 0}
                     self._enrich_with_sales_data(cust.id, d)
                     cust.last_purchase_date = d["last_purchase_date"]
-                    cust.total_purchases = Decimal(str(d["total_purchases"]))
+                    cust.total_purchases = Decimal(str(d["total_purchases"] or 0))
                     cust.purchases_count = d["purchases_count"]
             customers.sort(key=lambda c: c.total_purchases, reverse=True)
             return customers[:limit]
@@ -596,7 +596,7 @@ class CustomerManager:
     def update_balance(self, customer_id: int, amount: float, operation: str = "increase") -> bool:
         """تحديث رصيد العميل (atomic SQL)"""
         try:
-            amount_decimal = Decimal(str(amount))
+            amount_decimal = Decimal(str(amount or 0))
             if operation == "increase":
                 query = "UPDATE customers SET current_balance = current_balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
             else:
@@ -609,37 +609,93 @@ class CustomerManager:
 
     def delete_customer(self, customer_id: int) -> bool:
         """حذف عميل (Soft Delete) — مع التحقق من السجلات المرتبطة"""
+        # TOCTOU FIX: Transactional check + conditional delete is atomic.
+        #   The UPDATE uses WHERE is_active = 1 to make soft-delete idempotent:
+        #   a concurrent delete that already set is_active = 0 will cause
+        #   rowcount == 0, correctly returning False (already deleted).
+        #   Re-checks inside tx ensure no new records between check and delete.
         try:
-            # التحقق من وجود عمليات بيع مرتبطة
-            try:
-                sales_row = self.db_manager.fetch_one(
-                    "SELECT COUNT(*) as cnt FROM sales WHERE customer_id = ?", (customer_id,)
-                )
-                if sales_row:
-                    sales_count = sales_row.get("cnt") if isinstance(sales_row, dict) else sales_row[0]
-                    if sales_count and int(sales_count) > 0:
-                        if self.logger:
-                            self.logger.warning(f"Cannot delete customer {customer_id}: has {sales_count} sales")
-                        return False
-            except Exception:
-                pass
+            # Use transaction for atomicity if available
+            _tx = getattr(self.db_manager, 'transaction', None)
+            if callable(_tx):
+                with self.db_manager.transaction():
+                    # Re-check inside transaction (prevents TOCTOU)
+                    sales_row = self.db_manager.fetch_one(
+                        "SELECT COUNT(*) as cnt FROM sales WHERE customer_id = ?", (customer_id,)
+                    )
+                    if sales_row:
+                        sales_count = sales_row.get("cnt") if isinstance(sales_row, dict) else sales_row[0]
+                        if sales_count and int(sales_count) > 0:
+                            if self.logger:
+                                self.logger.warning(f"Cannot delete customer {customer_id}: has {sales_count} sales")
+                            return False
 
-            # التحقق من وجود مدفوعات مرتبطة
-            try:
-                payments_row = self.db_manager.fetch_one(
-                    "SELECT COUNT(*) as cnt FROM payments WHERE customer_id = ?", (customer_id,)
-                )
-                if payments_row:
-                    payments_count = payments_row.get("cnt") if isinstance(payments_row, dict) else payments_row[0]
-                    if payments_count and int(payments_count) > 0:
-                        if self.logger:
-                            self.logger.warning(f"Cannot delete customer {customer_id}: has {payments_count} payments")
-                        return False
-            except Exception:
-                pass
+                    payments_row = self.db_manager.fetch_one(
+                        "SELECT COUNT(*) as cnt FROM payments WHERE customer_id = ?", (customer_id,)
+                    )
+                    if payments_row:
+                        payments_count = payments_row.get("cnt") if isinstance(payments_row, dict) else payments_row[0]
+                        if payments_count and int(payments_count) > 0:
+                            if self.logger:
+                                self.logger.warning(f"Cannot delete customer {customer_id}: has {payments_count} payments")
+                            return False
 
-            query = "UPDATE customers SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-            return self.db_manager.execute_non_query(query, (customer_id,)) > 0
+                    # Check for related quotes
+                    quotes_row = self.db_manager.fetch_one(
+                        "SELECT COUNT(*) as cnt FROM quotes WHERE customer_id = ?", (customer_id,)
+                    )
+                    if quotes_row:
+                        quotes_count = quotes_row.get("cnt") if isinstance(quotes_row, dict) else quotes_row[0]
+                        if quotes_count and int(quotes_count) > 0:
+                            if self.logger:
+                                self.logger.warning(f"Cannot delete customer {customer_id}: has {quotes_count} quotes")
+                            return False
+
+                    # Check for return invoices
+                    returns_row = self.db_manager.fetch_one(
+                        "SELECT COUNT(*) as cnt FROM return_invoices WHERE customer_id = ?", (customer_id,)
+                    )
+                    if returns_row:
+                        returns_count = returns_row.get("cnt") if isinstance(returns_row, dict) else returns_row[0]
+                        if returns_count and int(returns_count) > 0:
+                            if self.logger:
+                                self.logger.warning(f"Cannot delete customer {customer_id}: has {returns_count} returns")
+                            return False
+
+                    # TOCTOU FIX: AND is_active = 1 makes soft-delete idempotent and atomic
+                    query = "UPDATE customers SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_active = 1"
+                    return self.db_manager.execute_non_query(query, (customer_id,)) > 0
+            else:
+                # Fallback: non-transactional path (existing behavior)
+                try:
+                    sales_row = self.db_manager.fetch_one(
+                        "SELECT COUNT(*) as cnt FROM sales WHERE customer_id = ?", (customer_id,)
+                    )
+                    if sales_row:
+                        sales_count = sales_row.get("cnt") if isinstance(sales_row, dict) else sales_row[0]
+                        if sales_count and int(sales_count) > 0:
+                            if self.logger:
+                                self.logger.warning(f"Cannot delete customer {customer_id}: has {sales_count} sales")
+                            return False
+                except Exception:
+                    pass
+
+                try:
+                    payments_row = self.db_manager.fetch_one(
+                        "SELECT COUNT(*) as cnt FROM payments WHERE customer_id = ?", (customer_id,)
+                    )
+                    if payments_row:
+                        payments_count = payments_row.get("cnt") if isinstance(payments_row, dict) else payments_row[0]
+                        if payments_count and int(payments_count) > 0:
+                            if self.logger:
+                                self.logger.warning(f"Cannot delete customer {customer_id}: has {payments_count} payments")
+                            return False
+                except Exception:
+                    pass
+
+                # TOCTOU FIX: AND is_active = 1 makes soft-delete idempotent (fallback path)
+                query = "UPDATE customers SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_active = 1"
+                return self.db_manager.execute_non_query(query, (customer_id,)) > 0
         except Exception as e:
             if self.logger:
                 self.logger.error(f"Error deleting customer {customer_id}: {e}")

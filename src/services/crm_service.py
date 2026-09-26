@@ -8,6 +8,8 @@
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+
+from ..utils.db_helpers import escape_like_wildcards
 from typing import Any, Dict, List, Optional
 
 
@@ -89,8 +91,8 @@ class CRMService:
                 customer_data.get("phone"),
                 customer_data.get("email"),
                 customer_data.get("address"),
-                float(customer_data.get("credit_limit", 0)),
-                float(customer_data.get("current_balance", 0)),
+                float(customer_data.get("credit_limit", 0) or 0),
+                float(customer_data.get("current_balance", 0) or 0),
                 now,
                 now,
             )
@@ -113,7 +115,7 @@ class CRMService:
 
     def search_customers(self, term: str) -> List[Dict[str, Any]]:
         try:
-            like = f"%{term}%"
+            like = f"%{escape_like_wildcards(term)}%"
             rows = self.db.fetch_all(
                 "SELECT * FROM customers WHERE name LIKE ? OR phone LIKE ? OR email LIKE ?",
                 (like, like, like),
@@ -253,18 +255,18 @@ class CRMService:
                     return datetime.fromisoformat(str(val))
 
                 return Lead(
-                    lead_id=row["lead_id"],
-                    name=row["name"],
-                    company=row["company"],
-                    phone=row["phone"],
-                    email=row["email"],
-                    source=row["source"],
-                    status=LeadStatus(row["status"]),
-                    assigned_to=row["assigned_to"],
-                    expected_value=row["expected_value"],
-                    notes=row["notes"],
-                    created_at=_parse_dt(row["created_at"]),
-                    updated_at=_parse_dt(row["updated_at"]),
+                    lead_id=row.get("lead_id"),
+                    name=row.get("name", ""),
+                    company=row.get("company"),
+                    phone=row.get("phone"),
+                    email=row.get("email"),
+                    source=row.get("source"),
+                    status=LeadStatus(row.get("status", "new")),
+                    assigned_to=row.get("assigned_to"),
+                    expected_value=float(row.get("expected_value", 0) or 0),
+                    notes=row.get("notes"),
+                    created_at=_parse_dt(row.get("created_at")),
+                    updated_at=_parse_dt(row.get("updated_at")),
                 )
         except Exception as e:
             if self.logger:
@@ -343,16 +345,16 @@ class CRMService:
             for row in rows:
                 leads.append(
                     Lead(
-                        lead_id=row["lead_id"],
-                        name=row["name"],
-                        company=row["company"],
-                        phone=row["phone"],
-                        email=row["email"],
-                        source=row["source"],
-                        status=LeadStatus(row["status"]),
-                        assigned_to=row["assigned_to"],
-                        expected_value=row["expected_value"],
-                        notes=row["notes"],
+                        lead_id=row.get("lead_id"),
+                        name=row.get("name", ""),
+                        company=row.get("company"),
+                        phone=row.get("phone"),
+                        email=row.get("email"),
+                        source=row.get("source"),
+                        status=LeadStatus(row.get("status", "new")),
+                        assigned_to=row.get("assigned_to"),
+                        expected_value=float(row.get("expected_value", 0) or 0),
+                        notes=row.get("notes"),
                     )
                 )
 

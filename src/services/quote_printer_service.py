@@ -1,7 +1,10 @@
 from datetime import datetime
+import logging
 from typing import Any, Dict, List
 
 from PySide6.QtGui import QPageSize, QTextDocument
+
+logger = logging.getLogger(__name__)
 
 
 class QuotePrinterService:
@@ -124,5 +127,5 @@ class QuotePrinterService:
 
             return True
         except Exception as e:
-            print(f"PDF Error: {e}")
+            logger.error(f"PDF Error: {e}")
             return False

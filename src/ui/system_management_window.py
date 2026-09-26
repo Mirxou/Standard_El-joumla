@@ -932,3 +932,20 @@ class SystemManagementWindow(QDialog):
         self.load_performance_info()
         self.load_maintenance_log()
         self.load_settings()
+
+    def closeEvent(self, event):
+        """تنظيف الموارد عند إغلاق النافذة"""
+        # MEMORY: stop any running worker threads
+        for attr in ('backup_thread', 'perf_thread'):
+            thread = getattr(self, attr, None)
+            if thread and isinstance(thread, QThread):
+                if thread.isRunning():
+                    if hasattr(thread, 'running'):
+                        thread.running = False
+                    thread.requestInterruption()
+                    if not thread.wait(2000):
+                        thread.terminate()
+                        thread.wait(500)
+                thread.deleteLater()
+                setattr(self, attr, None)
+        super().closeEvent(event)

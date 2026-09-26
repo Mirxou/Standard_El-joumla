@@ -7,6 +7,7 @@
 """
 
 import logging
+import sqlite3
 
 
 from datetime import date, datetime, timedelta
@@ -64,7 +65,11 @@ class QuoteService:
             return f"QT-{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
     def create_quote(self, quote: Quote) -> int:
-        """إنشاء عرض سعر جديد"""
+        """إنشاء عرض سعر جديد
+
+        Raises:
+            Exception: Re-raises database errors after rollback.
+        """
         try:
             # توليد رقم إذا لم يكن موجوداً
             if not quote.quote_number:
@@ -111,11 +116,11 @@ class QuoteService:
                     quote.sent_date.isoformat() if quote.sent_date else None,
                     quote.response_date.isoformat() if quote.response_date else None,
                     (quote.status.name if isinstance(quote.status, QuoteStatus) else quote.status),
-                    float(quote.subtotal),
-                    float(quote.discount_amount),
-                    float(quote.discount_percentage),
-                    float(quote.tax_amount),
-                    float(quote.total_amount),
+                    float(quote.subtotal or 0),
+                    float(quote.discount_amount or 0),
+                    float(quote.discount_percentage or 0),
+                    float(quote.tax_amount or 0),
+                    float(quote.total_amount or 0),
                     quote.payment_terms,
                     quote.delivery_terms,
                     quote.notes,
@@ -151,13 +156,13 @@ class QuoteService:
                         item.product_name,
                         item.product_barcode,
                         item.description,
-                        float(item.quantity),
-                        float(item.unit_price),
-                        float(item.discount_amount),
-                        float(item.discount_percentage),
-                        float(item.tax_amount),
-                        float(item.tax_percentage),
-                        float(item.total_amount),
+                        float(item.quantity or 0),
+                        float(item.unit_price or 0),
+                        float(item.discount_amount or 0),
+                        float(item.discount_percentage or 0),
+                        float(item.tax_amount or 0),
+                        float(item.tax_percentage or 0),
+                        float(item.total_amount or 0),
                         item.notes,
                     ),
                 )
@@ -167,7 +172,7 @@ class QuoteService:
             logger.info(f"تم إنشاء عرض السعر: {quote.quote_number}")
             return quote_id
 
-        except Exception as e:
+        except sqlite3.Error as e:
             self.db.connection.rollback()
             logger.log(logging.ERROR, f"خطأ في إنشاء عرض السعر: {str(e)}")
             raise
@@ -201,9 +206,9 @@ class QuoteService:
 
             return quote
 
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.log(logging.ERROR, f"خطأ في الحصول على عرض السعر {quote_id}: {str(e)}")
-            return None
+            return None  # On error: returns None
 
     def get_quote_by_number(self, quote_number: str) -> Optional[Quote]:
         """الحصول على عرض سعر بالرقم"""
@@ -216,9 +221,9 @@ class QuoteService:
                 return self.get_quote(get_value(row, 'id'))
             return None
 
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.log(logging.ERROR, f"خطأ في الحصول على عرض السعر {quote_number}: {str(e)}")
-            return None
+            return None  # On error: returns None
 
     def update_quote(self, quote: Quote) -> bool:
         """تحديث عرض سعر"""
@@ -253,11 +258,11 @@ class QuoteService:
                     quote.sent_date.isoformat() if quote.sent_date else None,
                     quote.response_date.isoformat() if quote.response_date else None,
                     (quote.status.name if isinstance(quote.status, QuoteStatus) else quote.status),
-                    float(quote.subtotal),
-                    float(quote.discount_amount),
-                    float(quote.discount_percentage),
-                    float(quote.tax_amount),
-                    float(quote.total_amount),
+                    float(quote.subtotal or 0),
+                    float(quote.discount_amount or 0),
+                    float(quote.discount_percentage or 0),
+                    float(quote.tax_amount or 0),
+                    float(quote.total_amount or 0),
                     quote.payment_terms,
                     quote.delivery_terms,
                     quote.notes,
@@ -292,13 +297,13 @@ class QuoteService:
                         item.product_name,
                         item.product_barcode,
                         item.description,
-                        float(item.quantity),
-                        float(item.unit_price),
-                        float(item.discount_amount),
-                        float(item.discount_percentage),
-                        float(item.tax_amount),
-                        float(item.tax_percentage),
-                        float(item.total_amount),
+                        float(item.quantity or 0),
+                        float(item.unit_price or 0),
+                        float(item.discount_amount or 0),
+                        float(item.discount_percentage or 0),
+                        float(item.tax_amount or 0),
+                        float(item.tax_percentage or 0),
+                        float(item.total_amount or 0),
                         item.notes,
                     ),
                 )
@@ -307,10 +312,10 @@ class QuoteService:
             logger.info(f"تم تحديث عرض السعر: {quote.quote_number}")
             return True
 
-        except Exception as e:
+        except sqlite3.Error as e:
             self.db.connection.rollback()
             logger.log(logging.ERROR, f"خطأ في تحديث عرض السعر: {str(e)}")
-            return False
+            return False  # On error: returns False
 
     def delete_quote(self, quote_id: int) -> bool:
         """حذف عرض سعر"""
@@ -320,10 +325,10 @@ class QuoteService:
             self.db.connection.commit()
             logger.info(f"تم حذف عرض السعر {quote_id}")
             return True
-        except Exception as e:
+        except sqlite3.Error as e:
             self.db.connection.rollback()
             logger.log(logging.ERROR, f"خطأ في حذف عرض السعر: {str(e)}")
-            return False
+            return False  # On error: returns False
 
     def get_all_quotes(
         self,
@@ -399,10 +404,10 @@ class QuoteService:
             self.db.connection.commit()
             logger.info(f"تم تحديث حالة عرض السعر {quote_id} إلى {status.value}")
             return True
-        except Exception as e:
+        except sqlite3.Error as e:
             self.db.connection.rollback()
-            logger.log(logging.ERROR, f"خطأ في تحديث حالة عرض السعر: {str(e)}")
-            return False
+            logger.log(logging.ERROR, f"خطأ في تحديث حالة عرض السعر {quote_id}: {str(e)}")
+            return False  # On error: returns False
 
     def mark_quote_as_sent(self, quote_id: int) -> bool:
         """تعليم عرض السعر كمرسل"""
@@ -453,7 +458,7 @@ class QuoteService:
                     f"""
                     UPDATE quotes
                     SET status = 'EXPIRED', updated_at = ?
-                    WHERE id IN ({placeholders})
+                    WHERE id IN ({placeholders})  # SQL_SAFE: placeholders are ? only, values parameterized
                 """,
                     [datetime.now().isoformat()] + expired_ids,
                 )
@@ -463,10 +468,10 @@ class QuoteService:
 
             return expired_ids
 
-        except Exception as e:
+        except sqlite3.Error as e:
             self.db.connection.rollback()
             logger.log(logging.ERROR, f"خطأ في فحص عروض الأسعار منتهية الصلاحية: {str(e)}")
-            return []
+            return []  # On error: returns empty list
 
     def get_quote_statistics(self) -> Dict[str, Any]:
         """الحصول على إحصائيات عروض الأسعار"""
@@ -509,6 +514,6 @@ class QuoteService:
 
             return stats
 
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.log(logging.ERROR, f"خطأ في الحصول على إحصائيات عروض الأسعار: {str(e)}")
-            return {}
+            return {}  # On error: returns empty dict

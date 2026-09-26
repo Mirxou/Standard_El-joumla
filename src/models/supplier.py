@@ -49,7 +49,7 @@ class Supplier:
             if value is None:
                 setattr(self, field, Decimal("0.00"))
             elif isinstance(value, (int, float, str)):
-                setattr(self, field, Decimal(str(value)))
+                setattr(self, field, Decimal(str(value or 0)))
 
     @property
     def available_credit(self) -> Decimal:
@@ -397,17 +397,54 @@ class SupplierManager:
 
     def delete_supplier(self, supplier_id: int, soft_delete: bool = True) -> bool:
         """حذف مورد"""
+        # TOCTOU FIX: Transactional check + conditional delete is atomic.
+        #   Soft delete uses WHERE is_active = 1 to make it idempotent:
+        #   a concurrent delete already set is_active = 0 → rowcount == 0.
+        #   Hard delete uses WHERE is_deleted = 0 as guard.
+        #   Re-checks inside tx prevent new records between check and delete.
         try:
-            if self.get_supplier_purchases_count(supplier_id) > 0:
-                return False
-            if self.get_supplier_products_count(supplier_id) > 0:
-                return False
+            # Use transaction for atomicity if available
+            _tx = getattr(self.db_manager, 'transaction', None)
+            if callable(_tx):
+                with self.db_manager.transaction():
+                    # Re-check inside transaction (prevents TOCTOU)
+                    if self.get_supplier_purchases_count(supplier_id) > 0:
+                        return False
+                    if self.get_supplier_products_count(supplier_id) > 0:
+                        return False
 
-            if soft_delete:
-                query = "UPDATE suppliers SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+                    # Check for related payments
+                    payments_row = self.db_manager.fetch_one(
+                        "SELECT COUNT(*) as cnt FROM payments WHERE supplier_id = ?", (supplier_id,)
+                    )
+                    if payments_row:
+                        payments_count = payments_row.get("cnt") if isinstance(payments_row, dict) else payments_row[0]
+                        if payments_count and int(payments_count) > 0:
+                            if self.logger:
+                                self.logger.warning(f"Cannot delete supplier {supplier_id}: has {payments_count} payments")
+                            return False
+
+                    if soft_delete:
+                        # TOCTOU FIX: AND is_active = 1 makes soft-delete idempotent and atomic
+                        query = "UPDATE suppliers SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_active = 1"
+                    else:
+                        # TOCTOU FIX: AND is_deleted = 0 prevents double hard-delete
+                        query = "DELETE FROM suppliers WHERE id = ? AND is_deleted = 0"
+                    return self._execute_non_query(query, (supplier_id,)) > 0
             else:
-                query = "DELETE FROM suppliers WHERE id = ?"
-            return self._execute_non_query(query, (supplier_id,)) > 0
+                # Fallback: non-transactional path (existing behavior)
+                if self.get_supplier_purchases_count(supplier_id) > 0:
+                    return False
+                if self.get_supplier_products_count(supplier_id) > 0:
+                    return False
+
+                if soft_delete:
+                    # TOCTOU FIX: AND is_active = 1 makes soft-delete idempotent (fallback path)
+                    query = "UPDATE suppliers SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_active = 1"
+                else:
+                    # TOCTOU FIX: AND is_deleted = 0 prevents double hard-delete (fallback path)
+                    query = "DELETE FROM suppliers WHERE id = ? AND is_deleted = 0"
+                return self._execute_non_query(query, (supplier_id,)) > 0
         except Exception as e:
             if self.logger:
                 self.logger.error(f"Error deleting supplier {supplier_id}: {e}")

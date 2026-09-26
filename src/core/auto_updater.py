@@ -156,7 +156,7 @@ class UpdateDownloadWorker(QThread):
         self.expected_sha256 = expected_sha256
         self.save_dir = save_dir or tempfile.gettempdir()
         self.logger = logging.getLogger(__name__)
-        self._cancelled = False
+        self._cancelled = False  # THREAD: accessed from main thread via cancel(); safe under CPython GIL but consider threading.Event for strictness
 
     def cancel(self):
         self._cancelled = True
@@ -165,8 +165,12 @@ class UpdateDownloadWorker(QThread):
         try:
             import urllib.request
 
-            # تحديد اسم الملف
-            filename = self.download_url.split('/')[-1]
+            # تحديد اسم الملف — sanitize to prevent path traversal
+            raw_filename = self.download_url.split('/')[-1]
+            # Keep only the last path component and strip dangerous characters
+            filename = os.path.basename(raw_filename).replace('"', '').replace("'", '')
+            if not filename:
+                filename = "update_download"
             save_path = os.path.join(self.save_dir, f"eljoumla_update_{filename}")
 
             # تحميل مع تتبع التقدم
@@ -347,23 +351,31 @@ class AutoUpdater(QObject):
             backup_exe = current_exe + ".backup"
 
             # إنشاء batch script للاستبدال
+            # Sanitize paths: strip characters dangerous in batch scripts
+            def _bat_safe(p: str) -> str:
+                """Strip chars that could break batch quoting."""
+                return p.replace('"', '').replace('&', '').replace('|', '').replace('^', '')
+
+            safe_current_exe = _bat_safe(current_exe)
+            safe_backup_exe = _bat_safe(backup_exe)
+            safe_update_file = _bat_safe(update_file)
             bat_content = f"""@echo off
 echo Updating El-Joumla ERP...
 timeout /t 2 /nobreak >nul
 
 REM Backup current version
-if exist "{current_exe}" (
-    copy /y "{current_exe}" "{backup_exe}"
+if exist "{safe_current_exe}" (
+    copy /y "{safe_current_exe}" "{safe_backup_exe}"
 )
 
 REM Replace with new version
-copy /y "{update_file}" "{current_exe}"
+copy /y "{safe_update_file}" "{safe_current_exe}"
 
 REM Restart application
-start "" "{current_exe}"
+start "" "{safe_current_exe}"
 
 REM Cleanup
-del "{update_file}"
+del "{safe_update_file}"
 del "%~f0"
 """
             bat_path = os.path.join(tempfile.gettempdir(), "eljoumla_update.bat")

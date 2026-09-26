@@ -25,7 +25,7 @@ from typing import Any, Callable, Dict, List, Optional, Type
 from PySide6.QtCore import QObject, QSettings
 from PySide6.QtWidgets import QWidget
 
-logger = logging.getLogger("window_manager")
+logger = logging.getLogger(__name__)
 
 
 class WindowConfig:

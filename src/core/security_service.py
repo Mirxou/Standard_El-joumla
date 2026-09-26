@@ -11,6 +11,7 @@ import base64
 import hashlib
 import os
 import secrets
+import sqlite3
 import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional, Tuple
@@ -181,7 +182,7 @@ class AdvancedSecurityService:
 
         except (VerifyMismatchError, VerificationError, InvalidHash):
             return False
-        except Exception:
+        except (ValueError, TypeError, AttributeError):
             return False
 
     # ==================== المصادقة الثنائية (2FA) ====================
@@ -258,7 +259,7 @@ class AdvancedSecurityService:
         try:
             totp = pyotp.TOTP(secret)
             return totp.verify(token, valid_window=window)
-        except Exception:
+        except (ValueError, TypeError):
             return False
 
     # ==================== إدارة الجلسات ====================
@@ -324,7 +325,7 @@ class AdvancedSecurityService:
                         user_agent,
                     ),
                 )
-            except Exception:
+            except (sqlite3.Error, OSError):
                 pass  # الجلسة موجودة في الذاكرة على الأقل
 
         return session_token
@@ -363,8 +364,8 @@ class AdvancedSecurityService:
                     session_data = dict(row)
                     # حفظ في الذاكرة للوصول السريع
                     self._active_sessions[session_token] = session_data
-            except Exception:
-                logging.getLogger(__name__).warning("Ignored exception in security_service.py")
+            except (sqlite3.Error, OSError):
+                logging.getLogger(__name__).warning("Ignored sqlite error in security_service validate_session")
 
         if not session_data:
             return None
@@ -403,8 +404,8 @@ class AdvancedSecurityService:
                     (datetime.now().isoformat(), session_token),
                 )
                 return True
-            except Exception:
-                logging.getLogger(__name__).warning("Ignored exception in security_service.py")
+            except (sqlite3.Error, OSError):
+                logging.getLogger(__name__).warning("Ignored sqlite error in security_service destroy_session")
 
         return True
 
@@ -435,8 +436,8 @@ class AdvancedSecurityService:
                 )
                 if isinstance(result, dict):
                     count = max(count, result.get("rowcount", 0))
-            except Exception:
-                logging.getLogger(__name__).warning("Ignored exception in security_service.py")
+            except (sqlite3.Error, OSError):
+                logging.getLogger(__name__).warning("Ignored sqlite error in security_service invalidate_all_user_sessions")
 
         return count
 
@@ -585,7 +586,7 @@ if __name__ == "__main__":
 
     # 1. اختبار تشفير كلمة المرور
     print("\n1️⃣ اختبار تشفير كلمة المرور:")
-    password = "MySecureP@ssw0rd123"
+    password = "MySecureP@ssw0rd123"  # TEST ONLY: demo in __main__
     hashed = security.hash_password(password)
     print(f"   كلمة المرور: {password}")
     print(f"   المشفرة: {hashed[:60]}...")

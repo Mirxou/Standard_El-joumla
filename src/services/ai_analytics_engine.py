@@ -306,9 +306,9 @@ class AIAnalyticsEngine:
             data = self.db.fetch_all(query, (product_id, start_date))
 
             return [
-                {"date": row["sale_date"], "quantity": row["quantity"],
-                 "revenue": float(row["revenue"])}
-                for row in data
+                {"date": row.get("sale_date"), "quantity": row.get("quantity", 0),
+                 "revenue": float(row.get("revenue") or 0)}
+                for row in (data or [])
             ]
 
         except Exception as e:
@@ -687,13 +687,13 @@ class AIAnalyticsEngine:
 
             return [
                 {
-                    "product_id": row["product_id"],
-                    "product_name": row["name"],
-                    "total_quantity": row["total_quantity"],
-                    "avg_price": float(row["avg_price"]),
-                    "last_purchase": row["last_purchase"],
+                    "product_id": row.get("product_id"),
+                    "product_name": row.get("name", ""),
+                    "total_quantity": row.get("total_quantity", 0),
+                    "avg_price": float(row.get("avg_price") or 0),
+                    "last_purchase": row.get("last_purchase"),
                 }
-                for row in data
+                for row in (data or [])
             ]
 
         except Exception as e:
@@ -706,7 +706,7 @@ class AIAnalyticsEngine:
             query = "SELECT id, name, category_id FROM products WHERE is_active = 1"
             data = self.db.fetch_all(query)
 
-            return [{"id": row["id"], "name": row["name"], "category_id": row["category_id"]} for row in data]
+            return [{"id": row.get("id"), "name": row.get("name", ""), "category_id": row.get("category_id")} for row in (data or [])]
 
         except Exception as e:
             self.logger.error(f"Error getting all products: {e}")
@@ -829,11 +829,11 @@ class AIAnalyticsEngine:
 
             data = self.db.fetch_all(segment_query)
 
-            for row in data:
-                segment_name = row["segment"]
+            for row in (data or []):
+                segment_name = row.get("segment", "unknown")
                 segments[segment_name] = {
-                    "count": row["customer_count"],
-                    "avg_spent": float(row["avg_spent"] or 0),
+                    "count": row.get("customer_count", 0),
+                    "avg_spent": float(row.get("avg_spent") or 0),
                 }
 
         except Exception as e:
@@ -858,13 +858,13 @@ class AIAnalyticsEngine:
 
             alerts["low_stock_products"] = [
                 {
-                    "id": row["id"],
-                    "name": row["name"],
-                    "current_stock": row["current_stock"],
-                    "min_stock": row["min_stock"],
-                    "urgency": "high" if row["current_stock"] <= row["min_stock"] else "medium",
+                    "id": row.get("id"),
+                    "name": row.get("name", ""),
+                    "current_stock": row.get("current_stock", 0),
+                    "min_stock": row.get("min_stock", 0),
+                    "urgency": "high" if row.get("current_stock", 0) <= row.get("min_stock", 0) else "medium",
                 }
-                for row in low_stock_products
+                for row in (low_stock_products or [])
             ]
 
             # منتجات زائدة المخزون
@@ -879,12 +879,12 @@ class AIAnalyticsEngine:
 
             alerts["excess_stock_products"] = [
                 {
-                    "id": row["id"],
-                    "name": row["name"],
-                    "current_stock": row["current_stock"],
-                    "min_stock": row["min_stock"],
+                    "id": row.get("id"),
+                    "name": row.get("name", ""),
+                    "current_stock": row.get("current_stock", 0),
+                    "min_stock": row.get("min_stock", 0),
                 }
-                for row in excess_stock_products
+                for row in (excess_stock_products or [])
             ]
 
         except Exception as e:
@@ -913,14 +913,14 @@ class AIAnalyticsEngine:
 
             opportunities["price_increase_candidates"] = [
                 {
-                    "id": row["id"],
-                    "name": row["name"],
-                    "current_price": float(row["selling_price"]),
-                    "avg_sold_price": float(row["avg_sold_price"] or 0),
-                    "sales_count": row["sales_count"],
-                    "potential_increase": float(row["selling_price"] - (row["avg_sold_price"] or 0)),
+                    "id": row.get("id"),
+                    "name": row.get("name", ""),
+                    "current_price": float(row.get("selling_price") or 0),
+                    "avg_sold_price": float(row.get("avg_sold_price") or 0),
+                    "sales_count": row.get("sales_count", 0),
+                    "potential_increase": float((row.get("selling_price") or 0) - (row.get("avg_sold_price") or 0)),
                 }
-                for row in data
+                for row in (data or [])
             ]
 
         except Exception as e:

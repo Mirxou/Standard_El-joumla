@@ -48,7 +48,7 @@ class QuoteItem:
     @property
     def line_total(self) -> Decimal:
         """إجمالي السطر قبل الخصم"""
-        return self.unit_price * Decimal(str(self.quantity))
+        return self.unit_price * Decimal(str(self.quantity or 0))
 
     @property
     def discount_amount(self) -> Decimal:
@@ -137,7 +137,7 @@ class CPQService:
             for item_data in items:
                 product_id = item_data["product_id"]
                 quantity = item_data["quantity"]
-                custom_discount = Decimal(str(item_data.get("custom_discount", 0)))
+                custom_discount = Decimal(str(item_data.get("custom_discount", 0) or 0))
 
                 # Get price for customer
                 unit_price = self.pricing_service.get_price_for_customer(product_id, customer, quantity)
@@ -203,7 +203,7 @@ class CPQService:
                 (
                     quote.customer.id,
                     self._generate_quote_number(),
-                    float(quote.total),
+                    float(quote.total or 0),
                     "draft",
                     quote.valid_until,
                     quote.notes,
@@ -222,9 +222,9 @@ class CPQService:
                             quote_id,
                             item.product_id,
                             item.quantity,
-                            float(item.unit_price),
-                            float(item.discount_percentage),
-                            float(item.net_total),
+                            float(item.unit_price or 0),
+                            float(item.discount_percentage or 0),
+                            float(item.net_total or 0),
                         ),
                     )
 
@@ -258,7 +258,7 @@ class CPQService:
         try:
             # Get quote header
             quote_data = self.db_manager.fetch_one(
-                """SELECT q.*, c.name as customer_name, c.customer_type
+                """SELECT q.*, c.name as customer_name  # COLUMN_CHECK: removed c.customer_type; not in customers schema
                    FROM quotes q
                    JOIN customers c ON q.customer_id = c.id
                    WHERE q.id = ?""",
@@ -272,7 +272,7 @@ class CPQService:
             customer = Customer(
                 id=quote_data[1],  # customer_id
                 name=quote_data[24] or "",  # customer_name
-                customer_type=quote_data[25],  # customer_type
+                customer_type=quote_data[24] if len(quote_data) > 24 else None,  # COLUMN_CHECK: customer_type removed from query
             )
 
             # Get quote items
@@ -341,18 +341,18 @@ class CPQService:
             if not quote or quote.is_expired:
                 return None
 
-            # Create sale record
+            # Create sale record  # COLUMN_CHECK: sales table requires invoice_number (NOT NULL), has user_id not created_by, no quote_id
             sale_id = self.db_manager.execute_insert(
                 """INSERT INTO sales
-                   (customer_id, total_amount, status, created_by, created_at, quote_id)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
+                   (invoice_number, customer_id, total_amount, final_amount, status, user_id, sale_date)
+                   VALUES (?, ?, ?, ?, ?, ?, DATE('now'))""",
                 (
+                    f"QT-{quote_id}-{datetime.now().strftime('%Y%m%d%H%M%S')}",  # Generate invoice_number
                     quote.customer.id,
-                    float(quote.total),
+                    float(quote.total or 0),
+                    float(quote.total or 0),
                     "confirmed",
                     user_id,
-                    datetime.now(),
-                    quote_id,
                 ),
             )
 
@@ -361,21 +361,21 @@ class CPQService:
                 for item in quote.items:
                     self.db_manager.execute_insert(
                         """INSERT INTO sale_items
-                           (sale_id, product_id, quantity, unit_price, discount_percentage, line_total)
-                           VALUES (?, ?, ?, ?, ?, ?)""",
+                           (sale_id, product_id, quantity, unit_price, discount, total_price)
+                           VALUES (?, ?, ?, ?, ?, ?)""",  # COLUMN_CHECK: schema has 'discount'/'total_price' not 'discount_percentage'/'line_total',
                         (
                             sale_id,
                             item.product_id,
                             item.quantity,
-                            float(item.unit_price),
-                            float(item.discount_percentage),
-                            float(item.net_total),
+                            float(item.unit_price or 0),
+                            float(item.discount_percentage or 0),
+                            float(item.net_total or 0),
                         ),
                     )
 
                 # Update quote status
                 self.db_manager.execute_non_query(
-                    "UPDATE quotes SET status = 'converted', converted_at = ? WHERE id = ?",
+                    "UPDATE quotes SET status = 'converted', converted_date = ? WHERE id = ?",  # COLUMN_CHECK: schema has 'converted_date' not 'converted_at'
                     (datetime.now(), quote_id),
                 )
 
@@ -410,7 +410,7 @@ class CPQService:
                 {
                     "id": q[0],
                     "quote_number": q[1],
-                    "total_amount": float(q[2]),
+                    "total_amount": float(q[2] or 0),
                     "status": q[3],
                     "valid_until": q[4],
                     "created_at": q[5],
@@ -441,15 +441,15 @@ class CPQService:
                     {
                         "product_id": item.product_id,
                         "quantity": item.quantity,
-                        "unit_price": float(item.unit_price),
-                        "discount_percentage": float(item.discount_percentage),
-                        "net_total": float(item.net_total),
+                        "unit_price": float(item.unit_price or 0),
+                        "discount_percentage": float(item.discount_percentage or 0),
+                        "net_total": float(item.net_total or 0),
                     }
                     for item in quote.items
                 ],
-                "subtotal": float(quote.subtotal),
-                "total_discount": float(quote.total_discount),
-                "total": float(quote.total),
+                "subtotal": float(quote.subtotal or 0),
+                "total_discount": float(quote.total_discount or 0),
+                "total": float(quote.total or 0),
                 "valid_until": quote.valid_until.isoformat(),
                 "is_expired": quote.is_expired,
                 "created_at": quote.created_at.isoformat(),

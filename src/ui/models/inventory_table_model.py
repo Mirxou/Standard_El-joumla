@@ -72,14 +72,14 @@ class InventoryTableModel(QAbstractTableModel):
                 # تنسيق الأرقام
                 if column_name == "selling_price" or (col == 7 and "warehouse_name" not in self._data.columns):
                     try:
-                        return f"{float(value):,.2f}" if pd.notna(value) and str(value).strip() else "0.00"
+                        return f"{float(value or 0):,.2f}" if pd.notna(value) and str(value).strip() else "0.00"
                     except (ValueError, TypeError):
                         return "0.00"
                 elif column_name in ("current_stock", "min_stock") or col in (5, 6):
                     try:
                         # معالجة آمنة للتحويل: تحقق من أن القيمة ليست string فارغ
                         if pd.notna(value) and str(value).strip():
-                            return str(int(float(value)))  # تحويل إلى float أولاً ثم int
+                            return str(int(float(value or 0)))  # تحويل إلى float أولاً ثم int
                         else:
                             return "0"
                     except (ValueError, TypeError):

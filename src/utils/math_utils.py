@@ -41,7 +41,7 @@ def to_decimal(value: Union[str, int, float, Decimal, None]) -> Decimal:
         return value
 
     if isinstance(value, (int, float)):
-        return Decimal(str(value))
+        return Decimal(str(value or 0))
 
     if isinstance(value, str):
         # 🔥 CRITICAL FIX: استخراج الأرقام باستخدام pattern ذكي
@@ -80,7 +80,7 @@ def to_decimal(value: Union[str, int, float, Decimal, None]) -> Decimal:
 
     try:
         # محاولة أخيرة للتحويل
-        return Decimal(str(value))
+        return Decimal(str(value or 0))
     except (InvalidOperation, ValueError, TypeError):
         return Decimal("0.00")
 

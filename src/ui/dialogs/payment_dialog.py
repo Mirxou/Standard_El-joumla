@@ -72,9 +72,9 @@ class PaymentWorker(QThread):
         try:
             if self.operation == "create_customer_payment":
                 result = self.payment_service.create_customer_payment(
-                    customer_id=self.payment_data["customer_id"],
-                    amount=self.payment_data["amount"],
-                    payment_method=self.payment_data["payment_method"],
+                    customer_id=self.payment_data.get("customer_id"),
+                    amount=self.payment_data.get("amount", 0),
+                    payment_method=self.payment_data.get("payment_method", "نقدي"),
                     reference_number=self.payment_data.get("reference_number"),
                     notes=self.payment_data.get("notes"),
                     sale_id=self.payment_data.get("sale_id"),
@@ -83,9 +83,9 @@ class PaymentWorker(QThread):
 
             elif self.operation == "create_supplier_payment":
                 result = self.payment_service.create_supplier_payment(
-                    supplier_id=self.payment_data["supplier_id"],
-                    amount=self.payment_data["amount"],
-                    payment_method=self.payment_data["payment_method"],
+                    supplier_id=self.payment_data.get("supplier_id"),
+                    amount=self.payment_data.get("amount", 0),
+                    payment_method=self.payment_data.get("payment_method", "نقدي"),
                     reference_number=self.payment_data.get("reference_number"),
                     notes=self.payment_data.get("notes"),
                 )
@@ -116,7 +116,7 @@ class PaymentDialog(BaseDialog):
         self.payment_type = payment_type or PaymentType.CUSTOMER_PAYMENT
         self.logger = setup_logger(__name__)
         self.prefill_entity_id = entity_id
-        self.prefill_amount = Decimal(str(amount)) if amount is not None else None
+        self.prefill_amount = Decimal(str(amount or 0)) if amount is not None else None
 
         # إعداد قاعدة البيانات والخدمات
         self.db_manager = db_manager
@@ -537,9 +537,9 @@ class PaymentDialog(BaseDialog):
                 self.sale_combo.setEnabled(True)
                 self.sale_combo.addItem("-- بدون ربط بفاتورة --", None)
                 for r in rows:
-                    inv = r["invoice_number"] if isinstance(r, dict) else r[1]
-                    rem = r["remaining_amount"] if isinstance(r, dict) else r[3]
-                    sid = r["id"] if isinstance(r, dict) else r[0]
+                    inv = r.get("invoice_number", "") if isinstance(r, dict) else r[1]
+                    rem = r.get("remaining_amount", 0) if isinstance(r, dict) else r[3]
+                    sid = r.get("id") if isinstance(r, dict) else r[0]
                     self.sale_combo.addItem(f"{inv} (متبقي: {rem or 0:,.2f})", sid)
             else:
                 self.sale_combo.setEnabled(False)
@@ -633,7 +633,7 @@ class PaymentDialog(BaseDialog):
     def validate_amount(self, amount) -> bool:
         """التحقق من صحة المبلغ - يجب أن يكون أكبر من صفر"""
         try:
-            val = Decimal(amount)
+            val = Decimal(str(amount or 0))
             return val > 0
         except Exception:
             return False
@@ -720,29 +720,29 @@ class PaymentDialog(BaseDialog):
 
             # إضافة الحسابات المدينة
             for account in receivables:
-                customer = next((c for c in self.customers if c.id == account["customer_id"]), None)
+                customer = next((c for c in self.customers if c.id == account.get("customer_id")), None)
                 if customer:
                     all_accounts.append(
                         {
                             "name": customer.name,
                             "type": "حساب مدين",
-                            "balance": account["balance"],
+                            "balance": account.get("balance", 0),
                             "last_transaction": account.get("last_payment_date", "لا يوجد"),
-                            "status": "نشط" if account["balance"] > 0 else "مسدد",
+                            "status": "نشط" if account.get("balance", 0) > 0 else "مسدد",
                         }
                     )
 
             # إضافة الحسابات الدائنة
             for account in payables:
-                supplier = next((s for s in self.suppliers if s.id == account["supplier_id"]), None)
+                supplier = next((s for s in self.suppliers if s.id == account.get("supplier_id")), None)
                 if supplier:
                     all_accounts.append(
                         {
                             "name": supplier.name,
                             "type": "حساب دائن",
-                            "balance": account["balance"],
+                            "balance": account.get("balance", 0),
                             "last_transaction": account.get("last_payment_date", "لا يوجد"),
-                            "status": "نشط" if account["balance"] > 0 else "مسدد",
+                            "status": "نشط" if account.get("balance", 0) > 0 else "مسدد",
                         }
                     )
 
@@ -750,12 +750,12 @@ class PaymentDialog(BaseDialog):
             self.accounts_table.setRowCount(len(all_accounts))
 
             for row, account in enumerate(all_accounts):
-                self.accounts_table.setItem(row, 0, QTableWidgetItem(account["name"]))
-                self.accounts_table.setItem(row, 1, QTableWidgetItem(account["type"]))
-                self.accounts_table.setItem(row, 2, QTableWidgetItem(f"{account['balance']:.2f} دج"))
+                self.accounts_table.setItem(row, 0, QTableWidgetItem(account.get("name", "")))
+                self.accounts_table.setItem(row, 1, QTableWidgetItem(account.get("type", "")))
+                self.accounts_table.setItem(row, 2, QTableWidgetItem(f"{account.get('balance', 0):.2f} دج"))
                 self.accounts_table.setItem(row, 3, QTableWidgetItem(""))  # آخر معاملة
-                self.accounts_table.setItem(row, 4, QTableWidgetItem(str(account["last_transaction"])))
-                self.accounts_table.setItem(row, 5, QTableWidgetItem(account["status"]))
+                self.accounts_table.setItem(row, 4, QTableWidgetItem(str(account.get("last_transaction", ""))))
+                self.accounts_table.setItem(row, 5, QTableWidgetItem(account.get("status", "")))
                 self.accounts_table.setItem(row, 6, QTableWidgetItem("عرض التفاصيل"))
 
         except Exception as e:
@@ -888,6 +888,14 @@ class PaymentDialog(BaseDialog):
                 self.i18n.get_message("error"),
                 f"{self.i18n.get_message('export_report_failed')}: {str(e)}",
             )
+
+
+    def closeEvent(self, event):
+        """تنظيف الموارد عند إغلاق النافذة"""
+        if hasattr(self, "payment_worker") and self.payment_worker and self.payment_worker.isRunning():
+            self.payment_worker.requestInterruption()
+            self.payment_worker.wait(2000)
+        super().closeEvent(event)
 
 
 if __name__ == "__main__":

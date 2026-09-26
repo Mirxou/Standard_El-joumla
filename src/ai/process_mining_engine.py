@@ -131,11 +131,12 @@ class ProcessMiningEngine:
 
     def _setup_logging(self):
         """إعداد نظام التسجيل"""
-        self.logger.setLevel(logging.INFO)
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter("%(asctime)s - Process Mining - %(levelname)s - %(message)s")
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
+        if not self.logger.handlers:
+            self.logger.setLevel(logging.INFO)
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter("%(asctime)s - Process Mining - %(levelname)s - %(message)s")
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
 
     def load_event_log(self, log_id: str, events: List[ProcessEvent]) -> Dict[str, Any]:
         """تحميل سجل الأحداث"""
@@ -235,6 +236,10 @@ class ProcessMiningEngine:
         """تصور نموذج العملية"""
         if process_id not in self.process_models:
             raise ValueError(f"Process model not found: {process_id}")
+
+        if not NETWORKX_AVAILABLE or not MATPLOTLIB_AVAILABLE:
+            self.logger.warning("NetworkX or Matplotlib not available; cannot visualize process model")
+            return ""
 
         model = self.process_models[process_id]
 

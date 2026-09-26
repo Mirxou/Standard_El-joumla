@@ -327,8 +327,9 @@ class AdvancedAnalyticsEngine:
         for sale in sales_data:
             category_sales[sale.get("category", "other")] += sale["amount"]
 
-        top_category = max(category_sales.items(), key=lambda x: x[1])
-        insights.append(f"الفئة الأكثر مبيعاً: {top_category[0]} بقيمة {top_category[1]:.2f} د.ج")
+        if category_sales:
+            top_category = max(category_sales.items(), key=lambda x: x[1])
+            insights.append(f"الفئة الأكثر مبيعاً: {top_category[0]} بقيمة {top_category[1]:.2f} د.ج")
 
         # تحليل الاتجاهات
         daily_totals = defaultdict(float)
@@ -373,8 +374,9 @@ class AdvancedAnalyticsEngine:
         for sale in sales_data:
             category_sales[sale.get("category", "other")] += sale["amount"]
 
-        top_category = max(category_sales.items(), key=lambda x: x[1])
-        recommendations.append(f"التركيز على فئة {top_category[0]} لزيادة المبيعات")
+        if category_sales:
+            top_category = max(category_sales.items(), key=lambda x: x[1])
+            recommendations.append(f"التركيز على فئة {top_category[0]} لزيادة المبيعات")
 
         # توصيات عامة
         recommendations.extend(

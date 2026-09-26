@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from PySide6.QtGui import QCloseEvent
 
 from src.core.database_manager import DatabaseManager
 from src.core.database_metrics import get_database_metrics
@@ -274,3 +275,9 @@ class DatabaseMetricsWindow(QMainWindow):
     def get_query_performance(self):
         """الحصول على أداء الاستعلامات (Stub for testing)"""
         return {}
+
+    def closeEvent(self, event: QCloseEvent):
+        """تنظيف الموارد عند إغلاق النافذة"""
+        if hasattr(self, "update_timer") and self.update_timer:
+            self.update_timer.stop()
+        super().closeEvent(event)

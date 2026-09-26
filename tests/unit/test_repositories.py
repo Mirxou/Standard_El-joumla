@@ -3,10 +3,17 @@ Unit Tests for Repository Pattern
 اختبارات وحدة Repository Pattern
 """
 
+from contextlib import contextmanager
 from datetime import date
 from unittest.mock import MagicMock
 
 import pytest
+
+
+@contextmanager
+def _mock_lock_row(*args, **kwargs):
+    """Mock context manager for lock_row (yields True)"""
+    yield True
 
 
 class TestBaseRepository:
@@ -19,7 +26,7 @@ class TestBaseRepository:
         db.connection = MagicMock()
         db.execute_query = MagicMock(return_value=[])
         db.execute_non_query = MagicMock()
-        db.lock_row = MagicMock(return_value=True)
+        db.lock_row = _mock_lock_row
         db.soft_delete = MagicMock(return_value=True)
         db.restore_deleted = MagicMock(return_value=True)
         db.get_pending_items = MagicMock(return_value=[])
@@ -98,7 +105,7 @@ class TestBaseRepository:
 
     def test_update_success(self, base_repo, mock_db):
         """اختبار تحديث سجل بنجاح"""
-        mock_db.lock_row.return_value = True
+        mock_db.lock_row = _mock_lock_row
 
         result = base_repo.update(1, {"name": "Updated"})
 
@@ -110,7 +117,7 @@ class TestBaseRepository:
 
         # Empty data gets is_synced added, so update proceeds
         # The result depends on whether lock_row succeeds
-        mock_db.lock_row.return_value = True
+        mock_db.lock_row = _mock_lock_row
         assert result is True
 
     def test_soft_delete(self, base_repo, mock_db):
@@ -168,7 +175,7 @@ class TestProductRepository:
         db.execute_query = MagicMock(return_value=[])
         db.execute_non_query = MagicMock()
         db.connection = MagicMock()
-        db.lock_row = MagicMock(return_value=True)
+        db.lock_row = _mock_lock_row
         db.soft_delete = MagicMock(return_value=True)
         db.restore_deleted = MagicMock(return_value=True)
         db.get_pending_items = MagicMock(return_value=[])
@@ -255,7 +262,7 @@ class TestCustomerRepository:
         db.execute_query = MagicMock(return_value=[])
         db.execute_non_query = MagicMock()
         db.connection = MagicMock()
-        db.lock_row = MagicMock(return_value=True)
+        db.lock_row = _mock_lock_row
         db.soft_delete = MagicMock(return_value=True)
         db.restore_deleted = MagicMock(return_value=True)
         db.get_pending_items = MagicMock(return_value=[])
@@ -327,7 +334,7 @@ class TestSaleRepository:
         mock_cursor = MagicMock()
         mock_cursor.lastrowid = 100
         db.connection.execute.return_value = mock_cursor
-        db.lock_row = MagicMock(return_value=True)
+        db.lock_row = _mock_lock_row
         db.soft_delete = MagicMock(return_value=True)
         db.restore_deleted = MagicMock(return_value=True)
         db.get_pending_items = MagicMock(return_value=[])

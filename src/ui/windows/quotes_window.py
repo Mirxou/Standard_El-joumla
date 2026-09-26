@@ -314,7 +314,7 @@ class QuotesWindow(QMainWindow):
                 self.quotes_table.setItem(row, 3, valid_item)
 
                 # المبلغ
-                amount_item = QTableWidgetItem(f"{float(quote.total_amount):,.2f}")
+                amount_item = QTableWidgetItem(f"{float(quote.total_amount or 0):,.2f}")
                 amount_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
                 self.quotes_table.setItem(row, 4, amount_item)
 
@@ -391,19 +391,19 @@ class QuotesWindow(QMainWindow):
             self.items_table.insertRow(row)
 
             self.items_table.setItem(row, 0, QTableWidgetItem(item.product_name))
-            self.items_table.setItem(row, 1, QTableWidgetItem(str(float(item.quantity))))
-            self.items_table.setItem(row, 2, QTableWidgetItem(f"{float(item.unit_price):,.2f}"))
-            self.items_table.setItem(row, 3, QTableWidgetItem(f"{float(item.discount_amount):,.2f}"))
-            self.items_table.setItem(row, 4, QTableWidgetItem(f"{float(item.tax_amount):,.2f}"))
+            self.items_table.setItem(row, 1, QTableWidgetItem(str(float(item.quantity or 0))))
+            self.items_table.setItem(row, 2, QTableWidgetItem(f"{float(item.unit_price or 0):,.2f}"))
+            self.items_table.setItem(row, 3, QTableWidgetItem(f"{float(item.discount_amount or 0):,.2f}"))
+            self.items_table.setItem(row, 4, QTableWidgetItem(f"{float(item.tax_amount or 0):,.2f}"))
 
-            total_item = QTableWidgetItem(f"{float(item.total_amount):,.2f}")
+            total_item = QTableWidgetItem(f"{float(item.total_amount or 0):,.2f}")
             total_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             self.items_table.setItem(row, 5, total_item)
 
         # المجاميع
-        self.subtotal_label.setText(f"{float(quote.subtotal):,.2f} دج")
-        self.discount_label.setText(f"{float(quote.discount_amount):,.2f} دج")
-        self.total_label.setText(f"{float(quote.total_amount):,.2f} دج")
+        self.subtotal_label.setText(f"{float(quote.subtotal or 0):,.2f} دج")
+        self.discount_label.setText(f"{float(quote.discount_amount or 0):,.2f} دج")
+        self.total_label.setText(f"{float(quote.total_amount or 0):,.2f} دج")
 
         # الملاحظات
         self.notes_text.setText(quote.notes or "لا توجد ملاحظات")

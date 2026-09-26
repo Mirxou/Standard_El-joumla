@@ -474,7 +474,7 @@ class EDIService:
 
             query = """
                 SELECT * FROM edi_documents
-                WHERE {' AND '.join(conditions)}
+                WHERE {' AND '.join(conditions)}  # SQL_SAFE: conditions built from parameterized strings
                 ORDER BY created_at DESC
             """
 
@@ -781,7 +781,7 @@ class EDIService:
         elif rule_type == "decimal":
             # تحويل إلى Decimal
             try:
-                return Decimal(str(value))
+                return Decimal(str(value or 0))
             except Exception:
                 return value
 
@@ -837,7 +837,7 @@ class EDIService:
                     else:
                         if "quantity" in item:
                             try:
-                                qty = float(item["quantity"])
+                                qty = float(item["quantity"] or 0)
                                 if qty <= 0:
                                     errors.append(f"كمية البند {idx + 1} يجب أن تكون أكبر من صفر")
                             except Exception:

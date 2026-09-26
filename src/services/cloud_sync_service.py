@@ -16,6 +16,7 @@ from src.core.conflict_resolver import ConflictResolver
 from src.core.database_manager import DatabaseManager
 from src.core.sync_engine import SyncDirection, SyncEngine, SyncResult, SyncStatus
 from src.core.tenant_isolation import TenantIsolationManager
+from src.utils.db_helpers import retry_with_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -437,9 +438,10 @@ class CloudSyncService:
             return None
 
     def _get_from_s3(self, settings: CloudSyncSettings, entity_type: str, entity_id: int) -> Optional[Dict[str, Any]]:
-        """الحصول من AWS S3"""
+        """الحصول من AWS S3 مع retry"""
         try:
             import boto3
+            from botocore.exceptions import BotoCoreError, ClientError
 
             s3_client = boto3.client(
                 "s3",
@@ -451,8 +453,17 @@ class CloudSyncService:
 
             key = f"{entity_type}/{entity_id}.json"
 
-            response = s3_client.get_object(Bucket=settings.bucket_name, Key=key)
-            data = json.loads(response["Body"].read().decode("utf-8"))
+            def _fetch():
+                response = s3_client.get_object(Bucket=settings.bucket_name, Key=key)
+                return json.loads(response["Body"].read().decode("utf-8"))
+
+            data = retry_with_backoff(
+                _fetch,
+                max_retries=3,
+                base_delay=1.0,
+                exceptions=(BotoCoreError, ClientError, OSError, TimeoutError),
+                logger=self.logger,
+            )
 
             # فك التشفير إذا كان مفعلاً
             if settings.encryption_enabled and settings.encryption_key:
@@ -464,13 +475,14 @@ class CloudSyncService:
             # الملف غير موجود = لا توجد بيانات سحابية
             if "NoSuchKey" in str(e) or "404" in str(e):
                 return None
-            self.logger.error(f"❌ خطأ في الحصول من S3: {e}", exc_info=True)
+            self.logger.error(f"❌ خطأ في الحصول من S3 (after retries): {e}", exc_info=True)
             return None
 
     def _get_from_gcs(self, settings: CloudSyncSettings, entity_type: str, entity_id: int) -> Optional[Dict[str, Any]]:
-        """الحصول من Google Cloud Storage"""
+        """الحصول من Google Cloud Storage مع retry"""
         try:
             from google.cloud import storage
+            from google.api_core.exceptions import GoogleAPIError, NotFound
 
             client = storage.Client.from_service_account_json(settings.config if settings.config else None)
 
@@ -480,7 +492,16 @@ class CloudSyncService:
             if not blob.exists():
                 return None
 
-            data = json.loads(blob.download_as_text())
+            def _fetch():
+                return json.loads(blob.download_as_text())
+
+            data = retry_with_backoff(
+                _fetch,
+                max_retries=3,
+                base_delay=1.0,
+                exceptions=(GoogleAPIError, OSError, TimeoutError),
+                logger=self.logger,
+            )
 
             # فك التشفير
             if settings.encryption_enabled and settings.encryption_key:
@@ -489,15 +510,18 @@ class CloudSyncService:
             return data
 
         except Exception as e:
-            self.logger.error(f"❌ خطأ في الحصول من GCS: {e}", exc_info=True)
+            if "404" in str(e) or "NotFound" in type(e).__name__:
+                return None
+            self.logger.error(f"❌ خطأ في الحصول من GCS (after retries): {e}", exc_info=True)
             return None
 
     def _get_from_azure(
         self, settings: CloudSyncSettings, entity_type: str, entity_id: int
     ) -> Optional[Dict[str, Any]]:
-        """الحصول من Azure Blob Storage"""
+        """الحصول من Azure Blob Storage مع retry"""
         try:
             from azure.storage.blob import BlobServiceClient
+            from azure.core.exceptions import AzureError
 
             blob_service_client = BlobServiceClient(
                 account_url=f"https://{settings.bucket_name}.blob.core.windows.net",
@@ -510,7 +534,16 @@ class CloudSyncService:
             if not blob_client.exists():
                 return None
 
-            data = json.loads(blob_client.download_blob().readall().decode("utf-8"))
+            def _fetch():
+                return json.loads(blob_client.download_blob().readall().decode("utf-8"))
+
+            data = retry_with_backoff(
+                _fetch,
+                max_retries=3,
+                base_delay=1.0,
+                exceptions=(AzureError, OSError, TimeoutError),
+                logger=self.logger,
+            )
 
             # فك التشفير
             if settings.encryption_enabled and settings.encryption_key:
@@ -519,7 +552,9 @@ class CloudSyncService:
             return data
 
         except Exception as e:
-            self.logger.error(f"❌ خطأ في الحصول من Azure: {e}", exc_info=True)
+            if "404" in str(e) or "BlobNotFound" in str(e):
+                return None
+            self.logger.error(f"❌ خطأ في الحصول من Azure (after retries): {e}", exc_info=True)
             return None
 
     # ============================================================================
@@ -534,7 +569,7 @@ class CloudSyncService:
             self.logger.warning(f"Entity type not in whitelist: {entity_type}")
             return None
         try:
-            query = f"SELECT * FROM {entity_type} WHERE id = ?"
+            query = f"SELECT * FROM {entity_type} WHERE id = ?"  # SQL_SAFE: entity_type validated against ALLOWED_TABLES whitelist
             row = self.db_manager.fetch_one(query, (entity_id,))
             return dict(row) if row else None
         except Exception as e:
@@ -549,7 +584,7 @@ class CloudSyncService:
             self.logger.warning(f"Entity type not in whitelist: {entity_type}")
             return []
         try:
-            query = f"SELECT * FROM {entity_type} LIMIT 1000"
+            query = f"SELECT * FROM {entity_type} LIMIT 1000"  # SQL_SAFE: entity_type validated against ALLOWED_TABLES whitelist
             rows = self.db_manager.fetch_all(query)
             return [dict(row) for row in rows]
         except Exception as e:

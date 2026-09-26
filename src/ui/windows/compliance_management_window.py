@@ -45,6 +45,7 @@ from src.services.compliance_service import (
     ComplianceService,
 )
 from src.ui.styles.design_tokens import C
+from src.utils.db_helpers import safe_int
 from src.utils.logger import setup_logger
 
 project_root = Path(__file__).parent.parent.parent.parent
@@ -450,7 +451,9 @@ class ComplianceManagementWindow(QMainWindow):
         if not id_cell:
             QMessageBox.warning(self, "تحذير", "لم يتم العثور على القاعدة")
             return
-        rule_id = int(id_cell.text())
+        rule_id = safe_int(id_cell.text(), default=-1)
+        if rule_id <= 0:
+            return
 
         rule = self.compliance_service.get_compliance_rule(rule_id)
         if not rule:
@@ -474,7 +477,9 @@ class ComplianceManagementWindow(QMainWindow):
         if not id_cell or not name_cell:
             QMessageBox.warning(self, "تحذير", "لم يتم العثور على بيانات القاعدة")
             return
-        rule_id = int(id_cell.text())
+        rule_id = safe_int(id_cell.text(), default=-1)
+        if rule_id <= 0:
+            return
         rule_name = name_cell.text()
 
         reply = QMessageBox.question(
@@ -503,7 +508,9 @@ class ComplianceManagementWindow(QMainWindow):
         if not id_cell:
             QMessageBox.warning(self, "تحذير", "لم يتم العثور على القاعدة")
             return
-        rule_id = int(id_cell.text())
+        rule_id = safe_int(id_cell.text(), default=-1)
+        if rule_id <= 0:
+            return
 
         self.statusBar().showMessage("جاري تشغيل الفحص...")
 

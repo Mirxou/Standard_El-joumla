@@ -46,6 +46,7 @@ from ...services.quote_printer_service import QuotePrinterService
 from ...services.standard_joumla_service import StandardJoumLaService
 from ...services.wholesale_analytics_service import WholesaleAnalyticsService
 from ...services.wholesale_quote_service import WholesaleQuoteService
+from ...utils.db_helpers import safe_int, safe_float
 from ..dialogs.quote_history_dialog import QuoteHistoryDialog
 from ..dialogs.wholesale_dashboard_dialog import WholesaleDashboardDialog
 
@@ -89,7 +90,7 @@ class AdvancedSearchWindow(QMainWindow):
 
         self.current_query = SearchQuery(entity=SearchEntity.PRODUCTS)
 
-        self.suggestion_timer = QTimer()
+        self.suggestion_timer = QTimer(self)  # MEMORY: parent=self ensures timer is destroyed with window
 
         self.suggestion_timer.setSingleShot(True)
 
@@ -1010,16 +1011,12 @@ class AdvancedSearchWindow(QMainWindow):
             if not id_cell or not name_cell or not w_cell or not c_cell:
                 QMessageBox.warning(self, "تحذير", "بيانات المنتج غير مكتملة")
                 return
-            p_id = int(id_cell.text())
+            p_id = safe_int(id_cell.text(), default=-1)
+            if p_id <= 0:
+                return
             p_name = name_cell.text()
-            try:
-                w_price = float(w_cell.text().replace(",", ""))
-            except (ValueError, TypeError, AttributeError):
-                w_price = 0.0
-            try:
-                c_price = float(c_cell.text().replace(",", ""))
-            except (ValueError, TypeError, AttributeError):
-                c_price = 0.0
+            w_price = safe_float(w_cell.text().replace(",", ""), default=0.0)
+            c_price = safe_float(c_cell.text().replace(",", ""), default=0.0)
 
             qty, ok = QInputDialog.getDouble(self, "الكمية", f"كمية {p_name}:", 1, 1, 10000, 0)
 
@@ -1045,7 +1042,7 @@ class AdvancedSearchWindow(QMainWindow):
 
         summary = self.quote_service.get_summary()
 
-        self.qp_count_lbl.setText(f"المنتجات: {summary['item_count']} (الكمية: {int(summary['total_qty'])})")
+        self.qp_count_lbl.setText(f"المنتجات: {summary['item_count']} (الكمية: {int(summary['total_qty'] or 0)})")
 
         self.qp_val_lbl.setText(f"القيمة: {summary['total_value']:,.2f}")
 
@@ -1144,6 +1141,13 @@ class AdvancedSearchWindow(QMainWindow):
         self.results_table.clearContents()
         self.results_table.setRowCount(0)
         return True
+
+    def closeEvent(self, event):
+        """تنظيف الموارد عند إغلاق النافذة"""
+        # MEMORY: stop suggestion_timer to prevent callbacks after close
+        if hasattr(self, 'suggestion_timer') and self.suggestion_timer.isActive():
+            self.suggestion_timer.stop()
+        super().closeEvent(event)
 
 
 class SaveFilterDialog(QDialog):

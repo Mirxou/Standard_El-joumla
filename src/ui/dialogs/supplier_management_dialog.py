@@ -178,6 +178,7 @@ class SupplierManagementDialog(BaseDialog):
             actions_layout.addStretch()
 
             actions_widget = self.create_widget_from_layout(actions_layout)
+            # PERF: consider using delegate instead of setCellWidget for large datasets
             self.table.setCellWidget(row, 4, actions_widget)
 
     def create_widget_from_layout(self, layout):

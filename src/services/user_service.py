@@ -156,7 +156,7 @@ class UserService:
                     # تحويل القيمة إلى النوع المناسب
                     current_value = getattr(self.security_settings, name)
                     if isinstance(current_value, int):
-                        setattr(self.security_settings, name, int(value))
+                        setattr(self.security_settings, name, int(value or 0))
                     elif isinstance(current_value, bool):
                         setattr(self.security_settings, name, value.lower() == "true")
                     else:
@@ -313,15 +313,15 @@ class UserService:
             row = result[0]
 
             return UserSession(
-                session_id=row["session_id"],
-                user_id=row["user_id"],
-                username=row["username"],
-                role=UserRole(row["role"]),
-                login_time=datetime.fromisoformat(row["login_time"]),
-                last_activity=datetime.fromisoformat(row["last_activity"]),
-                ip_address=row["ip_address"],
-                user_agent=row["user_agent"],
-                status=SessionStatus(row["status"]),
+                session_id=row.get("session_id", ""),
+                user_id=row.get("user_id", 0),
+                username=row.get("username", ""),
+                role=UserRole(row.get("role", "cashier")),
+                login_time=datetime.fromisoformat(row.get("login_time")) if row.get("login_time") else datetime.now(),
+                last_activity=datetime.fromisoformat(row.get("last_activity")) if row.get("last_activity") else datetime.now(),
+                ip_address=row.get("ip_address"),
+                user_agent=row.get("user_agent"),
+                status=SessionStatus(row.get("status", "active")),
             )
 
         except Exception as e:
@@ -598,11 +598,11 @@ class UserService:
             for row in results:
                 attempts.append(
                     LoginAttempt(
-                        username=row["username"],
-                        ip_address=row["ip_address"],
-                        timestamp=datetime.fromisoformat(row["timestamp"]),
-                        success=bool(row["success"]),
-                        failure_reason=row["failure_reason"],
+                        username=row.get("username", ""),
+                        ip_address=row.get("ip_address"),
+                        timestamp=datetime.fromisoformat(row.get("timestamp")) if row.get("timestamp") else datetime.now(),
+                        success=bool(row.get("success", 0)),
+                        failure_reason=row.get("failure_reason"),
                     )
                 )
 

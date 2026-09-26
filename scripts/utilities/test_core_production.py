@@ -40,17 +40,17 @@ cols_raw = db.fetch_all("PRAGMA table_info(users)")
 col_names = [c['name'] for c in cols_raw]
 check("users.role_id column exists", 'role_id' in col_names, f"got: {col_names}")
 
-# lock_row - no FOR UPDATE crash
+# lock_row - no FOR UPDATE crash (now a context manager using BEGIN IMMEDIATE)
 try:
     db.execute_non_query(
         "INSERT OR IGNORE INTO users (username, full_name, role, password_hash, salt) VALUES ('u1', 'Test', 'user', 'x', 'y')"
     )
-    result_lock = db.lock_row('users', 1)
-    check("lock_row() does not crash (no FOR UPDATE)", True)
-    check("lock_row() returns bool", isinstance(result_lock, bool))
+    with db.lock_row('users', 1) as locked:
+        check("lock_row() does not crash (no FOR UPDATE)", True)
+        check("lock_row() yields bool", isinstance(locked, bool))
 except Exception as e:
     check("lock_row() does not crash", False, str(e))
-    check("lock_row() returns bool", False)
+    check("lock_row() yields bool", False)
 
 # execute_query returns list for UPDATE (not cursor)
 ret = db.execute_query("UPDATE users SET role='admin' WHERE username='u1'")

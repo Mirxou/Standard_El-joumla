@@ -283,7 +283,10 @@ class InstallmentPaymentDialog(BaseDialog):
             return
 
         row = self.installments_table.currentRow()
-        installment_id = self.installments_table.item(row, 0).data(Qt.UserRole)
+        item = self.installments_table.item(row, 0) if row >= 0 else None
+        if not item:
+            return
+        installment_id = item.data(Qt.UserRole)
 
         # البحث عن القسط
         self.selected_installment = None
@@ -294,7 +297,7 @@ class InstallmentPaymentDialog(BaseDialog):
 
         if self.selected_installment:
             # تعيين المبلغ المتبقي كقيمة افتراضية
-            self.payment_amount_spin.setValue(float(self.selected_installment.remaining_amount))
+            self.payment_amount_spin.setValue(float(self.selected_installment.remaining_amount or 0))
             self.save_btn.setEnabled(True)
             self.pay_full_btn.setEnabled(True)
 
@@ -322,7 +325,10 @@ class InstallmentPaymentDialog(BaseDialog):
     def select_installment(self, installment: PaymentInstallment):
         """اختيار قسط محدد"""
         for row in range(self.installments_table.rowCount()):
-            inst_id = self.installments_table.item(row, 0).data(Qt.UserRole)
+            item = self.installments_table.item(row, 0)
+            if not item:
+                continue
+            inst_id = item.data(Qt.UserRole)
             if inst_id == installment.id:
                 self.installments_table.selectRow(row)
                 break
@@ -387,7 +393,7 @@ class InstallmentPaymentDialog(BaseDialog):
         if not self.selected_installment:
             return
 
-        self.payment_amount_spin.setValue(float(self.selected_installment.remaining_amount))
+        self.payment_amount_spin.setValue(float(self.selected_installment.remaining_amount or 0))
         self.save_payment()
 
     def get_status_text(self, status: str) -> str:

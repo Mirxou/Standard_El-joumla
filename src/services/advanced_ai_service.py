@@ -1294,50 +1294,50 @@ class AdvancedAIService:
                         accuracy_score=r.get("accuracy_score", 0.0),
                         training_status=r.get("training_status"),
                         last_trained=(
-                            datetime.fromisoformat(r["last_trained"])
-                            if r.get("last_trained") and isinstance(r["last_trained"], str)
+                            datetime.fromisoformat(r.get("last_trained", ""))
+                            if r.get("last_trained") and isinstance(r.get("last_trained"), str)
                             else r.get("last_trained")
                         ),
                         model_path=r.get("model_path"),
                         parameters=(
-                            json.loads(r["parameters"])
-                            if r.get("parameters") and isinstance(r["parameters"], str)
+                            json.loads(r.get("parameters", ""))
+                            if r.get("parameters") and isinstance(r.get("parameters"), str)
                             else (r.get("parameters") or {})
                         ),
                         performance_metrics=(
-                            json.loads(r["performance_metrics"])
-                            if r.get("performance_metrics") and isinstance(r["performance_metrics"], str)
+                            json.loads(r.get("performance_metrics", ""))
+                            if r.get("performance_metrics") and isinstance(r.get("performance_metrics"), str)
                             else (r.get("performance_metrics") or {})
                         ),
                         created_at=(
-                            datetime.fromisoformat(r["created_at"])
-                            if r.get("created_at") and isinstance(r["created_at"], str)
+                            datetime.fromisoformat(r.get("created_at", ""))
+                            if r.get("created_at") and isinstance(r.get("created_at"), str)
                             else r.get("created_at")
                         ),
                         algorithm=r.get("algorithm"),
                         feature_importance=(
-                            json.loads(r["feature_importance"])
-                            if r.get("feature_importance") and isinstance(r["feature_importance"], str)
+                            json.loads(r.get("feature_importance", ""))
+                            if r.get("feature_importance") and isinstance(r.get("feature_importance"), str)
                             else r.get("feature_importance")
                         ),
                         confusion_matrix=(
-                            json.loads(r["confusion_matrix"])
-                            if r.get("confusion_matrix") and isinstance(r["confusion_matrix"], str)
+                            json.loads(r.get("confusion_matrix", ""))
+                            if r.get("confusion_matrix") and isinstance(r.get("confusion_matrix"), str)
                             else r.get("confusion_matrix")
                         ),
                         cross_validation_scores=(
-                            json.loads(r["cross_validation_scores"])
-                            if r.get("cross_validation_scores") and isinstance(r["cross_validation_scores"], str)
+                            json.loads(r.get("cross_validation_scores", ""))
+                            if r.get("cross_validation_scores") and isinstance(r.get("cross_validation_scores"), str)
                             else r.get("cross_validation_scores")
                         ),
                         hyperparameters=(
-                            json.loads(r["hyperparameters"])
-                            if r.get("hyperparameters") and isinstance(r["hyperparameters"], str)
+                            json.loads(r.get("hyperparameters", ""))
+                            if r.get("hyperparameters") and isinstance(r.get("hyperparameters"), str)
                             else r.get("hyperparameters")
                         ),
                         feature_names=(
-                            json.loads(r["feature_names"])
-                            if r.get("feature_names") and isinstance(r["feature_names"], str)
+                            json.loads(r.get("feature_names", ""))
+                            if r.get("feature_names") and isinstance(r.get("feature_names"), str)
                             else r.get("feature_names")
                         ),
                     )
@@ -1391,50 +1391,50 @@ class AdvancedAIService:
                             accuracy_score=r.get("accuracy_score", 0.0),
                             training_status=r.get("training_status"),
                             last_trained=(
-                                datetime.fromisoformat(r["last_trained"])
-                                if r.get("last_trained") and isinstance(r["last_trained"], str)
+                                datetime.fromisoformat(r.get("last_trained", ""))
+                                if r.get("last_trained") and isinstance(r.get("last_trained"), str)
                                 else r.get("last_trained")
                             ),
                             model_path=r.get("model_path"),
                             parameters=(
-                                json.loads(r["parameters"])
-                                if r.get("parameters") and isinstance(r["parameters"], str)
+                                json.loads(r.get("parameters", ""))
+                                if r.get("parameters") and isinstance(r.get("parameters"), str)
                                 else (r.get("parameters") or {})
                             ),
                             performance_metrics=(
-                                json.loads(r["performance_metrics"])
-                                if r.get("performance_metrics") and isinstance(r["performance_metrics"], str)
+                                json.loads(r.get("performance_metrics", ""))
+                                if r.get("performance_metrics") and isinstance(r.get("performance_metrics"), str)
                                 else (r.get("performance_metrics") or {})
                             ),
                             created_at=(
-                                datetime.fromisoformat(r["created_at"])
-                                if r.get("created_at") and isinstance(r["created_at"], str)
+                                datetime.fromisoformat(r.get("created_at", ""))
+                                if r.get("created_at") and isinstance(r.get("created_at"), str)
                                 else r.get("created_at")
                             ),
                             algorithm=r.get("algorithm"),
                             feature_importance=(
-                                json.loads(r["feature_importance"])
-                                if r.get("feature_importance") and isinstance(r["feature_importance"], str)
+                                json.loads(r.get("feature_importance", ""))
+                                if r.get("feature_importance") and isinstance(r.get("feature_importance"), str)
                                 else r.get("feature_importance")
                             ),
                             confusion_matrix=(
-                                json.loads(r["confusion_matrix"])
-                                if r.get("confusion_matrix") and isinstance(r["confusion_matrix"], str)
+                                json.loads(r.get("confusion_matrix", ""))
+                                if r.get("confusion_matrix") and isinstance(r.get("confusion_matrix"), str)
                                 else r.get("confusion_matrix")
                             ),
                             cross_validation_scores=(
-                                json.loads(r["cross_validation_scores"])
-                                if r.get("cross_validation_scores") and isinstance(r["cross_validation_scores"], str)
+                                json.loads(r.get("cross_validation_scores", ""))
+                                if r.get("cross_validation_scores") and isinstance(r.get("cross_validation_scores"), str)
                                 else r.get("cross_validation_scores")
                             ),
                             hyperparameters=(
-                                json.loads(r["hyperparameters"])
-                                if r.get("hyperparameters") and isinstance(r["hyperparameters"], str)
+                                json.loads(r.get("hyperparameters", ""))
+                                if r.get("hyperparameters") and isinstance(r.get("hyperparameters"), str)
                                 else r.get("hyperparameters")
                             ),
                             feature_names=(
-                                json.loads(r["feature_names"])
-                                if r.get("feature_names") and isinstance(r["feature_names"], str)
+                                json.loads(r.get("feature_names", ""))
+                                if r.get("feature_names") and isinstance(r.get("feature_names"), str)
                                 else r.get("feature_names")
                             ),
                         )
@@ -1531,9 +1531,9 @@ class AdvancedAIService:
         """
         try:
             experiment_id = experiment_config.get("experiment_id", f"automl_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
-            target_column = experiment_config["target_column"]
-            features = experiment_config["features"]
-            data = experiment_config["data"]
+            target_column = experiment_config.get("target_column")
+            features = experiment_config.get("features", [])
+            data = experiment_config.get("data", [])
             algorithms = experiment_config.get("algorithms", ["rf", "nn", "xgb"])
             max_time = experiment_config.get("max_time", 30)  # دقائق
 
@@ -1956,7 +1956,7 @@ class AdvancedAIService:
                     x, y, w, h = cv2.boundingRect(contour)  # noqa: F821
                     objects.append(
                         {
-                            "area": float(area),
+                            "area": float(area or 0),
                             "bounding_box": {"x": x, "y": y, "width": w, "height": h},
                             "aspect_ratio": float(w / h) if h > 0 else 0,
                         }

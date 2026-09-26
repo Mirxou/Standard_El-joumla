@@ -13,6 +13,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..core.database_manager import DatabaseManager
+from ..utils.db_helpers import escape_like_wildcards
 
 
 class SearchField(Enum):
@@ -73,15 +74,15 @@ class SearchCriteria:
 
         elif self.operator == SearchOperator.CONTAINS:
             sql = f"{self._get_column()} LIKE ?"
-            params.append(f"%{self.value}%")
+            params.append(f"%{escape_like_wildcards(str(self.value))}%")
 
         elif self.operator == SearchOperator.STARTS_WITH:
             sql = f"{self._get_column()} LIKE ?"
-            params.append(f"{self.value}%")
+            params.append(f"{escape_like_wildcards(str(self.value))}%")
 
         elif self.operator == SearchOperator.ENDS_WITH:
             sql = f"{self._get_column()} LIKE ?"
-            params.append(f"%{self.value}")
+            params.append(f"%{escape_like_wildcards(str(self.value))}")
 
         elif self.operator == SearchOperator.GREATER_THAN:
             sql = f"{self._get_column()} > ?"
@@ -113,7 +114,7 @@ class SearchCriteria:
         """الحصول على اسم العمود من الحقل"""
         mapping = {
             SearchField.PRODUCT_NAME: "p.name",
-            SearchField.PRODUCT_SKU: "p.sku",
+            SearchField.PRODUCT_SKU: "p.barcode",  # COLUMN_CHECK: schema has 'barcode', not 'sku'
             SearchField.PRODUCT_BARCODE: "p.barcode",
             SearchField.CUSTOMER_NAME: "c.name",
             SearchField.CUSTOMER_PHONE: "c.phone",
@@ -153,8 +154,8 @@ class SearchService:
                 SELECT
                     p.id,
                     p.name,
-                    p.sku,
                     p.barcode,
+                    p.barcode as sku,  # COLUMN_CHECK: alias 'sku' for compat; schema column is 'barcode'
                     p.selling_price,
                     p.cost_price,
                     p.current_stock,
@@ -164,7 +165,7 @@ class SearchService:
             """
             where_clause, params = self._build_where_clause(criteria_list)
             if where_clause:
-                query = f"{base_query} WHERE {where_clause}"
+                query = f"{base_query} WHERE {where_clause}"  # SQL_SAFE: where_clause from _build_where_clause (parameterized)
             else:
                 query = base_query
 
@@ -173,7 +174,7 @@ class SearchService:
                 sort_order = sort_order.upper()
                 if sort_order not in ("ASC", "DESC"):
                     sort_order = "DESC"
-                query += f" ORDER BY {sort_col} {sort_order}"
+                query += f" ORDER BY {sort_col} {sort_order}"  # SQL_SAFE: sort_col and sort_order are hardcoded/validated
             else:
                 query += " ORDER BY p.name"
 
@@ -210,8 +211,8 @@ class SearchService:
             SELECT
                 p.id,
                 p.name,
-                p.sku,
                 p.barcode,
+                p.barcode as sku,  # COLUMN_CHECK: alias for compat; schema column is 'barcode'
                 p.selling_price,
                 p.cost_price,
                 p.current_stock,
@@ -223,7 +224,7 @@ class SearchService:
         where_clause, params = self._build_where_clause(criteria_list)
 
         if where_clause:
-            query = f"{base_query} WHERE {where_clause}"
+            query = f"{base_query} WHERE {where_clause}"  # SQL_SAFE: where_clause from _build_where_clause (parameterized)
         else:
             query = base_query
 
@@ -251,7 +252,7 @@ class SearchService:
         where_clause, params = self._build_where_clause(criteria_list)
 
         if where_clause:
-            query = f"{base_query} WHERE {where_clause}"
+            query = f"{base_query} WHERE {where_clause}"  # SQL_SAFE: where_clause from _build_where_clause (parameterized)
         else:
             query = base_query
 
@@ -269,6 +270,7 @@ class SearchService:
         offset: int = 0,
     ) -> List[Dict[str, Any]]:
         """البحث في فواتير المبيعات"""
+        # VALIDATION: consider adding date range validation (start_date <= end_date)
         base_query = """
             SELECT
                 s.id,
@@ -302,7 +304,7 @@ class SearchService:
                 params.extend(custom_params)
 
         if where_parts:
-            query = f"{base_query} WHERE {' AND '.join(where_parts)}"
+            query = f"{base_query} WHERE {' AND '.join(where_parts)}"  # SQL_SAFE: where_parts built from parameterized conditions
         else:
             query = base_query
 
@@ -325,7 +327,7 @@ class SearchService:
         Returns:
             النتائج المطابقة
         """
-        search_pattern = f"%{search_text}%"
+        search_pattern = f"%{escape_like_wildcards(search_text)}%"
 
         if entity == "products":
             query = """
@@ -411,9 +413,9 @@ class SearchService:
         where_clause, params = self._build_where_clause(criteria_list)
 
         if where_clause:
-            query = f"SELECT COUNT(*) as total FROM {table} WHERE {where_clause}"
+            query = f"SELECT COUNT(*) as total FROM {table} WHERE {where_clause}"  # SQL_SAFE: table from ALLOWED_TABLES; where_clause parameterized
         else:
-            query = f"SELECT COUNT(*) as total FROM {table}"
+            query = f"SELECT COUNT(*) as total FROM {table}"  # SQL_SAFE: table from ALLOWED_TABLES
 
         result = self.db.execute_query(query, params)
-        return int(result[0]["total"]) if result else 0
+        return int(result[0]["total"] or 0) if result else 0

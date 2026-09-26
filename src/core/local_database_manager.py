@@ -918,6 +918,7 @@ class LocalDatabaseManager:
         """إنشاء الفهارس لتحسين الأداء"""
 
         indexes = [
+            # --- Existing indexes ---
             "CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode)",
             "CREATE INDEX IF NOT EXISTS idx_products_synced ON products(is_synced)",
             "CREATE INDEX IF NOT EXISTS idx_products_deleted ON products(is_deleted)",
@@ -930,6 +931,49 @@ class LocalDatabaseManager:
             "CREATE INDEX IF NOT EXISTS idx_batches_deleted ON batches(is_deleted)",
             "CREATE INDEX IF NOT EXISTS idx_sync_queue_table_record ON sync_queue(table_name, record_id)",
             "CREATE INDEX IF NOT EXISTS idx_sync_queue_retry ON sync_queue(retry_count, last_retry_at)",
+
+            # --- Foreign key indexes (prevent full table scans on JOINs) ---
+            # sale_items FK
+            "CREATE INDEX IF NOT EXISTS idx_sale_items_sale_id ON sale_items(sale_id)",
+            "CREATE INDEX IF NOT EXISTS idx_sale_items_product_id ON sale_items(product_id)",
+            # purchase_items FK
+            "CREATE INDEX IF NOT EXISTS idx_purchase_items_purchase_id ON purchase_items(purchase_id)",
+            "CREATE INDEX IF NOT EXISTS idx_purchase_items_product_id ON purchase_items(product_id)",
+            # journal_lines FK
+            "CREATE INDEX IF NOT EXISTS idx_journal_lines_journal_entry_id ON journal_lines(journal_entry_id)",
+            "CREATE INDEX IF NOT EXISTS idx_journal_lines_account_id ON journal_lines(account_id)",
+            # stock_movements FK
+            "CREATE INDEX IF NOT EXISTS idx_stock_movements_product_id ON stock_movements(product_id)",
+            "CREATE INDEX IF NOT EXISTS idx_stock_movements_warehouse_id ON stock_movements(warehouse_id)",
+            # payments FK
+            "CREATE INDEX IF NOT EXISTS idx_payments_customer_id ON payments(customer_id)",
+            "CREATE INDEX IF NOT EXISTS idx_payments_supplier_id ON payments(supplier_id)",
+
+            # --- Commonly filtered columns ---
+            # sales.sale_date — date range queries (daily/weekly/monthly reports)
+            "CREATE INDEX IF NOT EXISTS idx_sales_sale_date ON sales(sale_date)",
+            # sales.customer_id — customer purchase history
+            "CREATE INDEX IF NOT EXISTS idx_sales_customer_id ON sales(customer_id)",
+            # products.category_id — category filtering / product listing
+            "CREATE INDEX IF NOT EXISTS idx_products_category_id ON products(category_id)",
+            # inventory.product_id — stock lookups
+            "CREATE INDEX IF NOT EXISTS idx_inventory_product_id ON inventory(product_id)",
+            # stock_movements.created_at — date range queries on movements
+            "CREATE INDEX IF NOT EXISTS idx_stock_movements_created_at ON stock_movements(created_at)",
+
+            # --- Commonly sorted columns ---
+            # products.name — alphabetical product listing
+            "CREATE INDEX IF NOT EXISTS idx_products_name ON products(name)",
+            # sales.created_at — recent sales first
+            "CREATE INDEX IF NOT EXISTS idx_sales_created_at ON sales(created_at)",
+
+            # --- Composite / covering indexes for frequent query patterns ---
+            # sale_items(sale_id, product_id) — join + filter in one index
+            "CREATE INDEX IF NOT EXISTS idx_sale_items_sale_product ON sale_items(sale_id, product_id)",
+            # sales(customer_id, sale_date) — customer history with date filter
+            "CREATE INDEX IF NOT EXISTS idx_sales_customer_date ON sales(customer_id, sale_date)",
+            # stock_movements(product_id, created_at) — product movement history
+            "CREATE INDEX IF NOT EXISTS idx_stock_movements_product_date ON stock_movements(product_id, created_at)",
         ]
 
         for index_sql in indexes:
@@ -1025,15 +1069,15 @@ class LocalDatabaseManager:
                                 query = query[:where_pos] + f" {table_name}.is_deleted = 0 AND " + query[where_pos:]
                             elif "GROUP BY" in query_upper_full:
                                 gb_pos = query_upper_full.find("GROUP BY")
-                                query = query[:gb_pos] + f" WHERE {table_name}.is_deleted = 0 " + query[gb_pos:]
+                                query = query[:gb_pos] + f" WHERE {table_name}.is_deleted = 0 " + query[gb_pos:]  # SQL_SAFE: table_name from internal execute_query parameter
                             elif "ORDER BY" in query_upper_full:
                                 ob_pos = query_upper_full.find("ORDER BY")
-                                query = query[:ob_pos] + f" WHERE {table_name}.is_deleted = 0 " + query[ob_pos:]
+                                query = query[:ob_pos] + f" WHERE {table_name}.is_deleted = 0 " + query[ob_pos:]  # SQL_SAFE: table_name from internal execute_query parameter
                             elif "LIMIT" in query_upper_full:
                                 l_pos = query_upper_full.find("LIMIT")
-                                query = query[:l_pos] + f" WHERE {table_name}.is_deleted = 0 " + query[l_pos:]
+                                query = query[:l_pos] + f" WHERE {table_name}.is_deleted = 0 " + query[l_pos:]  # SQL_SAFE: table_name from internal execute_query parameter
                             else:
-                                query += f" WHERE {table_name}.is_deleted = 0"
+                                query += f" WHERE {table_name}.is_deleted = 0"  # SQL_SAFE: table_name from internal execute_query parameter
 
             from enum import Enum
 

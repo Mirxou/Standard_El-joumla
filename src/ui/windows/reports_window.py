@@ -914,7 +914,7 @@ class ReportsWindow(QMainWindow):
         status_bar.addPermanentWidget(self.time_label)
 
         # تحديث الوقت كل دقيقة
-        self.time_timer = QTimer()
+        self.time_timer = QTimer(self)  # MEMORY: parent=self ensures timer is destroyed with window
         self.time_timer.timeout.connect(self.update_time)
         # self.time_timer.start(60000)  # 🔥 معطّل لمنع التجميد
 
@@ -1298,7 +1298,7 @@ class ReportsWindow(QMainWindow):
                         warehouses = self.db_manager.fetch_all(query)
                         if warehouses:
                             for w in warehouses:
-                                self.warehouse_combo.addItem(str(w["name"]), w["id"])
+                                self.warehouse_combo.addItem(str(w.get("name", "")), w.get("id"))
                     except Exception:
                         pass  # الجدول قد لا يكون موجوداً
 

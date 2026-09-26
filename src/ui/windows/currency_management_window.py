@@ -37,6 +37,7 @@ from src.core.database_manager import DatabaseManager
 from src.models.currency import Currency, CurrencyManager, ExchangeRate
 from src.services.exchange_rate_service import ExchangeRateService
 from src.ui.styles.design_tokens import C
+from src.utils.db_helpers import safe_int
 from src.utils.logger import setup_logger
 
 project_root = Path(__file__).parent.parent.parent.parent
@@ -240,7 +241,7 @@ class ExchangeRateDialog(QDialog):
             if to_idx >= 0:
                 self.to_currency_combo.setCurrentIndex(to_idx)
 
-            self.rate_spin.setValue(float(self.exchange_rate.rate))
+            self.rate_spin.setValue(float(self.exchange_rate.rate or 0))
 
             if self.exchange_rate.effective_date:
                 effective_qdate = QDate(
@@ -523,7 +524,9 @@ class CurrencyManagementWindow(QMainWindow):
         if not id_cell:
             QMessageBox.warning(self, "تحذير", "لم يتم العثور على العملة")
             return
-        currency_id = int(id_cell.text())
+        currency_id = safe_int(id_cell.text(), default=-1)
+        if currency_id <= 0:
+            return
         currency = self.currency_manager.get_currency(currency_id)
 
         if currency:
@@ -553,7 +556,9 @@ class CurrencyManagementWindow(QMainWindow):
         if not id_cell or not code_cell:
             QMessageBox.warning(self, "تحذير", "لم يتم العثور على بيانات العملة")
             return
-        currency_id = int(id_cell.text())
+        currency_id = safe_int(id_cell.text(), default=-1)
+        if currency_id <= 0:
+            return
         currency_code = code_cell.text()
 
         reply = QMessageBox.question(
@@ -614,7 +619,9 @@ class CurrencyManagementWindow(QMainWindow):
         if not id_cell:
             QMessageBox.warning(self, "تحذير", "لم يتم العثور على سعر الصرف")
             return
-        rate_id = int(id_cell.text())
+        rate_id = safe_int(id_cell.text(), default=-1)
+        if rate_id <= 0:
+            return
         rates = self.exchange_rate_service.get_exchange_rates()
         exchange_rate = next((r for r in rates if r.id == rate_id), None)
 
@@ -660,7 +667,9 @@ class CurrencyManagementWindow(QMainWindow):
         if not id_cell or not from_cell or not to_cell:
             QMessageBox.warning(self, "تحذير", "لم يتم العثور على بيانات سعر الصرف")
             return
-        rate_id = int(id_cell.text())
+        rate_id = safe_int(id_cell.text(), default=-1)
+        if rate_id <= 0:
+            return
         from_currency = from_cell.text()
         to_currency = to_cell.text()
 
@@ -695,7 +704,7 @@ class CurrencyManagementWindow(QMainWindow):
 
     def convert_amount(self, amount, from_code, to_code):
         """تحويل المبلغ (Stub for testing)"""
-        return float(amount)
+        return float(amount or 0)
 
     def get_exchange_rates(self):
         """الحصول على أسعار الصرف (Stub for testing)"""

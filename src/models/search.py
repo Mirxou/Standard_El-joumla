@@ -70,8 +70,8 @@ class SearchFilter:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "SearchFilter":
         return cls(
-            field=data["field"],
-            operator=FilterOperator[data["operator"]],
+            field=data.get("field", ""),
+            operator=FilterOperator[data.get("operator", "EQUALS")],
             value=data.get("value"),
             value2=data.get("value2"),
         )
@@ -89,7 +89,7 @@ class SortCriteria:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "SortCriteria":
-        return cls(field=data["field"], direction=SortDirection[data["direction"]])
+        return cls(field=data.get("field", ""), direction=SortDirection[data.get("direction", "ASC")])
 
 
 @dataclass
@@ -124,7 +124,7 @@ class SearchQuery:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "SearchQuery":
         return cls(
-            entity=SearchEntity[data["entity"]],
+            entity=SearchEntity[data.get("entity", "PRODUCT")],
             keyword=data.get("keyword", ""),
             filters=[SearchFilter.from_dict(f) for f in data.get("filters", [])],
             sort_by=[SortCriteria.from_dict(s) for s in data.get("sort_by", [])],

@@ -106,7 +106,7 @@ class PaymentInstallment:
         for field_name in decimal_fields:
             value = getattr(self, field_name)
             if isinstance(value, (int, float, str)):
-                setattr(self, field_name, Decimal(str(value)))
+                setattr(self, field_name, Decimal(str(value or 0)))
 
         if isinstance(self.status, str):
             try:
@@ -227,9 +227,9 @@ class PaymentInstallment:
             "principal_amount": float(self.principal_amount),
             "interest_amount": float(self.interest_amount),
             "late_fee": float(self.late_fee),
-            "total_amount": float(self.total_amount),
+            "total_amount": float(self.total_amount or 0),
             "amount_paid": float(self.amount_paid),
-            "remaining_amount": float(self.remaining_amount),
+            "remaining_amount": float(self.remaining_amount or 0),
             "status": (self.status.name if isinstance(self.status, InstallmentStatus) else self.status),
             "payment_date": (self.payment_date.isoformat() if self.payment_date else None),
             "payment_method": self.payment_method,
@@ -326,7 +326,7 @@ class PaymentPlan:
         for field_name in decimal_fields:
             value = getattr(self, field_name)
             if isinstance(value, (int, float, str)):
-                setattr(self, field_name, Decimal(str(value)))
+                setattr(self, field_name, Decimal(str(value or 0)))
 
         # تحويل الأنواع
         if isinstance(self.status, str):
@@ -543,7 +543,7 @@ class PaymentPlan:
             "description": self.description,
             "start_date": self.start_date.isoformat() if self.start_date else None,
             "end_date": self.end_date.isoformat() if self.end_date else None,
-            "total_amount": float(self.total_amount),
+            "total_amount": float(self.total_amount or 0),
             "down_payment": float(self.down_payment),
             "financed_amount": float(self.financed_amount),
             "number_of_installments": self.number_of_installments,

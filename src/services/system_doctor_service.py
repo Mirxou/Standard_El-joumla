@@ -1,6 +1,7 @@
 import logging
 import gc
 import os
+import sqlite3
 from typing import Tuple
 
 import psutil
@@ -33,8 +34,8 @@ class SystemDoctorService:
             orphans = self.db.execute_scalar(q1)
             if orphans and orphans > 0:
                 issues.append(f"Found {orphans} orphaned sale items")
-        except Exception:
-            logging.getLogger(__name__).warning("Ignored exception in system_doctor_service.py")
+        except sqlite3.Error:
+            logging.getLogger(__name__).warning("Ignored sqlite error in system_doctor_service check_orphans")
 
         # Check 2: Negative Stock (Logical error)
         q2 = "SELECT count(*) FROM products WHERE current_stock < 0"
@@ -42,8 +43,8 @@ class SystemDoctorService:
             neg_stock = self.db.execute_scalar(q2)
             if neg_stock and neg_stock > 0:
                 issues.append(f"Found {neg_stock} products with negative stock")
-        except Exception:
-            logging.getLogger(__name__).warning("Ignored exception in system_doctor_service.py")
+        except sqlite3.Error:
+            logging.getLogger(__name__).warning("Ignored sqlite error in system_doctor_service check_negative_stock")
 
         return issues
 
@@ -74,7 +75,7 @@ class SystemDoctorService:
             count1 = self.db.execute_non_query(q_fix1)
             if count1 > 0:
                 reports.append(f"Cleaned up {count1} orphaned items")
-        except Exception as e:
+        except sqlite3.Error as e:
             reports.append(f"Failed to fix orphans: {e}")
 
         # Heal 2: Fix Negative Stock (Reset to 0)
@@ -83,7 +84,7 @@ class SystemDoctorService:
             count2 = self.db.execute_non_query(q_fix2)
             if count2 > 0:
                 reports.append(f"Reset {count2} products with negative stock to 0")
-        except Exception as e:
+        except sqlite3.Error as e:
             reports.append(f"Failed to fix negative stock: {e}")
 
         return reports
@@ -103,7 +104,7 @@ class SystemDoctorService:
                 "cpu_percent": cpu_percent,
                 "status": "healthy" if memory_mb < 500 else "warning",
             }
-        except Exception:
+        except (ImportError, OSError):
             return {"memory_mb": 0, "cpu_percent": 0, "status": "unknown"}
 
     def optimize_memory(self) -> Tuple[bool, str]:
@@ -123,5 +124,5 @@ class SystemDoctorService:
             freed = before - after
 
             return True, f"تم تحرير {freed:.2f} ميجابايت من الذاكرة"
-        except Exception as e:
+        except (ImportError, OSError) as e:
             return False, f"فشل تحسين الذاكرة: {str(e)}"

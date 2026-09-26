@@ -108,7 +108,7 @@ class DataUpdateWorker(QThread):
     def __init__(self, payment_service: PaymentService):
         super().__init__()
         self.payment_service = payment_service
-        self.running = True
+        self.running = True  # THREAD: not used in run(); safe but consider removal
 
     def run(self):
         """تشغيل عملية تحديث البيانات"""
@@ -216,7 +216,7 @@ class PaymentDashboard(QMainWindow):
             self.data_worker = None
 
         # تحديث البيانات كل 5 دقائق
-        self.update_timer = QTimer()
+        self.update_timer = QTimer(self)  # MEMORY: parent=self ensures timer is destroyed with window
         self.update_timer.timeout.connect(self.refresh_data)
         # self.update_timer.start(300000)  # 🔥 معطّل لمنع التجميد
 
@@ -580,7 +580,7 @@ class PaymentDashboard(QMainWindow):
             # total_amount: flat or nested
             total_amount = kpis.get('total_amount') or summary.get('total_amount', 0)
             if total_amount:
-                self._set_kpi_value("إجمالي المدفوعات", f"{float(total_amount):,.0f} د.ج")
+                self._set_kpi_value("إجمالي المدفوعات", f"{float(total_amount or 0):,.0f} د.ج")
 
             # total_transactions: flat or nested
             total_tx = kpis.get('total_transactions') or summary.get('total_transactions', 0)
@@ -723,7 +723,7 @@ class PaymentDashboard(QMainWindow):
                     period_types = inner[period]
                     # Sum all payment types for this period
                     total = sum(
-                        float(v.get("total_amount", 0))
+                        float(v.get("total_amount", 0) or 0)
                         for v in period_types.values()
                         if isinstance(v, dict)
                     )
@@ -771,7 +771,7 @@ class PaymentDashboard(QMainWindow):
                 # Sort by month
                 all_points.sort(key=lambda x: x.get("month", ""))
                 for i, fc in enumerate(all_points):
-                    forecast_series.append(i, float(fc.get("predicted_amount", 0)))
+                    forecast_series.append(i, float(fc.get("predicted_amount", 0) or 0))
             elif "forecasts" in forecast_data:
                 # Legacy flat format
                 for i, forecast in enumerate(forecast_data["forecasts"]):

@@ -9,6 +9,9 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class AgentStatus(Enum):
@@ -158,7 +161,7 @@ class MultiAgentCoordinator:
 
         self.agents[agent_obj.agent_id] = agent_obj
         self.agent_assignments[agent_obj.agent_id] = []
-        print(f"تم تسجيل الوكيل: {agent_obj.agent_id}")
+        logger.info("Agent registered: %s", agent_obj.agent_id)
         return True
 
     def unregister_agent(self, agent_id: str) -> bool:
@@ -248,7 +251,7 @@ class MultiAgentCoordinator:
     def submit_task(self, task: AgentTask) -> str:
         """تقديم مهمة جديدة"""
         self.task_queue.append(task)
-        print(f"تم تقديم المهمة: {task.task_id} - {task.description}")
+        logger.info("Task submitted: %s - %s", task.task_id, task.description)
         return task.task_id
 
     def assign_task(self, task: AgentTask) -> Optional[str]:
@@ -260,7 +263,7 @@ class MultiAgentCoordinator:
         ]
 
         if not available_agents:
-            print(f"لا يوجد وكيل متاح للنوع: {task.agent_type.value}")
+            logger.warning("No available agent for type: %s", task.agent_type.value)
             return None
 
         selected_agent = min(available_agents, key=lambda a: a.tasks_completed)
@@ -271,7 +274,7 @@ class MultiAgentCoordinator:
         selected_agent.update_status(AgentStatus.BUSY)
         self.agent_assignments[selected_agent.agent_id].append(task.task_id)
 
-        print(f"تم تعيين المهمة {task.task_id} لوكيل {selected_agent.agent_id}")
+        logger.info("Task %s assigned to agent %s", task.task_id, selected_agent.agent_id)
         return selected_agent.agent_id
 
     def execute_task(self, task_id: str) -> Optional[AgentResult]:
@@ -309,7 +312,7 @@ class MultiAgentCoordinator:
             if task in self.task_queue:
                 self.task_queue.remove(task)
 
-            print(f"تم إنجاز المهمة: {task_id}")
+            logger.info("Task completed: %s", task_id)
             return result
 
         except Exception as e:
@@ -317,7 +320,7 @@ class MultiAgentCoordinator:
             task.error = str(e)
             if hasattr(agent, "update_status"):
                 agent.update_status(AgentStatus.ERROR)
-            print(f"فشل في تنفيذ المهمة {task_id}: {str(e)}")
+            logger.error("Task execution failed %s: %s", task_id, str(e))
             return None
 
     def get_agent_status(self, agent_id: str) -> Optional[Dict[str, Any]]:
@@ -359,5 +362,5 @@ class MultiAgentCoordinator:
         for agent in self.agents.values():
             if hasattr(agent, "update_status"):
                 agent.update_status(AgentStatus.IDLE)
-        print("تم إغلاق منسق الوكلاء")
+        logger.info("Multi-agent coordinator shut down")
 

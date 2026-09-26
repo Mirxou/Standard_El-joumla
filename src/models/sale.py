@@ -121,9 +121,9 @@ class SaleItem:
             v = getattr(self, f, None)
             if v is not None:
                 setattr(self, f, Decimal(str(v)))
-        self.quantity = float(self.quantity)
+        self.quantity = float(self.quantity or 0)
         # تهيئة subtotal
-        self._subtotal = Decimal(str(self.quantity)) * self.unit_price
+        self._subtotal = Decimal(str(self.quantity or 0)) * self.unit_price
 
     @property
     def subtotal(self) -> Decimal:
@@ -136,14 +136,24 @@ class SaleItem:
         return self.discount
 
     def calculate_total(self):
-        qty = Decimal(str(self.quantity))
+        qty = Decimal(str(self.quantity or 0))
         self._subtotal = qty * self.unit_price
+        # Constraint: discount_percentage must be 0-100%
+        disc_pct = self.discount_percentage
+        if disc_pct < 0:
+            disc_pct = Decimal("0.00")
+        elif disc_pct > 100:
+            disc_pct = Decimal("100.00")
         self.discount = self._subtotal * (
-            self.discount_percentage / Decimal("100.00")
+            disc_pct / Decimal("100.00")
         )
+        # Constraint: tax_percentage must be >= 0
+        tax_pct = self.tax_percentage
+        if tax_pct < 0:
+            tax_pct = Decimal("0.00")
         after_discount = self._subtotal - self.discount
         self.tax_amount = after_discount * (
-            self.tax_percentage / Decimal("100.00")
+            tax_pct / Decimal("100.00")
         )
         self.total_price = after_discount + self.tax_amount
         self.total_amount = self.total_price
@@ -226,7 +236,7 @@ class Sale:
         if self._subtotal_val is not None:
             return self._subtotal_val
         return sum(
-            Decimal(str(item.quantity)) * item.unit_price
+            Decimal(str(item.quantity or 0)) * item.unit_price
             for item in self.items
         )
 
@@ -235,7 +245,7 @@ class Sale:
         if isinstance(value, property):
             return
         self._subtotal_val = (
-            Decimal(str(value)) if value is not None else None
+            Decimal(str(value or 0)) if value is not None else None
         )
 
     @property
@@ -276,15 +286,25 @@ class Sale:
 
         if self.items:
             sub = self.subtotal
-            if self.discount_percentage > 0:
+            # Constraint: discount_percentage must be 0-100%
+            disc_pct = self.discount_percentage
+            if disc_pct < 0:
+                disc_pct = Decimal("0.00")
+            elif disc_pct > 100:
+                disc_pct = Decimal("100.00")
+            if disc_pct > 0:
                 self.discount_amount = sub * (
-                    self.discount_percentage / Decimal("100.00")
+                    disc_pct / Decimal("100.00")
                 )
 
             after_discount = sub - self.discount_amount
-            if self.tax_percentage > 0:
+            # Constraint: tax_percentage must be >= 0
+            tax_pct = self.tax_percentage
+            if tax_pct < 0:
+                tax_pct = Decimal("0.00")
+            if tax_pct > 0:
                 self.tax_amount = after_discount * (
-                    self.tax_percentage / Decimal("100.00")
+                    tax_pct / Decimal("100.00")
                 )
 
             self.total_amount = after_discount + self.tax_amount
@@ -332,7 +352,7 @@ class Sale:
             ),
             "notes": self.notes,
             "items_count": self.items_count,
-            "total_quantity": float(self.total_quantity),
+            "total_quantity": float(self.total_quantity or 0),
             "is_paid": self.is_paid,
             "items": [item.to_dict() for item in self.items],
         }
@@ -372,7 +392,7 @@ class SaleManager:
             )
             if row and row.get("invoice_number"):
                 try:
-                    seq = int(row["invoice_number"].split("-")[-1]) + 1
+                    seq = int(row.get("invoice_number", "").split("-")[-1]) + 1
                 except (ValueError, IndexError):
                     seq = 1
             else:
@@ -544,14 +564,14 @@ class SaleManager:
             sale.customer_name,
             sale.customer_phone,
             sale.due_date,
-            float(sale.total_amount),
-            float(sale.discount_amount),
-            float(sale.discount_percentage),
-            float(sale.tax_amount),
-            float(sale.tax_percentage),
-            float(sale.final_amount),
-            float(sale.paid_amount),
-            float(sale.remaining_amount),
+            float(sale.total_amount or 0),
+            float(sale.discount_amount or 0),
+            float(sale.discount_percentage or 0),
+            float(sale.tax_amount or 0),
+            float(sale.tax_percentage or 0),
+            float(sale.final_amount or 0),
+            float(sale.paid_amount or 0),
+            float(sale.remaining_amount or 0),
             (
                 sale.status.value
                 if isinstance(sale.status, Enum)
@@ -566,9 +586,9 @@ class SaleManager:
             sale.notes,
             sale.user_id,
             sale.currency_id,
-            float(sale.exchange_rate),
+            float(sale.exchange_rate or 0),
             (
-                float(sale.subtotal)
+                float(sale.subtotal or 0)
                 if sale.subtotal is not None
                 else None
             ),
@@ -597,14 +617,14 @@ class SaleManager:
             ("customer_name", sale.customer_name),
             ("customer_phone", sale.customer_phone),
             ("due_date", sale.due_date),
-            ("total_amount", float(sale.total_amount)),
-            ("discount_amount", float(sale.discount_amount)),
-            ("discount_percentage", float(sale.discount_percentage)),
-            ("tax_amount", float(sale.tax_amount)),
-            ("tax_percentage", float(sale.tax_percentage)),
-            ("final_amount", float(sale.final_amount)),
-            ("paid_amount", float(sale.paid_amount)),
-            ("remaining_amount", float(sale.remaining_amount)),
+            ("total_amount", float(sale.total_amount or 0)),
+            ("discount_amount", float(sale.discount_amount or 0)),
+            ("discount_percentage", float(sale.discount_percentage or 0)),
+            ("tax_amount", float(sale.tax_amount or 0)),
+            ("tax_percentage", float(sale.tax_percentage or 0)),
+            ("final_amount", float(sale.final_amount or 0)),
+            ("paid_amount", float(sale.paid_amount or 0)),
+            ("remaining_amount", float(sale.remaining_amount or 0)),
             (
                 "status",
                 (
@@ -625,11 +645,11 @@ class SaleManager:
             ("notes", sale.notes),
             ("user_id", sale.user_id),
             ("currency_id", sale.currency_id),
-            ("exchange_rate", float(sale.exchange_rate)),
+            ("exchange_rate", float(sale.exchange_rate or 0)),
             (
                 "subtotal",
                 (
-                    float(sale.subtotal)
+                    float(sale.subtotal or 0)
                     if sale.subtotal is not None
                     else None
                 ),
@@ -689,14 +709,20 @@ class SaleManager:
     def _create_sale_item(self, item: SaleItem):
         """إنشاء عنصر فاتورة مستقل مع جلب التكلفة والدفعة"""
         try:
-            # جلب سعر التكلفة
-            cost_row = self.db_manager.fetch_one(
-                "SELECT cost_price FROM products "
-                "WHERE id = ?",
+            # FK constraint: product_id must reference an existing product
+            product_row = self.db_manager.fetch_one(
+                "SELECT id, cost_price FROM products WHERE id = ?",
                 (item.product_id,)
             )
-            if cost_row:
-                item.cost_price = Decimal(str(cost_row.get("cost_price", 0) or 0))
+            if not product_row:
+                if self.logger:
+                    self.logger.warning(f"Cannot create sale_item: product_id {item.product_id} does not exist (FK constraint)")
+                return None
+
+            # جلب سعر التكلفة
+            cost_price_val = product_row.get("cost_price", 0) if isinstance(product_row, dict) else product_row[1]
+            if cost_price_val is not None:
+                item.cost_price = Decimal(str(cost_price_val or 0))
 
             # جلب أو إنشاء الدفعة بنظام FEFO (الأقرب للانتهاء أولاً)
             batch_row = self.db_manager.fetch_one(
@@ -726,8 +752,8 @@ class SaleManager:
                         item.product_id,
                         "AUTO",
                         item.quantity,
-                        float(item.cost_price),
-                        float(item.unit_price),
+                        float(item.cost_price or 0),
+                        float(item.unit_price or 0),
                     ),
                 )
                 if not batch_id:
@@ -747,11 +773,11 @@ class SaleManager:
                 item.product_id,
                 item.batch_id,
                 item.quantity,
-                float(item.unit_price),
-                float(item.total_price),
-                float(item.cost_price),
-                float(item.profit),
-                float(item.discount),
+                float(item.unit_price or 0),
+                float(item.total_price or 0),
+                float(item.cost_price or 0),
+                float(item.profit or 0),
+                float(item.discount or 0),
             )
             return self.db_manager.execute_insert(query, params)
         except Exception as e:
@@ -806,11 +832,11 @@ class SaleManager:
                     item.product_id,
                     item.batch_id,
                     item.quantity,
-                    float(item.unit_price),
-                    float(item.total_price),
-                    float(item.cost_price),
-                    float(item.profit),
-                    float(item.discount),
+                    float(item.unit_price or 0),
+                    float(item.total_price or 0),
+                    float(item.cost_price or 0),
+                    float(item.profit or 0),
+                    float(item.discount or 0),
                 ),
             )
             return cursor.lastrowid
@@ -956,7 +982,7 @@ class SaleManager:
             return
 
         for item in items:
-            qty_needed = float(item.quantity)
+            qty_needed = float(item.quantity or 0)
 
             # 1. حساب الرصيد الإجمالي المتاح للقطعة الحالية
             cursor.execute("""
@@ -1118,28 +1144,28 @@ class SaleManager:
                 sale_date=self._parse_date(gv("sale_date", 7)),
                 due_date=self._parse_date(gv("due_date", 15)),
                 total_amount=Decimal(
-                    str(gv("total_amount", 3, 0))
+                    str(gv("total_amount", 3, 0) or 0)
                 ),
                 discount_amount=Decimal(
-                    str(gv("discount_amount", 4, 0))
+                    str(gv("discount_amount", 4, 0) or 0)
                 ),
                 discount_percentage=Decimal(
-                    str(gv("discount_percentage", 18, 0))
+                    str(gv("discount_percentage", 18, 0) or 0)
                 ),
                 tax_amount=Decimal(
-                    str(gv("tax_amount", 19, 0))
+                    str(gv("tax_amount", 19, 0) or 0)
                 ),
                 tax_percentage=Decimal(
-                    str(gv("tax_percentage", 20, 0))
+                    str(gv("tax_percentage", 20, 0) or 0)
                 ),
                 final_amount=Decimal(
-                    str(gv("final_amount", 5, 0))
+                    str(gv("final_amount", 5, 0) or 0)
                 ),
                 paid_amount=Decimal(
-                    str(gv("paid_amount", 21, 0))
+                    str(gv("paid_amount", 21, 0) or 0)
                 ),
                 remaining_amount=Decimal(
-                    str(gv("remaining_amount", 22, 0))
+                    str(gv("remaining_amount", 22, 0) or 0)
                 ),
                 status=gv("status", 16, SaleStatus.PENDING.value),
                 payment_method=gv(
@@ -1149,7 +1175,7 @@ class SaleManager:
                 user_id=gv("user_id", 8),
                 currency_id=gv("currency_id", 23),
                 exchange_rate=Decimal(
-                    str(gv("exchange_rate", 24, 1.0))
+                    str(gv("exchange_rate", 24, 1.0) or 0)
                 ),
                 created_at=self._parse_datetime(
                     gv("created_at", 11)
@@ -1158,7 +1184,7 @@ class SaleManager:
                     gv("updated_at", 12)
                 ),
                 subtotal=(
-                    Decimal(str(gv("subtotal", 17, 0)))
+                    Decimal(str(gv("subtotal", 17, 0) or 0))
                     if gv("subtotal", 17) is not None
                     else None
                 ),
@@ -1174,13 +1200,13 @@ class SaleManager:
                 invoice_number=gv("invoice_number", 1, ""),
                 customer_id=gv("customer_id", 2),
                 total_amount=Decimal(
-                    str(gv("total_amount", 3, 0))
+                    str(gv("total_amount", 3, 0) or 0)
                 ),
                 discount_amount=Decimal(
-                    str(gv("discount_amount", 4, 0))
+                    str(gv("discount_amount", 4, 0) or 0)
                 ),
                 final_amount=Decimal(
-                    str(gv("final_amount", 5, 0))
+                    str(gv("final_amount", 5, 0) or 0)
                 ),
                 payment_method=gv(
                     "payment_method", 6, PaymentMethod.CASH.value
@@ -1193,10 +1219,10 @@ class SaleManager:
                     SaleStatus.PENDING.value
                 ),
                 paid_amount=Decimal(
-                    str(gv("paid_amount", paid_idx, 0))
+                    str(gv("paid_amount", paid_idx, 0) or 0)
                 ),
                 remaining_amount=Decimal(
-                    str(gv("remaining_amount", remaining_idx, 0))
+                    str(gv("remaining_amount", remaining_idx, 0) or 0)
                 ),
                 customer_name=gv(
                     "customer_name", 13, "عميل نقدي"
@@ -1204,7 +1230,7 @@ class SaleManager:
                 customer_phone=gv("customer_phone", 14),
                 due_date=self._parse_date(gv("due_date", 15)),
                 subtotal=(
-                    Decimal(str(gv("subtotal", 16, 0)))
+                    Decimal(str(gv("subtotal", 16, 0) or 0))
                     if gv("subtotal", 16) is not None
                     else None
                 ),
@@ -1241,13 +1267,13 @@ class SaleManager:
             sale_id=gv("sale_id", 1),
             product_id=gv("product_id", 2),
             batch_id=gv("batch_id", 3, 1),
-            quantity=float(gv("quantity", 4, 0)),
-            unit_price=Decimal(str(gv("unit_price", 5, 0))),
-            total_price=Decimal(str(gv("total_price", 6, 0))),
-            cost_price=Decimal(str(gv("cost_price", 7, 0))),
-            profit=Decimal(str(gv("profit", 8, 0))),
-            discount=Decimal(str(gv("discount", 10, 0))),
-            tax_amount=Decimal(str(gv("tax_amount", 11, 0))),
+            quantity=float(gv("quantity", 4, 0) or 0),
+            unit_price=Decimal(str(gv("unit_price", 5, 0) or 0)),
+            total_price=Decimal(str(gv("total_price", 6, 0) or 0)),
+            cost_price=Decimal(str(gv("cost_price", 7, 0) or 0)),
+            profit=Decimal(str(gv("profit", 8, 0) or 0)),
+            discount=Decimal(str(gv("discount", 10, 0) or 0)),
+            tax_amount=Decimal(str(gv("tax_amount", 11, 0) or 0)),
         )
 
     def _parse_datetime(self, val):
@@ -1374,14 +1400,14 @@ class SaleManager:
                         sale.customer_name,
                         sale.customer_phone,
                         sale.due_date,
-                        float(sale.total_amount),
-                        float(sale.discount_amount),
-                        float(sale.discount_percentage),
-                        float(sale.tax_amount),
-                        float(sale.tax_percentage),
-                        float(sale.final_amount),
-                        float(sale.paid_amount),
-                        float(sale.remaining_amount),
+                        float(sale.total_amount or 0),
+                        float(sale.discount_amount or 0),
+                        float(sale.discount_percentage or 0),
+                        float(sale.tax_amount or 0),
+                        float(sale.tax_percentage or 0),
+                        float(sale.final_amount or 0),
+                        float(sale.paid_amount or 0),
+                        float(sale.remaining_amount or 0),
                         (
                             sale.status.value
                             if isinstance(sale.status, Enum)
@@ -1396,9 +1422,9 @@ class SaleManager:
                         sale.notes,
                         sale.user_id,
                         sale.currency_id,
-                        float(sale.exchange_rate),
+                        float(sale.exchange_rate or 0),
                         (
-                            float(sale.subtotal)
+                            float(sale.subtotal or 0)
                             if sale.subtotal is not None
                             else None
                         ),
@@ -1461,14 +1487,14 @@ class SaleManager:
             sale.customer_name,
             sale.customer_phone,
             sale.due_date,
-            float(sale.total_amount),
-            float(sale.discount_amount),
-            float(sale.discount_percentage),
-            float(sale.tax_amount),
-            float(sale.tax_percentage),
-            float(sale.final_amount),
-            float(sale.paid_amount),
-            float(sale.remaining_amount),
+            float(sale.total_amount or 0),
+            float(sale.discount_amount or 0),
+            float(sale.discount_percentage or 0),
+            float(sale.tax_amount or 0),
+            float(sale.tax_percentage or 0),
+            float(sale.final_amount or 0),
+            float(sale.paid_amount or 0),
+            float(sale.remaining_amount or 0),
             (
                 sale.status.value
                 if isinstance(sale.status, Enum)
@@ -1483,9 +1509,9 @@ class SaleManager:
             sale.notes,
             sale.user_id,
             sale.currency_id,
-            float(sale.exchange_rate),
+            float(sale.exchange_rate or 0),
             (
-                float(sale.subtotal)
+                float(sale.subtotal or 0)
                 if sale.subtotal is not None
                 else None
             ),
@@ -1502,11 +1528,11 @@ class SaleManager:
         """
         params = (
             item.quantity,
-            float(item.unit_price),
-            float(item.total_price),
-            float(item.cost_price),
-            float(item.profit),
-            float(item.discount),
+            float(item.unit_price or 0),
+            float(item.total_price or 0),
+            float(item.cost_price or 0),
+            float(item.profit or 0),
+            float(item.discount or 0),
             item.id,
         )
         self.db_manager.execute_non_query(query, params)
@@ -1588,7 +1614,7 @@ class SaleManager:
             "invoice_number": gv("invoice_number", 1, ""),
             "customer_id": gv("customer_id", 2),
             "total_amount": float(
-                Decimal(str(gv("total_amount", 3, 0)))
+                Decimal(str(gv("total_amount", 3, 0) or 0))
             ),
             "status": gv("status", 16, ""),
         }
@@ -1891,7 +1917,7 @@ class SaleManager:
                 cursor.execute(
                     "UPDATE products SET current_stock = "
                     "current_stock + ? WHERE id = ?",
-                    (item.get("quantity", item.get("qty", 0)), item["product_id"]),
+                    (item.get("quantity", item.get("qty", 0)), item.get("product_id", 0)),
                 )
                 # Update batch quantity if batch_id is available
                 batch_id = item.get('batch_id')

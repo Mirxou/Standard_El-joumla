@@ -11,7 +11,7 @@ from cryptography.fernet import Fernet
 
 class EncryptionService:
     def __init__(self, key: str):
-        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger = logging.getLogger(__name__)
         self.raw_key = key
         # توليد مفتاح متوافق مع Fernet (32 بايت مرمز بـ base64 ملائم للمسارات)
         h = hashlib.sha256(key.encode()).digest()
@@ -28,7 +28,7 @@ class EncryptionService:
             return self._fernet.encrypt(plaintext.encode()).decode()
         except Exception as e:
             self.logger.error(f"خطأ أثناء تشفير البيانات: {e}")
-            return f"PLAINTEXT::{plaintext}"
+            raise ValueError(f"Encryption failed: {e}") from e
 
     def decrypt(self, enc: str) -> str:
         """
@@ -42,6 +42,5 @@ class EncryptionService:
         try:
             return self._fernet.decrypt(enc.encode()).decode()
         except Exception as e:
-            # محاولة التعامل مع التشفير القديم أو فك التشفير كـ plaintext احتياطياً
-            self.logger.warning(f"فشل فك التشفير العادي، محاولة إرجاع القيمة الأصلية: {e}")
-            return enc
+            self.logger.error(f"فشل فك التشفير: {e}")
+            raise ValueError(f"Decryption failed: {e}") from e

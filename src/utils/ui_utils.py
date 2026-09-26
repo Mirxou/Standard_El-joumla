@@ -1,5 +1,8 @@
+import logging
 import time
 from functools import wraps
+
+logger = logging.getLogger(__name__)
 
 
 def prevent_double_click(wait_ms=1500):
@@ -20,7 +23,7 @@ def prevent_double_click(wait_ms=1500):
                 return fn(*args, **kwargs)
             else:
                 # Silently ignore the duplicate click
-                print(f"[{time.strftime('%H:%M:%S')}] Ignored duplicate click on {fn.__name__}")
+                logger.debug("Ignored duplicate click on %s", fn.__name__)
                 return None
 
         return wrapper

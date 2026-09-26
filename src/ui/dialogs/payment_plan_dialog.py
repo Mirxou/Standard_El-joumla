@@ -364,7 +364,7 @@ class PaymentPlanDialog(BaseDialog):
     def on_late_fee_type_changed(self):
         """عند تغيير نوع الغرامة"""
         fee_type = self.late_fee_type_combo.currentData()
-        enabled = fee_type != LateFeeType.NONE.value
+        enabled = fee_type is not None and fee_type != LateFeeType.NONE.value
 
         self.late_fee_value_spin.setEnabled(enabled)
 
@@ -491,7 +491,7 @@ class PaymentPlanDialog(BaseDialog):
             )
             self.start_date_edit.setDate(qdate)
 
-        self.total_amount_spin.setValue(float(self.plan.total_amount))
+        self.total_amount_spin.setValue(float(self.plan.total_amount or 0))
         self.down_payment_spin.setValue(float(self.plan.down_payment))
         self.installments_count_spin.setValue(self.plan.number_of_installments)
         self.interest_rate_spin.setValue(float(self.plan.interest_rate))

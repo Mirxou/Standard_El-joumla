@@ -43,6 +43,11 @@ class Category:
 
 class CategoryManager:
     """مدير الفئات"""
+    # DUPLICATE_CODE: Multiple methods repeat the same SQL SELECT columns and
+    # self._row_to_category() mapping pattern. Consider extracting a shared
+    # _build_category_query(where_clause, params) method to reduce duplication
+    # across get_category_by_id, get_all_categories, get_parent_categories,
+    # get_subcategories, and search_categories.
 
     def __init__(self, db_manager, logger=None):
         self.db_manager = db_manager

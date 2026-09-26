@@ -119,11 +119,11 @@ class PurchaseOrderService:
                 (po.delivery_terms.name if isinstance(po.delivery_terms, DeliveryTerms) else po.delivery_terms),
                 (po.payment_terms.name if isinstance(po.payment_terms, PaymentTerms) else po.payment_terms),
                 po.currency,
-                float(po.subtotal),
-                float(po.discount_amount),
-                float(po.tax_amount),
-                float(po.shipping_cost),
-                float(po.total_amount),
+                float(po.subtotal or 0),
+                float(po.discount_amount or 0),
+                float(po.tax_amount or 0),
+                float(po.shipping_cost or 0),
+                float(po.total_amount or 0),
                 po.notes,
                 po.terms_and_conditions,
                 po.delivery_address,
@@ -197,15 +197,15 @@ class PurchaseOrderService:
             item.product_id,
             item.product_name,
             item.product_code,
-            float(item.quantity_ordered),
-            float(item.quantity_received),
-            float(item.quantity_pending),
-            float(item.unit_price),
-            float(item.discount_percentage),
-            float(item.tax_percentage),
-            float(item.subtotal),
-            float(item.discount_amount),
-            float(item.tax_amount),
+            float(item.quantity_ordered or 0),
+            float(item.quantity_received or 0),
+            float(item.quantity_pending or 0),
+            float(item.unit_price or 0),
+            float(item.discount_percentage or 0),
+            float(item.tax_percentage or 0),
+            float(item.subtotal or 0),
+            float(item.discount_amount or 0),
+            float(item.tax_amount or 0),
             float(item.net_amount),
             item.required_date.isoformat() if item.required_date else None,
             (item.expected_delivery_date.isoformat() if item.expected_delivery_date else None),
@@ -277,11 +277,11 @@ class PurchaseOrderService:
             (po.delivery_terms.name if isinstance(po.delivery_terms, DeliveryTerms) else po.delivery_terms),
             (po.payment_terms.name if isinstance(po.payment_terms, PaymentTerms) else po.payment_terms),
             po.currency,
-            float(po.subtotal),
-            float(po.discount_amount),
-            float(po.tax_amount),
-            float(po.shipping_cost),
-            float(po.total_amount),
+            float(po.subtotal or 0),
+            float(po.discount_amount or 0),
+            float(po.tax_amount or 0),
+            float(po.shipping_cost or 0),
+            float(po.total_amount or 0),
             po.notes,
             po.terms_and_conditions,
             po.delivery_address,
@@ -320,7 +320,7 @@ class PurchaseOrderService:
         # Find which existing DB items have receiving_items linked (cannot delete these)
         if existing_db_items:
             protected_ids_rows = self.db.fetch_all(
-                "SELECT DISTINCT po_item_id FROM receiving_items WHERE po_item_id IN ({})".format(
+                "SELECT DISTINCT po_item_id FROM receiving_items WHERE po_item_id IN ({})".format(  # SQL_SAFE: placeholders are ? only, values parameterized
                     ",".join("?" for _ in existing_db_items)
                 ),
                 tuple(existing_db_items.keys()),
@@ -345,7 +345,7 @@ class PurchaseOrderService:
         deletable = set(existing_db_items.keys()) - incoming_item_ids - protected_ids
         if deletable:
             self.db.execute_update(
-                "DELETE FROM purchase_order_items WHERE id IN ({})".format(
+                "DELETE FROM purchase_order_items WHERE id IN ({})".format(  # SQL_SAFE: placeholders are ? only, values parameterized
                     ",".join("?" for _ in deletable)
                 ),
                 tuple(deletable),
@@ -368,15 +368,15 @@ class PurchaseOrderService:
             item.product_id,
             item.product_name,
             item.product_code,
-            float(item.quantity_ordered),
-            float(item.quantity_received),
-            float(item.quantity_pending),
-            float(item.unit_price),
-            float(item.discount_percentage),
-            float(item.tax_percentage),
-            float(item.subtotal),
-            float(item.discount_amount),
-            float(item.tax_amount),
+            float(item.quantity_ordered or 0),
+            float(item.quantity_received or 0),
+            float(item.quantity_pending or 0),
+            float(item.unit_price or 0),
+            float(item.discount_percentage or 0),
+            float(item.tax_percentage or 0),
+            float(item.subtotal or 0),
+            float(item.discount_amount or 0),
+            float(item.tax_amount or 0),
             float(item.net_amount),
             item.required_date.isoformat() if item.required_date else None,
             (item.expected_delivery_date.isoformat() if item.expected_delivery_date else None),
@@ -616,8 +616,8 @@ class PurchaseOrderService:
             item.product_id,
             item.product_name,
             item.product_code,
-            float(item.quantity_ordered),
-            float(item.quantity_received),
+            float(item.quantity_ordered or 0),
+            float(item.quantity_received or 0),
             float(item.quantity_accepted),
             float(item.quantity_rejected),
             float(item.quantity_damaged),
@@ -743,7 +743,9 @@ class PurchaseOrderService:
                 po.receive_shipment(items_received)
                 self.update_purchase_order(po)
 
-            # قيد محاسبي لأمر الشراء (غير معطل)
+            # قيد محاسبي لأمر الشراء
+            # Accounting journal entry failure raises to trigger ROLLBACK.
+            # Inventory + PO status + accounting all succeed or all roll back.
             try:
                 if self.accounting_service:
                     from decimal import Decimal
@@ -762,9 +764,12 @@ class PurchaseOrderService:
                     self.accounting_service.create_purchase_journal_entry(po_data)
             except Exception as e:
                 if self.logger:
-                    self.logger.warning(f"خطأ في إنشاء قيد محاسبي للشراء: {e}")
+                    self.logger.error(f"خطأ في إنشاء قيد محاسبي للشراء، سيتم التراجع: {e}")
+                raise RuntimeError(f"Accounting journal entry failed for PO {po_id}: {e}") from e
 
             # Update supplier balance (increase debt when PO is received)
+            # Supplier balance update failure raises to trigger ROLLBACK.
+            # If this fails, the entire shipment receipt is rolled back.
             try:
                 from decimal import Decimal as _Decimal
                 from src.models.supplier import SupplierManager
@@ -775,7 +780,8 @@ class PurchaseOrderService:
                     supplier_mgr.update_supplier_balance(supplier_id, po_total)
             except Exception as e:
                 if self.logger:
-                    self.logger.warning(f"فشل تحديث رصيد المورد: {e}")
+                    self.logger.error(f"فشل تحديث رصيد المورد، سيتم التراجع: {e}")
+                raise RuntimeError(f"Supplier balance update failed for PO {po_id}: {e}") from e
 
             try:
                 self.db.execute_query("COMMIT")
@@ -892,7 +898,7 @@ class PurchaseOrderService:
             result = self.db.execute_query(status_query, tuple(status_params))
             count = result[0].get("count", 0) if result else 0
             value = result[0].get("total", 0) if result else 0
-            by_status[status.value] = {"count": count, "value": float(value)}
+            by_status[status.value] = {"count": count, "value": float(value or 0)}
 
         return {
             "total_pos": total_count,

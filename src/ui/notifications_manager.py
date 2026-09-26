@@ -106,13 +106,13 @@ class NotificationChecker(QThread):
         super().__init__()
         self.db_manager = db_manager
         self.interval = interval_seconds
-        self.running = True
-        self.main_window = main_window  # للحصول على main_window في callbacks
+        self.running = True  # THREAD: accessed from main thread; safe under CPython GIL but prefer requestInterruption()
+        self.main_window = main_window  # THREAD: do NOT access widgets from this QThread; use signals instead
         self.logger = setup_logger(__name__)
 
     def run(self):
         """تشغيل الفحص الدوري"""
-        while self.running:
+        while self.running and not self.isInterruptionRequested():
             try:
                 notifications = self.check_for_notifications()
                 if notifications:
@@ -124,7 +124,7 @@ class NotificationChecker(QThread):
 
             # الانتظار
             for _ in range(self.interval):
-                if not self.running:
+                if not self.running or self.isInterruptionRequested():
                     break
                 self.msleep(1000)
 

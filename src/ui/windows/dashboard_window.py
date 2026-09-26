@@ -64,7 +64,7 @@ class DashboardWindow(QMainWindow):
         # تطبيق ستايل الهوية الموحدة
         self.setStyleSheet(f"QMainWindow {{ background-color: {C.BG_VOID}; }}")
 
-        self.refresh_timer = QTimer()
+        self.refresh_timer = QTimer(self)  # MEMORY: parent=self ensures timer is destroyed with window
         self.refresh_timer.timeout.connect(self._load)
         self._blink_timer = None  # Timer للوميض
         self._blink_state = False
@@ -125,7 +125,7 @@ class DashboardWindow(QMainWindow):
         try:
             cats = self.service.list_categories()
             for c in cats:
-                self.category_combo.addItem(str(c.get("name")), int(c.get("id")))
+                self.category_combo.addItem(str(c.get("name")), int(c.get("id") or 0))
         except Exception:
             logging.getLogger(__name__).warning("Ignored exception in dashboard_window.py")
         saved_cat = self.settings.value("top_category_id", None)
@@ -461,8 +461,8 @@ class DashboardWindow(QMainWindow):
             cc = self.cycle_service.get_dashboard_summary()
             self.lbl_cc_open.setText(f"جلسات مفتوحة: {int(cc.get('open_sessions', 0))}")
             self.lbl_cc_closed.setText(f"مغلقة (7 أيام): {int(cc.get('recent_closed', 0))}")
-            self.lbl_cc_varq.setText(f"فرق كمية: {float(cc.get('variance_qty', 0.0)):.2f}")
-            self.lbl_cc_varv.setText(f"قيمة الفرق: {float(cc.get('variance_value', 0.0)):.2f} دج")
+            self.lbl_cc_varq.setText(f"فرق كمية: {float(cc.get('variance_qty', 0.0) or 0):.2f}")
+            self.lbl_cc_varv.setText(f"قيمة الفرق: {float(cc.get('variance_value', 0.0) or 0):.2f} دج")
         except Exception:
             # Keep silent; dashboard should not break if cycle data missing
             logging.getLogger(__name__).warning("Ignored exception in dashboard_window.py")
@@ -794,6 +794,9 @@ class DashboardWindow(QMainWindow):
         """تنظيف الموارد عند إغلاق النافذة"""
         if self._blink_timer:
             self._blink_timer.stop()
+        # MEMORY: stop refresh_timer to prevent callbacks after close
+        if hasattr(self, 'refresh_timer') and self.refresh_timer.isActive():
+            self.refresh_timer.stop()
         super().closeEvent(event)
 
     # --- Stubs for Testing ---

@@ -99,8 +99,8 @@ class TrainingResult:
 class PredictionResult:
     """Prediction result"""
 
-    predictions: Union[np.ndarray, List[float]]
-    probabilities: Optional[np.ndarray]
+    predictions: Any  # Union[np.ndarray, List[float]] depending on numpy availability
+    probabilities: Any  # Optional[np.ndarray] depending on numpy availability
     confidence: float
     model_used: str
     input_shape: Tuple[int, ...]
@@ -118,7 +118,7 @@ class ModelEvaluation:
     recall: float
     f1_score: float
     auc_roc: Optional[float]
-    confusion_matrix: np.ndarray
+    confusion_matrix: Any  # np.ndarray if numpy available
     classification_report: str
     evaluated_at: datetime
 
@@ -591,11 +591,13 @@ class DeepLearningEngine:
                 if patience_counter >= patience:
                     break
 
+        y_var = np.var(y_train)
+        y_val_var = np.var(y_val) if y_val is not None else 0.0
         return {
             "loss": train_losses[-1],
-            "accuracy": 1.0 - train_losses[-1] / np.var(y_train),  # Simple accuracy metric
+            "accuracy": 1.0 - train_losses[-1] / y_var if y_var > 0 else 0.0,
             "val_loss": val_losses[-1] if val_losses else train_losses[-1],
-            "val_accuracy": (1.0 - val_losses[-1] / np.var(y_val) if val_losses and y_val is not None else 0.0),
+            "val_accuracy": (1.0 - val_losses[-1] / y_val_var if val_losses and y_val is not None and y_val_var > 0 else 0.0),
             "epochs": len(train_losses),
             "best_epoch": best_epoch,
             "status": "converged",
@@ -723,7 +725,11 @@ class DeepLearningEngine:
 
             if len(series) > 10:
                 # Calculate z-scores
-                z_scores = np.abs((series - series.mean()) / series.std())
+                std = series.std()
+                if std > 0:
+                    z_scores = np.abs((series - series.mean()) / std)
+                else:
+                    z_scores = np.zeros(len(series))
 
                 # Find anomalies
                 anomaly_indices = np.where(z_scores > threshold)[0]

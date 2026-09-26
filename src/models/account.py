@@ -57,34 +57,42 @@ class Account:
         ]:
             raise ValueError(f"نوع حساب غير صحيح: {self.account_type}")
 
+    # DEAD_CODE: possibly unused - verify before removing
     def is_debit_account(self) -> bool:
         """هل هو حساب مدين؟"""
         return self.normal_side == "DEBIT"
 
+    # DEAD_CODE: possibly unused - verify before removing
     def is_credit_account(self) -> bool:
         """هل هو حساب دائن؟"""
         return self.normal_side == "CREDIT"
 
+    # DEAD_CODE: possibly unused - verify before removing
     def is_asset_account(self) -> bool:
         """هل هو حساب أصول؟"""
         return self.account_type == "Asset"
 
+    # DEAD_CODE: possibly unused - verify before removing
     def is_liability_account(self) -> bool:
         """هل هو حساب خصوم؟"""
         return self.account_type == "Liability"
 
+    # DEAD_CODE: possibly unused - verify before removing
     def is_equity_account(self) -> bool:
         """هل هو حساب حقوق ملكية؟"""
         return self.account_type == "Equity"
 
+    # DEAD_CODE: possibly unused - verify before removing
     def is_revenue_account(self) -> bool:
         """هل هو حساب إيرادات؟"""
         return self.account_type == "Revenue"
 
+    # DEAD_CODE: possibly unused - verify before removing
     def is_expense_account(self) -> bool:
         """هل هو حساب مصروفات؟"""
         return self.account_type == "Expense"
 
+    # DEAD_CODE: possibly unused - verify before removing
     def get_display_code(self) -> str:
         """الحصول على رمز الحساب المنسق للعرض"""
         return f"{self.account_code} - {self.account_name}"
@@ -112,6 +120,7 @@ class ChartOfAccounts:
         """احصل على حساب بواسطة الرمز"""
         return self.code_index.get(code)
 
+    # DEAD_CODE: possibly unused - verify before removing
     def get_accounts_by_type(self, account_type: str) -> list:
         """احصل على جميع الحسابات من نوع معين"""
         return [acc for acc in self.accounts.values() if acc.account_type == account_type]

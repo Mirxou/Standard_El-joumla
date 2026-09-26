@@ -47,7 +47,6 @@ qt_style_logger.setFilterRules("*.warning=false")
 
 # استيراد المكونات الأساسية
 from src.core.local_database_manager import LocalDatabaseManager
-from src.core.database_manager import DatabaseManager
 from src.core.config_manager import ConfigManager
 from src.utils.logger import setup_logger
 
@@ -226,6 +225,18 @@ class DatabaseInitWorker(QThread):
     def verify_database_integrity(self) -> bool:
         """التحقق من سلامة قاعدة البيانات"""
         try:
+            # فحص سلامة قاعدة البيانات باستخدام PRAGMA
+            integrity_result = self.db_manager.fetch_one("PRAGMA integrity_check")
+            if integrity_result and integrity_result.get("integrity_check", "") != "ok":
+                self.logger.error(f"فشل فحص سلامة قاعدة البيانات: {integrity_result}")
+                return False
+
+            # فحص سلامة المفاتيح الأجنبية
+            fk_result = self.db_manager.execute_query("PRAGMA foreign_key_check")
+            if fk_result and len(fk_result) > 0:
+                self.logger.error(f"مشاكل في المفاتيح الأجنبية: {fk_result}")
+                return False
+
             # التحقق من وجود الجداول الأساسية
             required_tables = [
                 'users', 'categories', 'products', 'customers',
@@ -510,6 +521,9 @@ class InventoryManagementApp(QApplication):
             self.memory_monitor.memory_critical.connect(
                 lambda level, mb: self.logger.critical(f"ذاكرة حرجة: {mb:.1f}MB")
             )
+            self.memory_monitor.leak_detected.connect(
+                lambda desc, mb: self.logger.warning(f"تسريب ذاكرة مكتشف: {desc} ({mb:.1f}MB)")
+            )
             self.memory_monitor.start()
         except Exception as e:
             self.logger.warning(f"فشل تفعيل مراقبة الذاكرة: {e}")
@@ -651,7 +665,7 @@ class InventoryManagementApp(QApplication):
 
             try:
                 from src.services.encryption_service import EncryptionService
-                encryption_key = self.config_manager.get("encryption_key", "default_secret_key")
+                encryption_key = os.environ.get("ERP_ENCRYPTION_KEY", self.config_manager.get("encryption_key", "dev_only_insecure_key"))
                 self.encryption_service = EncryptionService(encryption_key)
                 self.logger.info("✓ خدمة التشفير")
             except Exception as e:
@@ -664,16 +678,36 @@ class InventoryManagementApp(QApplication):
             except Exception as e:
                 self.logger.warning(f"تعذر تهيئة خدمة الدعم الفني: {e}")
 
-            # تهيئة البريد + التذكيرات + المجدول (اختياري)
+            # تهيئة خدمة البريد
             try:
                 from src.services.print_service import PrintService
                 print_service = PrintService(db_manager=self.db_manager)
-                self.email_service = EmailService(print_service=print_service)
-                self.reminder_service = init_reminder_service(self.db_manager, self.email_service)
-                self.task_scheduler = init_task_scheduler(self.db_manager, self.reminder_service)
-                self.logger.info("✓ المجدول والتذكيرات")
+                email_config = {
+                    'smtp_host': self.config_manager.get('smtp_host', 'localhost'),
+                    'smtp_port': self.config_manager.get('smtp_port', 587),
+                    'smtp_user': self.config_manager.get('smtp_user', ''),
+                    'smtp_password': self.config_manager.get('smtp_password', ''),
+                    'from_email': self.config_manager.get('from_email', 'noreply@eljoumla.local'),
+                    'use_tls': self.config_manager.get('smtp_use_tls', True),
+                }
+                self.email_service = EmailService(config=email_config, print_service=print_service)
+                self.logger.info("✓ خدمة البريد")
             except Exception as e:
-                self.logger.warning(f"تعذرت تهيئة المجدول/التذكيرات: {e}")
+                self.logger.warning(f"تعذرت تهيئة خدمة البريد: {e}")
+
+            # تهيئة التذكيرات (لا تعتمد على البريد)
+            try:
+                self.reminder_service = init_reminder_service(self.db_manager, self.email_service)
+                self.logger.info("✓ خدمة التذكيرات")
+            except Exception as e:
+                self.logger.warning(f"تعذرت تهيئة خدمة التذكيرات: {e}")
+
+            # تهيئة المجدول (لا يعتمد على التذكيرات)
+            try:
+                self.task_scheduler = init_task_scheduler(self.db_manager, self.reminder_service)
+                self.logger.info("✓ المجدول")
+            except Exception as e:
+                self.logger.warning(f"تعذر تهيئة المجدول: {e}")
 
             # تهيئة عميل API الهجين
             try:
@@ -741,6 +775,10 @@ class InventoryManagementApp(QApplication):
 
                         if self.current_user:
                             self.logger.info(f"تم تسجيل دخول المستخدم بنجاح: {self.current_user.username}")
+
+                            # تعيين المستخدم في نظام السجلات المحسّن
+                            if self.enhanced_logging:
+                                self.enhanced_logging.set_user(self.current_user.username)
 
                             # حفظ الجلسة الحالية واستخدامها لاحقاً في تسجيل الخروج
                             self.current_session = session
@@ -907,6 +945,15 @@ class InventoryManagementApp(QApplication):
                 notifications_manager=self.notifications_manager,
                 hybrid_service=self.hybrid_service
             )
+
+            # توصيل مراقب الاتصال بشريط الحالة
+            if self.connectivity_monitor and self.main_window:
+                try:
+                    status_bar = self.main_window.statusBar()
+                    if status_bar:
+                        self.connectivity_monitor.create_status_widget(status_bar)
+                except Exception as e:
+                    self.logger.warning(f"فشل إضافة مراقب الاتصال لشريط الحالة: {e}")
 
             self.main_window.show()
             self.logger.info("تم عرض النافذة الرئيسية")
@@ -1143,9 +1190,6 @@ def main():
     """الدالة الرئيسية"""
     exit_code = 1
     try:
-        # إعداد معالج الاستثناءات
-        setup_exception_handler()
-
         # إنشاء التطبيق
         app = InventoryManagementApp(sys.argv)
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 import logging
 
+from ...utils.db_helpers import safe_int
 from ...ui.styles.design_tokens import C
 
 from PySide6.QtWidgets import (
@@ -156,7 +157,9 @@ class CycleCountWindow(QMainWindow):
             if not sid_item:
                 QMessageBox.warning(self, "إغلاق الجلسة", "تعذر تحديد المعرف.")
                 return
-            session_id = int(sid_item.text())
+            session_id = safe_int(sid_item.text(), default=-1)
+            if session_id <= 0:
+                return
             svc = self._ensure_service()
             svc.close_session(session_id)
             self.status_label.setText(f"تم إغلاق الجلسة #{session_id}")

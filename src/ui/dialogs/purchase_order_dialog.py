@@ -364,6 +364,7 @@ class PurchaseOrderDialog(BaseDialog):
         self.items_table.insertRow(row)
 
         # المنتج
+        # PERF_WIDGET: consider QStyledItemDelegate for better performance with large datasets
         self.items_table.setCellWidget(row, 0, product_combo)
 
         # الكود
@@ -376,6 +377,7 @@ class PurchaseOrderDialog(BaseDialog):
         qty_spin.setDecimals(3)
         qty_spin.setValue(1.000)
         qty_spin.valueChanged.connect(lambda val, r=row: self._update_item_row(r))
+        # PERF_WIDGET: consider QStyledItemDelegate for better performance with large datasets
         self.items_table.setCellWidget(row, 2, qty_spin)
 
         # السعر
@@ -384,6 +386,7 @@ class PurchaseOrderDialog(BaseDialog):
         price_spin.setMaximum(999999.99)
         price_spin.setDecimals(2)
         price_spin.valueChanged.connect(lambda val, r=row: self._update_item_row(r))
+        # PERF_WIDGET: consider QStyledItemDelegate for better performance with large datasets
         self.items_table.setCellWidget(row, 3, price_spin)
 
         # الخصم%
@@ -393,6 +396,7 @@ class PurchaseOrderDialog(BaseDialog):
         discount_spin.setDecimals(2)
         discount_spin.setSuffix("%")
         discount_spin.valueChanged.connect(lambda val, r=row: self._update_item_row(r))
+        # PERF_WIDGET: consider QStyledItemDelegate for better performance with large datasets
         self.items_table.setCellWidget(row, 4, discount_spin)
 
         # الضريبة% (للعرض فقط - الضريبة تُطبق على مستوى الأمر)
@@ -402,6 +406,7 @@ class PurchaseOrderDialog(BaseDialog):
         tax_spin.setDecimals(2)
         tax_spin.setValue(0.00)
         tax_spin.setSuffix("%")
+        # PERF_WIDGET: consider QStyledItemDelegate for better performance with large datasets
         self.items_table.setCellWidget(row, 5, tax_spin)
 
         # المجموع الفرعي
@@ -417,6 +422,8 @@ class PurchaseOrderDialog(BaseDialog):
     def _on_product_changed(self, row):
         """عند تغيير المنتج في صف"""
         product_combo = self.items_table.cellWidget(row, 0)
+        if not product_combo:
+            return
         product_data = product_combo.currentData()
 
         if product_data:
@@ -425,7 +432,8 @@ class PurchaseOrderDialog(BaseDialog):
             if _code_cell:
                 _code_cell.setText(product_data["code"] or "")
             price_spin = self.items_table.cellWidget(row, 3)
-            price_spin.setValue(float(product_data["unit_price"]) if product_data["unit_price"] else 0.00)
+            if price_spin:
+                price_spin.setValue(float(product_data["unit_price"] or 0) if product_data["unit_price"] else 0.00)
 
             self._update_item_row(row)
 
@@ -435,6 +443,9 @@ class PurchaseOrderDialog(BaseDialog):
             qty_spin = self.items_table.cellWidget(row, 2)
             price_spin = self.items_table.cellWidget(row, 3)
             discount_spin = self.items_table.cellWidget(row, 4)
+
+            if not qty_spin or not price_spin or not discount_spin:
+                return
 
             qty = Decimal(str(qty_spin.value()))
             price = Decimal(str(price_spin.value()))
@@ -560,17 +571,26 @@ class PurchaseOrderDialog(BaseDialog):
 
             # تحديد المنتج
             product_combo = self.items_table.cellWidget(row, 0)
-            for i in range(product_combo.count()):
-                data = product_combo.itemData(i)
-                if data and data.get("id") == item.product_id:
-                    product_combo.setCurrentIndex(i)
-                    break
+            if product_combo:
+                for i in range(product_combo.count()):
+                    data = product_combo.itemData(i)
+                    if data and data.get("id") == item.product_id:
+                        product_combo.setCurrentIndex(i)
+                        break
 
             # الكمية والسعر
-            self.items_table.cellWidget(row, 2).setValue(float(item.quantity_ordered or 0))
-            self.items_table.cellWidget(row, 3).setValue(float(item.unit_price or 0))
-            self.items_table.cellWidget(row, 4).setValue(float(item.discount_percentage or 0))
-            self.items_table.cellWidget(row, 5).setValue(float(item.tax_percentage or 0))
+            _qty_spin = self.items_table.cellWidget(row, 2)
+            _price_spin = self.items_table.cellWidget(row, 3)
+            _disc_spin = self.items_table.cellWidget(row, 4)
+            _tax_spin = self.items_table.cellWidget(row, 5)
+            if _qty_spin:
+                _qty_spin.setValue(float(item.quantity_ordered or 0))
+            if _price_spin:
+                _price_spin.setValue(float(item.unit_price or 0))
+            if _disc_spin:
+                _disc_spin.setValue(float(item.discount_percentage or 0))
+            if _tax_spin:
+                _tax_spin.setValue(float(item.tax_percentage or 0))
 
         # المبالغ
         self.discount_spin.setValue(float(self.po.discount_amount or 0))
@@ -621,7 +641,7 @@ class PurchaseOrderDialog(BaseDialog):
 
         for row in range(self.items_table.rowCount()):
             product_combo = self.items_table.cellWidget(row, 0)
-            if not product_combo.currentData():
+            if not product_combo or not product_combo.currentData():
                 self.notify.show_warning(
                     self.i18n.get_message("warning"),
                     self.i18n.get_message("select_product_for_item", item_number=row + 1),
@@ -700,15 +720,20 @@ class PurchaseOrderDialog(BaseDialog):
         items = []
         for row in range(self.items_table.rowCount()):
             product_combo = self.items_table.cellWidget(row, 0)
+            if not product_combo:
+                continue
             product_data = product_combo.currentData()
             if product_data:
+                _qty_w = self.items_table.cellWidget(row, 2)
+                _price_w = self.items_table.cellWidget(row, 3)
+                _disc_w = self.items_table.cellWidget(row, 4)
                 item = PurchaseOrderItem(
                     product_id=product_data.get("id"),
                     product_name=product_data.get("name"),
                     product_code=product_data.get("code"),
-                    quantity_ordered=Decimal(str(self.items_table.cellWidget(row, 2).value())),
-                    unit_price=Decimal(str(self.items_table.cellWidget(row, 3).value())),
-                    discount_percentage=Decimal(str(self.items_table.cellWidget(row, 4).value())),
+                    quantity_ordered=Decimal(str(_qty_w.value())) if _qty_w else Decimal("0"),
+                    unit_price=Decimal(str(_price_w.value())) if _price_w else Decimal("0"),
+                    discount_percentage=Decimal(str(_disc_w.value())) if _disc_w else Decimal("0"),
                     tax_percentage=Decimal("0.00"),  # الضريبة على مستوى الأمر فقط، ليس على مستوى البند
                 )
                 item.calculate_totals()
@@ -738,6 +763,7 @@ class PurchaseOrderDialog(BaseDialog):
                         if data and data.get("id") == product_id:
                             product_combo.setCurrentIndex(i)
                             break
+                    # PERF_WIDGET: consider QStyledItemDelegate for better performance with large datasets
                     self.items_table.setCellWidget(row, 0, product_combo)
                     self.items_table.setItem(row, 1, QTableWidgetItem(product_data.get("barcode", "")))
 
@@ -751,6 +777,7 @@ class PurchaseOrderDialog(BaseDialog):
                     qty_spin.setDecimals(3)
                     qty_spin.setValue(suggested_qty)
                     qty_spin.valueChanged.connect(lambda val, r=row: self._update_item_row(r))
+                    # PERF_WIDGET: consider QStyledItemDelegate for better performance with large datasets
                     self.items_table.setCellWidget(row, 2, qty_spin)
 
                     cost_price = float(product_data.get("cost_price") or 0)
@@ -760,6 +787,7 @@ class PurchaseOrderDialog(BaseDialog):
                     price_spin.setDecimals(2)
                     price_spin.setValue(cost_price)
                     price_spin.valueChanged.connect(lambda val, r=row: self._update_item_row(r))
+                    # PERF_WIDGET: consider QStyledItemDelegate for better performance with large datasets
                     self.items_table.setCellWidget(row, 3, price_spin)
 
                     discount_spin = QDoubleSpinBox()
@@ -768,6 +796,7 @@ class PurchaseOrderDialog(BaseDialog):
                     discount_spin.setDecimals(2)
                     discount_spin.setSuffix("%")
                     discount_spin.valueChanged.connect(lambda val, r=row: self._update_item_row(r))
+                    # PERF_WIDGET: consider QStyledItemDelegate for better performance with large datasets
                     self.items_table.setCellWidget(row, 4, discount_spin)
 
                     tax_spin = QDoubleSpinBox()
@@ -776,6 +805,7 @@ class PurchaseOrderDialog(BaseDialog):
                     tax_spin.setDecimals(2)
                     tax_spin.setValue(0.00)  # الضريبة على مستوى الأمر فقط
                     tax_spin.setSuffix("%")
+                    # PERF_WIDGET: consider QStyledItemDelegate for better performance with large datasets
                     self.items_table.setCellWidget(row, 5, tax_spin)
 
                     self.items_table.setItem(row, 6, QTableWidgetItem("0.00"))

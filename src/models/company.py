@@ -83,7 +83,7 @@ class Company:
             "base_currency_id": self.base_currency_id,
             "fiscal_year_start": (self.fiscal_year_start.isoformat() if self.fiscal_year_start else None),
             "fiscal_year_end": (self.fiscal_year_end.isoformat() if self.fiscal_year_end else None),
-            "tax_rate": float(self.tax_rate),
+            "tax_rate": float(self.tax_rate or 0),
             "is_active": 1 if self.is_active else 0,
             "is_default": 1 if self.is_default else 0,
             "timezone": self.timezone,
@@ -105,15 +105,15 @@ class Company:
         fiscal_year_start = None
         fiscal_year_end = None
         if data.get("fiscal_year_start"):
-            if isinstance(data["fiscal_year_start"], str):
-                fiscal_year_start = date.fromisoformat(data["fiscal_year_start"])
+            if isinstance(data.get("fiscal_year_start"), str):
+                fiscal_year_start = date.fromisoformat(data.get("fiscal_year_start", ""))
             else:
-                fiscal_year_start = data["fiscal_year_start"]
+                fiscal_year_start = data.get("fiscal_year_start")
         if data.get("fiscal_year_end"):
-            if isinstance(data["fiscal_year_end"], str):
-                fiscal_year_end = date.fromisoformat(data["fiscal_year_end"])
+            if isinstance(data.get("fiscal_year_end"), str):
+                fiscal_year_end = date.fromisoformat(data.get("fiscal_year_end", ""))
             else:
-                fiscal_year_end = data["fiscal_year_end"]
+                fiscal_year_end = data.get("fiscal_year_end")
 
         return cls(
             id=data.get("id"),
@@ -135,7 +135,7 @@ class Company:
             base_currency_id=data.get("base_currency_id"),
             fiscal_year_start=fiscal_year_start,
             fiscal_year_end=fiscal_year_end,
-            tax_rate=Decimal(str(data.get("tax_rate", 19.00))),
+            tax_rate=Decimal(str(data.get("tax_rate", 19.00) or 0)),
             is_active=bool(data.get("is_active", 1)),
             is_default=bool(data.get("is_default", 0)),
             timezone=data.get("timezone", "Africa/Algiers"),
@@ -145,8 +145,8 @@ class Company:
             logo_path=data.get("logo_path", ""),
             notes=data.get("notes", ""),
             metadata=data.get("metadata", ""),
-            created_at=(datetime.fromisoformat(data["created_at"]) if data.get("created_at") else None),
-            updated_at=(datetime.fromisoformat(data["updated_at"]) if data.get("updated_at") else None),
+            created_at=(datetime.fromisoformat(data.get("created_at", "")) if data.get("created_at") else None),
+            updated_at=(datetime.fromisoformat(data.get("updated_at", "")) if data.get("updated_at") else None),
             created_by=data.get("created_by"),
             updated_by=data.get("updated_by"),
         )
@@ -282,7 +282,7 @@ class CompanyManager:
                 company.base_currency_id,
                 company.fiscal_year_start,
                 company.fiscal_year_end,
-                float(company.tax_rate),
+                float(company.tax_rate or 0),
                 1 if company.is_active else 0,
                 1 if company.is_default else 0,
                 company.timezone,
@@ -343,7 +343,7 @@ class CompanyManager:
                 company.base_currency_id,
                 company.fiscal_year_start,
                 company.fiscal_year_end,
-                float(company.tax_rate),
+                float(company.tax_rate or 0),
                 1 if company.is_active else 0,
                 1 if company.is_default else 0,
                 company.timezone,
@@ -480,7 +480,7 @@ class CompanyManager:
                 base_currency_id=get_val("base_currency_id", 16),
                 fiscal_year_start=self._parse_date(get_val("fiscal_year_start", 17)),
                 fiscal_year_end=self._parse_date(get_val("fiscal_year_end", 18)),
-                tax_rate=Decimal(str(get_val("tax_rate", 19, 19.00))),
+                tax_rate=Decimal(str(get_val("tax_rate", 19, 19.00) or 0)),
                 is_active=bool(get_val("is_active", 20)),
                 is_default=bool(get_val("is_default", 21)),
                 timezone=get_val("timezone", 22, "Africa/Algiers"),

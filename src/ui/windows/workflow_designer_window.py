@@ -41,6 +41,7 @@ from src.core.workflow_engine import (
 )
 from src.services.workflow_service import WorkflowService
 from src.ui.styles.design_tokens import C
+from src.utils.db_helpers import safe_int
 from src.utils.logger import setup_logger
 
 project_root = Path(__file__).parent.parent.parent.parent
@@ -462,7 +463,9 @@ class WorkflowDesignerWindow(QMainWindow):
 
         item = self.workflows_table.item(current_row, 0)
         if item:
-            workflow_id = int(item.text())
+            workflow_id = safe_int(item.text(), default=-1)
+            if workflow_id <= 0:
+                return
             self.current_workflow_id = workflow_id
             self.load_workflow_steps(workflow_id)
 
@@ -531,7 +534,9 @@ class WorkflowDesignerWindow(QMainWindow):
 
         item = self.workflows_table.item(current_row, 0)
         if item:
-            workflow_id = int(item.text())
+            workflow_id = safe_int(item.text(), default=-1)
+            if workflow_id <= 0:
+                return
             workflow = self.workflow_engine.get_workflow(workflow_id)
             if workflow:
                 dialog = WorkflowDialog(
@@ -555,7 +560,9 @@ class WorkflowDesignerWindow(QMainWindow):
 
         item = self.workflows_table.item(current_row, 0)
         if item:
-            workflow_id = int(item.text())
+            workflow_id = safe_int(item.text(), default=-1)
+            if workflow_id <= 0:
+                return
             workflow = self.workflow_engine.get_workflow(workflow_id)
             if workflow:
                 reply = QMessageBox.question(

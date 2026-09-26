@@ -71,8 +71,14 @@ class TranslationManager:
             translation_file = self.translations_dir / f"{lang.value}.json"
 
             if translation_file.exists():
-                with open(translation_file, "r", encoding="utf-8") as f:
-                    self.translations[lang.value] = json.load(f)
+                try:
+                    with open(translation_file, "r", encoding="utf-8") as f:
+                        self.translations[lang.value] = json.load(f)
+                except (json.JSONDecodeError, OSError) as e:
+                    logging.getLogger(__name__).warning(
+                        "Failed to load translation file %s: %s", translation_file, e
+                    )
+                    self.translations[lang.value] = self._get_default_translations(lang)
             else:
                 # إنشاء ملف الترجمة الافتراضي
                 self.translations[lang.value] = self._get_default_translations(lang)

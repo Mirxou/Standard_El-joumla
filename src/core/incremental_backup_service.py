@@ -32,7 +32,8 @@ class IncrementalBackupService:
     def _init_changes_tracking(self):
         """تهيئة قاعدة بيانات تتبع التغييرات"""
         conn = sqlite3.connect(str(self.changes_db_path))
-        conn.execute("""
+        try:
+            conn.execute("""
             CREATE TABLE IF NOT EXISTS backup_snapshots (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 snapshot_name TEXT NOT NULL UNIQUE,
@@ -44,7 +45,7 @@ class IncrementalBackupService:
             )
         """)
 
-        conn.execute("""
+            conn.execute("""
             CREATE TABLE IF NOT EXISTS table_checksums (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 snapshot_id INTEGER NOT NULL,
@@ -55,8 +56,9 @@ class IncrementalBackupService:
             )
         """)
 
-        conn.commit()
-        conn.close()
+            conn.commit()
+        finally:
+            conn.close()  # RESOURCE-LEAK-FIX: use try/finally to ensure close
 
     def create_full_backup(self, snapshot_name: Optional[str] = None) -> Dict[str, Any]:
         """إنشاء نسخة احتياطية كاملة"""
@@ -95,7 +97,6 @@ class IncrementalBackupService:
                 )
 
             conn.commit()
-            conn.close()
 
             return {
                 "success": True,
@@ -109,6 +110,11 @@ class IncrementalBackupService:
 
         except Exception as e:
             return {"success": False, "error": str(e)}
+        finally:
+            try:
+                conn.close()  # RESOURCE-LEAK-FIX: ensure conn is closed
+            except Exception:
+                pass
 
     def create_incremental_backup(self, base_snapshot_name: Optional[str] = None) -> Dict[str, Any]:
         """إنشاء نسخة احتياطية تدريجية (فقط التغييرات)"""
@@ -226,7 +232,7 @@ class IncrementalBackupService:
         for table in tables:
             try:
                 # حساب checksum بناءً على محتوى الجدول
-                cursor.execute(f"SELECT * FROM {table} ORDER BY rowid")
+                cursor.execute(f"SELECT * FROM {table} ORDER BY rowid")  # SQL_SAFE: table from internal _get_tables_for_backup()
                 rows = cursor.fetchall()
 
                 # تحويل البيانات إلى نص وحساب hash
@@ -258,7 +264,7 @@ class IncrementalBackupService:
 
                     # تصدير البيانات
                     cursor = conn.cursor()
-                    cursor.execute(f"SELECT * FROM {table}")
+                    cursor.execute(f"SELECT * FROM {table}")  # SQL_SAFE: table from internal _get_tables_for_backup()
                     rows = cursor.fetchall()
 
                     # الحصول على أسماء الأعمدة

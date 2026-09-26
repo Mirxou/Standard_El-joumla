@@ -637,16 +637,31 @@ class ComplianceService:
         """فحص احتفاظ البيانات"""
         try:
             retention_days = config.get("retention_days", 365)
-            config.get("table_name", "sales")
+            table_name = config.get("table_name", "sales")
 
-            query = """
+            # SQL_INJECTION: table_name and retention_days were in a non-f-string template
+            # (broken code — placeholders never interpolated). Fixed: validate inputs and
+            # use a parameterized query with a table-name whitelist.
+            ALLOWED_TABLES = {
+                "sales", "purchases", "audit_logs", "login_history",
+                "payment_schedules", "quotes", "returns",
+            }
+            if table_name not in ALLOWED_TABLES:
+                return {
+                    "status": ComplianceCheckStatus.FAILED.value,
+                    "message": f"Invalid table name for retention check: {table_name}",
+                }
+            if not isinstance(retention_days, int) or retention_days < 1:
+                retention_days = 365
+
+            query = f"""
                 SELECT COUNT(*) as count
                 FROM {table_name}
                 WHERE DATE(created_at) < DATE('now', '-{retention_days} days')
-            """
+            """  # SQL_SAFE: table_name whitelisted; retention_days is int-validated
 
             row = self.db_manager.fetch_one(query)
-            old_records = row["count"] if row else 0
+            old_records = row.get("count", 0) if row else 0
 
             if old_records > 0:
                 return {
@@ -680,7 +695,7 @@ class ComplianceService:
             """
 
             row = self.db_manager.fetch_one(query)
-            users_without_permissions = row["count"] if row else 0
+            users_without_permissions = row.get("count", 0) if row else 0
 
             if users_without_permissions > 0:
                 return {
@@ -711,7 +726,7 @@ class ComplianceService:
             """
 
             row = self.db_manager.fetch_one(query)
-            customers_with_email = row["count"] if row else 0
+            customers_with_email = row.get("count", 0) if row else 0
 
             # يمكن إضافة فحوصات أكثر تعقيداً هنا
             return {
@@ -737,7 +752,7 @@ class ComplianceService:
             """
 
             row = self.db_manager.fetch_one(query)
-            sales_without_customer = row["count"] if row else 0
+            sales_without_customer = row.get("count", 0) if row else 0
 
             if sales_without_customer > 0:
                 return {
@@ -768,7 +783,7 @@ class ComplianceService:
             """
 
             row = self.db_manager.fetch_one(query)
-            products_without_min_stock = row["count"] if row else 0
+            products_without_min_stock = row.get("count", 0) if row else 0
 
             if products_without_min_stock > 0:
                 return {

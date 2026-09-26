@@ -431,8 +431,10 @@ class AdvancedAnalyticsService:
             if not current_month or not previous_month:
                 return []
 
-            current_total = sum(item.get("total_amount", 0) for item in current_month)
-            previous_total = sum(item.get("total_amount", 0) for item in previous_month)
+            # PRECISION: Use Decimal sum for money amounts to avoid float errors
+            from decimal import Decimal
+            current_total = float(sum(Decimal(str(item.get("total_amount", 0))) for item in current_month))
+            previous_total = float(sum(Decimal(str(item.get("total_amount", 0))) for item in previous_month))
 
             growth_rate = ((current_total - previous_total) / previous_total) if previous_total > 0 else 0
 
@@ -445,6 +447,7 @@ class AdvancedAnalyticsService:
                     target_value=self.performance_thresholds["sales_growth"]["good"],
                     unit="percentage",
                     trend="up" if growth_rate > 0 else "down",
+                    # PRECISION: growth_rate is a percentage, not money; float is acceptable
                     change_percentage=growth_rate * 100,
                     calculated_at=datetime.now(),
                 )
@@ -983,8 +986,10 @@ class AdvancedAnalyticsService:
         if not financial_data:
             return 0.0
 
-        total_revenue = sum(item.get("revenue", 0) for item in financial_data)
-        total_profit = sum(item.get("profit", 0) for item in financial_data)
+        # PRECISION: Use Decimal sum for money amounts to avoid float errors
+        from decimal import Decimal
+        total_revenue = float(sum(Decimal(str(item.get("revenue", 0))) for item in financial_data))
+        total_profit = float(sum(Decimal(str(item.get("profit", 0))) for item in financial_data))
 
         return total_profit / total_revenue if total_revenue > 0 else 0.0
 

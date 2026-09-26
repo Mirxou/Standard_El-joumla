@@ -133,14 +133,14 @@ class Payment:
             "payment_type": self.payment_type,
             "payment_method": self.payment_method,
             "status": self.status,
-            "amount": float(self.amount),
+            "amount": float(self.amount or 0),
             "currency": self.currency,  # للتوافق مع الكود القديم
             # Multi-Currency Support
             "currency_id": self.currency_id,
-            "exchange_rate": float(self.exchange_rate),
-            "base_amount": float(self.base_amount) if self.base_amount else None,
-            "converted_amount": (float(self.converted_amount) if self.converted_amount else None),
-            "amount_in_base_currency": float(self.amount_in_base_currency),  # للتوافق مع الكود القديم
+            "exchange_rate": float(self.exchange_rate or 0),
+            "base_amount": float(self.base_amount or 0) if self.base_amount else None,
+            "converted_amount": (float(self.converted_amount or 0) if self.converted_amount else None),
+            "amount_in_base_currency": float(self.amount_in_base_currency or 0),  # للتوافق مع الكود القديم
             "payment_date": (self.payment_date.isoformat() if self.payment_date else None),
             "due_date": self.due_date.isoformat() if self.due_date else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
@@ -179,7 +179,7 @@ class AccountBalance:
             "account_id": self.account_id,
             "account_type": self.account_type,
             "account_name": self.account_name,
-            "balance": float(self.balance),
+            "balance": float(self.balance or 0),
             "currency": self.currency,
             "last_transaction_date": (self.last_transaction_date.isoformat() if self.last_transaction_date else None),
             "created_at": self.created_at.isoformat() if self.created_at else None,
@@ -228,9 +228,9 @@ class PaymentSchedule:
             "payment_id": self.payment_id,
             "installment_number": self.installment_number,
             "due_date": self.due_date.isoformat() if self.due_date else None,
-            "amount": float(self.amount),
-            "paid_amount": float(self.paid_amount),
-            "remaining_amount": float(self.remaining_amount),
+            "amount": float(self.amount or 0),
+            "paid_amount": float(self.paid_amount or 0),
+            "remaining_amount": float(self.remaining_amount or 0),
             "status": self.status,
             "notes": self.notes,
             "created_at": self.created_at.isoformat() if self.created_at else None,
@@ -261,7 +261,7 @@ class PaymentManager:
             # Multi-Currency: حساب المبالغ
             base_amount = payment.base_amount if payment.base_amount is not None else payment.amount
             converted_amount = payment.converted_amount if payment.converted_amount is not None else payment.amount
-            exchange_rate = float(payment.exchange_rate) if payment.exchange_rate else 1.0
+            exchange_rate = float(payment.exchange_rate or 0) if payment.exchange_rate else 1.0
 
             # تطبيع نوع الدفعة ليتوافق مع قيود CHECK المحتملة
             type_mapping = {
@@ -478,6 +478,10 @@ class PaymentManager:
                         try:
                             if "created_at" in available and ("id" in available or "payment_id" in available):
                                 idc = "id" if "id" in available else "payment_id"
+                                # idc is validated against whitelist ('id' or 'payment_id')
+                                _VALID_ID_COLS = {"id", "payment_id"}
+                                if idc not in _VALID_ID_COLS:
+                                    idc = "id"
                                 cursor.execute(f"SELECT {idc} FROM payments ORDER BY created_at DESC LIMIT 1")
                                 r2 = cursor.fetchone()
                                 if r2:
@@ -627,7 +631,7 @@ class PaymentManager:
                 return Decimal("0.00")
 
             if result:
-                val = result["balance"] if isinstance(result, dict) else (result[0] if len(result) > 0 else None)
+                val = result.get("balance") if isinstance(result, dict) else (result[0] if len(result) > 0 else None)
                 if val is not None:
                     return Decimal(str(val))
 
@@ -667,7 +671,7 @@ class PaymentManager:
                 updated_at = ?
             WHERE id = ?
             """
-            self.db_manager.execute_non_query(query, (float(amount), datetime.now().isoformat(), customer_id))
+            self.db_manager.execute_non_query(query, (float(amount or 0), datetime.now().isoformat(), customer_id))
 
         except Exception as e:
             if self.logger:
@@ -682,7 +686,7 @@ class PaymentManager:
                 updated_at = ?
             WHERE id = ?
             """
-            self.db_manager.execute_non_query(query, (float(amount), datetime.now().isoformat(), supplier_id))
+            self.db_manager.execute_non_query(query, (float(amount or 0), datetime.now().isoformat(), supplier_id))
 
         except Exception as e:
             if self.logger:
@@ -768,7 +772,7 @@ class PaymentManager:
             if value is None:
                 return None
             try:
-                return Decimal(str(value))
+                return Decimal(str(value or 0))
             except Exception:
                 return None
 

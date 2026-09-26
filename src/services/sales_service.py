@@ -78,6 +78,37 @@ class SalesService:
         يتم التراجع عن كل شيء تلقائياً.
         """
         try:
+            # EDGE CASE: Sale with 0 items is invalid
+            if not sale.items or len(sale.items) == 0:
+                self.logger.warning("Cannot create sale with 0 items — empty sale rejected")
+                return None
+
+            # EDGE CASE: Validate each item's quantity and price
+            for item in sale.items:
+                item_qty = Decimal(str(item.quantity or 0))
+                if item_qty <= 0:
+                    self.logger.warning(
+                        f"Sale item rejected: product {item.product_id} has invalid quantity {item.quantity}"
+                    )
+                    return None
+                item_price = Decimal(str(getattr(item, 'unit_price', None) or 0))
+                if item_price < 0:
+                    self.logger.warning(
+                        f"Sale item rejected: product {item.product_id} has negative price {item_price}"
+                    )
+                    return None
+
+            # EDGE CASE: Discount > total → negative final amount
+            total_amount = Decimal(str(getattr(sale, 'total_amount', 0) or 0))
+            discount_amount = Decimal(str(getattr(sale, 'discount_amount', 0) or 0))
+            final_amount = Decimal(str(getattr(sale, 'final_amount', None) or total_amount - discount_amount))
+            if final_amount < 0:
+                self.logger.warning(
+                    f"Sale rejected: discount ({discount_amount}) exceeds total ({total_amount}), "
+                    f"resulting in negative final amount ({final_amount})"
+                )
+                return None
+
             # 0. توليد رقم الفاتورة إذا لم يكن موجوداً
             invoice_num = getattr(sale, "invoice_number", None)
             if not invoice_num:
@@ -93,17 +124,31 @@ class SalesService:
                             currency_id, base_curr.id, getattr(sale, "sale_date", None) or date.today()
                         )
                         if rate:
-                            sale.exchange_rate = Decimal(str(rate))
-                            sale.base_amount = Decimal(str(sale.total_amount)) * sale.exchange_rate
+                            sale.exchange_rate = Decimal(str(rate or 0))
+                            sale.base_amount = Decimal(str(sale.total_amount or 0)) * sale.exchange_rate
                 except Exception as e:
                     self.logger.warning(f"Error converting currency in SalesService.create_sale: {e}")
 
+            # EDGE CASE: Verify customer still exists if referenced (customer deleted while sale pending)
+            customer_id = getattr(sale, "customer_id", None)
+            if customer_id:
+                customer = self.customer_manager.get_customer_by_id(customer_id)
+                if not customer:
+                    self.logger.warning(
+                        f"Sale rejected: customer {customer_id} does not exist (may have been deleted)"
+                    )
+                    return None
+
             # 1. التحقق من توفر الكميات (قبل بدء المعاملة)
             # M7 FIX: تجميع الكميات المطلوبة لكل منتج للتحقق الصحيح
+            # EDGE CASE (same product added twice): Aggregating quantities per product
+            # ensures stock check is correct. Duplicate SaleItem rows are allowed
+            # intentionally — the UI may show separate line items for the same product
+            # (e.g. different discounts per line).
             required_quantities = {}
             for item in sale.items:
                 pid = item.product_id
-                required_quantities[pid] = required_quantities.get(pid, Decimal("0")) + Decimal(str(item.quantity))
+                required_quantities[pid] = required_quantities.get(pid, Decimal("0")) + Decimal(str(item.quantity or 0))
 
             for pid, total_qty in required_quantities.items():
                 product = self.product_manager.get_product_by_id(pid)
@@ -136,21 +181,41 @@ class SalesService:
                 sale.id = sale_id
 
                 # 3. تحديث المخزون بشكل ذري داخل المعاملة
+                # TOCTOU FIX: Use deduct_stock_atomic (conditional SQL) instead of
+                # read-then-set pattern. The old code read current_stock then set
+                # new_quantity, which had a TOCTOU race between read and write.
+                # deduct_stock_atomic uses WHERE current_stock >= ? and checks rowcount.
                 for item in sale.items:
-                    product = self.product_manager.get_product_by_id(item.product_id)
-                    current_stock = getattr(product, "current_stock", 0) if product else 0
-                    self.inventory_service.adjust_stock(
-                        product_id=item.product_id,
-                        new_quantity=current_stock - item.quantity,
-                        reason=f"sale:{sale_id}",
-                        user_id=user_id,
-                    )
+                    qty = float(item.quantity or 0)
+                    success = self.product_manager.deduct_stock_atomic(item.product_id, qty)
+                    if not success:
+                        raise RuntimeError(
+                            f"Insufficient stock for product {item.product_id} "
+                            f"(needed {qty}) — concurrent sale may have consumed it"
+                        )
+                    # Record stock movement for audit trail
+                    try:
+                        self.inventory_service._record_stock_movement(
+                            product_id=item.product_id,
+                            movement_type="out",
+                            quantity=qty,
+                            reference_id=sale_id,
+                            reference_type="sale",
+                            notes=f"sale:{sale_id}",
+                            created_by=user_id,
+                        )
+                    except Exception as move_err:
+                        self.logger.warning(f"Stock movement recording failed (non-blocking): {move_err}")
 
                 # 4. معالجة محاسبية (داخل المعاملة لضمان التناسق)
+                # Accounting journal entry is mandatory within the transaction.
+                # If it fails, the entire sale is rolled back. Chart of accounts
+                # must be set up before creating sales.
                 try:
                     self.accounting_service.create_sale_journal_entry(sale)
                 except Exception as e:
-                    self.logger.warning(f"Accounting entry deferred for sale {sale_id}: {e}")
+                    self.logger.error(f"Accounting entry failed for sale {sale_id}, rolling back: {e}")
+                    raise RuntimeError(f"Accounting entry failed for sale {sale_id}: {e}") from e
 
                 # 5. تحديث رصيد العميل إذا كان الدفع آجلاً
                 customer_id = getattr(sale, "customer_id", None)
@@ -160,13 +225,16 @@ class SalesService:
 
                     remaining_amount = getattr(sale, "remaining_amount", None)
                     if remaining_amount is None:
-                        remaining_amount = Decimal(str(total_amount)) - Decimal(str(paid_amount))
+                        remaining_amount = Decimal(str(total_amount or 0)) - Decimal(str(paid_amount or 0))
 
                     if remaining_amount > 0:
+                        # Customer balance update is mandatory within the transaction.
+                        # If it fails, the entire sale is rolled back.
                         try:
                             self.customer_manager.update_balance(customer_id, remaining_amount, "increase")
                         except Exception as e:
-                            self.logger.warning(f"Customer balance update deferred: {e}")
+                            self.logger.error(f"Customer balance update failed for sale {sale_id}, rolling back: {e}")
+                            raise RuntimeError(f"Customer balance update failed for sale {sale_id}: {e}") from e
 
                 return sale_id
         except Exception as e:
@@ -210,7 +278,17 @@ class SalesService:
                 if not self.sale_manager.cancel_sale(sale_id):
                     raise RuntimeError(f"Failed to cancel sale {sale_id}")
 
-                # 2. عكس رصيد العميل
+                # 2. عكس القيد المحاسبي
+                # Create a reversal journal entry for the cancelled sale to keep
+                # accounting consistent.
+                try:
+                    self.accounting_service.create_sale_reversal_journal_entry(sale)
+                except Exception as e:
+                    self.logger.warning(f"Accounting reversal entry deferred for cancelled sale {sale_id}: {e}")
+                    # Non-fatal: the sale is cancelled but accounting reversal may need
+                    # manual reconciliation. We log warning but don't block cancellation.
+
+                # 3. عكس رصيد العميل
                 customer_id = getattr(sale, "customer_id", None)
                 if customer_id:
                     total_amount = getattr(sale, "total_amount", Decimal("0.00"))
@@ -218,13 +296,16 @@ class SalesService:
 
                     remaining_amount = getattr(sale, "remaining_amount", None)
                     if remaining_amount is None:
-                        remaining_amount = Decimal(str(total_amount)) - Decimal(str(paid_amount))
+                        remaining_amount = Decimal(str(total_amount or 0)) - Decimal(str(paid_amount or 0))
 
                     if remaining_amount > 0:
+                        # Customer balance reversal is mandatory within the transaction.
+                        # If it fails, the entire cancellation is rolled back.
                         try:
                             self.customer_manager.update_balance(customer_id, remaining_amount, "decrease")
                         except Exception as e:
-                            self.logger.warning(f"Customer balance reversal deferred: {e}")
+                            self.logger.error(f"Customer balance reversal failed for sale {sale_id}, rolling back: {e}")
+                            raise RuntimeError(f"Customer balance reversal failed for sale {sale_id}: {e}") from e
 
                 return True
         except Exception as e:
@@ -319,6 +400,22 @@ class SalesService:
             self.logger.warning("Active session already exists")
             return None
 
+        # COLUMN_CHECK: pos_sessions table not in base schema; ensure it exists
+        try:
+            self.db_manager.execute_query("""
+                CREATE TABLE IF NOT EXISTS pos_sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    opening_cash DECIMAL(10,2) DEFAULT 0,
+                    closing_cash DECIMAL(10,2) DEFAULT 0,
+                    status TEXT DEFAULT 'active',
+                    opened_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    closed_at TIMESTAMP
+                )
+            """)
+        except Exception:
+            pass  # Table may already exist
+
         query = "INSERT INTO pos_sessions (user_id, opening_cash, status) VALUES (?, ?, 'active')"
         session_id = self.db_manager.execute_insert(query, (user_id, opening_cash))
 
@@ -363,14 +460,14 @@ class SalesService:
             """
             row = self.db_manager.fetch_one(query, (start_date.isoformat(), end_date.isoformat()))
             if row:
-                total_sales = int(row["total_sales"])
-                total_revenue = Decimal(str(row["total_revenue"]))
-                total_profit = Decimal(str(row["total_profit"]))
-                average_sale_value = float(total_revenue / total_sales) if total_sales > 0 else 0.0
+                total_sales = int(row.get("total_sales", 0) or 0)
+                total_revenue = Decimal(str(row.get("total_revenue", 0) or 0))
+                total_profit = Decimal(str(row.get("total_profit", 0) or 0))
+                average_sale_value = float((total_revenue or 0) / total_sales) if total_sales > 0 else 0.0
                 return {
                     "total_sales": total_sales,
-                    "total_revenue": float(total_revenue),
-                    "total_profit": float(total_profit),
+                    "total_revenue": float(total_revenue or 0),
+                    "total_profit": float(total_profit or 0),
                     "average_sale_value": average_sale_value,
                 }
         except Exception as e:
@@ -403,9 +500,9 @@ class SalesService:
             rows = self.db_manager.fetch_all(query, (start_date.isoformat(), end_date.isoformat()))
             return [
                 {
-                    "product_name": row["product_name"],
-                    "quantity": Decimal(str(row["quantity"])),
-                    "revenue": Decimal(str(row["revenue"])),
+                    "product_name": row.get("product_name", ""),
+                    "quantity": Decimal(str(row.get("quantity", 0) or 0)),
+                    "revenue": Decimal(str(row.get("revenue", 0) or 0)),
                 }
                 for row in rows
             ]
@@ -432,9 +529,9 @@ class SalesService:
             rows = self.db_manager.fetch_all(query, (start_date.isoformat(), end_date.isoformat()))
             return [
                 {
-                    "customer_name": row["customer_name"],
-                    "total_purchases": Decimal(str(row["total_purchases"] or 0)),
-                    "invoice_count": int(row["invoice_count"]),
+                    "customer_name": row.get("customer_name", ""),
+                    "total_purchases": Decimal(str(row.get("total_purchases", 0) or 0)),
+                    "invoice_count": int(row.get("invoice_count", 0) or 0),
                 }
                 for row in rows
             ]
@@ -459,9 +556,9 @@ class SalesService:
             rows = self.db_manager.fetch_all(query, (start_date.isoformat(), end_date.isoformat()))
             return [
                 {
-                    "date": str(row["date"]),
-                    "total": Decimal(str(row["total"])),
-                    "count": int(row["count"]),
+                    "date": str(row.get("date", "")),
+                    "total": Decimal(str(row.get("total", 0) or 0)),
+                    "count": int(row.get("count", 0) or 0),
                 }
                 for row in rows
             ]
@@ -486,9 +583,9 @@ class SalesService:
             rows = self.db_manager.fetch_all(query, (start_date.isoformat(), end_date.isoformat()))
             return [
                 {
-                    "payment_method": row["payment_method"],
-                    "count": int(row["count"]),
-                    "total": float(row["total"]),
+                    "payment_method": row.get("payment_method", ""),
+                    "count": int(row.get("count", 0) or 0),
+                    "total": float(row.get("total", 0) or 0),
                 }
                 for row in rows
             ]
@@ -519,7 +616,7 @@ class SalesService:
                     COALESCE(SUM(CASE WHEN payment_status = 'paid' THEN COALESCE(final_amount, total_amount) ELSE 0 END), 0) as paid_amount,
                     COALESCE(SUM(CASE WHEN payment_status IN ('partial', 'unpaid') THEN COALESCE(final_amount, total_amount) - COALESCE(paid_amount, 0) ELSE 0 END), 0) as outstanding,
                     AVG(COALESCE(final_amount, total_amount)) as avg_sale
-                FROM sales WHERE {date_filter}
+                FROM sales WHERE {date_filter}  # SQL_SAFE: date_filter is hardcoded based on period value
                   AND status NOT IN ('cancelled', 'draft')
                   AND COALESCE(is_deleted, 0) = 0
             """
@@ -550,14 +647,14 @@ class SalesService:
                 date_filter = "s.sale_date >= DATE('now', '-30 days')"
 
             query = f"""
-                SELECT p.id, p.name, p.sku,
+                SELECT p.id, p.name, p.barcode,
                        SUM(si.quantity) as total_qty,
                        SUM(si.total_price) as total_revenue
                 FROM sale_items si
                 JOIN sales s ON s.id = si.sale_id
                 JOIN products p ON p.id = si.product_id
-                WHERE {date_filter}
-                GROUP BY p.id, p.name, p.sku
+                WHERE {date_filter}  # SQL_SAFE: date_filter is hardcoded based on period value
+                GROUP BY p.id, p.name, p.barcode
                 ORDER BY total_qty DESC
                 LIMIT ?
             """
@@ -586,7 +683,7 @@ class SalesService:
                        COALESCE(SUM(s.total_amount), 0) as total_spent
                 FROM sales s
                 JOIN customers c ON c.id = s.customer_id
-                WHERE {date_filter}
+                WHERE {date_filter}  # SQL_SAFE: date_filter is hardcoded based on period value
                 GROUP BY c.id, c.name, c.phone
                 ORDER BY total_spent DESC
                 LIMIT ?
@@ -696,7 +793,7 @@ class SalesService:
             """
             row = self.db_manager.fetch_one(query, (target_date.isoformat(),))
             if row:
-                return float(Decimal(str(row["daily_profit"])))
+                return float(Decimal(str(row.get("daily_profit", 0) or 0)))
         except Exception as e:
             self.logger.warning(f"Error calculating daily profit: {e}")
         return 0.0
@@ -743,6 +840,11 @@ class SalesService:
 
     def add_sale_item(self, sale_id, product_id, quantity, discount=0.0):
         """إضافة عنصر مبيعات مع تطبيق منطق أسعار الجملة/التجزئة"""
+        # EDGE CASE: quantity must be positive
+        if not quantity or quantity <= 0:
+            self.logger.warning(f"add_sale_item rejected: invalid quantity {quantity} for product {product_id}")
+            return False
+
         product = self.product_manager.get_product_by_id(product_id)
         if not product:
             return False
@@ -756,8 +858,8 @@ class SalesService:
         item = SaleItem(
             product_id=product_id,
             quantity=quantity,
-            unit_price=Decimal(str(price)),
-            discount=Decimal(str(discount)),
+            unit_price=Decimal(str(price or 0)),
+            discount=Decimal(str(discount or 0)),
             sale_id=sale_id,
             product_name=getattr(product, "name", "")
         )

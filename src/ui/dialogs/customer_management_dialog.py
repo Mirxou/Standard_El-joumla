@@ -107,12 +107,12 @@ class CustomerManagementDialog(BaseDialog):
             self.customers = []
             for row in results:
                 if isinstance(row, dict):
-                    cust_id = row["id"]
-                    name = row["name"]
-                    phone = row["phone"]
-                    email = row["email"]
-                    balance = row["current_balance"]
-                    is_active = row["is_active"]
+                    cust_id = row.get("id")
+                    name = row.get("name", "")
+                    phone = row.get("phone", "")
+                    email = row.get("email", "")
+                    balance = row.get("current_balance", 0)
+                    is_active = row.get("is_active", 1)
                 else:
                     cust_id, name, phone, email, balance, is_active = row
                 self.customers.append(
@@ -154,7 +154,7 @@ class CustomerManagementDialog(BaseDialog):
             self.table.setItem(row, 2, email_item)
 
             # الرصيد
-            balance_item = QTableWidgetItem(f"{float(cust['balance']):,.2f}")
+            balance_item = QTableWidgetItem(f"{float(cust['balance'] or 0):,.2f}")
             balance_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.table.setItem(row, 3, balance_item)
 
@@ -175,6 +175,7 @@ class CustomerManagementDialog(BaseDialog):
             actions_layout.addStretch()
 
             actions_widget = self.create_widget_from_layout(actions_layout)
+            # PERF: consider using delegate instead of setCellWidget for large datasets
             self.table.setCellWidget(row, 4, actions_widget)
 
     def create_widget_from_layout(self, layout):

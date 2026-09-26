@@ -29,7 +29,7 @@ class ConnectivityChecker(QThread):
             urllib.request.urlopen(req, timeout=self.TIMEOUT)
             latency = (time.time() - start) * 1000
             self.result_ready.emit(True, latency)
-        except Exception:
+        except (OSError, urllib.error.URLError):
             self.result_ready.emit(False, 0)
 
 

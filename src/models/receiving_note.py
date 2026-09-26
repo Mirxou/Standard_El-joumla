@@ -96,7 +96,7 @@ class ReceivingItem:
         for field_name in decimal_fields:
             value = getattr(self, field_name)
             if isinstance(value, (int, float, str)):
-                setattr(self, field_name, Decimal(str(value)))
+                setattr(self, field_name, Decimal(str(value or 0)))
 
         # تحويل الأنواع
         if isinstance(self.inspection_status, str):
@@ -149,8 +149,8 @@ class ReceivingItem:
             "product_id": self.product_id,
             "product_name": self.product_name,
             "product_code": self.product_code,
-            "quantity_ordered": float(self.quantity_ordered),
-            "quantity_received": float(self.quantity_received),
+            "quantity_ordered": float(self.quantity_ordered or 0),
+            "quantity_received": float(self.quantity_received or 0),
             "quantity_accepted": float(self.quantity_accepted),
             "quantity_rejected": float(self.quantity_rejected),
             "quantity_damaged": float(self.quantity_damaged),
@@ -415,7 +415,7 @@ class SupplierEvaluation:
         for field_name in decimal_fields:
             value = getattr(self, field_name)
             if isinstance(value, (int, float, str)):
-                setattr(self, field_name, Decimal(str(value)))
+                setattr(self, field_name, Decimal(str(value or 0)))
 
         # تحويل التواريخ
         date_fields = [

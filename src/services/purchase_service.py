@@ -37,7 +37,13 @@ class PurchaseService:
         }
 
     def create_purchase(self, purchase: Purchase) -> Optional[int]:
-        """إنشاء فاتورة شراء"""
+        """إنشاء فاتورة شراء
+
+        NOTE: Purchase creation intentionally does NOT add inventory or create
+        accounting entries — inventory is added upon receipt (see
+        PurchaseOrderService.receive_shipment). Accounting entries are handled
+        there transactionally, so no inconsistency risk.
+        """
         try:
             # Multi-Currency (في حال كان النموذج يدعمه)
             currency_id = getattr(purchase, "currency_id", None)
@@ -167,7 +173,7 @@ class PurchaseService:
 
             item = PurchaseItem(
                 product_id=product_id,
-                quantity_ordered=Decimal(str(quantity)),
+                quantity_ordered=Decimal(str(quantity or 0)),
                 unit_cost=product.cost_price,
             )
             purchase.items = [item]

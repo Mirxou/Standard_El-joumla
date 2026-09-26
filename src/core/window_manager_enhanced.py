@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional, Type
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtWidgets import QWidget
 
-logger = logging.getLogger("window_manager_enhanced")
+logger = logging.getLogger(__name__)
 
 
 class WindowPerformanceMetrics:

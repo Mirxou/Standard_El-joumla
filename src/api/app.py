@@ -58,6 +58,11 @@ rate_limiter = APIRateLimiter(
     per_endpoint_limits={
         "/api/v1/auth/login": {"max_requests": 5, "window_seconds": 60},
         "/api/v1/auth/refresh": {"max_requests": 10, "window_seconds": 60},
+        "/api/v1/auth/logout": {"max_requests": 20, "window_seconds": 60},
+        "/api/v1/users": {"max_requests": 20, "window_seconds": 60},
+        "/api/v1/admin": {"max_requests": 30, "window_seconds": 60},
+        "/api/v1/sales": {"max_requests": 60, "window_seconds": 60},
+        "/api/v1/purchases": {"max_requests": 60, "window_seconds": 60},
     },
 )
 

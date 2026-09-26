@@ -141,7 +141,9 @@ class BlockingOverlay(QWidget):
 
     def show_overlay(self):
         """عرض Overlay"""
-        self.setGeometry(self.parent().rect())
+        parent = self.parent()
+        if parent:
+            self.setGeometry(parent.rect())
         self.show()
         self.raise_()
 

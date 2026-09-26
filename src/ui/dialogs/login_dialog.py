@@ -138,10 +138,10 @@ class _RoseParticleCanvas(QWidget):
                     pen.setColor(c)
                     painter.setPen(pen)
                     painter.drawLine(
-                        int(self._particles[i]["x"]),
-                        int(self._particles[i]["y"]),
-                        int(self._particles[j]["x"]),
-                        int(self._particles[j]["y"]),
+                        int(self._particles[i]["x"] or 0),
+                        int(self._particles[i]["y"] or 0),
+                        int(self._particles[j]["x"] or 0),
+                        int(self._particles[j]["y"] or 0),
                     )
 
         # Draw particles

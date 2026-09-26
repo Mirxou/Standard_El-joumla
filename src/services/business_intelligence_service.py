@@ -635,23 +635,25 @@ class BusinessIntelligenceService:
             # كشف الأنماط الأسبوعية
             if len(df) >= 14:  # أسبوعين على الأقل
                 weekly_pattern = df.groupby(df.index.dayofweek)["value"].mean()
-                if weekly_pattern.std() / weekly_pattern.mean() > 0.2:
+                weekly_mean = weekly_pattern.mean()
+                if weekly_mean != 0 and weekly_pattern.std() / weekly_mean > 0.2:
                     patterns["weekly_pattern"] = {
                         "pattern_type": "weekly",
                         "peak_day": weekly_pattern.idxmax(),
                         "trough_day": weekly_pattern.idxmin(),
-                        "variability": weekly_pattern.std() / weekly_pattern.mean(),
+                        "variability": weekly_pattern.std() / weekly_mean,
                     }
 
             # كشف الأنماط الشهرية
             if len(df) >= 60:  # شهرين على الأقل
                 monthly_pattern = df.groupby(df.index.month)["value"].mean()
-                if monthly_pattern.std() / monthly_pattern.mean() > 0.15:
+                monthly_mean = monthly_pattern.mean()
+                if monthly_mean != 0 and monthly_pattern.std() / monthly_mean > 0.15:
                     patterns["monthly_pattern"] = {
                         "pattern_type": "monthly",
                         "peak_month": monthly_pattern.idxmax(),
                         "trough_month": monthly_pattern.idxmin(),
-                        "variability": monthly_pattern.std() / monthly_pattern.mean(),
+                        "variability": monthly_pattern.std() / monthly_mean,
                     }
 
             return patterns
@@ -754,7 +756,8 @@ class BusinessIntelligenceService:
                 )
 
                 return [dict(row) for row in cursor.fetchall()]
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in BI operation: {e}")
             return []
 
     def _get_customer_behavior_data(self) -> pd.DataFrame:
@@ -780,7 +783,8 @@ class BusinessIntelligenceService:
                 data = cursor.fetchall()
 
                 return pd.DataFrame(data, columns=columns)
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in BI operation: {e}")
             return pd.DataFrame()
 
     def _get_metric_history(self, metric: str, time_period: str) -> List[Dict[str, Any]]:
@@ -806,7 +810,8 @@ class BusinessIntelligenceService:
                     return [dict(row) for row in cursor.fetchall()]
 
             return []
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in BI operation: {e}")
             return []
 
     # طرق إضافية للتحليل
@@ -824,7 +829,8 @@ class BusinessIntelligenceService:
                 """)
 
                 return [dict(row) for row in cursor.fetchall()]
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in BI operation: {e}")
             return []
 
     def _analyze_inventory_turnover(self) -> Dict[str, Any]:
@@ -908,7 +914,7 @@ class BusinessIntelligenceService:
 
                     # العملاء المهددون بالخسارة (لم يشتروا منذ 60 يوماً)
                     last_purchase_days = (
-                        (datetime.now() - customer["last_purchase"]).days if customer["last_purchase"] else 999
+                        (datetime.now() - customer.get("last_purchase")).days if customer.get("last_purchase") else 999
                     )
                     if last_purchase_days > 60:
                         at_risk_customers.append(customer)
@@ -1153,12 +1159,13 @@ class BusinessIntelligenceService:
 
                 # إضافة متوسط العملاء للمقارنة
                 if customers:
-                    avg_customer_purchases = np.mean([c["total_purchases"] for c in customers if c["total_purchases"]])
+                    avg_customer_purchases = np.mean([c.get("total_purchases") or 0 for c in customers if c.get("total_purchases")])
                     for customer in customers:
                         customer["avg_customer_purchases"] = avg_customer_purchases
 
                 return customers
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in BI operation: {e}")
             return []
 
     def _analyze_cluster_characteristics(self, cluster_data: pd.DataFrame) -> Dict[str, Any]:
@@ -1171,7 +1178,8 @@ class BusinessIntelligenceService:
                 "avg_last_purchase_days": cluster_data["last_purchase_days"].mean(),
                 "size": len(cluster_data),
             }
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in BI operation: {e}")
             return {}
 
     def _analyze_cluster_behavior(self, cluster_data: pd.DataFrame) -> Dict[str, Any]:
@@ -1182,7 +1190,8 @@ class BusinessIntelligenceService:
                 "spending_pattern": cluster_data["total_purchases"].describe().to_dict(),
                 "loyalty_score": (cluster_data["purchase_frequency"] * cluster_data["total_purchases"]).mean(),
             }
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in BI operation: {e}")
             return {}
 
     def _calculate_segment_value(self, cluster_data: pd.DataFrame) -> Dict[str, Any]:
@@ -1194,5 +1203,6 @@ class BusinessIntelligenceService:
                 "revenue_percentage": 0,  # سيتم حسابه نسبة للإجمالي
                 "growth_potential": cluster_data["purchase_frequency"].mean() * 1.2,  # تقدير
             }
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in BI operation: {e}")
             return {}

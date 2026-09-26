@@ -323,7 +323,7 @@ class ProductGridItem(QFrame):
                 "name": self.product.name,
                 "quantity": quantity,
                 "unit_price": (
-                    float(self.pricing_service.get_price_for_customer(self.product.id, self.customer, quantity))
+                    float(self.pricing_service.get_price_for_customer(self.product.id, self.customer, quantity) or 0)
                     if self.customer and self.pricing_service
                     else float(self.product.retail_price or 0)
                 ),

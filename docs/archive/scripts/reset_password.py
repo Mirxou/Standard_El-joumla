@@ -17,7 +17,7 @@ def reset_admin_password():
     cursor = db_manager.connection.cursor()
     
     username = "admin"
-    new_password = "123" 
+    new_password = "123"  # SECURITY: move to environment variable; this is a weak default for dev only
     
     # Initialize security service
     security = AdvancedSecurityService()

@@ -227,7 +227,7 @@ class EDIGenerator:
                 "order_date": po_data.get("order_date", datetime.now().strftime("%Y-%m-%d")),
             },
             "items": [],
-            "summary": {"total_amount": float(po_data.get("total_amount", 0))},
+            "summary": {"total_amount": float(po_data.get("total_amount", 0) or 0)},
         }
 
         # تحويل البنود
@@ -236,8 +236,8 @@ class EDIGenerator:
             edi_data["items"].append(
                 {
                     "product_code": item.get("product_code", ""),
-                    "quantity": float(item.get("quantity_ordered", 0)),
-                    "unit_price": float(item.get("unit_price", 0)),
+                    "quantity": float(item.get("quantity_ordered", 0) or 0),
+                    "unit_price": float(item.get("unit_price", 0) or 0),
                     "unit": item.get("unit_of_measure", "PCE"),
                 }
             )
@@ -255,7 +255,7 @@ class EDIGenerator:
                 "invoice_date": invoice_data.get("purchase_date", datetime.now().strftime("%Y-%m-%d")),
             },
             "items": [],
-            "summary": {"total_amount": float(invoice_data.get("total_amount", 0))},
+            "summary": {"total_amount": float(invoice_data.get("total_amount", 0) or 0)},
         }
 
         # تحويل البنود
@@ -264,8 +264,8 @@ class EDIGenerator:
             edi_data["items"].append(
                 {
                     "product_code": item.get("product_code", ""),
-                    "quantity": float(item.get("quantity", 0)),
-                    "unit_price": float(item.get("unit_price", 0)),
+                    "quantity": float(item.get("quantity", 0) or 0),
+                    "unit_price": float(item.get("unit_price", 0) or 0),
                     "unit": "PCE",
                 }
             )

@@ -52,8 +52,8 @@ class Currency:
             is_base=bool(data.get("is_base", 0)),
             is_active=bool(data.get("is_active", 1)),
             decimal_places=data.get("decimal_places", 2),
-            created_at=(datetime.fromisoformat(data["created_at"]) if data.get("created_at") else None),
-            updated_at=(datetime.fromisoformat(data["updated_at"]) if data.get("updated_at") else None),
+            created_at=(datetime.fromisoformat(data.get("created_at", "")) if data.get("created_at") else None),
+            updated_at=(datetime.fromisoformat(data.get("updated_at", "")) if data.get("updated_at") else None),
         )
 
 
@@ -78,7 +78,7 @@ class ExchangeRate:
             "id": self.id,
             "from_currency_id": self.from_currency_id,
             "to_currency_id": self.to_currency_id,
-            "rate": float(self.rate),
+            "rate": float(self.rate or 0),
             "effective_date": (self.effective_date.isoformat() if self.effective_date else None),
             "expiry_date": self.expiry_date.isoformat() if self.expiry_date else None,
             "source": self.source,
@@ -94,13 +94,13 @@ class ExchangeRate:
             id=data.get("id"),
             from_currency_id=data.get("from_currency_id", 0),
             to_currency_id=data.get("to_currency_id", 0),
-            rate=Decimal(str(data.get("rate", 1.0))),
-            effective_date=(date.fromisoformat(data["effective_date"]) if data.get("effective_date") else None),
-            expiry_date=(date.fromisoformat(data["expiry_date"]) if data.get("expiry_date") else None),
+            rate=Decimal(str(data.get("rate", 1.0) or 0)),
+            effective_date=(date.fromisoformat(data.get("effective_date", "")) if data.get("effective_date") else None),
+            expiry_date=(date.fromisoformat(data.get("expiry_date", "")) if data.get("expiry_date") else None),
             source=data.get("source", "manual"),
             is_active=bool(data.get("is_active", 1)),
-            created_at=(datetime.fromisoformat(data["created_at"]) if data.get("created_at") else None),
-            updated_at=(datetime.fromisoformat(data["updated_at"]) if data.get("updated_at") else None),
+            created_at=(datetime.fromisoformat(data.get("created_at", "")) if data.get("created_at") else None),
+            updated_at=(datetime.fromisoformat(data.get("updated_at", "")) if data.get("updated_at") else None),
         )
 
 

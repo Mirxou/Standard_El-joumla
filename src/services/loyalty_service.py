@@ -12,6 +12,9 @@ Features:
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -242,15 +245,15 @@ class LoyaltySystem:
             }
 
         row = result[0]
-        tier_info = next((t for t in self.TIERS if t.name == row["tier"]), self.TIERS[0])
+        tier_info = next((t for t in self.TIERS if t.name == row.get("tier", "")), self.TIERS[0])
 
         return {
-            "total_points": row["total_points"],
-            "lifetime_points": row["lifetime_points"],
-            "tier": row["tier"],
+            "total_points": row.get("total_points", 0),
+            "lifetime_points": row.get("lifetime_points", 0),
+            "tier": row.get("tier", "\u0628\u0631\u0648\u0646\u0632\u064a"),
             "tier_benefits": tier_info.benefits,
             "discount_percentage": tier_info.discount_percentage,
-            "updated_at": row["updated_at"],
+            "updated_at": row.get("updated_at"),
         }
 
     def get_transactions(self, customer_id: int, limit: int = 20) -> List[Dict]:
@@ -270,12 +273,12 @@ class LoyaltySystem:
         for row in result:
             transactions.append(
                 {
-                    "id": row["id"],
-                    "points": row["points"],
-                    "type": row["transaction_type"],
-                    "order_id": row["order_id"],
-                    "notes": row["notes"],
-                    "date": row["created_at"],
+                    "id": row.get("id", 0),
+                    "points": row.get("points", 0),
+                    "type": row.get("transaction_type", ""),
+                    "order_id": row.get("order_id"),
+                    "notes": row.get("notes", ""),
+                    "date": row.get("created_at", ""),
                 }
             )
 
@@ -361,13 +364,13 @@ class LoyaltySystem:
         for row in result:
             offers.append(
                 {
-                    "id": row["id"],
-                    "title": row["title"],
-                    "description": row["description"],
-                    "discount_percentage": row["discount_percentage"],
-                    "points_required": row["points_required"],
-                    "valid_from": row["valid_from"],
-                    "valid_to": row["valid_to"],
+                    "id": row.get("id", 0),
+                    "title": row.get("title", ""),
+                    "description": row.get("description", ""),
+                    "discount_percentage": row.get("discount_percentage", 0),
+                    "points_required": row.get("points_required", 0),
+                    "valid_from": row.get("valid_from", ""),
+                    "valid_to": row.get("valid_to", ""),
                 }
             )
 
@@ -375,9 +378,9 @@ class LoyaltySystem:
 
 
 if __name__ == "__main__":
-    print("🎁 Loyalty System Test")
-    print("=" * 50)
-    print("✅ Module loaded successfully!")
-    print("\nLoyalty Tiers:")
+    logger.info("Loyalty System Test")
+    logger.info("=" * 50)
+    logger.info("Module loaded successfully!")
+    logger.info("Loyalty Tiers:")
     for tier in LoyaltySystem.TIERS:
-        print(f"  {tier.name}: {tier.min_points}+ points, {tier.discount_percentage}% discount")
+        logger.info(f"  {tier.name}: {tier.min_points}+ points, {tier.discount_percentage}% discount")

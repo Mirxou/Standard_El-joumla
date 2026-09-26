@@ -5,6 +5,7 @@ Hybrid Mode: يعمل محليًا أو عبر API حسب توفر الاتصا�
 """
 
 import logging
+import os
 import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
@@ -37,6 +38,8 @@ class APIClient:
 
         Args:
             base_url: عنوان الـ API (افتراضي: localhost)
+                CONFIG: Should be loaded from env var API_BASE_URL in production.
+                Current default is for local development only.
             timeout: وقت انتظار الاتصال بالثواني
             max_retries: عدد محاولات إعادة المحاولة (افتراضي: 3)
             retry_backoff_factor: عامل الانتظار الأسي (افتراضي: 0.5)
@@ -45,6 +48,11 @@ class APIClient:
                 (افتراضي: [500, 502, 503, 504])
             enable_logging: تفعيل تسجيل الطلبات (افتراضي: True)
         """
+        # CONFIG: Use environment variable for base_url in production
+        if base_url == "http://127.0.0.1:8001":
+            env_url = os.getenv("API_BASE_URL", "")
+            if env_url:
+                base_url = env_url
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.max_retries = max_retries

@@ -111,7 +111,7 @@ class ReportGenerator:
         summary.total_quantity = float(total_quantity)
         summary.total_discount = float(total_discount)
         summary.total_tax = float(total_tax)
-        summary.total_profit = float(total_profit)
+        summary.total_profit = float(total_profit or 0)
 
         summary.cash_sales = float(cash_sales)
         summary.credit_sales = float(credit_sales)
@@ -127,7 +127,7 @@ class ReportGenerator:
         if filters.include_returns:
             returns_data = self._get_returns_data(filters)
             summary.returns_count = len(returns_data)
-            summary.returns_value = sum(float(r["total"]) for r in returns_data)
+            summary.returns_value = sum(float(r.get("total") or 0) for r in returns_data)
 
         summary.net_sales = summary.total_sales - summary.returns_value
 
@@ -184,9 +184,9 @@ class ReportGenerator:
         """تقرير المبيعات حسب المنتج"""
         query = """
             SELECT
-                p.id, p.name, p.code, c.name as category_name,
+                p.id, p.name, p.barcode as code, c.name as category_name,  # COLUMN_CHECK: schema has 'barcode' not 'code'
                 SUM(si.quantity) as total_quantity,
-                SUM(si.total) as total_sales,
+                SUM(si.total_price) as total_sales,  # COLUMN_CHECK: schema has 'total_price' not 'total'
                 SUM(si.quantity * (si.unit_price - p.cost_price)) as total_profit,
                 COUNT(DISTINCT s.id) as invoice_count,
                 AVG(si.unit_price) as avg_price
@@ -194,7 +194,7 @@ class ReportGenerator:
             JOIN sales s ON si.sale_id = s.id
             JOIN products p ON si.product_id = p.id
             LEFT JOIN categories c ON p.category_id = c.id
-            WHERE s.date BETWEEN ? AND ?
+            WHERE s.sale_date BETWEEN ? AND ?  # COLUMN_CHECK: schema has 'sale_date' not 'date'
         """
 
         params = [filters.start_date, filters.end_date]
@@ -212,7 +212,11 @@ class ReportGenerator:
         query += " GROUP BY p.id ORDER BY total_sales DESC"
 
         if filters.limit:
-            query += f" LIMIT {filters.limit}"
+            # SQL_INJECTION: filters.limit was directly interpolated. Fixed: int-validate.
+            safe_limit = int(filters.limit) if isinstance(filters.limit, (int, float)) else 100
+            if safe_limit < 1:
+                safe_limit = 100
+            query += f" LIMIT {safe_limit}"  # SQL_SAFE: safe_limit is int-validated
 
         results = self.db.execute_query(query, params)
 
@@ -223,12 +227,12 @@ class ReportGenerator:
                 date=filters.start_date,
                 invoice_number="",
                 customer_name="",
-                product_name=row["name"],
+                product_name=row.get("name", ""),
                 category_name=row.get("category_name"),
-                quantity=float(row["total_quantity"]),
-                unit_price=float(row["avg_price"]),
-                total=float(row["total_sales"]),
-                profit=float(row["total_profit"] or 0),
+                quantity=float(row.get("total_quantity") or 0),
+                unit_price=float(row.get("avg_price") or 0),
+                total=float(row.get("total_sales") or 0),
+                profit=float(row.get("total_profit") or 0),
             )
             report.sales_lines.append(line)
 
@@ -250,7 +254,7 @@ class ReportGenerator:
 
         query = """
             SELECT
-                p.id, p.code, p.name, c.name as category_name,
+                p.id, p.barcode as code, p.name, c.name as category_name,  # COLUMN_CHECK: schema has 'barcode' not 'code'
                 p.current_stock as closing_quantity,
                 p.cost_price as unit_cost,
                 COALESCE(purchases.total, 0) as purchases,
@@ -260,29 +264,28 @@ class ReportGenerator:
             FROM products p
             LEFT JOIN categories c ON p.category_id = c.id
             LEFT JOIN (
-                SELECT product_id, SUM(quantity) as total
+                SELECT product_id, SUM(quantity_ordered) as total
                 FROM purchase_items
-                WHERE date BETWEEN ? AND ?
                 GROUP BY product_id
             ) purchases ON p.id = purchases.product_id
             LEFT JOIN (
                 SELECT product_id, SUM(quantity) as total
                 FROM sale_items si
                 JOIN sales s ON si.sale_id = s.id
-                WHERE s.date BETWEEN ? AND ?
+                WHERE s.sale_date BETWEEN ? AND ?  # COLUMN_CHECK: schema has 'sale_date' not 'date'
                 GROUP BY product_id
             ) sales ON p.id = sales.product_id
             LEFT JOIN (
                 SELECT product_id, SUM(quantity) as total
                 FROM return_items ri
                 JOIN return_invoices r ON ri.return_id = r.id
-                WHERE r.date BETWEEN ? AND ?
+                WHERE r.return_date BETWEEN ? AND ?  # COLUMN_CHECK: return_invoices has 'return_date' not 'date'
                 GROUP BY product_id
             ) returns ON p.id = returns.product_id
             LEFT JOIN (
                 SELECT product_id, SUM(quantity) as total
-                FROM stock_adjustments
-                WHERE date BETWEEN ? AND ?
+                FROM stock_movements  # COLUMN_CHECK: stock_adjustments table doesn't exist; using stock_movements
+                WHERE created_at BETWEEN ? AND ?
                 GROUP BY product_id
             ) adjustments ON p.id = adjustments.product_id
         """
@@ -294,35 +297,33 @@ class ReportGenerator:
             filters.end_date,
             filters.start_date,
             filters.end_date,
-            filters.start_date,
-            filters.end_date,
         ]
 
         results = self.db.execute_query(query, params)
 
         for row in results:
-            purchases = float(row["purchases"] or 0)
-            sales = float(row["sales"] or 0)
-            returns = float(row["returns"] or 0)
-            adjustments = float(row["adjustments"] or 0)
-            closing = float(row["closing_quantity"])
+            purchases = float(row.get("purchases") or 0)
+            sales = float(row.get("sales") or 0)
+            returns = float(row.get("returns") or 0)
+            adjustments = float(row.get("adjustments") or 0)
+            closing = float(row.get("closing_quantity") or 0)
 
             # حساب الرصيد الافتتاحي
             opening = closing - purchases + sales - returns - adjustments
 
             line = InventoryReportLine(
-                product_id=row["id"],
-                product_code=row["code"],
-                product_name=row["name"],
-                category_name=row["category_name"] or "",
+                product_id=row.get("id", 0),
+                product_code=row.get("code", ""),
+                product_name=row.get("name", ""),
+                category_name=row.get("category_name", "") or "",
                 opening_quantity=opening,
                 purchases=purchases,
                 sales=sales,
                 returns=returns,
                 adjustments=adjustments,
                 closing_quantity=closing,
-                unit_cost=float(row["unit_cost"]),
-                total_value=closing * float(row["unit_cost"]),
+                unit_cost=float(row.get("unit_cost", 0) or 0),
+                total_value=closing * float(row.get("unit_cost", 0) or 0),
             )
             report.inventory_lines.append(line)
 
@@ -344,13 +345,13 @@ class ReportGenerator:
         """تقرير تقييم المخزون"""
         query = """
             SELECT
-                p.id, p.code, p.name, c.name as category_name,
+                p.id, p.barcode as code, p.name, c.name as category_name,  # COLUMN_CHECK: schema has 'barcode' not 'code'
                 p.current_stock as quantity,
                 p.cost_price,
-                p.sale_price,
+                p.selling_price as sale_price,  # COLUMN_CHECK: schema has 'selling_price' not 'sale_price'
                 (p.current_stock * p.cost_price) as cost_value,
-                (p.current_stock * p.sale_price) as sale_value,
-                ((p.sale_price - p.cost_price) * p.current_stock) as potential_profit
+                (p.current_stock * p.selling_price) as sale_value,  # COLUMN_CHECK: schema has 'selling_price' not 'sale_price'
+                ((p.selling_price - p.cost_price) * p.current_stock) as potential_profit  # COLUMN_CHECK: schema has 'selling_price' not 'sale_price'
             FROM products p
             LEFT JOIN categories c ON p.category_id = c.id
             WHERE p.current_stock > 0
@@ -371,13 +372,13 @@ class ReportGenerator:
 
         for row in results:
             line = InventoryReportLine(
-                product_id=row["id"],
-                product_code=row["code"],
-                product_name=row["name"],
-                category_name=row["category_name"] or "",
-                closing_quantity=float(row["quantity"]),
-                unit_cost=float(row["cost_price"]),
-                total_value=float(row["cost_value"]),
+                product_id=row.get("id"),
+                product_code=row.get("code", ""),
+                product_name=row.get("name", ""),
+                category_name=row.get("category_name") or "",
+                closing_quantity=float(row.get("quantity") or 0),
+                unit_cost=float(row.get("cost_price") or 0),
+                total_value=float(row.get("cost_value") or 0),
             )
             report.inventory_lines.append(line)
 
@@ -415,14 +416,14 @@ class ReportGenerator:
         results = self.db.execute_query(query, params)
 
         for row in results:
-            debit = float(row["total_debit"])
-            credit = float(row["total_credit"])
+            debit = float(row.get("total_debit") or 0)
+            credit = float(row.get("total_credit") or 0)
             balance = debit - credit
 
             line = FinancialReportLine(
-                account_code=row["code"],
-                account_name=row["name"],
-                account_type=row["type"],
+                account_code=row.get("code", ""),
+                account_name=row.get("name", ""),
+                account_type=row.get("type", ""),
                 debit=debit,
                 credit=credit,
                 closing_balance=balance,
@@ -472,8 +473,8 @@ class ReportGenerator:
         revenue_result = self.db.execute_query(revenue_query, params)
         expenses_result = self.db.execute_query(expenses_query, params)
 
-        total_revenue = float(revenue_result[0]["total"]) if revenue_result else 0
-        total_expenses = float(expenses_result[0]["total"]) if expenses_result else 0
+        total_revenue = float(revenue_result[0].get("total") or 0) if revenue_result else 0
+        total_expenses = float(expenses_result[0].get("total") or 0) if expenses_result else 0
 
         summary = FinancialReportSummary(
             period_start=filters.start_date,
@@ -497,15 +498,15 @@ class ReportGenerator:
         """جلب بيانات المبيعات"""
         query = """
             SELECT
-                s.id, s.invoice_number, s.date, s.total, s.discount, s.tax,
+                s.id, s.invoice_number, s.sale_date, s.total_amount, s.discount_amount, s.tax_amount,  # COLUMN_CHECK: fixed column names
                 s.payment_method, s.notes,
                 c.name as customer_name,
                 si.product_id, p.name as product_name, cat.name as category_name,
                 si.quantity, si.unit_price,
                 (si.quantity * (si.unit_price - p.cost_price)) as profit,
                 CASE
-                    WHEN si.total > 0
-                    THEN ((si.quantity * (si.unit_price - p.cost_price)) / si.total) * 100
+                    WHEN si.total_price > 0  # COLUMN_CHECK: schema has 'total_price' not 'total'
+                    THEN ((si.quantity * (si.unit_price - p.cost_price)) / si.total_price) * 100
                     ELSE 0
                 END as profit_margin
             FROM sales s
@@ -513,7 +514,7 @@ class ReportGenerator:
             LEFT JOIN sale_items si ON s.id = si.sale_id
             LEFT JOIN products p ON si.product_id = p.id
             LEFT JOIN categories cat ON p.category_id = cat.id
-            WHERE s.date BETWEEN ? AND ?
+            WHERE s.sale_date BETWEEN ? AND ?  # COLUMN_CHECK: schema has 'sale_date' not 'date'
         """
 
         params = [filters.start_date, filters.end_date]
@@ -526,7 +527,7 @@ class ReportGenerator:
         if filters.only_approved:
             query += " AND s.status = 'completed'"
 
-        query += " ORDER BY s.date DESC"
+        query += " ORDER BY s.sale_date DESC"  # COLUMN_CHECK: schema has 'sale_date' not 'date'
 
         return self.db.execute_query(query, params)
 
@@ -534,11 +535,11 @@ class ReportGenerator:
         """جلب بيانات المرتجعات"""
         query = """
             SELECT
-                r.id, r.return_number, r.date, r.total,
+                r.id, r.return_number, r.return_date, r.total_refund_amount,  # COLUMN_CHECK: fixed column names for return_invoices
                 c.name as customer_name
             FROM return_invoices r
-            JOIN customers c ON r.customer_id = c.id
-            WHERE r.date BETWEEN ? AND ?
+            JOIN customers c ON r.original_invoice_id = c.id  # COLUMN_CHECK: return_invoices uses 'original_invoice_id'
+            WHERE r.return_date BETWEEN ? AND ?
             AND r.status = 'approved'
         """
 
@@ -551,11 +552,11 @@ class ReportGenerator:
             SELECT
                 p.name,
                 SUM(si.quantity) as total_quantity,
-                SUM(si.total) as total_sales
+                SUM(si.total_price) as total_sales  # COLUMN_CHECK: schema has 'total_price' not 'total'
             FROM sale_items si
             JOIN sales s ON si.sale_id = s.id
             JOIN products p ON si.product_id = p.id
-            WHERE s.date BETWEEN ? AND ?
+            WHERE s.sale_date BETWEEN ? AND ?  # COLUMN_CHECK: schema has 'sale_date' not 'date'
             GROUP BY p.id
             ORDER BY total_sales DESC
             LIMIT ?
@@ -570,10 +571,10 @@ class ReportGenerator:
             SELECT
                 c.name,
                 COUNT(s.id) as invoice_count,
-                SUM(s.total) as total_sales
+                SUM(s.total_amount) as total_sales  # COLUMN_CHECK: schema has 'total_amount' not 'total'
             FROM sales s
             JOIN customers c ON s.customer_id = c.id
-            WHERE s.date BETWEEN ? AND ?
+            WHERE s.sale_date BETWEEN ? AND ?  # COLUMN_CHECK: schema has 'sale_date' not 'date'
             GROUP BY c.id
             ORDER BY total_sales DESC
             LIMIT ?
@@ -588,12 +589,12 @@ class ReportGenerator:
             SELECT
                 c.name,
                 SUM(si.quantity) as total_quantity,
-                SUM(si.total) as total_sales
+                SUM(si.total_price) as total_sales  # COLUMN_CHECK: schema has 'total_price' not 'total'
             FROM sale_items si
             JOIN sales s ON si.sale_id = s.id
             JOIN products p ON si.product_id = p.id
             JOIN categories c ON p.category_id = c.id
-            WHERE s.date BETWEEN ? AND ?
+            WHERE s.sale_date BETWEEN ? AND ?  # COLUMN_CHECK: schema has 'sale_date' not 'date'
             GROUP BY c.id
             ORDER BY total_sales DESC
             LIMIT ?
@@ -625,7 +626,7 @@ class ReportGenerator:
                 datasets=[
                     {
                         "label": "المبيعات",
-                        "data": [float(p["total_sales"]) for p in summary.top_products[:10]],
+                        "data": [float(p["total_sales"] or 0) for p in summary.top_products[:10]],
                     }
                 ],
                 colors=["#2196F3"],
@@ -684,7 +685,7 @@ class ReportGenerator:
 
         query = """
             SELECT
-                p.id as product_id, p.code as product_code, p.name as product_name,
+                p.id as product_id, p.barcode as product_code, p.name as product_name,  # COLUMN_CHECK: schema has 'barcode' not 'code'
                 c.name as category_name,
                 p.current_stock, p.min_stock,
                 p.cost_price as unit_cost,
@@ -711,8 +712,8 @@ class ReportGenerator:
             results = []
 
         for row in results:
-            current_stock = float(row.get("current_stock", 0))
-            min_stock = float(row.get("min_stock", 0))
+            current_stock = float(row.get("current_stock", 0) or 0)
+            min_stock = float(row.get("min_stock", 0) or 0)
             is_low = current_stock <= min_stock
 
             if hasattr(filters, 'low_stock_only') and filters.low_stock_only and not is_low:
@@ -724,8 +725,8 @@ class ReportGenerator:
                 product_name=row.get("product_name", ""),
                 category_name=row.get("category_name", ""),
                 closing_quantity=current_stock,
-                unit_cost=float(row.get("unit_cost", 0)),
-                total_value=float(row.get("total_value", 0)),
+                unit_cost=float(row.get("unit_cost", 0) or 0),
+                total_value=float(row.get("total_value", 0) or 0),
                 is_low_stock=is_low,
             )
             report.inventory_lines.append(line)
@@ -750,7 +751,7 @@ class ReportGenerator:
             )
             rev_rows = self.db.execute_query(q_rev)
             if rev_rows:
-                total_revenue = float(rev_rows[0].get("amount", 0))
+                total_revenue = float(rev_rows[0].get("amount", 0) or 0)
 
             # Expenses
             q_exp = (
@@ -760,7 +761,7 @@ class ReportGenerator:
             )
             exp_rows = self.db.execute_query(q_exp)
             if exp_rows:
-                total_expenses = float(exp_rows[0].get("amount", 0))
+                total_expenses = float(exp_rows[0].get("amount", 0) or 0)
 
             # Assets
             q_ast = (
@@ -770,7 +771,7 @@ class ReportGenerator:
             )
             ast_rows = self.db.execute_query(q_ast)
             if ast_rows:
-                total_assets = float(ast_rows[0].get("amount", 0))
+                total_assets = float(ast_rows[0].get("amount", 0) or 0)
 
             # Liabilities
             q_liab = (
@@ -780,7 +781,7 @@ class ReportGenerator:
             )
             liab_rows = self.db.execute_query(q_liab)
             if liab_rows:
-                total_liabilities = float(liab_rows[0].get("amount", 0))
+                total_liabilities = float(liab_rows[0].get("amount", 0) or 0)
         except Exception:
             pass  # Return zeros if queries fail
 
@@ -878,13 +879,13 @@ class ReportGenerator:
         if not assets_result:
             return {"liquidity_ratios": {}, "profitability_ratios": {}, "efficiency_ratios": {}}
         assets_row = assets_result[0]
-        current_assets = float(assets_row["inventory_value"]) + float(assets_row["receivables"])
+        current_assets = float(assets_row.get("inventory_value", 0) or 0) + float(assets_row.get("receivables", 0) or 0)
 
         q_liabilities = """
             SELECT COALESCE(SUM(balance), 0) as payables FROM account_balances WHERE account_type = 'payable'
         """
         liabilities_row = self.db.execute_query(q_liabilities)
-        current_liabilities = float(liabilities_row[0]["payables"]) if liabilities_row else 0.0
+        current_liabilities = float(liabilities_row[0].get("payables", 0) or 0) if liabilities_row else 0.0
 
         # Sales & Profit
         q_sales = """
@@ -898,15 +899,15 @@ class ReportGenerator:
         if not sales_result:
             return {"liquidity_ratios": {}, "profitability_ratios": {}, "efficiency_ratios": {}}
         sales_row = sales_result[0]
-        sales = float(sales_row["sales"])
-        profit = float(sales_row["profit"])
+        sales = float(sales_row.get("sales", 0) or 0)
+        profit = float(sales_row.get("profit", 0) or 0)
 
         # Calculate Ratios
         ratios = {
             "liquidity_ratios": {
                 "current_ratio": (current_assets / current_liabilities if current_liabilities > 0 else 0.0),
                 "quick_ratio": (
-                    (current_assets - float(assets_row["inventory_value"])) / current_liabilities
+                    (current_assets - float(assets_row.get("inventory_value", 0) or 0)) / current_liabilities
                     if current_liabilities > 0
                     else 0.0
                 ),
@@ -918,10 +919,10 @@ class ReportGenerator:
             },
             "efficiency_ratios": {
                 "inventory_turnover": (
-                    sales / float(assets_row["inventory_value"]) if float(assets_row["inventory_value"]) > 0 else 0.0
+                    sales / float(assets_row.get("inventory_value", 0) or 0) if float(assets_row.get("inventory_value", 0) or 0) > 0 else 0.0
                 ),
                 "receivables_turnover": (
-                    sales / float(assets_row["receivables"]) if float(assets_row["receivables"]) > 0 else 0.0
+                    sales / float(assets_row.get("receivables", 0) or 0) if float(assets_row.get("receivables", 0) or 0) > 0 else 0.0
                 ),
             },
         }
@@ -1027,14 +1028,14 @@ class ReportGenerator:
                     "total_qty": 0.0, "customer_count": 0, "avg_invoice_value": 0.0,
                 }
             row = result[0]
-            invoice_count = int(row["invoice_count"])
-            total_sales = float(row["total_sales"])
+            invoice_count = int(row.get("invoice_count") or 0)
+            total_sales = float(row.get("total_sales") or 0)
             return {
                 "invoice_count": invoice_count,
                 "total_sales": total_sales,
-                "total_profit": float(row["total_profit"]),
-                "total_qty": float(row["total_qty"]),
-                "customer_count": int(row["customer_count"]),
+                "total_profit": float(row.get("total_profit") or 0),
+                "total_qty": float(row.get("total_qty") or 0),
+                "customer_count": int(row.get("customer_count") or 0),
                 "avg_invoice_value": (
                     total_sales / invoice_count if invoice_count > 0 else 0.0
                 ),

@@ -278,8 +278,8 @@ class SafetyStockDialog(BaseDialog):
             stats = self.service.calculate_demand_statistics(product_id, days=90)
 
             if stats["avg_daily_demand"] > 0:
-                self.avg_demand_spin.setValue(float(stats["avg_daily_demand"]))
-                self.std_dev_spin.setValue(float(stats["std_deviation"]))
+                self.avg_demand_spin.setValue(float(stats["avg_daily_demand"] or 0))
+                self.std_dev_spin.setValue(float(stats["std_deviation"] or 0))
 
                 self.notify.show_info(
                     "نجح",
@@ -299,7 +299,8 @@ class SafetyStockDialog(BaseDialog):
         """حساب القيم"""
         avg_demand = Decimal(str(self.avg_demand_spin.value()))
         lead_time = self.lead_time_spin.value()
-        service_level = Decimal(str(self.service_level_combo.currentData()))
+        _service_level_data = self.service_level_combo.currentData()
+        service_level = Decimal(str(_service_level_data)) if _service_level_data is not None else Decimal("0.95")
         std_dev = Decimal(str(self.std_dev_spin.value()))
 
         if avg_demand <= 0:
@@ -317,10 +318,10 @@ class SafetyStockDialog(BaseDialog):
         # حساب المخزون الآمن: Safety Stock = Z × σ × √LT
         import math
 
-        safety_stock = z_score * std_dev * Decimal(str(math.sqrt(lead_time)))
+        safety_stock = z_score * std_dev * Decimal(str(math.sqrt(lead_time) or 0))
 
         # حساب نقطة إعادة الطلب: ROP = (Avg Demand × Lead Time) + Safety Stock
-        reorder_point = (avg_demand * Decimal(str(lead_time))) + safety_stock
+        reorder_point = (avg_demand * Decimal(str(lead_time or 0))) + safety_stock
 
         # الحد الأدنى = Safety Stock
         min_stock = safety_stock
@@ -400,7 +401,7 @@ class SafetyStockDialog(BaseDialog):
             self.holding_cost_spin.setValue(float(config.holding_cost_percentage))
 
         if config.unit_cost:
-            self.unit_cost_spin.setValue(float(config.unit_cost))
+            self.unit_cost_spin.setValue(float(config.unit_cost or 0))
 
         # تحديث الحسابات
         self.calculate_values()
@@ -423,7 +424,7 @@ class SafetyStockDialog(BaseDialog):
                 "product_id": product_id,
                 "average_daily_demand": avg_demand,
                 "lead_time_days": self.lead_time_spin.value(),
-                "service_level": Decimal(str(self.service_level_combo.currentData())),
+                "service_level": Decimal(str(self.service_level_combo.currentData() or 0.95)),
                 "demand_std_dev": Decimal(str(self.std_dev_spin.value())),
                 "order_cost": Decimal(str(self.order_cost_spin.value())),
                 "holding_cost_percentage": Decimal(str(self.holding_cost_spin.value())),

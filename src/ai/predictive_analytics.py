@@ -9,10 +9,17 @@ Features:
 - التوصيات الذكية (Smart recommendations)
 """
 
+import logging
 import statistics
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
+
+from src.utils.db_helpers import run_with_timeout
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -46,6 +53,9 @@ class CustomerInsight:
 class PredictiveEngine:
     """محرك التحليلات التنبؤية"""
 
+    # Maximum cached models to prevent memory leaks
+    _MAX_MODEL_CACHE = 20
+
     def __init__(self, db_manager):
         """
         تهيئة محرك التنبؤات
@@ -54,6 +64,12 @@ class PredictiveEngine:
             db_manager: مدير قاعدة البيانات
         """
         self.db = db_manager
+
+        # Thread safety: lock for any shared model/state access
+        self._lock = threading.Lock()
+
+        # Model cache with LRU eviction to prevent memory leaks
+        self._model_cache: OrderedDict = OrderedDict()
 
     def forecast_sales(self, product_id: Optional[int] = None, days: int = 30) -> List[SalesForecast]:
         """
@@ -66,6 +82,19 @@ class PredictiveEngine:
         Returns:
             قائمة بتوقعات المبيعات
         """
+        try:
+            return run_with_timeout(
+                self._forecast_sales_impl,
+                args=(product_id, days),
+                timeout=30,
+                default=[],
+            )
+        except Exception as e:
+            logger.warning("forecast_sales timed out or failed: %s", e)
+            return []
+
+    def _forecast_sales_impl(self, product_id: Optional[int], days: int) -> List[SalesForecast]:
+        """Internal implementation wrapped by run_with_timeout."""
         forecasts = []
 
         # الحصول على المنتجات
@@ -74,14 +103,16 @@ class PredictiveEngine:
             try:
                 products = self.db.execute_query("SELECT * FROM products WHERE id = ?", (product_id,))
                 products = products if products else []
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to query product by id: %s", e)
                 products = []
         else:
             # الحصول على جميع المنتجات
             try:
                 products = self.db.execute_query("SELECT * FROM products")
                 products = products if products else []
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to query all products: %s", e)
                 products = []
 
         for product in products:
@@ -121,7 +152,7 @@ class PredictiveEngine:
             confidence = min(len(sales_history) / 30, 1.0)  # max 1.0
 
             forecast = SalesForecast(
-                product_id=product["id"],
+                product_id=product.get("id"),
                 product_name=product.get("name", "Unknown"),
                 current_stock=current_stock,
                 predicted_sales=predicted_sales,
@@ -146,6 +177,19 @@ class PredictiveEngine:
         Returns:
             قائمة برؤى العملاء
         """
+        try:
+            return run_with_timeout(
+                self._analyze_customer_behavior_impl,
+                args=(customer_id,),
+                timeout=30,
+                default=[],
+            )
+        except Exception as e:
+            logger.warning("analyze_customer_behavior timed out or failed: %s", e)
+            return []
+
+    def _analyze_customer_behavior_impl(self, customer_id: Optional[int]) -> List[CustomerInsight]:
+        """Internal implementation wrapped by run_with_timeout."""
         insights = []
 
         # الحصول على العملاء
@@ -153,13 +197,15 @@ class PredictiveEngine:
             try:
                 customers = self.db.execute_query("SELECT * FROM customers WHERE id = ?", (customer_id,))
                 customers = customers if customers else []
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to query customer by id: %s", e)
                 customers = []
         else:
             try:
                 customers = self.db.execute_query("SELECT * FROM customers")
                 customers = customers if customers else []
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to query all customers: %s", e)
                 customers = []
 
         for customer in customers:
@@ -167,7 +213,7 @@ class PredictiveEngine:
                 continue
 
             # الحصول على تاريخ المشتريات
-            purchases = self._get_customer_purchases(customer["id"])
+            purchases = self._get_customer_purchases(customer.get("id"))
 
             if not purchases:
                 continue
@@ -221,7 +267,7 @@ class PredictiveEngine:
                 churn_risk = min(days_since_last_purchase / (avg_interval * 3), 1.0)
 
             insight = CustomerInsight(
-                customer_id=customer["id"],
+                customer_id=customer.get("id"),
                 customer_name=customer.get("name", "Unknown"),
                 total_purchases=total_purchases,
                 average_order_value=avg_order_value,
@@ -268,14 +314,14 @@ class PredictiveEngine:
         # تصفية المنتجات التي لم يشتريها
         recommendations = []
         for product in all_products:
-            if product["id"] not in purchased_product_ids:
+            if product.get("id") not in purchased_product_ids:
                 # حساب درجة التوصية (بناءً على الشعبية والمخزون)
-                sales_count = self._get_product_sales_count(product["id"])
+                sales_count = self._get_product_sales_count(product.get("id", 0))
                 score = sales_count * (1 if product.get("quantity", 0) > 0 else 0.5)
 
                 recommendations.append(
                     {
-                        "product_id": product["id"],
+                        "product_id": product.get("id", 0),
                         "name": product.get("name", ""),
                         "price": product.get("price", 0),
                         "score": score,
@@ -298,6 +344,19 @@ class PredictiveEngine:
         Returns:
             قائمة بالشذوذات المكتشفة
         """
+        try:
+            return run_with_timeout(
+                self._detect_anomalies_impl,
+                args=(days,),
+                timeout=30,
+                default=[],
+            )
+        except Exception as e:
+            logger.warning("detect_anomalies timed out or failed: %s", e)
+            return []
+
+    def _detect_anomalies_impl(self, days: int) -> List[Dict]:
+        """Internal implementation wrapped by run_with_timeout."""
         anomalies = []
 
         # الحصول على جميع المنتجات
@@ -309,8 +368,8 @@ class PredictiveEngine:
 
         for product in products:
             # الحصول على المبيعات الأخيرة
-            recent_sales = self._get_sales_history(product["id"], days=days)
-            historical_sales = self._get_sales_history(product["id"], days=90)
+            recent_sales = self._get_sales_history(product.get("id", 0), days=days)
+            historical_sales = self._get_sales_history(product.get("id", 0), days=90)
 
             if not historical_sales:
                 continue
@@ -333,7 +392,7 @@ class PredictiveEngine:
 
                 anomalies.append(
                     {
-                        "product_id": product["id"],
+                        "product_id": product.get("id", 0),
                         "product_name": product.get("name", ""),
                         "type": anomaly_type,
                         "expected_daily_sales": avg,
@@ -411,7 +470,8 @@ class PredictiveEngine:
 
             results = self.db.execute_query(query, (product_id, days))
             return results if results else []
-        except Exception:
+        except Exception as e:
+            logger.warning("Failed to get sales history for product %s: %s", product_id, e)
             return []
 
     def _calculate_daily_sales(self, sales_history: List[Dict]) -> List[float]:
@@ -459,7 +519,8 @@ class PredictiveEngine:
 
             results = self.db.execute_query(query, (customer_id,))
             return results if results else []
-        except Exception:
+        except Exception as e:
+            logger.warning("Failed to get customer purchases for %s: %s", customer_id, e)
             return []
 
     def _segment_customer(self, total_purchases: float, frequency: float, order_count: int) -> str:
@@ -496,12 +557,12 @@ class PredictiveEngine:
 
             result = self.db.execute_scalar(query, (product_id,))
             return int(result) if result else 0
-        except Exception:
+        except Exception as e:
+            logger.warning("Failed to get product sales count for %s: %s", product_id, e)
             return 0
 
 
 if __name__ == "__main__":
-    print("📊 Predictive Analytics Test")
-    print("=" * 50)
-    print("✅ Module loaded successfully!")
-    print("Note: Full testing requires database integration")
+    logging.basicConfig(level=logging.INFO)
+    logger.info("Predictive Analytics module loaded successfully")
+    logger.info("Note: Full testing requires database integration")

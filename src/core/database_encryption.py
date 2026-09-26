@@ -85,9 +85,9 @@ class DatabaseEncryption:
         # التحقق من أن التشفير يعمل
         try:
             conn.execute("SELECT COUNT(*) FROM sqlite_master")
-        except Exception as e:
+        except sqlite3.Error as e:
             self.logger.error(f"❌ فشل فك تشفير قاعدة البيانات: {str(e)}")
-            raise ValueError("كلمة مرور التشفير غير صحيحة أو قاعدة البيانات غير مشفرة")
+            raise ValueError("كلمة مرور التشفير غير صحيحة أو قاعدة البيانات غير مشفرة") from e
 
         self.logger.info("✅ تم الاتصال بقاعدة البيانات المشفرة بنجاح")
         return conn
@@ -150,7 +150,7 @@ class DatabaseEncryption:
             self.logger.info("✅ تم تشفير قاعدة البيانات بنجاح")
             return True
 
-        except Exception as e:
+        except (sqlite3.Error, OSError) as e:
             self.logger.error(f"❌ فشل تشفير قاعدة البيانات: {str(e)}")
             return False
 
@@ -173,7 +173,7 @@ class DatabaseEncryption:
             conn = sqlite3.connect(db_path)
             conn.execute("SELECT COUNT(*) FROM sqlite_master")
             return False
-        except Exception:
+        except sqlite3.Error:
             # إذا فشل، قد تكون مشفرة
             return True
         finally:

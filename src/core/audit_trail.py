@@ -158,7 +158,7 @@ class AuditTrail:
 
         query = f"""
             SELECT * FROM audit_logs
-            WHERE {where_clause}
+            WHERE {where_clause}  # SQL_SAFE: where_clause built from parameterized conditions
             ORDER BY timestamp DESC
             LIMIT ? OFFSET ?
         """

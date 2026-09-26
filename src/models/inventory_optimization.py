@@ -132,8 +132,8 @@ class ABCAnalysisResult:
             "annual_sales_quantity": float(self.annual_sales_quantity),
             "annual_sales_value": float(self.annual_sales_value),
             "average_unit_price": float(self.average_unit_price),
-            "current_stock": float(self.current_stock),
-            "stock_value": float(self.stock_value),
+            "current_stock": float(self.current_stock or 0),
+            "stock_value": float(self.stock_value or 0),
             "abc_category": self.abc_category,
             "percentage_of_total_value": float(self.percentage_of_total_value),
             "cumulative_percentage": float(self.cumulative_percentage),
@@ -287,14 +287,14 @@ class SafetyStockConfig:
             "product_id": self.product_id,
             "product_code": self.product_code,
             "product_name": self.product_name,
-            "reorder_point": float(self.reorder_point),
-            "safety_stock": float(self.safety_stock),
+            "reorder_point": float(self.reorder_point or 0),
+            "safety_stock": float(self.safety_stock or 0),
             "maximum_stock": float(self.maximum_stock),
             "minimum_stock": float(self.minimum_stock),
             "average_daily_demand": float(self.average_daily_demand),
             "lead_time_days": self.lead_time_days,
             "service_level": float(self.service_level),
-            "current_stock": float(self.current_stock),
+            "current_stock": float(self.current_stock or 0),
             "reorder_status": self.reorder_status,
             "economic_order_quantity": float(self.economic_order_quantity),
             "suggested_order_quantity": float(self.suggested_order_quantity),
@@ -314,13 +314,13 @@ class SafetyStockConfig:
         """إنشاء من قاموس"""
         # تحويل التواريخ
         if data.get("last_reorder_date"):
-            data["last_reorder_date"] = date.fromisoformat(data["last_reorder_date"])
+            data["last_reorder_date"] = date.fromisoformat(data.get("last_reorder_date", ""))
         if data.get("last_stockout_date"):
-            data["last_stockout_date"] = date.fromisoformat(data["last_stockout_date"])
+            data["last_stockout_date"] = date.fromisoformat(data.get("last_stockout_date", ""))
         if data.get("created_at"):
-            data["created_at"] = datetime.fromisoformat(data["created_at"])
+            data["created_at"] = datetime.fromisoformat(data.get("created_at", ""))
         if data.get("updated_at"):
-            data["updated_at"] = datetime.fromisoformat(data["updated_at"])
+            data["updated_at"] = datetime.fromisoformat(data.get("updated_at", ""))
 
         # تحويل Decimal
         decimal_fields = [
@@ -489,8 +489,8 @@ class ProductBatch:
             "supplier_id": self.supplier_id,
             "supplier_name": self.supplier_name,
             "purchase_order_number": self.purchase_order_number,
-            "unit_cost": float(self.unit_cost),
-            "total_cost": float(self.total_cost),
+            "unit_cost": float(self.unit_cost or 0),
+            "total_cost": float(self.total_cost or 0),
             "status": self.status,
             "notes": self.notes,
             "quality_check_passed": self.quality_check_passed,
@@ -503,15 +503,15 @@ class ProductBatch:
         """إنشاء من قاموس"""
         # تحويل التواريخ
         if data.get("manufacturing_date"):
-            data["manufacturing_date"] = date.fromisoformat(data["manufacturing_date"])
+            data["manufacturing_date"] = date.fromisoformat(data.get("manufacturing_date", ""))
         if data.get("expiry_date"):
-            data["expiry_date"] = date.fromisoformat(data["expiry_date"])
+            data["expiry_date"] = date.fromisoformat(data.get("expiry_date", ""))
         if data.get("received_date"):
-            data["received_date"] = date.fromisoformat(data["received_date"])
+            data["received_date"] = date.fromisoformat(data.get("received_date", ""))
         if data.get("created_at"):
-            data["created_at"] = datetime.fromisoformat(data["created_at"])
+            data["created_at"] = datetime.fromisoformat(data.get("created_at", ""))
         if data.get("updated_at"):
-            data["updated_at"] = datetime.fromisoformat(data["updated_at"])
+            data["updated_at"] = datetime.fromisoformat(data.get("updated_at", ""))
 
         # تحويل Decimal
         decimal_fields = [
@@ -569,9 +569,9 @@ class ReorderRecommendation:
             "product_id": self.product_id,
             "product_code": self.product_code,
             "product_name": self.product_name,
-            "current_stock": float(self.current_stock),
-            "reorder_point": float(self.reorder_point),
-            "safety_stock": float(self.safety_stock),
+            "current_stock": float(self.current_stock or 0),
+            "reorder_point": float(self.reorder_point or 0),
+            "safety_stock": float(self.safety_stock or 0),
             "suggested_quantity": float(self.suggested_quantity),
             "priority": self.priority,
             "urgency": self.urgency,

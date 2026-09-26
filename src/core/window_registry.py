@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Type
 
 from PySide6.QtWidgets import QWidget
 
-logger = logging.getLogger("window_registry")
+logger = logging.getLogger(__name__)
 
 
 class WindowRegistry:

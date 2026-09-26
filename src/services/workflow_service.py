@@ -42,7 +42,7 @@ class WorkflowService:
         minimum = product_data.get("min_stock", 0)
         if current <= minimum:
             msg = f"⚠️ Low Stock Alert: {product_data.get('name')} " f"is below minimum ({current}/{minimum})"
-            print(f"[Autopilot] {msg}")
+            self.logger.info(f"[Autopilot] {msg}")
             if self.notify:
                 self.notify.show_warning(msg)
 
@@ -51,7 +51,7 @@ class WorkflowService:
         total = sale_data.get("total_amount", 0)
         if total > 100000:
             msg = f"🌟 VIP Sale: Invoice #{sale_data.get('invoice_number')} " f"is {total:,.2f} DA!"
-            print(f"[Autopilot] {msg}")
+            self.logger.info(f"[Autopilot] {msg}")
             if self.notify:
                 self.notify.show_success(msg)
 

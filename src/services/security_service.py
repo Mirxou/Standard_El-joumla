@@ -198,7 +198,7 @@ class SecurityService:
                 where += " AND ip_address = ?"
                 params.append(ip)
             rows = self.db.execute_query(
-                f"SELECT COUNT(*) as cnt FROM login_attempts WHERE {where}",
+                f"SELECT COUNT(*) as cnt FROM login_attempts WHERE {where}",  # SQL_SAFE: where is built from hardcoded strings only
                 tuple(params),
             )
             row = rows[0] if rows else None

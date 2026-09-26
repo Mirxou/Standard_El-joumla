@@ -10,11 +10,14 @@ Features:
 """
 
 import json
+import logging
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import random  # nosec B311
+
+logger = logging.getLogger(__name__)
 
 
 class ChatbotEngine:
@@ -35,8 +38,11 @@ class ChatbotEngine:
         """تحميل قاعدة المعرفة"""
         kb_path = Path(self.knowledge_base_path)
         if kb_path.exists():
-            with open(kb_path, "r", encoding="utf-8") as f:
-                return json.load(f)
+            try:
+                with open(kb_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning("Failed to load knowledge base from %s: %s", kb_path, e)
 
         # قاعدة معرفة افتراضية
         return {

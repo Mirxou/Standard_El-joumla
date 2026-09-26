@@ -99,9 +99,9 @@ class Permission:
             description=data.get("description", ""),
             is_system=bool(data.get("is_system", False)),
             created_at=(
-                data["created_at"]
+                data.get("created_at")
                 if isinstance(data.get("created_at"), datetime)
-                else (datetime.fromisoformat(data["created_at"]) if data.get("created_at") else None)
+                else (datetime.fromisoformat(data.get("created_at", "")) if data.get("created_at") else None)
             ),
         )
 
@@ -162,6 +162,7 @@ class User:
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
+    @property
     def is_active(self) -> bool:
         """التحقق من أن المستخدم نشط"""
         if self.is_locked:

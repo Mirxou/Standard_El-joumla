@@ -7,10 +7,13 @@
 """
 
 import logging
+import sqlite3
 
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+
+from ..utils.db_helpers import escape_like_wildcards
 
 
 class VendorService:
@@ -37,39 +40,45 @@ class VendorService:
                 now,
             )
             return self.db.execute_insert(q, params)
-        except Exception as e:
+        except (sqlite3.Error, ValueError) as e:
             if self.logger:
                 self.logger.error(f"خطأ في إنشاء مورد: {e}")
-        return None
+        return None  # On error: returns None
 
     def get_vendor(self, vendor_id: int) -> Optional[Dict[str, Any]]:
         try:
             row = self.db.fetch_one("SELECT * FROM suppliers WHERE id = ?", (vendor_id,))
             return row
-        except Exception as e:
+        except (sqlite3.Error, ValueError) as e:
             if self.logger:
                 self.logger.error(f"خطأ في جلب مورد {vendor_id}: {e}")
-            return None
+            return None  # On error: returns None
 
     def search_vendors(self, term: str) -> List[Dict[str, Any]]:
         try:
-            like = f"%{term}%"
+            like = f"%{escape_like_wildcards(term)}%"
             rows = self.db.fetch_all(
                 "SELECT * FROM suppliers WHERE name LIKE ? OR contact_person LIKE ? OR phone LIKE ? OR email LIKE ?",
                 (like, like, like, like),
             )
             return rows
-        except Exception as e:
+        except (sqlite3.Error, ValueError) as e:
             if self.logger:
                 self.logger.error(f"خطأ في البحث عن موردين: {e}")
-            return []
+            return []  # On error: returns empty list
 
     def create_purchase_order(
         self, vendor_id: int, items: List[Dict[str, Any]], meta: Dict[str, Any] = None
     ) -> Optional[int]:
         try:
+            # EDGE CASE: purchase order with 0 items
+            if not items or len(items) == 0:
+                if self.logger:
+                    self.logger.warning("Cannot create purchase order with 0 items")
+                return None
+
             now = datetime.now()
-            total = sum(float(i.get("quantity", 1)) * float(i.get("unit_cost", 0)) for i in items)
+            total = sum(float(i.get("quantity", 1) or 0) * float(i.get("unit_cost", 0) or 0) for i in items)
             po_number = f"PO-{int(now.timestamp())}"
 
             # استخدام جدول purchase_orders الصحيح
@@ -98,8 +107,8 @@ class VendorService:
                     "INSERT INTO purchase_order_items (purchase_order_id, product_id, quantity_ordered, unit_price, subtotal, created_at) "  # noqa: E501
                     "VALUES (?, ?, ?, ?, ?, ?)"
                 )
-                qty = float(it.get("quantity", 1))
-                cost = float(it.get("unit_cost", 0))
+                qty = float(it.get("quantity", 1) or 0)
+                cost = float(it.get("unit_cost", 0) or 0)
                 self.db.execute_insert(q_item, (po_id, it.get("product_id"), qty, cost, qty * cost, now))
 
             if self.logger:
@@ -112,7 +121,40 @@ class VendorService:
 
     def receive_purchase(self, purchase_id: int, received_items: List[Dict[str, Any]]) -> bool:
         try:
+            # EDGE CASE: purchase receipt with 0 items
+            if not received_items or len(received_items) == 0:
+                if self.logger:
+                    self.logger.warning(f"Cannot receive purchase order {purchase_id} with 0 items")
+                return False
+
             now = datetime.now()
+
+            # EDGE CASE: receiving more than ordered
+            for it in received_items:
+                pid = it.get("product_id")
+                qty = float(it.get("quantity", 1) or 0)
+                try:
+                    ordered_row = self.db.fetch_one(
+                        "SELECT quantity_ordered, quantity_received FROM purchase_order_items "
+                        "WHERE purchase_order_id = ? AND product_id = ?",
+                        (purchase_id, pid),
+                    )
+                    if ordered_row:
+                        ordered_qty = float(ordered_row.get("quantity_ordered") or 0)
+                        already_received = float(ordered_row.get("quantity_received") or 0)
+                        if qty + already_received > ordered_qty:
+                            if self.logger:
+                                self.logger.warning(
+                                    f"Over-receipt for product {pid} in PO {purchase_id}: "
+                                    f"ordered={ordered_qty}, already_received={already_received}, "
+                                    f"this_receipt={qty}. Capping at remaining."
+                                )
+                            # Cap received qty at remaining ordered
+                            qty = max(0, ordered_qty - already_received)
+                            it["quantity"] = qty
+                except Exception:
+                    pass  # If check fails, proceed with original qty
+
             # تحديث حالة أمر الشراء في purchase_orders
             self.db.execute_non_query(
                 "UPDATE purchase_orders SET status = ?, delivery_date = ?, updated_at = ? WHERE id = ?",
@@ -122,7 +164,7 @@ class VendorService:
             for it in received_items:
                 # تحديث الكمية المستلمة في purchase_order_items
                 pid = it.get("product_id")
-                qty = float(it.get("quantity", 1))
+                qty = float(it.get("quantity", 1) or 0)
                 self.db.execute_non_query(
                     "UPDATE purchase_order_items SET quantity_received = ?, actual_delivery_date = ? WHERE purchase_order_id = ? AND product_id = ?",  # noqa: E501
                     (qty, now, purchase_id, pid),
@@ -136,7 +178,7 @@ class VendorService:
                     inv._record_stock_movement(
                         product_id=pid,
                         movement_type="in",
-                        quantity=int(qty),
+                        quantity=int(qty or 0),
                         reference_id=purchase_id,
                         reference_type="purchase_order",
                     )
@@ -241,6 +283,55 @@ class VendorService:
                 self.logger.error(f"خطأ في إنشاء خطة الطلب: {e}")
             return []
 
+    def cancel_purchase_order(self, purchase_id: int) -> bool:
+        """Cancel a purchase order.
+
+        EDGE CASE: cancelling a partially received PO — only allow if no items received.
+        """
+        try:
+            # Check current status
+            po_row = self.db.fetch_one(
+                "SELECT status FROM purchase_orders WHERE id = ?",
+                (purchase_id,),
+            )
+            if not po_row:
+                if self.logger:
+                    self.logger.warning(f"Purchase order {purchase_id} not found for cancellation")
+                return False
+
+            po_status = po_row.get("status")
+            if po_status == "cancelled":
+                if self.logger:
+                    self.logger.warning(f"Purchase order {purchase_id} is already cancelled")
+                return False
+
+            # EDGE CASE: partially received PO — reject cancellation
+            received_row = self.db.fetch_one(
+                "SELECT SUM(quantity_received) as total_received FROM purchase_order_items "
+                "WHERE purchase_order_id = ?",
+                (purchase_id,),
+            )
+            total_received = float(received_row.get("total_received", 0) or 0) if received_row else 0
+            if total_received > 0:
+                if self.logger:
+                    self.logger.warning(
+                        f"Cannot cancel PO {purchase_id}: {total_received} items already received. "
+                        f"Consider returning items instead."
+                    )
+                return False
+
+            self.db.execute_non_query(
+                "UPDATE purchase_orders SET status = ?, updated_at = ? WHERE id = ?",
+                ("cancelled", datetime.now(), purchase_id),
+            )
+            if self.logger:
+                self.logger.info(f"Purchase order {purchase_id} cancelled")
+            return True
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في إلغاء أمر الشراء {purchase_id}: {e}")
+            return False
+
     def vendor_performance(self, vendor_id: int) -> Dict[str, Any]:
         try:
             # استخدام purchase_orders
@@ -259,8 +350,8 @@ class VendorService:
             return {
                 "vendor_id": vendor_id,
                 "avg_lead_time_days": float(avg_days),
-                "total_orders": int(total),
-                "on_time_rate": (int(on_time) / int(total) if total > 0 else 0),
+                "total_orders": int(total or 0),
+                "on_time_rate": (int(on_time) / int(total or 0) if total > 0 else 0),
                 "quality_score": quality_score,
             }
         except Exception as e:

@@ -66,7 +66,7 @@ def setup_logger(
 
                     logging.Logger.critical = corrected_fail_on_critical
     except Exception:
-        pass
+        logging.getLogger(__name__).warning("Ignored exception in logger.py pytest compat setup")
 
     # إنشاء logger
     logger = logging.getLogger(name)

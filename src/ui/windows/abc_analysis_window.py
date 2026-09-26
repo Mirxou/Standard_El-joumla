@@ -434,9 +434,9 @@ class ABCAnalysisWindow(QMainWindow):
 
         # رسم أعمدة للقيمة
         bar_set = QBarSet("القيمة (دج)")
-        bar_set.append(float(summary.get("category_a_value", 0)))
-        bar_set.append(float(summary.get("category_b_value", 0)))
-        bar_set.append(float(summary.get("category_c_value", 0)))
+        bar_set.append(float(summary.get("category_a_value", 0) or 0))
+        bar_set.append(float(summary.get("category_b_value", 0) or 0))
+        bar_set.append(float(summary.get("category_c_value", 0) or 0))
 
         bar_series = QBarSeries()
         bar_series.append(bar_set)
@@ -503,3 +503,18 @@ class ABCAnalysisWindow(QMainWindow):
                 actions.append("💡 عروض خاصة للتصريف")
 
         return "\n".join(actions)
+
+    def closeEvent(self, event):
+        """تنظيف الموارد عند إغلاق النافذة"""
+        # MEMORY: stop any running ABC analysis worker
+        worker = getattr(self, 'worker', None)
+        if worker and isinstance(worker, QThread) and worker.isRunning():
+            if hasattr(worker, 'running'):
+                worker.running = False
+            worker.requestInterruption()
+            if not worker.wait(2000):
+                worker.terminate()
+                worker.wait(500)
+            worker.deleteLater()
+            self.worker = None
+        super().closeEvent(event)

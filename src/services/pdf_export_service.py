@@ -358,8 +358,8 @@ class PDFExportService:
                         mediabox = getattr(page, 'mediabox', None)
                         if not mediabox:
                             continue
-                        w = float(mediabox.width)
-                        h = float(mediabox.height)
+                        w = float(mediabox.width or 0)
+                        h = float(mediabox.height or 0)
                         buf = BytesIO()
                         c = pdf_canvas.Canvas(buf, pagesize=(w, h))
                         c.setFont("Helvetica", 50)

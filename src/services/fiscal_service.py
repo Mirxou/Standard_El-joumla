@@ -1,6 +1,9 @@
+import logging
 import os
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 class FiscalService:
@@ -26,16 +29,20 @@ class FiscalService:
                 "SELECT key, value FROM app_settings WHERE key IN (?, ?)",
                 ("fiscal_tap_rate", "fiscal_timbre_rate"),
             )
-            rate_map = {row.get('key'): float(row.get('value', 0)) for row in rows}
+            rate_map = {row.get('key'): float(row.get('value', 0) or 0) for row in rows}
             if "fiscal_tap_rate" in rate_map:
                 self.tap_rate = rate_map["fiscal_tap_rate"]
             if "fiscal_timbre_rate" in rate_map:
                 self.timbre_rate = rate_map["fiscal_timbre_rate"]
-        except Exception:
+        except (ValueError, TypeError, OSError):
             pass  # Fall back to defaults
 
     def save_rates_to_settings(self, tap_rate: float = None, timbre_rate: float = None) -> bool:
-        """Persist TAP and Timbre rates to the settings table."""
+        """Persist TAP and Timbre rates to the settings table.
+
+        Returns:
+            bool: True on success, False on database error.
+        """
         try:
             if tap_rate is not None:
                 self.tap_rate = tap_rate
@@ -50,7 +57,7 @@ class FiscalService:
                     ("fiscal_timbre_rate", str(timbre_rate)),
                 )
             return True
-        except Exception:
+        except (ValueError, TypeError, OSError):
             return False
 
     def generate_g50(self, month: int, year: int) -> dict:
@@ -98,7 +105,7 @@ class FiscalService:
         query = """
             SELECT
                 c.name as 'Nom et Prénom / Raison Sociale',
-                c.tax_id as 'NIF',
+                '' as 'NIF',  # COLUMN_CHECK: customers table has no 'tax_id' column; using empty string
                 c.address as 'Adresse',
                 SUM(s.total_amount) as 'Montant TTC',
                 SUM(s.tax_amount) as 'Montant TVA'
@@ -109,9 +116,11 @@ class FiscalService:
             HAVING SUM(s.total_amount) > 100000
         """
 
-        conn = self.db.get_connection()
-        df = pd.read_sql_query(query, conn, params=(str(year),))
-        conn.close()
+        try:
+            conn = self.db.get_connection()
+            df = pd.read_sql_query(query, conn, params=(str(year),))
+        finally:
+            conn.close()
 
         if df.empty:
             return False, "لا توجد بيانات (مبيعات > 100,000 دج) لهذا العام."
@@ -136,5 +145,5 @@ class FiscalService:
             full_path = os.path.join(output_path, f"Etat_104_{year}.xlsx")
             df.to_excel(full_path, index=False)
             return True, full_path
-        except Exception as e:
+        except (OSError, ValueError) as e:
             return False, str(e)

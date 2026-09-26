@@ -8,6 +8,8 @@ WebSocket Client للـ Desktop Application
 import asyncio
 import json
 import logging
+import os
+import threading
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
@@ -38,6 +40,7 @@ class WebSocketSignals(QObject):
 
 class WebSocketClientRunnable(BaseRunnable):
     """Runnable لـ WebSocket connection (يستخدم QThreadPool)"""
+    # THREAD-SAFETY: run() wrapped in try/except to prevent silent thread crash
 
     def __init__(
         self,
@@ -52,12 +55,42 @@ class WebSocketClientRunnable(BaseRunnable):
         self.room = room
         self.token = token
         self.signals = signals or WebSocketSignals()
-        self.should_connect = True
-        self.is_connected = False
+        self._stop_event = threading.Event()
+        self._connected_event = threading.Event()
+
+    @property
+    def should_connect(self) -> bool:
+        """Thread-safe read of stop flag"""
+        return not self._stop_event.is_set()
+
+    @should_connect.setter
+    def should_connect(self, value: bool):
+        """Thread-safe set of stop flag"""
+        if value:
+            self._stop_event.clear()
+        else:
+            self._stop_event.set()
+
+    @property
+    def is_connected(self) -> bool:
+        """Thread-safe read of connected flag"""
+        return self._connected_event.is_set()
+
+    @is_connected.setter
+    def is_connected(self, value: bool):
+        """Thread-safe set of connected flag"""
+        if value:
+            self._connected_event.set()
+        else:
+            self._connected_event.clear()
 
     def run(self):
         """تشغيل WebSocket connection"""
-        asyncio.run(self._run_websocket())
+        try:
+            asyncio.run(self._run_websocket())
+        except Exception as e:
+            logger.log(logging.ERROR, f"❌ خطأ غير معالج في WebSocket runnable: {e}")
+            self.signals.connection_status_changed.emit(False, f"خطأ حرج: {str(e)}")
 
     async def _run_websocket(self):
         """تشغيل WebSocket connection"""
@@ -135,13 +168,14 @@ class WebSocketClientRunnable(BaseRunnable):
 
     def stop(self):
         """إيقاف الاتصال"""
-        self.should_connect = False
-        self.is_connected = False
+        self._stop_event.set()
+        self._connected_event.clear()
 
 
 # Backward compatibility - يمكن استخدام QThread أيضاً
 class WebSocketClientWorker(QThread):
     """Worker thread لـ WebSocket connection (Legacy - يستخدم QThread)"""
+    # THREAD-SAFETY: run() wrapped in try/except to prevent silent thread crash
 
     message_received = Signal(dict)
     connection_status_changed = Signal(bool, str)
@@ -151,12 +185,42 @@ class WebSocketClientWorker(QThread):
         self.ws_url = ws_url
         self.room = room
         self.token = token
-        self.should_connect = True
-        self.is_connected = False
+        self._stop_event = threading.Event()
+        self._connected_event = threading.Event()
+
+    @property
+    def should_connect(self) -> bool:
+        """Thread-safe read of stop flag"""
+        return not self._stop_event.is_set()
+
+    @should_connect.setter
+    def should_connect(self, value: bool):
+        """Thread-safe set of stop flag"""
+        if value:
+            self._stop_event.clear()
+        else:
+            self._stop_event.set()
+
+    @property
+    def is_connected(self) -> bool:
+        """Thread-safe read of connected flag"""
+        return self._connected_event.is_set()
+
+    @is_connected.setter
+    def is_connected(self, value: bool):
+        """Thread-safe set of connected flag"""
+        if value:
+            self._connected_event.set()
+        else:
+            self._connected_event.clear()
 
     def run(self):
         """تشغيل WebSocket connection"""
-        asyncio.run(self._run_websocket())
+        try:
+            asyncio.run(self._run_websocket())
+        except Exception as e:
+            logger.log(logging.ERROR, f"❌ خطأ غير معالج في WebSocket worker thread: {e}")
+            self.connection_status_changed.emit(False, f"خطأ حرج: {str(e)}")
 
     async def _run_websocket(self):
         """تشغيل WebSocket connection"""
@@ -185,6 +249,8 @@ class WebSocketClientWorker(QThread):
                                 continue
 
                             self.message_received.emit(data)
+                        except json.JSONDecodeError:
+                            logger.warning(f"رسالة غير صالحة في worker: {message}")
                         except asyncio.TimeoutError:
                             await websocket.send(json.dumps({"type": "ping"}))
                         except websockets.exceptions.ConnectionClosed:
@@ -206,8 +272,8 @@ class WebSocketClientWorker(QThread):
 
     def stop(self):
         """إيقاف الاتصال"""
-        self.should_connect = False
-        self.is_connected = False
+        self._stop_event.set()
+        self._connected_event.clear()
 
 
 class WebSocketClient(QObject):
@@ -226,6 +292,11 @@ class WebSocketClient(QObject):
         parent=None,
     ):
         super().__init__(parent)
+        # CONFIG: Use API_BASE_URL env var if the default is still used
+        if api_base_url == "http://localhost:8000":
+            env_url = os.getenv("API_BASE_URL", "")
+            if env_url:
+                api_base_url = env_url
         self.api_base_url = api_base_url.rstrip("/")
         self.room = room
         self.token = token

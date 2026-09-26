@@ -44,7 +44,7 @@ class TestIntegrationBase:
         old_secret = api_app.auth_manager.secret_key
 
         # تحديث القيم لخدمة التست
-        test_secret = "test-secret-key-12345"
+        test_secret = "test-secret-key-12345"  # TEST ONLY
         api_app.db_manager = db_instance
         api_app.auth_manager.db_manager = db_instance
         api_app.auth_manager.secret_key = test_secret
@@ -75,7 +75,7 @@ class TestIntegrationBase:
         user_manager = UserManager(db_instance)
 
         username = "integration_user"
-        password = "testpass123"
+        password = "testpass123"  # TEST ONLY
 
         user = user_manager.get_user_by_username(username)
         if not user:

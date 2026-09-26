@@ -24,7 +24,7 @@ except ImportError:
             if isinstance(value, str):
                 cleaned = value.strip().replace("د.ج", "").replace("دج", "").replace(",", "").strip()
                 return Decimal(cleaned) if cleaned else Decimal("0")
-            return Decimal(str(value))
+            return Decimal(str(value or 0))
         except (InvalidOperation, ValueError, TypeError):
             return Decimal("0")
 
@@ -134,9 +134,9 @@ class InvoiceTableModel(QAbstractTableModel):
             if col == 3:  # الكمية
                 # قبول int أو string
                 if isinstance(value, str):
-                    quantity = int(float(value))  # تحويل آمن
+                    quantity = int(float(value or 0))  # تحويل آمن
                 else:
-                    quantity = int(value)
+                    quantity = int(value or 0)
                 if quantity < 1:
                     return False
                 item.quantity = quantity

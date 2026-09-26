@@ -5,6 +5,7 @@ Inventory Count and Adjustments Service
 
 from datetime import date, datetime
 from decimal import Decimal
+import logging
 from typing import Any, Dict, List, Optional
 
 from src.core.database_manager import DatabaseManager
@@ -23,6 +24,7 @@ class InventoryCountService:
 
     def __init__(self, db_manager: DatabaseManager):
         self.db = db_manager
+        self.logger = logging.getLogger(__name__)
 
     # ==================== Physical Counts ====================
 
@@ -319,7 +321,7 @@ class InventoryCountService:
         """تحميل المنتجات للجرد"""
         query = """
             SELECT
-                p.id, p.sku, p.name, p.barcode,
+                p.id, p.barcode, p.name, p.barcode as sku,  # COLUMN_CHECK: alias for compat; schema has 'barcode' not 'sku'
                 p.current_stock, p.cost_price
             FROM products p
             WHERE p.is_active = 1
@@ -336,12 +338,12 @@ class InventoryCountService:
         for row in rows:
             item = CountItem(
                 count_id=count_id,
-                product_id=row["id"],
-                product_code=row["sku"],
-                product_name=row["name"],
-                product_barcode=row["barcode"],
-                system_quantity=Decimal(str(row["current_stock"] or 0)),
-                unit_cost=Decimal(str(row["cost_price"] or 0)),
+                product_id=row.get("id", 0),
+                product_code=row.get("sku", row.get("barcode", "")),  # COLUMN_CHECK: safe access for 'sku' alias
+                product_name=row.get("name", ""),
+                product_barcode=row.get("barcode", ""),
+                system_quantity=Decimal(str(row.get("current_stock") or 0)),
+                unit_cost=Decimal(str(row.get("cost_price") or 0)),
                 location=location,
             )
             item.system_value = item.system_quantity * item.unit_cost
@@ -562,16 +564,16 @@ class InventoryCountService:
                 (
                     adjustment.product_id,
                     "adjustment",
-                    float(adjustment.adjustment_quantity),
+                    float(adjustment.adjustment_quantity or 0),
                     adjustment.id,
                     "stock_adjustment",
                     f"تسوية من الجرد - {adjustment.adjustment_number}",
                     adjustment.created_by,
                 ),
             )
-        except Exception:
+        except Exception as e:
             # لا نمنع التسوية إذا فشل تسجيل الحركة
-            pass
+            self.logger.warning(f"Failed to log stock movement for adjustment {adjustment.id}: {e}")
 
         # وضع علامة مطبقة
         adjustment.mark_applied()
@@ -693,15 +695,15 @@ class InventoryCountService:
     def _row_to_count(self, row: Dict) -> PhysicalCount:
         """تحويل صف إلى PhysicalCount"""
         return PhysicalCount(
-            id=row["id"],
-            count_number=row["count_number"],
-            count_date=row["count_date"],
+            id=row.get("id", 0),
+            count_number=row.get("count_number", ""),
+            count_date=row.get("count_date"),
             scheduled_date=row.get("scheduled_date"),
             description=row.get("description", ""),
             location=row.get("location"),
             counted_by=row.get("counted_by"),
             counted_by_name=row.get("counted_by_name"),
-            status=CountStatus(row["status"]),
+            status=CountStatus(row.get("status", "draft")),
             approved_by=row.get("approved_by"),
             approved_by_name=row.get("approved_by_name"),
             approved_at=row.get("approved_at"),
@@ -718,18 +720,18 @@ class InventoryCountService:
     def _row_to_count_item(self, row: Dict) -> CountItem:
         """تحويل صف إلى CountItem"""
         return CountItem(
-            id=row["id"],
-            count_id=row["count_id"],
-            product_id=row["product_id"],
-            product_code=row["product_code"],
-            product_name=row["product_name"],
+            id=row.get("id", 0),
+            count_id=row.get("count_id", 0),
+            product_id=row.get("product_id", 0),
+            product_code=row.get("product_code", ""),
+            product_name=row.get("product_name", ""),
             product_barcode=row.get("product_barcode"),
-            system_quantity=Decimal(str(row["system_quantity"] or 0)),
+            system_quantity=Decimal(str(row.get("system_quantity") or 0)),
             counted_quantity=(
-                Decimal(str(row["counted_quantity"])) if row.get("counted_quantity") is not None else None
+                Decimal(str(row.get("counted_quantity") or 0)) if row.get("counted_quantity") is not None else None
             ),
             variance_quantity=Decimal(str(row.get("variance_quantity", 0) or 0)),
-            unit_cost=Decimal(str(row["unit_cost"] or 0)),
+            unit_cost=Decimal(str(row.get("unit_cost") or 0)),
             system_value=Decimal(str(row.get("system_value", 0) or 0)),
             counted_value=Decimal(str(row.get("counted_value", 0) or 0)),
             variance_value=Decimal(str(row.get("variance_value", 0) or 0)),
@@ -745,18 +747,18 @@ class InventoryCountService:
     def _row_to_adjustment(self, row: Dict) -> StockAdjustment:
         """تحويل صف إلى StockAdjustment"""
         return StockAdjustment(
-            id=row["id"],
-            adjustment_number=row["adjustment_number"],
-            adjustment_date=row["adjustment_date"],
-            adjustment_type=AdjustmentType(row["adjustment_type"]),
+            id=row.get("id", 0),
+            adjustment_number=row.get("adjustment_number", ""),
+            adjustment_date=row.get("adjustment_date"),
+            adjustment_type=AdjustmentType(row.get("adjustment_type", "increase")),
             reason=row.get("reason", ""),
-            product_id=row["product_id"],
-            product_code=row["product_code"],
-            product_name=row["product_name"],
-            quantity_before=Decimal(str(row["quantity_before"] or 0)),
-            adjustment_quantity=Decimal(str(row["adjustment_quantity"] or 0)),
+            product_id=row.get("product_id", 0),
+            product_code=row.get("product_code", ""),
+            product_name=row.get("product_name", ""),
+            quantity_before=Decimal(str(row.get("quantity_before") or 0)),
+            adjustment_quantity=Decimal(str(row.get("adjustment_quantity") or 0)),
             quantity_after=Decimal(str(row.get("quantity_after", 0) or 0)),
-            unit_cost=Decimal(str(row["unit_cost"] or 0)),
+            unit_cost=Decimal(str(row.get("unit_cost") or 0)),
             adjustment_value=Decimal(str(row.get("adjustment_value", 0) or 0)),
             location=row.get("location"),
             batch_number=row.get("batch_number"),
@@ -778,12 +780,12 @@ class InventoryCountService:
         """توليد رقم جرد"""
         query = "SELECT COUNT(*) as count FROM physical_counts"
         row = self.db.fetch_one(query)
-        count = row["count"] if row else 0
+        count = row.get("count", 0) if row else 0
         return f"CNT-{datetime.now().strftime('%Y%m%d')}-{count + 1:04d}"
 
     def generate_adjustment_number(self) -> str:
         """توليد رقم تسوية"""
         query = "SELECT COUNT(*) as count FROM stock_adjustments"
         row = self.db.fetch_one(query)
-        count = row["count"] if row else 0
+        count = row.get("count", 0) if row else 0
         return f"ADJ-{datetime.now().strftime('%Y%m%d')}-{count + 1:04d}"

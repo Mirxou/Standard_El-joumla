@@ -231,7 +231,7 @@ class DatabaseManager:
                         cfg = PoolConfig(
                             pool_size=int(self._pool_options.get("pool_size", 15)),  # زيادة من 10 إلى 15
                             max_overflow=int(self._pool_options.get("max_overflow", 30)),  # زيادة من 20 إلى 30
-                            timeout=float(self._pool_options.get("timeout", 60.0)),  # زيادة من 30.0 إلى 60.0
+                            timeout=float(self._pool_options.get("timeout", 60.0) or 0),  # زيادة من 30.0 إلى 60.0
                         )
                         self.pool = ConnectionPool(self.db_path, cfg)
 
@@ -261,7 +261,7 @@ class DatabaseManager:
         except DatabaseException:
             raise
         except Exception as e:
-            raise DatabaseException(f"خطأ في تهيئة قاعدة البيانات: {e}")
+            raise DatabaseException(f"خطأ في تهيئة قاعدة البيانات: {e}") from e
 
     def _create_tables(self):
         """إنشاء جداول قاعدة البيانات"""
@@ -1588,7 +1588,7 @@ class DatabaseManager:
                         continue
 
                     # حذف السجلات القديمة
-                    delete_query = f"DELETE FROM {table_name} WHERE {date_column} < ?"
+                    delete_query = f"DELETE FROM {table_name} WHERE {date_column} < ?"  # SQL_SAFE: table_name and date_column from hardcoded supported_tables dict
                     cursor = self.connection.execute(delete_query, (cutoff_date,))
                     deleted_count = cursor.rowcount
 
@@ -1646,7 +1646,7 @@ class DatabaseManager:
                 if not self.table_exists(table):
                     info["records"][table] = 0
                     continue
-                count_query = f"SELECT COUNT(*) FROM {table}"
+                count_query = f"SELECT COUNT(*) FROM {table}"  # SQL_SAFE: table from hardcoded main_tables list
                 info["records"][table] = self.execute_scalar(count_query)
 
             return info

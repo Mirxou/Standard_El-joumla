@@ -242,7 +242,7 @@ class EncryptionManager:
             result = cursor.fetchone()
 
             return result[0] == "ok"
-        except Exception as e:
+        except (sqlite3.Error, OSError) as e:
             logger.log(logging.ERROR, f"خطأ في التحقق من سلامة قاعدة البيانات: {e}")
             return False
         finally:
@@ -262,7 +262,7 @@ class EncryptionManager:
                         encryption_info = json.loads(info_json)
                         return "salt" in encryption_info and "encrypted_at" in encryption_info
             return False
-        except Exception:
+        except (OSError, ValueError, json.JSONDecodeError):
             return False
 
     @staticmethod

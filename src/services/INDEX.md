@@ -126,7 +126,7 @@
 from src.services.sales_service import SalesService
 
 sales_service = SalesService(db_manager, logger)
-invoice_id = sales_service.create_invoice(customer_id=1, items=[...])
+invoice_id = sales_service.create_sale(sale)
 ```
 
 ### خدمة المخزون
@@ -150,7 +150,7 @@ report = report_exporter.generate_sales_report(filters)
 from src.services.payment_service import PaymentService
 
 payment_service = PaymentService(db_manager, logger)
-payment = payment_service.create_payment(customer_id=1, amount=1000)
+payment = payment_service.create_customer_payment(customer_id=1, amount=Decimal("1000"))
 ```
 
 ---

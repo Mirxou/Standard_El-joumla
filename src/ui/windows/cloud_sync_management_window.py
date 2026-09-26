@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 from src.core.database_manager import DatabaseManager
 from src.services.cloud_sync_service import CloudSyncService, CloudSyncSettings
 from src.ui.styles.design_tokens import C
+from src.utils.db_helpers import safe_int
 from src.utils.logger import setup_logger
 
 project_root = Path(__file__).parent.parent.parent.parent
@@ -327,7 +328,9 @@ class CloudSyncManagementWindow(QMainWindow):
         if not id_cell:
             QMessageBox.warning(self, "تحذير", "لم يتم العثور على الإعدادات")
             return
-        settings_id = int(id_cell.text())
+        settings_id = safe_int(id_cell.text(), default=-1)
+        if settings_id <= 0:
+            return
 
         settings = self.cloud_sync_service.get_settings(settings_id)
         if not settings:
@@ -351,7 +354,9 @@ class CloudSyncManagementWindow(QMainWindow):
         if not id_cell or not name_cell:
             QMessageBox.warning(self, "تحذير", "لم يتم العثور على بيانات الإعدادات")
             return
-        settings_id = int(id_cell.text())
+        settings_id = safe_int(id_cell.text(), default=-1)
+        if settings_id <= 0:
+            return
         settings_name = name_cell.text()
 
         reply = QMessageBox.question(
@@ -380,7 +385,9 @@ class CloudSyncManagementWindow(QMainWindow):
         if not id_cell:
             QMessageBox.warning(self, "تحذير", "لم يتم العثور على الإعدادات")
             return
-        settings_id = int(id_cell.text())
+        settings_id = safe_int(id_cell.text(), default=-1)
+        if settings_id <= 0:
+            return
 
         reply = QMessageBox.question(
             self,
@@ -433,7 +440,7 @@ class CloudSyncManagementWindow(QMainWindow):
         if not id_cell:
             QMessageBox.warning(self, "تحذير", "لم يتم العثور على التعارض")
             return
-        conflict_id = int(id_cell.text())  # noqa: F841
+        conflict_id = safe_int(id_cell.text(), default=-1)  # noqa: F841
 
         QMessageBox.information(self, "قريباً", "ميزة حل التعارضات ستكون متاحة قريباً")
 
@@ -442,6 +449,21 @@ class CloudSyncManagementWindow(QMainWindow):
         self.load_settings()
         self.load_sync_logs()
         self.load_conflicts()
+
+    def closeEvent(self, event):
+        """تنظيف الموارد عند إغلاق النافذة"""
+        # MEMORY: stop any running sync worker
+        worker = getattr(self, 'sync_worker', None)
+        if worker and isinstance(worker, QThread) and worker.isRunning():
+            if hasattr(worker, 'running'):
+                worker.running = False
+            worker.requestInterruption()
+            if not worker.wait(2000):
+                worker.terminate()
+                worker.wait(500)
+            worker.deleteLater()
+            self.sync_worker = None
+        super().closeEvent(event)
 
 
 class CloudSyncSettingsDialog(QDialog):

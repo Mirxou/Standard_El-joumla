@@ -6,6 +6,7 @@
 """
 
 import json
+import logging
 import sys
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -13,6 +14,8 @@ from typing import Any, Dict, List, Tuple
 
 from src.core.config_manager import ConfigManager
 from src.core.database_manager import DatabaseManager
+
+logger = logging.getLogger(__name__)
 
 
 class UIInteraction:
@@ -411,7 +414,7 @@ class UIAdaptationService:
             self.element_usage.clear()
 
         except Exception as e:
-            print(f"Error resetting adaptation data: {e}")
+            logger.error(f"Error resetting adaptation data: {e}")
 
     def export_adaptation_data(self) -> Dict[str, Any]:
         """تصدير بيانات التكيف"""
@@ -465,7 +468,7 @@ class UIAdaptationService:
             self.interactions_buffer.clear()
 
         except Exception as e:
-            print(f"Error flushing interactions: {e}")
+            logger.error(f"Error flushing interactions: {e}")
 
     def load_user_adaptation_data(self):
         """تحميل بيانات التكيف"""
@@ -521,7 +524,7 @@ class UIAdaptationService:
                 self.elements_cache[element_id] = element
 
         except Exception as e:
-            print(f"Error loading adaptation data: {e}")
+            logger.error(f"Error loading adaptation data: {e}")
 
     def _get_context_elements(self, ui_context: str) -> List[UIElement]:
         """الحصول على عناصر سياق محدد"""

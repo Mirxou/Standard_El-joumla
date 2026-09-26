@@ -27,7 +27,8 @@ class AuditLogService:
                 (name,),
             )
             return cur.fetchone() is not None
-        except Exception:
+        except Exception as e:  # sqlite3 errors; returns False on any DB issue
+            self.logger.debug(f"Table existence check failed: {e}")
             return False
 
     def _detect_audit_schema(self) -> dict:
@@ -364,7 +365,7 @@ class AuditLogService:
         cursor = self.db.conn.cursor()
         sel = self._select_clause()
         idcol = self._audit["id"]
-        cursor.execute(f"""SELECT {sel} FROM {tbl} WHERE {idcol} = ?""", (audit_id,))
+        cursor.execute(f"""SELECT {sel} FROM {tbl} WHERE {idcol} = ?""", (audit_id,))  # SQL_SAFE: tbl/sel/idcol from _detect_audit_schema (DB introspection, not user input)
 
         row = cursor.fetchone()
         if row:
@@ -433,20 +434,20 @@ class AuditLogService:
             return [], 0
         self._audit["id"]
         cursor = self.db.conn.cursor()
-        cursor.execute(f"""SELECT COUNT(*) FROM {tbl} WHERE {where_clause}""", params)
+        cursor.execute(f"""SELECT COUNT(*) FROM {tbl} WHERE {where_clause}""", params)  # SQL_SAFE: tbl from schema introspection; where_clause built from parameterized conditions
         total = cursor.fetchone()[0]
 
         # Get records
-        self._select_clause()
-        self._audit["timestamp"]
+        sel = self._select_clause()
+        ts = self._audit["timestamp"]
         cursor.execute(
-            """
+            f"""
             SELECT {sel}
             FROM {tbl}
             WHERE {where_clause}
             ORDER BY {ts} DESC
             LIMIT ? OFFSET ?
-        """,
+        """,  # SQL_SAFE: tbl,sel,ts from _detect_audit_schema; where_clause parameterized
             params + [limit, offset],
         )
 
@@ -495,35 +496,36 @@ class AuditLogService:
 
         # Total actions
         cursor.execute(
-            f"""SELECT COUNT(*) FROM {tbl} WHERE user_id = ? AND {ts} >= ?""",
+            f"""SELECT COUNT(*) FROM {tbl} WHERE user_id = ? AND {ts} >= ?""",  # SQL_SAFE: tbl,ts from _detect_audit_schema
             (user_id, start_date),
         )
         stats["total_actions"] = cursor.fetchone()[0]
 
         # Actions by type
         cursor.execute(
-            f"""SELECT action, COUNT(*) as count FROM {tbl} WHERE user_id = ? AND {ts} >= ? GROUP BY action ORDER BY count DESC""",  # noqa: E501
+            f"""SELECT action, COUNT(*) as count FROM {tbl} WHERE user_id = ? AND {ts} >= ? GROUP BY action ORDER BY count DESC""",  # SQL_SAFE: tbl,ts from _detect_audit_schema
             (user_id, start_date),
         )
         stats["actions_by_type"] = {get_value(row, 'action'): get_value(row, 'count', 0) for row in cursor.fetchall()}
 
         # Actions by module
         cursor.execute(
-            f"""SELECT {mod}, COUNT(*) as count FROM {tbl} WHERE user_id = ? AND {ts} >= ? GROUP BY {mod} ORDER BY count DESC""",  # noqa: E501
+            f"""SELECT {mod}, COUNT(*) as count FROM {tbl} WHERE user_id = ? AND {ts} >= ? GROUP BY {mod} ORDER BY count DESC""",  # SQL_SAFE: tbl,mod,ts from _detect_audit_schema
             (user_id, start_date),
         )
         stats["actions_by_module"] = {get_value(row, mod): get_value(row, 'count', 0) for row in cursor.fetchall()}
 
         # Success rate
         cursor.execute(
-            f"""SELECT SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) * 1.0 / COUNT(*) * 100 FROM {tbl} WHERE user_id = ? AND {ts} >= ?""",  # noqa: E501
+            f"""SELECT SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) * 1.0 / COUNT(*) * 100 FROM {tbl} WHERE user_id = ? AND {ts} >= ?""",  # SQL_SAFE: tbl,ts from _detect_audit_schema
             (user_id, start_date),
         )
+        # PRECISION: round() on success_rate (percentage, not money) is acceptable
         stats["success_rate"] = round(cursor.fetchone()[0] or 0, 2)
 
         # Most active day
         cursor.execute(
-            f"""SELECT date({ts}) as day, COUNT(*) as count FROM {tbl} WHERE user_id = ? AND {ts} >= ? GROUP BY day ORDER BY count DESC LIMIT 1""",  # noqa: E501
+            f"""SELECT date({ts}) as day, COUNT(*) as count FROM {tbl} WHERE user_id = ? AND {ts} >= ? GROUP BY day ORDER BY count DESC LIMIT 1""",  # SQL_SAFE: tbl,ts from _detect_audit_schema
             (user_id, start_date),
         )
         row = cursor.fetchone()
@@ -548,14 +550,14 @@ class AuditLogService:
 
         # Total actions
         cursor.execute(
-            f"""SELECT COUNT(*) FROM {tbl} WHERE {mod} = ? AND {ts} >= ?""",
+            f"""SELECT COUNT(*) FROM {tbl} WHERE {mod} = ? AND {ts} >= ?""",  # SQL_SAFE: tbl,mod,ts from _detect_audit_schema
             (module, start_date),
         )
         stats["total_actions"] = cursor.fetchone()[0]
 
         # Top users
         cursor.execute(
-            f"""SELECT username, COUNT(*) as count FROM {tbl} WHERE {mod} = ? AND {ts} >= ? GROUP BY user_id ORDER BY count DESC LIMIT 5""",  # noqa: E501
+            f"""SELECT username, COUNT(*) as count FROM {tbl} WHERE {mod} = ? AND {ts} >= ? GROUP BY user_id ORDER BY count DESC LIMIT 5""",  # SQL_SAFE: tbl,mod,ts from _detect_audit_schema
             (module, start_date),
         )
         stats["top_users"] = [
@@ -565,7 +567,7 @@ class AuditLogService:
 
         # Actions breakdown
         cursor.execute(
-            f"""SELECT action, COUNT(*) as count FROM {tbl} WHERE {mod} = ? AND {ts} >= ? GROUP BY action""",
+            f"""SELECT action, COUNT(*) as count FROM {tbl} WHERE {mod} = ? AND {ts} >= ? GROUP BY action""",  # SQL_SAFE: tbl,mod,ts from _detect_audit_schema
             (module, start_date),
         )
         stats["actions"] = {get_value(row, 'action'): get_value(row, 'count', 0) for row in cursor.fetchall()}
@@ -578,9 +580,9 @@ class AuditLogService:
         tbl = self._audit["table"]
         if tbl is None:
             return []
-        self._audit["timestamp"]
+        ts = self._audit["timestamp"]
         cursor.execute(
-            """
+            f"""
             SELECT
                 date({ts}) as date,
                 COUNT(*) as total,
@@ -591,7 +593,7 @@ class AuditLogService:
             WHERE {ts} >= date('now', ? || ' days')
             GROUP BY date({ts})
             ORDER BY date DESC
-        """,
+        """,  # SQL_SAFE: tbl,ts from _detect_audit_schema
             (f"-{days}",),
         )
 
@@ -606,6 +608,7 @@ class AuditLogService:
                     "unique_users": get_value(row, 'unique_users', 0),
                     "successful": successful,
                     "failed": get_value(row, 'failed', 0),
+                    # PRECISION: round() on success_rate (percentage, not money) is acceptable
                     "success_rate": (round(successful * 100.0 / total, 2) if total > 0 else 0),
                 }
             )
@@ -793,7 +796,7 @@ class AuditLogService:
             ts = self._audit["timestamp"]
             if not tbl:
                 return 0
-            cursor.execute(f"""DELETE FROM {tbl} WHERE {ts} < ?""", (cutoff_date,))
+            cursor.execute(f"""DELETE FROM {tbl} WHERE {ts} < ?""", (cutoff_date,))  # SQL_SAFE: tbl,ts from _detect_audit_schema
 
             deleted = cursor.rowcount
             self.db.conn.commit()

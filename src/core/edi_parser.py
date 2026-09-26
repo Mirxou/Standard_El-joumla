@@ -60,8 +60,8 @@ class EDIParser:
                 return self._parse_x12(edi_content)
             else:
                 return EDIParseResult(success=False, errors=[f"معيار غير مدعوم: {self.standard}"])
-        except Exception as e:
-            self.logger.error(f"خطأ في تحليل EDI: {e}", exc_info=True)
+        except (ValueError, IndexError, UnicodeDecodeError) as e:
+            self.logger.error(f"خطأ في تحليل EDI ({self.standard}): {e}", exc_info=True)
             return EDIParseResult(success=False, errors=[f"خطأ في التحليل: {str(e)}"])
 
     def _parse_edifact(self, content: str) -> EDIParseResult:
@@ -109,7 +109,7 @@ class EDIParser:
 
             return EDIParseResult(success=True, document_type=document_type, data=parsed_data)
 
-        except Exception as e:
+        except (ValueError, IndexError) as e:
             return EDIParseResult(success=False, errors=[f"خطأ في تحليل EDIFACT: {str(e)}"])
 
     def _parse_x12(self, content: str) -> EDIParseResult:
@@ -155,7 +155,7 @@ class EDIParser:
 
             return EDIParseResult(success=True, document_type=document_type, data=parsed_data)
 
-        except Exception as e:
+        except (ValueError, IndexError) as e:
             return EDIParseResult(success=False, errors=[f"خطأ في تحليل X12: {str(e)}"])
 
     def _parse_edifact_segments(self, segments: List[str], doc_type: str) -> Dict[str, Any]:
@@ -209,9 +209,9 @@ class EDIParser:
                 if len(parts) >= 3 and data["items"]:
                     quantity = parts[2] if len(parts) > 2 else "0"
                     try:
-                        data["items"][-1]["quantity"] = float(quantity)
-                    except Exception:
-                        logging.getLogger(__name__).warning("Ignored exception in edi_parser.py")
+                        data["items"][-1]["quantity"] = float(quantity or 0)
+                    except (ValueError, TypeError):
+                        logging.getLogger(__name__).warning("Ignored ValueError in edi_parser QTY segment")
 
             elif segment.startswith("PRI+"):
                 # Price
@@ -219,9 +219,9 @@ class EDIParser:
                 if len(parts) >= 3 and data["items"]:
                     price = parts[2] if len(parts) > 2 else "0"
                     try:
-                        data["items"][-1]["unit_price"] = float(price)
-                    except Exception:
-                        logging.getLogger(__name__).warning("Ignored exception in edi_parser.py")
+                        data["items"][-1]["unit_price"] = float(price or 0)
+                    except (ValueError, TypeError):
+                        logging.getLogger(__name__).warning("Ignored ValueError in edi_parser PRI segment")
 
         return data
 
@@ -255,11 +255,21 @@ class EDIParser:
             elif segment.startswith("PO1*"):
                 # Line Item
                 parts = segment.split("*")
+                try:
+                    qty = float(parts[2]) if len(parts) > 2 and parts[2] else 0
+                except (ValueError, TypeError):
+                    logger.warning("Invalid quantity in PO1 segment: %s", segment)
+                    qty = 0
+                try:
+                    price = float(parts[4]) if len(parts) > 4 and parts[4] else 0.0
+                except (ValueError, TypeError):
+                    logger.warning("Invalid price in PO1 segment: %s", segment)
+                    price = 0.0
                 item = {
                     "line_number": parts[1] if len(parts) > 1 else "",
                     "product_code": parts[7] if len(parts) > 7 else "",
-                    "quantity": float(parts[2]) if len(parts) > 2 and parts[2] else 0,
-                    "unit_price": (float(parts[4]) if len(parts) > 4 and parts[4] else 0.0),
+                    "quantity": qty,
+                    "unit_price": price,
                 }
                 data["items"].append(item)
 
@@ -284,8 +294,8 @@ class EDIParser:
                 month = date_str[4:6]
                 day = date_str[6:8]
                 return f"{year}-{month}-{day}"
-        except Exception:
-            logging.getLogger(__name__).warning("Ignored exception in edi_parser.py")
+        except (ValueError, TypeError):
+            logging.getLogger(__name__).warning("Ignored error in edi_parser _parse_edifact_date")
         return None
 
     def _parse_x12_date(self, date_str: str) -> Optional[str]:
@@ -296,8 +306,8 @@ class EDIParser:
                 month = date_str[4:6]
                 day = date_str[6:8]
                 return f"{year}-{month}-{day}"
-        except Exception:
-            logging.getLogger(__name__).warning("Ignored exception in edi_parser.py")
+        except (ValueError, TypeError):
+            logging.getLogger(__name__).warning("Ignored error in edi_parser _parse_x12_date")
         return None
 
     def validate(self, edi_content: str) -> Tuple[bool, List[str]]:

@@ -128,9 +128,9 @@ class Warehouse:
     def __post_init__(self):
         """ضمان تحويل الأرقام إلى Decimal"""
         if isinstance(self.capacity, (int, float, str)):
-            self.capacity = Decimal(str(self.capacity))
+            self.capacity = Decimal(str(self.capacity or 0))
         if isinstance(self.current_utilization, (int, float, str)):
-            self.current_utilization = Decimal(str(self.current_utilization))
+            self.current_utilization = Decimal(str(self.current_utilization or 0))
 
     def to_dict(self) -> Dict[str, Any]:
         """تحويل إلى قاموس"""
@@ -140,8 +140,8 @@ class Warehouse:
             "name": self.name,
             "name_en": self.name_en,
             "warehouse_type": self.warehouse_type,
-            "capacity": float(self.capacity),
-            "current_utilization": float(self.current_utilization),
+            "capacity": float(self.capacity or 0),
+            "current_utilization": float(self.current_utilization or 0),
             "address": self.address,
             "city": self.city,
             "country": self.country,
@@ -168,8 +168,8 @@ class Warehouse:
             name=data.get("name", ""),
             name_en=data.get("name_en"),
             warehouse_type=data.get("warehouse_type", WarehouseType.MAIN.value),
-            capacity=Decimal(str(data.get("capacity", 0))),
-            current_utilization=Decimal(str(data.get("current_utilization", 0))),
+            capacity=Decimal(str(data.get("capacity", 0) or 0)),
+            current_utilization=Decimal(str(data.get("current_utilization", 0) or 0)),
             address=data.get("address"),
             city=data.get("city"),
             country=data.get("country", "الجزائر"),
@@ -181,8 +181,8 @@ class Warehouse:
             is_default=bool(data.get("is_default", 0)),
             allow_negative_stock=bool(data.get("allow_negative_stock", 0)),
             notes=data.get("notes"),
-            created_at=(datetime.fromisoformat(data["created_at"]) if data.get("created_at") else None),
-            updated_at=(datetime.fromisoformat(data["updated_at"]) if data.get("updated_at") else None),
+            created_at=(datetime.fromisoformat(data.get("created_at", "")) if data.get("created_at") else None),
+            updated_at=(datetime.fromisoformat(data.get("updated_at", "")) if data.get("updated_at") else None),
             created_by=data.get("created_by"),
             updated_by=data.get("updated_by"),
         )
@@ -347,8 +347,8 @@ class WarehouseManager:
                 warehouse.name,
                 warehouse.name_en,
                 warehouse.warehouse_type,
-                float(warehouse.capacity),
-                float(warehouse.current_utilization),
+                float(warehouse.capacity or 0),
+                float(warehouse.current_utilization or 0),
                 warehouse.address,
                 warehouse.city,
                 warehouse.country,
@@ -437,7 +437,7 @@ class WarehouseManager:
                 warehouse.name,
                 warehouse.name_en,
                 warehouse.warehouse_type,
-                float(warehouse.capacity),
+                float(warehouse.capacity or 0),
                 warehouse.address,
                 warehouse.city,
                 warehouse.country,
@@ -674,9 +674,8 @@ class WarehouseInventoryManager:
         """تعديل كمية المخزون"""
         try:
             existing = self.get_inventory(warehouse_id, product_id)
-            from decimal import Decimal
 
-            new_qty = Decimal(str(existing.quantity)) if existing else Decimal("0.0")
+            new_qty = Decimal(str(existing.quantity or 0)) if existing else Decimal("0.0")
             new_qty += Decimal(str(quantity_diff))
 
             # F3 FIX: check allow_negative_stock on warehouse before blocking
@@ -695,7 +694,7 @@ class WarehouseInventoryManager:
                 except Exception:
                     return False
 
-            new_reserved = Decimal(str(existing.reserved_quantity)) if existing else Decimal("0.0")
+            new_reserved = Decimal(str(existing.reserved_quantity or 0)) if existing else Decimal("0.0")
             return self.update_quantity(warehouse_id, product_id, float(new_qty), float(new_reserved))
         except Exception as e:
             _log_error(self.logger, f"Error adjusting quantity: {e}")

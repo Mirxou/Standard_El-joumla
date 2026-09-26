@@ -314,7 +314,10 @@ class AnomalyDetectionSystem:
         daily_totals = defaultdict(float)
 
         for sale in sales_data:
-            date = datetime.fromisoformat(sale["date"]).date().isoformat()
+            try:
+                date = datetime.fromisoformat(sale["date"]).date().isoformat()
+            except (ValueError, TypeError, KeyError):
+                continue
             daily_totals[date] += sale.get("amount", 0)
 
         return dict(daily_totals)
@@ -479,7 +482,7 @@ class AnomalyDetectionSystem:
             return {"trend": "stable", "change_percent": 0.0}
 
         if older_count == 0:
-            change_percent = float("inf") if recent_count > 0 else 0.0
+            change_percent = 100.0 if recent_count > 0 else 0.0
         else:
             change_percent = ((recent_count - older_count) / older_count) * 100
 

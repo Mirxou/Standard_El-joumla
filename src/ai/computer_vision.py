@@ -50,7 +50,7 @@ except ImportError:
     PIL_AVAILABLE = False
     Image = None
 
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -410,11 +410,14 @@ class ComputerVisionEngine:
             product_embedding = product_data["embedding"]
 
             # Calculate cosine similarity
-            similarity = np.dot(query_embedding, product_embedding.T) / (
-                np.linalg.norm(query_embedding) * np.linalg.norm(product_embedding)
-            )
+            norm_q = np.linalg.norm(query_embedding)
+            norm_p = np.linalg.norm(product_embedding)
+            if norm_q > 0 and norm_p > 0:
+                similarity = np.dot(query_embedding, product_embedding.T) / (norm_q * norm_p)
+            else:
+                similarity = 0.0
 
-            confidence = float(similarity[0][0])
+            confidence = float(similarity[0][0]) if isinstance(similarity, np.ndarray) and similarity.ndim >= 1 else float(similarity)
 
             if confidence >= self.config["models"]["product_recognition"]["threshold"]:
                 matches.append(

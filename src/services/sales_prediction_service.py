@@ -170,16 +170,16 @@ class SalesPredictionService:
             monthly_patterns = self._analyze_monthly_patterns(historical_data)
 
             # تحديد النمط الأقوى
-            if weekly_patterns["strength"] > monthly_patterns["strength"]:
+            if weekly_patterns.get("strength", 0) > monthly_patterns.get("strength", 0):
                 pattern_type = "weekly"
-                peak_periods = weekly_patterns["peaks"]
-                low_periods = weekly_patterns["lows"]
-                strength = weekly_patterns["strength"]
+                peak_periods = weekly_patterns.get("peaks", [])
+                low_periods = weekly_patterns.get("lows", [])
+                strength = weekly_patterns.get("strength", 0)
             else:
                 pattern_type = "monthly"
-                peak_periods = monthly_patterns["peaks"]
-                low_periods = monthly_patterns["lows"]
-                strength = monthly_patterns["strength"]
+                peak_periods = monthly_patterns.get("peaks", [])
+                low_periods = monthly_patterns.get("lows", [])
+                strength = monthly_patterns.get("strength", 0)
 
             return SeasonalPattern(
                 product_id=product_id,
@@ -251,8 +251,8 @@ class SalesPredictionService:
             return InventoryRecommendation(
                 product_id=product_id,
                 recommended_stock_level=int(np.ceil(recommended_stock)),
-                safety_stock=int(np.ceil(safety_stock)),
-                reorder_point=int(np.ceil(reorder_point)),
+                safety_stock=int(np.ceil(safety_stock) or 0),
+                reorder_point=int(np.ceil(reorder_point) or 0),
                 reasoning=reasoning,
                 confidence_score=forecast.accuracy_score,
                 generated_at=datetime.now(),
@@ -289,7 +289,7 @@ class SalesPredictionService:
 
             # الحصول على متوسط الطلب التاريخي
             historical_data = self._get_demand_history(product_id, days=365)
-            avg_demand = np.mean([d["quantity"] for d in historical_data])
+            avg_demand = np.mean([d.get("quantity", 0) for d in historical_data])
 
             # تطبيق المعامل الموسمي
             seasonal_multiplier = self._get_seasonal_multiplier(target_date, seasonal_pattern)
@@ -353,7 +353,7 @@ class SalesPredictionService:
 
             # ميزات موسمية
             df["seasonal_multiplier"] = df.apply(
-                lambda row: self._get_seasonal_multiplier(row["date"], seasonal_patterns),
+                lambda row: self._get_seasonal_multiplier(row.get("date"), seasonal_patterns),
                 axis=1,
             )
 
@@ -452,14 +452,14 @@ class SalesPredictionService:
             # ميزات متأخرة (من البيانات الأخيرة)
             recent_data = self._get_demand_history(product_id, days=30)
             if recent_data:
-                last_quantity = recent_data[-1]["quantity"]
-                week_ago = recent_data[-7]["quantity"] if len(recent_data) > 7 else last_quantity
-                month_ago = recent_data[0]["quantity"] if recent_data else last_quantity
+                last_quantity = recent_data[-1].get("quantity", 0)
+                week_ago = recent_data[-7].get("quantity", 0) if len(recent_data) > 7 else last_quantity
+                month_ago = recent_data[0].get("quantity", 0) if recent_data else last_quantity
 
                 features.extend([last_quantity, week_ago, month_ago])
 
                 # حساب المتوسطات المتحركة
-                quantities = [d["quantity"] for d in recent_data[-7:]]
+                quantities = [d.get("quantity", 0) for d in recent_data[-7:]]
                 rolling_mean = np.mean(quantities)
                 rolling_std = np.std(quantities)
 
@@ -536,7 +536,7 @@ class SalesPredictionService:
 
             factors["best_sales_day"] = int(best_day)
             factors["worst_sales_day"] = int(worst_day)
-            factors["day_variation_coefficient"] = float(weekday_avg.std() / weekday_avg.mean())
+            factors["day_variation_coefficient"] = float(weekday_avg.std() / weekday_avg.mean()) if weekday_avg.mean() != 0 else 0
 
             # قوة النمط الموسمي
             factors["seasonality_strength"] = seasonal_patterns.seasonality_strength
@@ -662,7 +662,7 @@ class SalesPredictionService:
         """تنبؤ بسيط بالطلب عندما تكون البيانات محدودة"""
         try:
             recent_data = self._get_demand_history(product_id, days=30)
-            avg_demand = np.mean([d["quantity"] for d in recent_data]) if recent_data else 0
+            avg_demand = np.mean([d.get("quantity", 0) for d in recent_data]) if recent_data else 0
 
             return DemandForecast(
                 product_id=product_id,
@@ -673,7 +673,8 @@ class SalesPredictionService:
                 factors={"method": "simple_average", "data_points": len(recent_data)},
             )
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in simple demand forecast: {e}")
             return DemandForecast(
                 product_id=product_id,
                 forecast_date=datetime.now() + timedelta(days=days_ahead),
@@ -725,7 +726,7 @@ class SalesPredictionService:
         """حساب انحراف معياري الطلب"""
         try:
             historical_data = self._get_demand_history(product_id, days=90)
-            quantities = [d["quantity"] for d in historical_data]
+            quantities = [d.get("quantity", 0) for d in historical_data]
 
             return np.std(quantities) if quantities else 0
 
@@ -758,7 +759,7 @@ class SalesPredictionService:
             # تحديث نموذج الطلب
             all_products = self._get_all_products()
             for product in all_products[:5]:  # تدريب على أول 5 منتجات للاختبار
-                demand_data = self._get_demand_history(product["id"], days=180)
+                demand_data = self._get_demand_history(product.get("id", 0), days=180)
                 if len(demand_data) >= self.min_training_samples:
                     seasonal_patterns = self._analyze_seasonal_patterns(demand_data)
                     X, y = self._prepare_demand_training_data(demand_data, seasonal_patterns)

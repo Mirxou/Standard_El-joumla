@@ -51,8 +51,8 @@ class KeyringManager:
                     device_id = f.read().strip()
                 if device_id:
                     return device_id
-            except Exception:
-                logging.getLogger(__name__).warning("Ignored exception in keyring_manager.py")
+            except (OSError, ValueError):
+                logging.getLogger(__name__).warning("Ignored OSError in keyring_manager get_device_id")
 
         # إنشاء معرف جديد
         device_id = str(uuid.uuid4())
@@ -60,7 +60,7 @@ class KeyringManager:
             with open(device_id_file, "w") as f:
                 f.write(device_id)
             os.chmod(device_id_file, 0o600)  # صلاحيات محدودة
-        except Exception as e:
+        except (OSError, PermissionError) as e:
             self.logger.warning(f"فشل حفظ معرف الجهاز: {str(e)}")
 
         return device_id
@@ -84,9 +84,9 @@ class KeyringManager:
             keyring.set_password(self.SERVICE_NAME, key, password)
             self.logger.info(f"✅ تم حفظ المفتاح في Keyring: {key[:8]}...")
             return True
-        except Exception as e:
+        except (keyring.errors.KeyringError, keyring.errors.KeyringLocked) as e:
             self.logger.error(f"❌ فشل حفظ المفتاح في Keyring: {str(e)}")
-            return False
+            return False  # On error: returns False
 
     def get_password(self, key: str) -> Optional[str]:
         """
@@ -107,9 +107,9 @@ class KeyringManager:
             if password:
                 self.logger.info(f"✅ تم استرجاع المفتاح من Keyring: {key[:8]}...")
             return password
-        except Exception as e:
+        except (keyring.errors.KeyringError, keyring.errors.KeyringLocked) as e:
             self.logger.error(f"❌ فشل استرجاع المفتاح من Keyring: {str(e)}")
-            return None
+            return None  # On error: returns None
 
     def delete_password(self, key: str) -> bool:
         """
@@ -128,9 +128,9 @@ class KeyringManager:
             keyring.delete_password(self.SERVICE_NAME, key)
             self.logger.info(f"✅ تم حذف المفتاح من Keyring: {key[:8]}...")
             return True
-        except Exception as e:
+        except (keyring.errors.KeyringError, keyring.errors.KeyringLocked, keyring.errors.PasswordDeleteError) as e:
             self.logger.warning(f"⚠️ فشل حذف المفتاح من Keyring: {str(e)}")
-            return False
+            return False  # On error: returns False
 
     def get_database_password(self, device_id: Optional[str] = None) -> Optional[str]:
         """

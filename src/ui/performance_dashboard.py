@@ -3,6 +3,7 @@ Performance Monitoring Dashboard - لوحة مراقبة الأداء
 نظام شامل لمراقبة أداء التطبيق في الوقت الفعلي
 """
 import logging
+import threading
 
 from datetime import datetime
 from pathlib import Path
@@ -34,9 +35,10 @@ class PerformanceMonitor(QThread):
     def __init__(self, interval_ms: int = 2000):
         super().__init__()
         self.interval_ms = interval_ms
-        self.running = True
+        self.running = True  # THREAD: accessed from main thread via stop(); safe under CPython GIL but prefer requestInterruption()
         self.cache_stats = {}
         self.db_stats = {}
+        self._stats_lock = threading.Lock()  # THREAD: protect shared stats dicts from concurrent access
         self.logger = setup_logger(__name__)
 
     def run(self):
@@ -84,20 +86,23 @@ class PerformanceMonitor(QThread):
         stats["process_threads"] = process.num_threads()
 
         # Cache stats (إذا كان متاحاً)
-        stats["cache"] = self.cache_stats.copy()
+        with self._stats_lock:
+            stats["cache"] = self.cache_stats.copy()
 
-        # DB stats (إذا كان متاحاً)
-        stats["database"] = self.db_stats.copy()
+            # DB stats (إذا كان متاحاً)
+            stats["database"] = self.db_stats.copy()
 
         return stats
 
     def update_cache_stats(self, cache_stats: dict):
         """تحديث إحصائيات الكاش"""
-        self.cache_stats = cache_stats
+        with self._stats_lock:
+            self.cache_stats = cache_stats
 
     def update_db_stats(self, db_stats: dict):
         """تحديث إحصائيات قاعدة البيانات"""
-        self.db_stats = db_stats
+        with self._stats_lock:
+            self.db_stats = db_stats
 
     def stop(self):
         """إيقاف المراقبة"""

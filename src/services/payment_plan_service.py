@@ -96,7 +96,7 @@ class PaymentPlanService:
             plan.description,
             plan.start_date.isoformat() if plan.start_date else None,
             plan.end_date.isoformat() if plan.end_date else None,
-            float(plan.total_amount),
+            float(plan.total_amount or 0),
             float(plan.down_payment),
             float(plan.financed_amount),
             plan.number_of_installments,
@@ -145,9 +145,9 @@ class PaymentPlanService:
             float(installment.principal_amount),
             float(installment.interest_amount),
             float(installment.late_fee),
-            float(installment.total_amount),
+            float(installment.total_amount or 0),
             float(installment.amount_paid),
-            float(installment.remaining_amount),
+            float(installment.remaining_amount or 0),
             (installment.status.name if isinstance(installment.status, InstallmentStatus) else installment.status),
             installment.payment_date.isoformat() if installment.payment_date else None,
             installment.payment_method,
@@ -211,7 +211,7 @@ class PaymentPlanService:
             plan.description,
             plan.start_date.isoformat() if plan.start_date else None,
             plan.end_date.isoformat() if plan.end_date else None,
-            float(plan.total_amount),
+            float(plan.total_amount or 0),
             float(plan.down_payment),
             float(plan.financed_amount),
             plan.number_of_installments,
@@ -261,9 +261,9 @@ class PaymentPlanService:
             float(installment.principal_amount),
             float(installment.interest_amount),
             float(installment.late_fee),
-            float(installment.total_amount),
+            float(installment.total_amount or 0),
             float(installment.amount_paid),
-            float(installment.remaining_amount),
+            float(installment.remaining_amount or 0),
             (installment.status.name if isinstance(installment.status, InstallmentStatus) else installment.status),
             installment.payment_date.isoformat() if installment.payment_date else None,
             installment.payment_method,
@@ -478,7 +478,7 @@ class PaymentPlanService:
 
         # الأقساط المتأخرة
         overdue_query = """
-        SELECT COUNT(*)
+        SELECT COUNT(*) as count
         FROM payment_installments
         WHERE status IN (?, ?)
         AND due_date < date('now')
@@ -489,7 +489,7 @@ class PaymentPlanService:
         )
         if overdue_result:
             row0 = overdue_result[0]
-            overdue_count = row0.get("COUNT(*)", 0) if isinstance(row0, dict) else (row0[0] if row0 else 0)
+            overdue_count = row0.get("count", 0)
         else:
             overdue_count = 0
 

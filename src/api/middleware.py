@@ -314,6 +314,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         "X-XSS-Protection": "1; mode=block",
         "Referrer-Policy": "strict-origin-when-cross-origin",
         "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains",  # HSTS — enforce HTTPS for 1 year
         "Content-Security-Policy": (
             "default-src 'self'; script-src 'self'; "
             "style-src 'self' 'unsafe-inline'; "
@@ -354,10 +355,20 @@ def setup_middleware(
 
     # CORS Middleware (يجب أن يكون أولاً - قبل Auth)
     if enable_cors:
+        # SECURITY: allow_credentials=True with allow_origins=["*"] violates CORS spec.
+        # If no origins specified, disable credentials to prevent the security violation.
+        effective_origins = cors_origins or ["*"]
+        effective_credentials = True if cors_origins else False
+        if not cors_origins:
+            import logging
+            logging.getLogger(__name__).warning(
+                "⚠️ CORS: allow_credentials disabled because allow_origins is wildcard. "
+                "Set CORS_ORIGINS env var to enable credentials."
+            )
         app.add_middleware(
             StarletteCORS,
-            allow_origins=cors_origins or ["*"],
-            allow_credentials=True,
+            allow_origins=effective_origins,
+            allow_credentials=effective_credentials,
             allow_methods=["*"],
             allow_headers=["*"],
         )

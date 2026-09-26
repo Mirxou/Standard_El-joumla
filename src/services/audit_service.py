@@ -176,7 +176,7 @@ class AuditService:
             [user_id, start_date.isoformat()],
         )
 
-        actions_by_type = {row["action"]: row["count"] for row in actions_result}
+        actions_by_type = {row.get("action", ""): row.get("count", 0) for row in actions_result}
 
         # الموارد المعدلة
         resources_result = self.db.execute_query(
@@ -188,7 +188,7 @@ class AuditService:
             [user_id, start_date.isoformat()],
         )
 
-        resources_modified = {row["resource_type"]: row["count"] for row in resources_result}
+        resources_modified = {row.get("resource_type", ""): row.get("count", 0) for row in resources_result}
 
         # نسبة النجاح
         success_count = self.count_audit_logs(user_id=user_id, start_date=start_date, status="success")
@@ -217,11 +217,11 @@ class AuditService:
     def _audit_log_from_row(self, row: Dict[str, Any]) -> AuditLog:
         """تحويل صف إلى كائن AuditLog"""
         return AuditLog(
-            id=row["id"],
+            id=row.get("id"),
             user_id=row.get("user_id"),
-            username=row["username"],
-            action=row["action"],
-            resource_type=row["resource_type"],
+            username=row.get("username", ""),
+            action=row.get("action", ""),
+            resource_type=row.get("resource_type", ""),
             resource_id=row.get("resource_id"),
             old_value=row.get("old_value", ""),
             new_value=row.get("new_value", ""),
@@ -229,7 +229,7 @@ class AuditService:
             user_agent=row.get("user_agent", ""),
             status=row.get("status", "success"),
             error_message=row.get("error_message", ""),
-            created_at=(datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None),
+            created_at=(datetime.fromisoformat(row.get("created_at")) if row.get("created_at") else None),
         )
 
     def get_audit_logs(self, **kwargs) -> List[AuditLog]:
@@ -256,7 +256,7 @@ class AuditService:
                LIMIT 10""",
             [start_date.isoformat()],
         )
-        top_users = {row["username"]: row["count"] for row in top_users_result}
+        top_users = {row.get("username", ""): row.get("count", 0) for row in top_users_result}
 
         return {
             "total_actions": total_actions,
@@ -355,7 +355,7 @@ class AuditService:
             [start_date.isoformat()],
         )
 
-        status_counts = {row["status"]: row["count"] for row in status_result}
+        status_counts = {row.get("status", ""): row.get("count", 0) for row in status_result}
 
         # أكثر المستخدمين نشاطاً
         top_users_result = self.db.execute_query(
@@ -368,7 +368,7 @@ class AuditService:
             [start_date.isoformat()],
         )
 
-        top_users = [(row["username"], row["count"]) for row in top_users_result]
+        top_users = [(row.get("username", ""), row.get("count", 0)) for row in top_users_result]
 
         # أكثر عناوين IP نشاطاً
         top_ips_result = self.db.execute_query(
@@ -381,7 +381,7 @@ class AuditService:
             [start_date.isoformat()],
         )
 
-        top_ips = [(row["ip_address"], row["count"]) for row in top_ips_result]
+        top_ips = [(row.get("ip_address", ""), row.get("count", 0)) for row in top_ips_result]
 
         return {
             "total_attempts": total,
@@ -396,14 +396,14 @@ class AuditService:
     def _login_history_from_row(self, row: Dict[str, Any]) -> LoginHistory:
         """تحويل صف إلى كائن LoginHistory"""
         return LoginHistory(
-            id=row["id"],
+            id=row.get("id"),
             user_id=row.get("user_id"),
-            username=row["username"],
-            status=row["status"],
+            username=row.get("username", ""),
+            status=row.get("status", ""),
             ip_address=row.get("ip_address", ""),
             user_agent=row.get("user_agent", ""),
             failure_reason=row.get("failure_reason", ""),
-            created_at=(datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None),
+            created_at=(datetime.fromisoformat(row.get("created_at")) if row.get("created_at") else None),
         )
 
     # ==================== Cleanup ====================

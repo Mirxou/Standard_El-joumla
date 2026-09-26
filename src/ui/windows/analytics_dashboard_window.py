@@ -189,103 +189,114 @@ class AnalyticsDashboardWindow(QMainWindow):
 
     def load_sales_analytics(self, start_date: datetime, end_date: datetime):
         """تحميل تحليلات المبيعات"""
-        # Sales Trends
-        trends_result = self.analytics_service.get_sales_trends(start_date, end_date)
-        if trends_result.get("success"):
-            data = trends_result.get("data", [])
-            if data:
-                chart_data = []
-                for idx, item in enumerate(data):
-                    date = (  # noqa: F841
-                        datetime.fromisoformat(item["date"]) if isinstance(item["date"], str) else item["date"]
-                    )  # noqa: F841
-                    chart_data.append((idx, float(item.get("total_amount") or 0)))
+        try:
+            # Sales Trends
+            trends_result = self.analytics_service.get_sales_trends(start_date, end_date)
+            if trends_result.get("success"):
+                data = trends_result.get("data", [])
+                if data:
+                    chart_data = []
+                    for idx, item in enumerate(data):
+                        date_val = (  # noqa: F841
+                            datetime.fromisoformat(item.get("date", "")) if isinstance(item.get("date"), str) else item.get("date")
+                        )  # noqa: F841
+                        chart_data.append((idx, float(item.get("total_amount") or 0)))
 
-                self.sales_trends_chart.clear()
-                self.sales_trends_chart.add_series("المبيعات", chart_data)
+                    self.sales_trends_chart.clear()
+                    self.sales_trends_chart.add_series("المبيعات", chart_data)
 
-        # Sales by Category
-        category_result = self.analytics_service.get_sales_by_category(start_date, end_date)
-        if category_result.get("success"):
-            data = category_result.get("data", [])
-            if data:
-                pie_data = {item["category"]: item["total_amount"] for item in data}
-                self.sales_category_chart.clear()
-                self.sales_category_chart.add_data(pie_data)
+            # Sales by Category
+            category_result = self.analytics_service.get_sales_by_category(start_date, end_date)
+            if category_result.get("success"):
+                data = category_result.get("data", [])
+                if data:
+                    pie_data = {item.get("category", ""): (item.get("total_amount") or 0) for item in data}
+                    self.sales_category_chart.clear()
+                    self.sales_category_chart.add_data(pie_data)
 
-        # Sales by Customer
-        customer_result = self.analytics_service.get_sales_by_customer(
-            limit=10, start_date=start_date, end_date=end_date
-        )
-        if customer_result.get("success"):
-            data = customer_result.get("data", [])
-            self.sales_customer_table.setRowCount(len(data))
+            # Sales by Customer
+            customer_result = self.analytics_service.get_sales_by_customer(
+                limit=10, start_date=start_date, end_date=end_date
+            )
+            if customer_result.get("success"):
+                data = customer_result.get("data", [])
+                self.sales_customer_table.setRowCount(len(data))
 
-            for row, item in enumerate(data):
-                self.sales_customer_table.setItem(row, 0, QTableWidgetItem(item["customer_name"]))
-                self.sales_customer_table.setItem(row, 1, QTableWidgetItem(str(item["sale_count"])))
-                self.sales_customer_table.setItem(row, 2, QTableWidgetItem(f"{item['total_amount']:.2f}"))
-                self.sales_customer_table.setItem(row, 3, QTableWidgetItem(f"{item['avg_amount']:.2f}"))
+                for row, item in enumerate(data):
+                    self.sales_customer_table.setItem(row, 0, QTableWidgetItem(item.get("customer_name", "")))
+                    self.sales_customer_table.setItem(row, 1, QTableWidgetItem(str(item.get("sale_count", 0))))
+                    total_amt = item.get("total_amount", 0) or 0
+                    avg_amt = item.get("avg_amount", 0) or 0
+                    self.sales_customer_table.setItem(row, 2, QTableWidgetItem(f"{total_amt:.2f}"))
+                    self.sales_customer_table.setItem(row, 3, QTableWidgetItem(f"{avg_amt:.2f}"))
+        except Exception as e:
+            self.logger.error(f"خطأ في تحميل تحليلات المبيعات: {e}", exc_info=True)
 
     def load_inventory_analytics(self):
         """تحميل تحليلات المخزون"""
-        # Inventory Turnover
-        turnover_result = self.analytics_service.get_inventory_turnover()
-        if turnover_result.get("success"):
-            data = turnover_result.get("data", [])[:10]  # أول 10 منتجات
-            if data:
-                categories = [item["product_name"] for item in data]
-                turnover_data = {"معدل الدوران": [item["turnover_rate"] for item in data]}
-                self.inventory_turnover_chart.clear()
-                self.inventory_turnover_chart.add_data(categories, turnover_data)
+        try:
+            # Inventory Turnover
+            turnover_result = self.analytics_service.get_inventory_turnover()
+            if turnover_result.get("success"):
+                data = turnover_result.get("data", [])[:10]  # أول 10 منتجات
+                if data:
+                    categories = [item.get("product_name", "") for item in data]
+                    turnover_data = {"معدل الدوران": [item.get("turnover_rate", 0) or 0 for item in data]}
+                    self.inventory_turnover_chart.clear()
+                    self.inventory_turnover_chart.add_data(categories, turnover_data)
 
-        # Stock Alerts
-        alerts_result = self.analytics_service.get_stock_alerts()
-        if alerts_result.get("success"):
-            alerts = alerts_result.get("alerts", {})
-            low_stock = alerts.get("low_stock", [])
-            out_of_stock = alerts.get("out_of_stock", [])
+            # Stock Alerts
+            alerts_result = self.analytics_service.get_stock_alerts()
+            if alerts_result.get("success"):
+                alerts = alerts_result.get("alerts", {})
+                low_stock = alerts.get("low_stock", [])
+                out_of_stock = alerts.get("out_of_stock", [])
 
-            all_alerts = out_of_stock + low_stock
-            self.stock_alerts_table.setRowCount(len(all_alerts))
+                all_alerts = out_of_stock + low_stock
+                self.stock_alerts_table.setRowCount(len(all_alerts))
 
-            for row, alert in enumerate(all_alerts):
-                self.stock_alerts_table.setItem(row, 0, QTableWidgetItem(alert["product_name"]))
-                self.stock_alerts_table.setItem(row, 1, QTableWidgetItem(str(alert["current_stock"])))
-                self.stock_alerts_table.setItem(row, 2, QTableWidgetItem(str(alert.get("min_stock", 0))))
+                for row, alert in enumerate(all_alerts):
+                    self.stock_alerts_table.setItem(row, 0, QTableWidgetItem(alert.get("product_name", "")))
+                    self.stock_alerts_table.setItem(row, 1, QTableWidgetItem(str(alert.get("current_stock", 0))))
+                    self.stock_alerts_table.setItem(row, 2, QTableWidgetItem(str(alert.get("min_stock", 0))))
 
-                status = "نفد" if alert.get("current_stock", 0) <= 0 else "منخفض"
-                status_item = QTableWidgetItem(status)
-                status_color = (
-                    QColor(Colors.ACCENT_CORAL)
-                    if status == "نفد" else QColor(Colors.ACCENT_AMBER)
-                )
-                status_item.setForeground(status_color)
-                self.stock_alerts_table.setItem(row, 3, status_item)
+                    status = "نفد" if alert.get("current_stock", 0) <= 0 else "منخفض"
+                    status_item = QTableWidgetItem(status)
+                    status_color = (
+                        QColor(Colors.ACCENT_CORAL)
+                        if status == "نفد" else QColor(Colors.ACCENT_AMBER)
+                    )
+                    status_item.setForeground(status_color)
+                    self.stock_alerts_table.setItem(row, 3, status_item)
+        except Exception as e:
+            self.logger.error(f"خطأ في تحليلات المخزون: {e}", exc_info=True)
 
     def load_financial_analytics(self, start_date: datetime, end_date: datetime):
         """تحميل التحليلات المالية"""
-        # Profit Margin
-        profit_result = self.analytics_service.get_profit_margin_analysis(start_date, end_date)
-        if profit_result.get("success"):
-            data = profit_result.get("data", [])[:10]  # أول 10 منتجات
-            if data:
-                categories = [item["product_name"] for item in data]
-                margin_data = {"هامش الربح %": [item["margin_percent"] for item in data]}
-                self.profit_margin_chart.clear()
-                self.profit_margin_chart.add_data(categories, margin_data)
+        try:
+            # Profit Margin
+            profit_result = self.analytics_service.get_profit_margin_analysis(start_date, end_date)
+            if profit_result.get("success"):
+                data = profit_result.get("data", [])[:10]  # أول 10 منتجات
+                if data:
+                    categories = [item.get("product_name", "") for item in data]
+                    margin_data = {"هامش الربح %": [item.get("margin_percent", 0) or 0 for item in data]}
+                    self.profit_margin_chart.clear()
+                    self.profit_margin_chart.add_data(categories, margin_data)
 
-        # Cash Flow
-        cashflow_result = self.analytics_service.get_cash_flow_analysis(start_date, end_date)
-        if cashflow_result.get("success"):
-            data = cashflow_result.get("data", [])
-            if data:
-                inflow_data = [(idx, item["inflow"]) for idx, item in enumerate(data)]
-                outflow_data = [(idx, item["outflow"]) for idx, item in enumerate(data)]
+            # Cash Flow
+            cashflow_result = self.analytics_service.get_cash_flow_analysis(start_date, end_date)
+            if cashflow_result.get("success"):
+                data = cashflow_result.get("data", [])
+                if data:
+                    inflow_data = [(idx, item.get("inflow", 0) or 0) for idx, item in enumerate(data)]
+                    outflow_data = [(idx, item.get("outflow", 0) or 0) for idx, item in enumerate(data)]
 
-                self.cash_flow_chart.clear()
-                self.cash_flow_chart.add_series("التدفق الوارد", inflow_data)
-                self.cash_flow_chart.add_series("التدفق الصادر", outflow_data)
+                    self.cash_flow_chart.clear()
+                    self.cash_flow_chart.add_series("التدفق الوارد", inflow_data)
+                    self.cash_flow_chart.add_series("التدفق الصادر", outflow_data)
+        except Exception as e:
+            self.logger.error(f"خطأ في تحميل التحليلات المالية: {e}", exc_info=True)
 
     def refresh_data(self):
         """تحديث البيانات"""
@@ -325,7 +336,7 @@ class AnalyticsDashboardWindow(QMainWindow):
         elif file_path.endswith(".csv"):
             # تصدير أول جدول متاح
             if export_data.get("sales_by_customer", {}).get("data"):
-                success = self.analytics_service.export_to_csv(export_data["sales_by_customer"]["data"], file_path)
+                success = self.analytics_service.export_to_csv(export_data.get("sales_by_customer", {}).get("data", []), file_path)
             else:
                 success = False
         elif file_path.endswith(".xlsx"):
@@ -333,7 +344,7 @@ class AnalyticsDashboardWindow(QMainWindow):
             excel_data = {}
             for key, value in export_data.items():
                 if isinstance(value, dict) and "data" in value:
-                    excel_data[key] = value["data"]
+                    excel_data[key] = value.get("data", [])
 
             if excel_data:
                 success = self.analytics_service.export_to_excel(excel_data, file_path)

@@ -732,7 +732,10 @@ class PurchaseOrdersWindow(QMainWindow):
             return
 
         row = selected[0].row()
-        po_id = self.pos_table.item(row, 0).data(Qt.UserRole)
+        po_item = self.pos_table.item(row, 0)
+        po_id = po_item.data(Qt.UserRole) if po_item else None
+        if po_id is None:
+            return
 
         try:
             self.current_po = self.po_service.get_purchase_order(po_id)

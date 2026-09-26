@@ -403,7 +403,7 @@ class PaymentGatewayService:
                 integration_id,
                 transaction_id,
                 transaction_type,
-                float(amount),
+                float(amount or 0),
                 currency,
                 status,
                 gateway_status,

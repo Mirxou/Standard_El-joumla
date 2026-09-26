@@ -4,10 +4,13 @@ Notifications and Alerts System
 """
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from typing import Callable, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class NotificationType(Enum):
@@ -357,22 +360,22 @@ class NotificationService:
 
         notifications = []
         for row in rows:
-            data = json.loads(row["data"]) if row.get("data") else None
+            data = json.loads(row.get("data", "")) if row.get("data") else None
 
             notifications.append(
                 Notification(
-                    id=row["id"],
-                    title=row["title"],
-                    message=row["message"],
-                    type=NotificationType(row["type"]),
-                    priority=NotificationPriority(row["priority"]),
-                    category=AlertCategory(row["category"]),
+                    id=row.get("id", 0),
+                    title=row.get("title", ""),
+                    message=row.get("message", ""),
+                    type=NotificationType(row.get("type", "info")),
+                    priority=NotificationPriority(row.get("priority", 2)),
+                    category=AlertCategory(row.get("category", "system")),
                     user_id=row.get("user_id"),
                     action_url=row.get("action_url"),
                     data=data,
                     read=bool(row.get("read", 0)),
                     read_at=datetime.fromisoformat(row["read_at"]) if row.get("read_at") else None,
-                    created_at=datetime.fromisoformat(row["created_at"]),
+                    created_at=datetime.fromisoformat(row.get("created_at", datetime.now().isoformat())),
                 )
             )
 
@@ -440,11 +443,14 @@ class NotificationService:
             عدد الإشعارات المحذوفة
         """
         cursor = self.db.connection.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             DELETE FROM notifications
             WHERE read = 1
-            AND created_at < datetime('now', '-{} days')
-        """.format(days))
+            AND created_at < datetime('now', ? || ' days')
+        """,
+            (f'-{days}',),
+        )
         self.db.connection.commit()
         return cursor.rowcount
 
@@ -581,7 +587,7 @@ class NotificationService:
             try:
                 callback(notification_id)
             except Exception as e:
-                print(f"Error in notification callback: {e}")
+                logger.error(f"Error in notification callback: {e}")
 
     def get_statistics(self) -> dict:
         """إحصائيات الإشعارات"""

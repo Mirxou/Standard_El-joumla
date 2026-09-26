@@ -11,6 +11,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv("SECRET_KEY")  # Required - must be set in production
 DEBUG = False
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+# CONFIG: Default ALLOWED_HOSTS includes localhost for development.
+# In production, set ALLOWED_HOSTS env var to actual domain names.
 
 # Database Configuration
 DATABASES = {
@@ -164,10 +166,10 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 # Feature Flags
-ENABLE_AI_FEATURES = True
-ENABLE_ADVANCED_REPORTING = True
-ENABLE_REAL_TIME_ANALYTICS = True
-ENABLE_MOBILE_APP = True
+ENABLE_AI_FEATURES = os.getenv("ENABLE_AI_FEATURES", "true").lower() == "true"
+ENABLE_ADVANCED_REPORTING = os.getenv("ENABLE_ADVANCED_REPORTING", "true").lower() == "true"
+ENABLE_REAL_TIME_ANALYTICS = os.getenv("ENABLE_REAL_TIME_ANALYTICS", "true").lower() == "true"
+ENABLE_MOBILE_APP = os.getenv("ENABLE_MOBILE_APP", "true").lower() == "true"
 
 # Rate Limiting
 REST_FRAMEWORK = {
@@ -186,5 +188,5 @@ CORS_ALLOWED_ORIGINS = [
 CORS_ALLOW_CREDENTIALS = True
 
 # Maintenance Mode
-MAINTENANCE_MODE = False
+MAINTENANCE_MODE = os.getenv("MAINTENANCE_MODE", "false").lower() == "true"
 MAINTENANCE_MESSAGE = "النظام قيد الصيانة، يرجى المحاولة لاحقاً."

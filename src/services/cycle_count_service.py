@@ -100,13 +100,13 @@ class CycleCountService:
             rows = cx.execute(sql).fetchall()
             return [
                 CycleCountPlan(
-                    id=row["id"],
-                    name=row["name"],
-                    frequency=row["frequency"],
-                    strategy=row["strategy"],
-                    locations=row["locations"],
-                    start_date=row["start_date"],
-                    enabled=row["enabled"],
+                    id=row.get("id", 0),
+                    name=row.get("name", ""),
+                    frequency=row.get("frequency", "monthly"),
+                    strategy=row.get("strategy", "abc"),
+                    locations=row.get("locations"),
+                    start_date=row.get("start_date"),
+                    enabled=row.get("enabled", 1),
                 )
                 for row in rows
             ]
@@ -205,25 +205,27 @@ class CycleCountService:
 
             return {
                 "session": dict(sess) if sess else None,
-                "items": (int(totals["items"]) if totals and totals["items"] is not None else 0),
+                "items": (int(totals.get("items", 0) or 0) if totals else 0),
                 "variance_qty": (
-                    float(totals["variance_qty"]) if totals and totals["variance_qty"] is not None else 0.0
+                    float(totals.get("variance_qty", 0) or 0) if totals and totals.get("variance_qty") is not None else 0.0
                 ),
                 "variance_value": (
-                    float(totals["variance_value"]) if totals and totals["variance_value"] is not None else 0.0
+                    float(totals.get("variance_value", 0) or 0) if totals and totals.get("variance_value") is not None else 0.0
                 ),
             }
 
     def get_dashboard_summary(self) -> Dict[str, Any]:
         with self._conn() as cx:
-            open_sessions = cx.execute(
+            _row = cx.execute(
                 "SELECT COUNT(*) AS c FROM cycle_count_sessions WHERE status = 'open'"
-            ).fetchone()["c"]
-            recent_closed = cx.execute("""
+            ).fetchone()
+            open_sessions = _row.get("c", 0) if _row else 0
+            _row2 = cx.execute("""
                 SELECT COUNT(*) AS c
                 FROM cycle_count_sessions
                 WHERE status = 'closed' AND closed_at >= datetime('now', '-7 days')
-                """).fetchone()["c"]
+                """).fetchone()
+            recent_closed = _row2.get("c", 0) if _row2 else 0
 
             totals = cx.execute("""
                 SELECT
@@ -241,10 +243,10 @@ class CycleCountService:
                 "open_sessions": int(open_sessions),
                 "recent_closed": int(recent_closed),
                 "variance_qty": (
-                    float(totals["variance_qty"]) if totals and totals["variance_qty"] is not None else 0.0
+                    float(totals.get("variance_qty", 0) or 0) if totals and totals.get("variance_qty") is not None else 0.0
                 ),
                 "variance_value": (
-                    float(totals["variance_value"]) if totals and totals["variance_value"] is not None else 0.0
+                    float(totals.get("variance_value", 0) or 0) if totals and totals.get("variance_value") is not None else 0.0
                 ),
             }
 

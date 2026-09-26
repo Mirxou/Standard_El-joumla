@@ -413,7 +413,8 @@ class AdvancedBusinessAnalyticsService:
 
             return insights
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return []
 
     def _generate_trend_insights(self) -> List[BusinessInsight]:
@@ -424,7 +425,7 @@ class AdvancedBusinessAnalyticsService:
             # تحليل اتجاهات المبيعات
             sales_trends = self._analyze_sales_trends()
             if sales_trends.get("trend_strength", 0) > 0.1:
-                trend_direction = "تصاعدي" if sales_trends["trend_direction"] == "increasing" else "تنازلي"
+                trend_direction = "تصاعدي" if sales_trends.get("trend_direction") == "increasing" else "تنازلي"
                 insight = BusinessInsight(
                     insight_id=f"INSIGHT_TREND_SALES_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
                     insight_type="trend",
@@ -443,7 +444,8 @@ class AdvancedBusinessAnalyticsService:
 
             return insights
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return []
 
     def _generate_anomaly_insights(self) -> List[BusinessInsight]:
@@ -469,7 +471,8 @@ class AdvancedBusinessAnalyticsService:
 
             return insights
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return []
 
     def _generate_opportunity_insights(self) -> List[BusinessInsight]:
@@ -495,7 +498,8 @@ class AdvancedBusinessAnalyticsService:
 
             return insights
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return []
 
     # طرق تجزئة العملاء
@@ -524,11 +528,11 @@ class AdvancedBusinessAnalyticsService:
                 for row in cursor.fetchall():
                     customer = dict(row)
                     customer["days_since_last_purchase"] = (
-                        (datetime.now() - customer["last_purchase_date"]).days
-                        if customer["last_purchase_date"]
+                        (datetime.now() - customer.get("last_purchase_date")).days
+                        if customer.get("last_purchase_date")
                         else 365
                     )
-                    customer["purchase_frequency"] = customer["total_purchases"] / 12  # شهرياً
+                    customer["purchase_frequency"] = customer.get("total_purchases", 0) / 12  # شهرياً
                     customers.append(customer)
 
                 return customers
@@ -557,7 +561,8 @@ class AdvancedBusinessAnalyticsService:
 
             return pd.DataFrame(X_scaled, columns=numeric_features, index=df.index)
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return pd.DataFrame()
 
     def _perform_clustering(self, X: pd.DataFrame, original_df: pd.DataFrame) -> List[CustomerSegment]:
@@ -592,7 +597,7 @@ class AdvancedBusinessAnalyticsService:
                     "total_customers": len(cluster_data),
                     "total_revenue": cluster_data["total_spent"].sum(),
                     "avg_customer_value": cluster_data["total_spent"].mean(),
-                    "segment_percentage": len(cluster_data) / len(original_df) * 100,
+                    "segment_percentage": (len(cluster_data) / len(original_df) * 100) if len(original_df) > 0 else 0,
                 }
 
                 segment = CustomerSegment(
@@ -647,7 +652,8 @@ class AdvancedBusinessAnalyticsService:
 
             return behavior
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return {}
 
     # طرق حساب المقاييس
@@ -692,7 +698,8 @@ class AdvancedBusinessAnalyticsService:
 
             return metrics
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return []
 
     def _calculate_operational_metrics(self) -> List[BusinessMetric]:
@@ -718,7 +725,8 @@ class AdvancedBusinessAnalyticsService:
 
             return metrics
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return []
 
     def _calculate_customer_metrics(self) -> List[BusinessMetric]:
@@ -744,7 +752,8 @@ class AdvancedBusinessAnalyticsService:
 
             return metrics
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return []
 
     def _calculate_product_metrics(self) -> List[BusinessMetric]:
@@ -770,7 +779,8 @@ class AdvancedBusinessAnalyticsService:
 
             return metrics
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return []
 
     # طرق الرؤى التنبؤية
@@ -810,7 +820,8 @@ class AdvancedBusinessAnalyticsService:
 
             return insights
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return []
 
     def _generate_customer_predictive_insights(self, time_horizon: str) -> List[PredictiveInsight]:
@@ -826,8 +837,8 @@ class AdvancedBusinessAnalyticsService:
                     insight_id=f"PRED_INSIGHT_CHURN_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
                     prediction_type="customer_churn",
                     target_metric="churn_rate",
-                    predicted_value=churn_prediction["predicted_rate"],
-                    confidence_interval=churn_prediction["confidence_interval"],
+                    predicted_value=churn_prediction.get("predicted_rate", 0),
+                    confidence_interval=churn_prediction.get("confidence_interval", {"lower": 0, "upper": 0}),
                     time_horizon=time_horizon,
                     influencing_factors=[
                         "customer_satisfaction",
@@ -841,7 +852,8 @@ class AdvancedBusinessAnalyticsService:
 
             return insights
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return []
 
     def _generate_product_predictive_insights(self, time_horizon: str) -> List[PredictiveInsight]:
@@ -857,10 +869,10 @@ class AdvancedBusinessAnalyticsService:
                     insight_id=f"PRED_INSIGHT_PRODUCT_{product['product_id']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",  # noqa: E501
                     prediction_type="product_demand",
                     target_metric="product_sales",
-                    predicted_value=product["predicted_sales"],
+                    predicted_value=product.get("predicted_sales", 0),
                     confidence_interval=(
-                        product["predicted_sales"] * 0.8,
-                        product["predicted_sales"] * 1.2,
+                        product.get("predicted_sales", 0) * 0.8,
+                        product.get("predicted_sales", 0) * 1.2,
                     ),
                     time_horizon=time_horizon,
                     influencing_factors=["seasonality", "trends", "marketing"],
@@ -871,7 +883,8 @@ class AdvancedBusinessAnalyticsService:
 
             return insights
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return []
 
     # طرق التحليل المساعدة
@@ -897,7 +910,8 @@ class AdvancedBusinessAnalyticsService:
                 "trend": "improving" if change_percentage > 0 else "declining",
             }
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return {}
 
     def _analyze_customer_performance(self) -> Dict[str, Any]:
@@ -915,7 +929,8 @@ class AdvancedBusinessAnalyticsService:
                 "retention_rate": 1 - churn_rate,
             }
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return {}
 
     def _analyze_sales_trends(self) -> Dict[str, Any]:
@@ -930,7 +945,7 @@ class AdvancedBusinessAnalyticsService:
             from sklearn.linear_model import LinearRegression
 
             X = np.arange(len(sales_data)).reshape(-1, 1)
-            y = np.array([item["sales"] for item in sales_data])
+            y = np.array([item.get("sales", 0) for item in sales_data])
 
             model = LinearRegression()
             model.fit(X, y)
@@ -947,7 +962,8 @@ class AdvancedBusinessAnalyticsService:
                 "r_squared": model.score(X, y),
             }
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return {"trend_direction": "stable", "trend_strength": 0}
 
     def _detect_sales_anomalies(self) -> List[Dict[str, Any]]:
@@ -958,7 +974,7 @@ class AdvancedBusinessAnalyticsService:
             if len(sales_data) < 14:
                 return []
 
-            values = np.array([item["sales"] for item in sales_data])
+            values = np.array([item.get("sales", 0) for item in sales_data])
             mean = np.mean(values)
             std = np.std(values)
 
@@ -968,8 +984,8 @@ class AdvancedBusinessAnalyticsService:
                 if z_score > 2.5:  # شذوذ إحصائي
                     anomalies.append(
                         {
-                            "date": item["date"],
-                            "sales": item["sales"],
+                            "date": item.get("date", ""),
+                            "sales": item.get("sales", 0),
                             "expected_sales": mean,
                             "deviation": values[i] - mean,
                             "z_score": z_score,
@@ -979,7 +995,8 @@ class AdvancedBusinessAnalyticsService:
 
             return anomalies
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return []
 
     def _identify_growth_opportunities(self) -> List[Dict[str, Any]]:
@@ -993,8 +1010,8 @@ class AdvancedBusinessAnalyticsService:
                 opportunities.append(
                     {
                         "type": "product_optimization",
-                        "description": f"تحسين أداء المنتج: {product['product_name']}",
-                        "potential_impact": product["potential_gain"],
+                        "description": f"تحسين أداء المنتج: {product.get('product_name', '')}",
+                        "potential_impact": product.get("potential_gain", 0),
                         "actions": ["مراجعة التسعير", "تحسين التسويق", "تحسين الجودة"],
                     }
                 )
@@ -1005,15 +1022,16 @@ class AdvancedBusinessAnalyticsService:
                 opportunities.append(
                     {
                         "type": "market_expansion",
-                        "description": f"استغلال شريحة عملاء جديدة: {segment['segment_name']}",
-                        "potential_impact": segment["potential_revenue"],
+                        "description": f"استغلال شريحة عملاء جديدة: {segment.get('segment_name', '')}",
+                        "potential_impact": segment.get("potential_revenue", 0),
                         "actions": ["حملات تسويقية مستهدفة", "تطوير منتجات مناسبة"],
                     }
                 )
 
             return opportunities
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return []
 
     # طرق البيانات
@@ -1028,7 +1046,8 @@ class AdvancedBusinessAnalyticsService:
                 """)
                 result = cursor.fetchone()
                 return result[0] or 0
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return 0
 
     def _get_yesterday_revenue(self) -> float:
@@ -1042,7 +1061,8 @@ class AdvancedBusinessAnalyticsService:
                 """)
                 result = cursor.fetchone()
                 return result[0] or 0
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return 0
 
     def _get_current_profit(self) -> float:
@@ -1051,7 +1071,8 @@ class AdvancedBusinessAnalyticsService:
             revenue = self._get_today_revenue()
             costs = self._get_today_costs()
             return revenue - costs
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return 0
 
     def _get_previous_profit(self) -> float:
@@ -1060,7 +1081,8 @@ class AdvancedBusinessAnalyticsService:
             prev_revenue = self._get_yesterday_revenue()
             prev_costs = self._get_yesterday_costs()
             return prev_revenue - prev_costs
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return 0
 
     def _get_today_costs(self) -> float:
@@ -1074,7 +1096,8 @@ class AdvancedBusinessAnalyticsService:
                 """)
                 result = cursor.fetchone()
                 return result[0] or 0
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return 0
 
     def _get_yesterday_costs(self) -> float:
@@ -1088,7 +1111,8 @@ class AdvancedBusinessAnalyticsService:
                 """)
                 result = cursor.fetchone()
                 return result[0] or 0
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return 0
 
     def _get_order_fulfillment_rate(self) -> float:
@@ -1104,7 +1128,8 @@ class AdvancedBusinessAnalyticsService:
                 """)
                 result = cursor.fetchone()
                 return result[0] or 0
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return 0.85
 
     def _get_customer_retention_rate(self) -> float:
@@ -1114,7 +1139,8 @@ class AdvancedBusinessAnalyticsService:
             returning_customers = self._get_returning_customers()
 
             return returning_customers / total_customers if total_customers > 0 else 0
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return 0.8
 
     def _get_inventory_turnover_rate(self) -> float:
@@ -1136,7 +1162,8 @@ class AdvancedBusinessAnalyticsService:
                 """)
                 result = cursor.fetchone()
                 return result[0] or 4.0
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return 4.0
 
     def _get_total_customers(self) -> int:
@@ -1147,7 +1174,8 @@ class AdvancedBusinessAnalyticsService:
                 cursor.execute("SELECT COUNT(*) FROM customers")
                 result = cursor.fetchone()
                 return result[0] or 0
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return 0
 
     def _get_churned_customers_last_month(self) -> int:
@@ -1165,7 +1193,8 @@ class AdvancedBusinessAnalyticsService:
                 """)
                 result = cursor.fetchone()
                 return result[0] or 0
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return 0
 
     def _get_returning_customers(self) -> int:
@@ -1182,7 +1211,8 @@ class AdvancedBusinessAnalyticsService:
                 """)
                 result = cursor.fetchone()
                 return result[0] or 0
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return 0
 
     def _get_current_period_sales(self) -> float:
@@ -1206,7 +1236,8 @@ class AdvancedBusinessAnalyticsService:
                     ORDER BY date
                 """)
                 return [dict(row) for row in cursor.fetchall()]
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return []
 
     def _get_daily_sales_data(self) -> List[Dict[str, Any]]:
@@ -1233,12 +1264,13 @@ class AdvancedBusinessAnalyticsService:
                 products = []
                 for row in cursor.fetchall():
                     product = dict(row)
-                    product["potential_gain"] = product["revenue"] * 0.5  # تقدير
+                    product["potential_gain"] = product.get("revenue", 0) * 0.5  # تقدير
                     products.append(product)
 
                 return products
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return []
 
     def _get_untapped_customer_segments(self) -> List[Dict[str, Any]]:
@@ -1265,7 +1297,8 @@ class AdvancedBusinessAnalyticsService:
                 "confidence_interval": (predicted_rate * 0.8, predicted_rate * 1.2),
             }
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return None
 
     def _predict_top_products(self) -> List[Dict[str, Any]]:
@@ -1289,12 +1322,13 @@ class AdvancedBusinessAnalyticsService:
                 for row in cursor.fetchall():
                     product = dict(row)
                     # توقع بسيط: الاتجاه الحالي + 20%
-                    product["predicted_sales"] = product["total_sold"] * 1.2
+                    product["predicted_sales"] = product.get("total_sold", 0) * 1.2
                     products.append(product)
 
                 return products
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return []
 
     def _calculate_trend(self, current: float, previous: float) -> str:
@@ -1446,7 +1480,8 @@ class AdvancedBusinessAnalyticsService:
                 "customers_today": self._get_today_customers_count(),
                 "profit_margin": self._calculate_profit_margin(),
             }
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return {}
 
     def _get_top_insights(self) -> List[Dict[str, Any]]:
@@ -1473,7 +1508,8 @@ class AdvancedBusinessAnalyticsService:
 
                 return [dict(row) for row in cursor.fetchall()]
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return []
 
     def _get_performance_trends(self) -> Dict[str, Any]:
@@ -1484,7 +1520,8 @@ class AdvancedBusinessAnalyticsService:
                 "customer_trend": self._analyze_customer_trends(),
                 "profit_trend": self._analyze_profit_trends(),
             }
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return {}
 
     def _get_customer_analytics(self) -> Dict[str, Any]:
@@ -1496,7 +1533,8 @@ class AdvancedBusinessAnalyticsService:
                 "segment_distribution": [s.customer_count for s in segments],
                 "top_segment": segments[0].segment_name if segments else None,
             }
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return {}
 
     def _get_predictive_alerts(self) -> List[Dict[str, Any]]:
@@ -1517,7 +1555,8 @@ class AdvancedBusinessAnalyticsService:
 
             return alerts
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return []
 
     def _get_action_items(self) -> List[Dict[str, Any]]:
@@ -1543,7 +1582,8 @@ class AdvancedBusinessAnalyticsService:
 
                 return list(set(actions))  # إزالة التكرارات
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return []
 
     # طرق إضافية
@@ -1558,7 +1598,8 @@ class AdvancedBusinessAnalyticsService:
                 """)
                 result = cursor.fetchone()
                 return result[0] or 0
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return 0
 
     def _get_today_customers_count(self) -> int:
@@ -1572,7 +1613,8 @@ class AdvancedBusinessAnalyticsService:
                 """)
                 result = cursor.fetchone()
                 return result[0] or 0
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return 0
 
     def _calculate_profit_margin(self) -> float:
@@ -1583,7 +1625,8 @@ class AdvancedBusinessAnalyticsService:
 
             return ((revenue - costs) / revenue * 100) if revenue > 0 else 0
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return 0
 
     def _analyze_customer_trends(self) -> Dict[str, Any]:
@@ -1594,7 +1637,8 @@ class AdvancedBusinessAnalyticsService:
 
             return self._calculate_trend(current_customers, previous_customers)
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return "stable"
 
     def _analyze_profit_trends(self) -> Dict[str, Any]:
@@ -1605,7 +1649,8 @@ class AdvancedBusinessAnalyticsService:
 
             return self._calculate_trend(current_profit, previous_profit)
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return "stable"
 
     def _get_yesterday_customers_count(self) -> int:
@@ -1619,7 +1664,8 @@ class AdvancedBusinessAnalyticsService:
                 """)
                 result = cursor.fetchone()
                 return result[0] or 0
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return 0
 
     def _get_sales_forecast(self) -> Dict[str, Any]:
@@ -1645,7 +1691,8 @@ class AdvancedBusinessAnalyticsService:
                     "product": "declining",
                 },
             }
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return {}
 
     def _generate_business_recommendations(self) -> List[Dict[str, Any]]:
@@ -1669,5 +1716,6 @@ class AdvancedBusinessAnalyticsService:
 
             return recommendations
 
-        except Exception as e:  # noqa: F841
+        except Exception as e:
+            self.logger.error(f"Error in analytics operation: {e}")
             return []

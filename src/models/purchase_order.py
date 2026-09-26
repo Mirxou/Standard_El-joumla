@@ -118,7 +118,7 @@ class PurchaseOrderItem:
         for field_name in decimal_fields:
             value = getattr(self, field_name)
             if isinstance(value, (int, float, str)):
-                setattr(self, field_name, Decimal(str(value)))
+                setattr(self, field_name, Decimal(str(value or 0)))
 
         # تحويل التواريخ
         for field_name in ["expected_delivery_date", "actual_delivery_date"]:
@@ -197,15 +197,15 @@ class PurchaseOrderItem:
             "product_name": self.product_name,
             "product_code": self.product_code,
             "description": self.description,
-            "quantity_ordered": float(self.quantity_ordered),
-            "quantity_received": float(self.quantity_received),
-            "quantity_pending": float(self.quantity_pending),
-            "unit_price": float(self.unit_price),
-            "discount_percentage": float(self.discount_percentage),
-            "discount_amount": float(self.discount_amount),
-            "tax_percentage": float(self.tax_percentage),
-            "tax_amount": float(self.tax_amount),
-            "total_amount": float(self.total_amount),
+            "quantity_ordered": float(self.quantity_ordered or 0),
+            "quantity_received": float(self.quantity_received or 0),
+            "quantity_pending": float(self.quantity_pending or 0),
+            "unit_price": float(self.unit_price or 0),
+            "discount_percentage": float(self.discount_percentage or 0),
+            "discount_amount": float(self.discount_amount or 0),
+            "tax_percentage": float(self.tax_percentage or 0),
+            "tax_amount": float(self.tax_amount or 0),
+            "total_amount": float(self.total_amount or 0),
             "unit_of_measure": self.unit_of_measure,
             "specifications": self.specifications,
             "manufacturer": self.manufacturer,
@@ -325,7 +325,7 @@ class PurchaseOrder:
         for field_name in decimal_fields:
             value = getattr(self, field_name)
             if isinstance(value, (int, float, str)):
-                setattr(self, field_name, Decimal(str(value)))
+                setattr(self, field_name, Decimal(str(value or 0)))
 
         # تحويل الأنواع
         if isinstance(self.status, str):
@@ -616,16 +616,16 @@ class PurchaseOrder:
             "delivery_address": self.delivery_address,
             "delivery_contact_person": self.delivery_contact_person,
             "delivery_phone": self.delivery_phone,
-            "subtotal": float(self.subtotal),
-            "discount_amount": float(self.discount_amount),
-            "discount_percentage": float(self.discount_percentage),
-            "tax_amount": float(self.tax_amount),
-            "shipping_cost": float(self.shipping_cost),
-            "other_charges": float(self.other_charges),
-            "total_amount": float(self.total_amount),
-            "advance_payment": float(self.advance_payment),
-            "paid_amount": float(self.paid_amount),
-            "balance_due": float(self.balance_due),
+            "subtotal": float(self.subtotal or 0),
+            "discount_amount": float(self.discount_amount or 0),
+            "discount_percentage": float(self.discount_percentage or 0),
+            "tax_amount": float(self.tax_amount or 0),
+            "shipping_cost": float(self.shipping_cost or 0),
+            "other_charges": float(self.other_charges or 0),
+            "total_amount": float(self.total_amount or 0),
+            "advance_payment": float(self.advance_payment or 0),
+            "paid_amount": float(self.paid_amount or 0),
+            "balance_due": float(self.balance_due or 0),
             "notes": self.notes,
             "internal_notes": self.internal_notes,
             "terms_and_conditions": self.terms_and_conditions,

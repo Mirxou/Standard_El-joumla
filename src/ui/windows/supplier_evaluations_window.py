@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.core.database_manager import DatabaseManager
+from src.ui.styles.design_tokens import C
 from src.utils.logger import setup_logger
 
 
@@ -248,7 +249,7 @@ class SupplierEvaluationsWindow(QMainWindow):
 
         # التقييم العام (تلقائي)
         overall_label = QLabel("0.0")
-        overall_label.setStyleSheet("font-weight: bold; font-size: 16px; color: C.ACCENT_SKY;")
+        overall_label.setStyleSheet(f"font-weight: bold; font-size: 16px; color: {C.ACCENT_SKY};")
         layout.addRow("التقييم العام:", overall_label)
 
         # الملاحظات

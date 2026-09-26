@@ -32,6 +32,7 @@ from ...ui.styles.design_tokens import C
 from ...core.database_manager import DatabaseManager
 from ...models.physical_count import CountStatus, PhysicalCount
 from ...services.inventory_count_service import InventoryCountService
+from ...utils.db_helpers import safe_int
 from ...utils.logger import setup_logger
 
 
@@ -515,11 +516,22 @@ class PhysicalCountsWindow(QMainWindow):
         completed = sum(1 for c in counts if c.status in [CountStatus.COMPLETED, CountStatus.APPROVED])
         with_variance = sum(1 for c in counts if c.items_with_variance > 0)
 
-        self.total_card.findChild(QLabel, "card_value").setText(str(total))
-        self.draft_card.findChild(QLabel, "card_value").setText(str(draft))
-        self.in_progress_card.findChild(QLabel, "card_value").setText(str(in_progress))
-        self.completed_card.findChild(QLabel, "card_value").setText(str(completed))
-        self.variance_card.findChild(QLabel, "card_value").setText(str(with_variance))
+        # None-safe findChild: findChild can return None if label not found
+        total_label = self.total_card.findChild(QLabel, "card_value")
+        draft_label = self.draft_card.findChild(QLabel, "card_value")
+        in_progress_label = self.in_progress_card.findChild(QLabel, "card_value")
+        completed_label = self.completed_card.findChild(QLabel, "card_value")
+        variance_label = self.variance_card.findChild(QLabel, "card_value")
+        if total_label:
+            total_label.setText(str(total))
+        if draft_label:
+            draft_label.setText(str(draft))
+        if in_progress_label:
+            in_progress_label.setText(str(in_progress))
+        if completed_label:
+            completed_label.setText(str(completed))
+        if variance_label:
+            variance_label.setText(str(with_variance))
 
     def get_status_color(self, status: CountStatus) -> QColor:
         """الحصول على لون الحالة"""
@@ -583,8 +595,10 @@ class PhysicalCountsWindow(QMainWindow):
         id_cell = self.table.item(row, 0)
         if not id_cell:
             return None
-        count_id = int(id_cell.text())
-        return count_id
+        rate_id = safe_int(id_cell.text(), default=-1)
+        if rate_id <= 0:
+            return None
+        return rate_id
 
     def create_new_count(self):
         """إنشاء جرد جديد"""

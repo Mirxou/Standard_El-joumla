@@ -15,6 +15,23 @@ from src.core.database_manager import DatabaseManager
 from src.utils.logger import setup_logger
 
 
+def _parse_dt(value: Any) -> Optional[datetime]:
+    """Safely parse a datetime from a DB row value; returns None on failure."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=None)
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
+        except Exception:
+            try:
+                return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+            except Exception:
+                return None
+    return None
+
+
 class WorkflowStatus(Enum):
     """حالات سير العمل"""
 
@@ -725,8 +742,8 @@ class WorkflowEngine:
             trigger_condition=row.get("trigger_condition", ""),
             company_id=row.get("company_id"),
             created_by=row.get("created_by"),
-            created_at=(datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None),
-            updated_at=(datetime.fromisoformat(row["updated_at"]) if row.get("updated_at") else None),
+            created_at=_parse_dt(row.get("created_at")),
+            updated_at=_parse_dt(row.get("updated_at")),
         )
 
     def _row_to_workflow_step(self, row: Dict[str, Any]) -> WorkflowStep:
@@ -747,8 +764,8 @@ class WorkflowEngine:
             is_required=bool(row.get("is_required", 1)),
             can_delegate=bool(row.get("can_delegate", 0)),
             auto_approve=bool(row.get("auto_approve", 0)),
-            created_at=(datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None),
-            updated_at=(datetime.fromisoformat(row["updated_at"]) if row.get("updated_at") else None),
+            created_at=_parse_dt(row.get("created_at")),
+            updated_at=_parse_dt(row.get("updated_at")),
         )
 
     def _row_to_workflow_instance(self, row: Dict[str, Any]) -> WorkflowInstance:
@@ -761,14 +778,14 @@ class WorkflowEngine:
             status=row.get("status", WorkflowStatus.PENDING.value),
             current_step_id=row.get("current_step_id"),
             initiated_by=row.get("initiated_by", 0),
-            initiated_at=(datetime.fromisoformat(row["initiated_at"]) if row.get("initiated_at") else None),
-            completed_at=(datetime.fromisoformat(row["completed_at"]) if row.get("completed_at") else None),
+            initiated_at=_parse_dt(row.get("initiated_at")),
+            completed_at=_parse_dt(row.get("completed_at")),
             completed_by=row.get("completed_by"),
             notes=row.get("notes", ""),
             metadata=row.get("metadata", ""),
             company_id=row.get("company_id"),
-            created_at=(datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None),
-            updated_at=(datetime.fromisoformat(row["updated_at"]) if row.get("updated_at") else None),
+            created_at=_parse_dt(row.get("created_at")),
+            updated_at=_parse_dt(row.get("updated_at")),
         )
 
     def _row_to_workflow_approval(self, row: Dict[str, Any]) -> WorkflowApproval:
@@ -782,11 +799,11 @@ class WorkflowEngine:
             decision=row.get("decision"),
             comments=row.get("comments", ""),
             delegated_to=row.get("delegated_to"),
-            approved_at=(datetime.fromisoformat(row["approved_at"]) if row.get("approved_at") else None),
-            rejected_at=(datetime.fromisoformat(row["rejected_at"]) if row.get("rejected_at") else None),
-            deadline=(datetime.fromisoformat(row["deadline"]) if row.get("deadline") else None),
-            notified_at=(datetime.fromisoformat(row["notified_at"]) if row.get("notified_at") else None),
+            approved_at=_parse_dt(row.get("approved_at")),
+            rejected_at=_parse_dt(row.get("rejected_at")),
+            deadline=_parse_dt(row.get("deadline")),
+            notified_at=_parse_dt(row.get("notified_at")),
             reminder_sent=bool(row.get("reminder_sent", 0)),
-            created_at=(datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None),
-            updated_at=(datetime.fromisoformat(row["updated_at"]) if row.get("updated_at") else None),
+            created_at=_parse_dt(row.get("created_at")),
+            updated_at=_parse_dt(row.get("updated_at")),
         )

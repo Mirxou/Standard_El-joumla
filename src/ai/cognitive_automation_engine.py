@@ -94,11 +94,12 @@ class CognitiveAutomationEngine:
 
     def _setup_logging(self):
         """إعداد نظام التسجيل"""
-        self.logger.setLevel(logging.INFO)
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
+        if not self.logger.handlers:
+            self.logger.setLevel(logging.INFO)
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
 
     def start_engine(self) -> Dict[str, Any]:
         """بدء تشغيل المحرك"""
@@ -322,16 +323,14 @@ class CognitiveAutomationEngine:
 
     def _execute_rule(self, rule: AutomationRule):
         """تنفيذ القاعدة"""
+        task = AutomationTask(
+            task_id=f"rule_{rule.rule_id}_{int(datetime.now().timestamp())}",
+            automation_type=AutomationType.BUSINESS_PROCESS,
+            description=f"Rule execution: {rule.name}",
+            parameters={"rule": rule.rule_id, "actions": rule.actions},
+        )
         try:
             self.logger.info(f"Executing rule: {rule.name}")
-
-            # إنشاء مهمة للقاعدة
-            task = AutomationTask(
-                task_id=f"rule_{rule.rule_id}_{int(datetime.now().timestamp())}",
-                automation_type=AutomationType.BUSINESS_PROCESS,
-                description=f"Rule execution: {rule.name}",
-                parameters={"rule": rule.rule_id, "actions": rule.actions},
-            )
 
             # تنفيذ الإجراءات
             results = []

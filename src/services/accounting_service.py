@@ -144,7 +144,7 @@ class AccountingService:
                 account.parent_account_id,
                 account.is_active,
                 account.is_locked,
-                float(account.opening_balance),
+                float(account.opening_balance or 0),
                 float(account.current_balance),
             )
             account_id = self.db.execute_insert(query, params)
@@ -162,12 +162,29 @@ class AccountingService:
 
     def create_journal_entry(self, entry: JournalEntry) -> int:
         """إنشاء قيد يومي جديد بنمط آمن مع حماية من تكرار الرقم."""
-        # Validate: must have at least 2 lines with non-zero amounts
+        # EDGE CASE: Journal entry with 0 lines
         if not entry.lines or len(entry.lines) < 2:
             raise ValueError("القيد يجب أن يحتوي على سطرين على الأقل")
         has_non_zero = any(line.debit_amount > 0 or line.credit_amount > 0 for line in entry.lines)
         if not has_non_zero:
             raise ValueError("القيد يحتوي على مبالغ صفرية فقط — غير صالح")
+        # EDGE CASE: negative amount in journal entry
+        for line in entry.lines:
+            if line.debit_amount < 0 or line.credit_amount < 0:
+                raise ValueError(
+                    f"القيد يحتوي على مبلغ سلبي: debit={line.debit_amount}, credit={line.credit_amount} "
+                    f"للحساب {line.account_code}"
+                )
+        # EDGE CASE: account doesn't exist in chart_of_accounts
+        for line in entry.lines:
+            if line.account_id:
+                account = self.coa.get_account_by_id(line.account_id)
+                if not account:
+                    self.logger.warning(
+                        f"Journal entry references account_id {line.account_id} "
+                        f"not found in chart_of_accounts — proceeding but balance may be incorrect"
+                    )
+        # EDGE CASE: unbalanced entry (debits ≠ credits)
         if not entry.is_balanced():
             raise ValueError("القيد غير متوازن")
         try:
@@ -286,6 +303,51 @@ class AccountingService:
             return self.create_journal_entry(entry)
         except Exception as e:
             self.logger.warning(f"خطأ في إنشاء قيد المبيعات: {e}")
+            return None
+
+    def create_sale_reversal_journal_entry(self, sale: Sale) -> Optional[int]:
+        """إنشاء قيد محاسبي عكسي لإلغاء فاتورة مبيعات (عكس القيد الأصلي)"""
+        try:
+            entry = JournalEntry(
+                entry_date=sale.sale_date,
+                description=f"إلغاء فاتورة مبيعات رقم {sale.invoice_number}",
+                reference_type="sale_cancellation",
+                reference_id=sale.id,
+                created_by=str(sale.user_id) if sale.user_id else "system",
+            )
+
+            # جلب الحسابات اللازمة
+            receivable = self.get_account_by_code("1010")  # العملاء
+            revenue = self.get_account_by_code("4001")  # المبيعات
+
+            if not (receivable and revenue):
+                self.logger.warning(
+                    "حسابات المبيعات الأساسية (1010 أو 4001) غير موجودة - سيتم إنشاء القيد العكسي يدوياً لاحقاً"
+                )
+                return None
+
+            total = Decimal(str(sale.final_amount or "0.00"))
+            # عكس القيد: دائن العملاء، مدين المبيعات
+            entry.add_line(
+                JournalLine(
+                    account_id=receivable.id,
+                    account_code=receivable.account_code,
+                    account_name=receivable.account_name,
+                    credit_amount=total,
+                )
+            )
+            entry.add_line(
+                JournalLine(
+                    account_id=revenue.id,
+                    account_code=revenue.account_code,
+                    account_name=revenue.account_name,
+                    debit_amount=total,
+                )
+            )
+
+            return self.create_journal_entry(entry)
+        except Exception as e:
+            self.logger.warning(f"خطأ في إنشاء قيد عكسي لإلغاء المبيعات: {e}")
             return None
 
     def create_purchase_journal_entry(self, purchase_data: dict) -> int:
@@ -424,7 +486,7 @@ class AccountingService:
                 account.parent_account_id,
                 account.is_active,
                 account.is_locked,
-                float(account.opening_balance),
+                float(account.opening_balance or 0),
                 float(account.current_balance),
                 account.id,
             )
@@ -474,7 +536,7 @@ class AccountingService:
         try:
             # التحقق من أن القيد غير مرحل مسبقاً
             entry = self.db.fetch_one(
-                "SELECT is_posted FROM general_journal WHERE id = ?",
+                "SELECT is_posted, entry_date FROM general_journal WHERE id = ?",
                 (journal_id,),
             )
             if not entry:
@@ -482,6 +544,25 @@ class AccountingService:
             is_posted = entry.get("is_posted") if isinstance(entry, dict) else entry[0]
             if is_posted:
                 raise ValueError("هذا القيد مرحل مسبقاً")
+
+            # EDGE CASE: fiscal year is closed but someone tries to post
+            entry_date = entry.get("entry_date") if isinstance(entry, dict) else entry[1]
+            if entry_date:
+                try:
+                    fy_row = self.db.fetch_one(
+                        "SELECT id, status FROM fiscal_years WHERE start_date <= ? AND end_date >= ?",
+                        (entry_date, entry_date),
+                    )
+                    if fy_row:
+                        fy_status = fy_row.get("status")
+                        if fy_status == "closed":
+                            raise ValueError(
+                                f"Cannot post entry: fiscal year is closed for date {entry_date}"
+                            )
+                except ValueError:
+                    raise  # Re-raise the fiscal year closed error
+                except Exception:
+                    pass  # If fiscal_years table doesn't exist, allow posting
 
             self.db.execute_non_query(
                 "UPDATE general_journal SET is_posted = 1 WHERE id = ?",
@@ -558,7 +639,7 @@ class AccountingService:
 
             seq = 1
             if result:
-                last = result.get("entry_number") if isinstance(result, dict) else result[0]
+                last = result.get("entry_number")
                 if last:
                     try:
                         # JE-SAL-0042-202605 → extract 0042
@@ -614,8 +695,10 @@ class AccountingService:
                         "balance": float(gv(row, "current_balance") or 0),
                     }
                 )
-            total_debits = sum(acc["total_debits"] for acc in result)
-            total_credits = sum(acc["total_credits"] for acc in result)
+            # PRECISION: Use Decimal sum for money amounts instead of float
+            from decimal import Decimal
+            total_debits = float(sum(Decimal(str(acc["total_debits"])) for acc in result))
+            total_credits = float(sum(Decimal(str(acc["total_credits"])) for acc in result))
             return TrialBalanceList(result, total_debits, total_credits)
         except Exception as e:
             self.logger.warning(f"خطأ في ميزان المراجعة: {e}")

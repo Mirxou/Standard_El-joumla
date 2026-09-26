@@ -546,6 +546,13 @@ class EncryptionDialog(BaseDialog):
             }}
         """)
 
+    def closeEvent(self, event):
+        """تنظيف الموارد عند إغلاق النافذة"""
+        if self.encryption_worker and self.encryption_worker.isRunning():
+            self.encryption_worker.requestInterruption()
+            self.encryption_worker.wait(2000)
+        super().closeEvent(event)
+
 
 if __name__ == "__main__":
     from PySide6.QtWidgets import QApplication

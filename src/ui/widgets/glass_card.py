@@ -78,6 +78,8 @@ class GlassCard(QFrame):
         animation = QPropertyAnimation(self, b"minimumWidth")
         animation.setDuration(250)
         animation.setEasingCurve(QEasingCurve.OutCubic)
+        # Store reference to prevent garbage collection before animation completes
+        self._hover_animation = animation
         animation.start()
 
     def mousePressEvent(self, event):

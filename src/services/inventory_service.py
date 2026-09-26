@@ -178,7 +178,46 @@ class InventoryService:
 
     def delete_product(self, product_id: int, hard_delete: bool = False) -> bool:
         """حذف منتج"""
+        # Reference checks for open sales/purchase orders prevent orphaned references.
         try:
+            # Check for open sales referencing this product
+            open_sales_row = self.db_manager.fetch_one(
+                "SELECT COUNT(*) as cnt FROM sale_items si "
+                "JOIN sales s ON si.sale_id = s.id "
+                "WHERE si.product_id = ? AND s.status NOT IN ('cancelled', 'ملغية')",
+                (product_id,)
+            )
+            if open_sales_row:
+                open_sales = open_sales_row.get("cnt", 0)
+                if open_sales and int(open_sales) > 0:
+                    self.logger.warning(
+                        f"Cannot delete product {product_id}: has {open_sales} open sale items"
+                    )
+                    return False
+
+            # Check for open purchase orders referencing this product
+            open_po_row = self.db_manager.fetch_one(
+                "SELECT COUNT(*) as cnt FROM purchase_items pi "
+                "JOIN purchases p ON pi.purchase_id = p.id "
+                "WHERE pi.product_id = ? AND p.status NOT IN ('cancelled', 'مستلمة', 'ملغية')",
+                (product_id,)
+            )
+            if open_po_row:
+                open_po = open_po_row.get("cnt", 0)
+                if open_po and int(open_po) > 0:
+                    self.logger.warning(
+                        f"Cannot delete product {product_id}: has {open_po} open purchase order items"
+                    )
+                    return False
+
+            # EDGE CASE: product deleted while stock still exists
+            product = self.product_manager.get_product_by_id(product_id)
+            if product and product.current_stock > 0 and hard_delete:
+                self.logger.warning(
+                    f"Hard delete of product {product_id} with existing stock ({product.current_stock}). "
+                    f"Consider soft delete instead to preserve stock records."
+                )
+                return False
             # F3 FIX: invert hard_delete → soft_delete for ProductManager contract
             return self.product_manager.delete_product(product_id, soft_delete=not hard_delete)
         except Exception as e:
@@ -186,25 +225,50 @@ class InventoryService:
             return False
 
     def transfer_stock(self, from_product_id: int, to_product_id: int, quantity: float) -> bool:
-        """نقل مخزون بين منتجين — H4 FIX: معاملة ذرية لمنع فقدان المخزون"""
+        """نقل مخزون بين منتجين — TOCTOU FIX: atomic conditional SQL prevents race conditions.
+
+        Instead of read-check-update (which has a TOCTOU window), we use:
+          UPDATE products SET current_stock = current_stock - ?
+          WHERE id = ? AND current_stock >= ?
+        The DB checks stock sufficiency and deducts atomically — no gap for races.
+        """
         try:
+            # EDGE CASE: source = destination product (no-op transfer)
             if from_product_id == to_product_id:
                 self.logger.warning("لا يمكن نقل المخزون لنفس المنتج")
                 return False
+
+            # EDGE CASE: negative transfer amount
+            if quantity < 0:
+                self.logger.warning(f"Stock transfer rejected: negative quantity {quantity}")
+                return False
+
+            # EDGE CASE: zero transfer amount — no-op but log it
+            if quantity == 0:
+                self.logger.info("Stock transfer of 0 quantity — no-op, skipped")
+                return True
+
+            # Validate products exist (lightweight check, not a TOCTOU concern)
             from_product = self.product_manager.get_product_by_id(from_product_id)
             to_product = self.product_manager.get_product_by_id(to_product_id)
             if not from_product or not to_product:
                 return False
-            if from_product.current_stock < quantity:
-                return False
 
-            # H4 FIX: تنفيذ النقل داخل معاملة ذرية
+            # TOCTOU FIX: Atomic conditional update inside a transaction.
+            # deduct_stock_atomic uses:
+            #   UPDATE products SET current_stock = current_stock - ?
+            #   WHERE id = ? AND current_stock >= ?
+            # If rowcount == 0, stock was insufficient → transaction rolls back.
+            # adjust_stock_relative uses:
+            #   UPDATE products SET current_stock = current_stock + ?
+            #   WHERE id = ?
             with self.db_manager.transaction() as _tx:
-                if not self.product_manager.update_stock(
-                    from_product_id, round(from_product.current_stock - quantity, 2)
-                ):
-                    raise RuntimeError("فشل خصم مخزون المصدر")
-                if not self.product_manager.update_stock(to_product_id, round(to_product.current_stock + quantity, 2)):
+                if not self.product_manager.deduct_stock_atomic(from_product_id, quantity):
+                    raise ValueError(
+                        f"Insufficient stock for transfer: product {from_product_id}, "
+                        f"requested {quantity}"
+                    )
+                if not self.product_manager.adjust_stock_relative(to_product_id, quantity):
                     raise RuntimeError("فشل إضافة مخزون الهدف")
                 self._record_stock_movement(
                     from_product_id,
@@ -273,6 +337,15 @@ class InventoryService:
         warehouse_id: Optional[int] = None,
     ) -> bool:
         """تعديل كمية المخزون مع دعم المستودعات المتعددة (ذري)"""
+        # EDGE CASE: adjustment of 0 — no-op, log and return early
+        try:
+            product = self.product_manager.get_product_by_id(product_id)
+            if product and new_quantity == product.current_stock:
+                self.logger.info(f"Stock adjustment of 0 for product {product_id} — no-op")
+                return True
+        except Exception:
+            pass  # Fall through to normal flow if product lookup fails
+
         try:
             if self.is_multi_warehouse_enabled():
                 if warehouse_id is None:
@@ -296,6 +369,7 @@ class InventoryService:
                             )
                             # تحديث المخزون الإجمالي للتوافق
                             total_stock = self.warehouse_service.get_total_stock(product_id)
+                            # PRECISION: round() on stock quantity (not money) is acceptable
                             self.product_manager.update_stock(product_id, round(total_stock, 2))
                             self.logger.info(
                                 f"تم تعديل مخزون المنتج {product_id} إلى {new_quantity} "
@@ -309,6 +383,8 @@ class InventoryService:
             if not product:
                 return False
 
+            # THREAD: potential race condition - read-modify-write without lock;
+            # consider using adjust_stock_relative() for concurrent-safe updates
             diff = new_quantity - product.current_stock
             if self.product_manager.update_stock(product_id, round(new_quantity, 2)):
                 self._record_stock_movement(

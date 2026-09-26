@@ -2,6 +2,7 @@
 خدمة إدارة المدفوعات والذمم المدينة والدائنة
 """
 import logging
+import sqlite3
 
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -150,7 +151,7 @@ class PaymentService:
             if self.logger:
                 self.logger.info("تم إنشاء جداول المدفوعات بنجاح")
 
-        except Exception as e:
+        except sqlite3.Error as e:
             if self.logger:
                 self.logger.error(f"خطأ في إنشاء جداول المدفوعات: {e}", exc_info=True)
 
@@ -187,7 +188,7 @@ class PaymentService:
                     cursor.execute(index)
                 conn.commit()
 
-        except Exception as e:
+        except sqlite3.Error as e:
             if self.logger:
                 self.logger.error(f"خطأ في إنشاء فهارس المدفوعات: {e}", exc_info=True)
 
@@ -220,26 +221,48 @@ class PaymentService:
                     self.logger.warning("تم رفض دفعة عميل: معرف العميل غير صحيح")
                 return None
 
+            # FK constraint: customer_id must reference an existing customer
+            customer_row = self.db_manager.fetch_one(
+                "SELECT id FROM customers WHERE id = ?", (customer_id,)
+            )
+            if not customer_row:
+                if self.logger:
+                    self.logger.warning(f"تم رفض دفعة عميل: العميل {customer_id} غير موجود (FK constraint)")
+                return None
+
             # Guard: if linked to a specific sale, verify amount does not exceed remaining
+            # EDGE CASE: payment for already-paid sale (remaining == 0)
+            # EDGE CASE: partial payment that exceeds remaining balance
+            # EDGE CASE: concurrent payments on same sale — FIXED: pre-check is advisory only;
+            #   the authoritative check is the atomic conditional UPDATE at line ~404 which uses
+            #   WHERE remaining_amount >= ? to prevent overpayment under concurrency.
             if sale_id:
                 try:
                     sale_row = self.db_manager.fetch_one(
                         "SELECT total_amount, paid_amount, remaining_amount FROM sales WHERE id = ?",
                         (sale_id,),
                     )
-                    if sale_row:
-                        remaining = Decimal(str(
-                            (sale_row["remaining_amount"]
-                             if isinstance(sale_row, dict)
-                             else sale_row[2]) or 0
-                        ))
-                        if amount > remaining:
-                            if self.logger:
-                                self.logger.warning(
-                                    f"تم رفض دفعة عميل: المبلغ {amount} "
-                                    f"يتجاوز المبلغ المتبقي {remaining} للفاتورة {sale_id}"
-                                )
-                            return None
+                    if not sale_row:
+                        # FK constraint: sale_id must reference an existing sale
+                        if self.logger:
+                            self.logger.warning(f"تم رفض دفعة عميل: الفاتورة {sale_id} غير موجودة (FK constraint)")
+                        return None
+                    remaining = Decimal(str(
+                        sale_row.get("remaining_amount", 0) or 0
+                    ))
+                    if remaining <= 0:
+                        if self.logger:
+                            self.logger.warning(
+                                f"تم رفض دفعة عميل: الفاتورة {sale_id} مدفوعة بالكامل بالفعل"
+                            )
+                        return None
+                    if amount > remaining:
+                        if self.logger:
+                            self.logger.warning(
+                                f"تم رفض دفعة عميل: المبلغ {amount} "
+                                f"يتجاوز المبلغ المتبقي {remaining} للفاتورة {sale_id}"
+                            )
+                        return None
                 except Exception:
                     pass  # non-blocking: if query fails, allow payment to proceed
 
@@ -350,7 +373,7 @@ class PaymentService:
                         "payment_id": payment_id,
                         "payment_type": payment.payment_type,
                         "customer_id": customer_id,
-                        "amount": float(amount),
+                        "amount": float(amount or 0),
                         "payment_method": payment_method,
                         "created_at": datetime.now().isoformat(),
                         "payment": (payment_obj.to_dict() if payment_obj and hasattr(payment_obj, "to_dict") else {}),
@@ -371,7 +394,9 @@ class PaymentService:
                     if self.logger:
                         self.logger.warning(f"⚠️ فشل إطلاق Webhook: {e}")
 
-                # قيد محاسبي للدفعة (غير معطل)
+                # قيد محاسبي للدفعة
+                # Accounting journal entry failure raises to trigger rollback.
+                # Payment + journal entry must succeed atomically.
                 try:
                     payment_data = {
                         'payment_id': payment_id,
@@ -382,20 +407,42 @@ class PaymentService:
                     }
                     self.accounting_service.create_payment_journal_entry(payment_data)
                 except Exception as e:
-                    self.logger.warning(f"خطأ في إنشاء قيد محاسبي للدفعة: {e}")
+                    self.logger.error(f"خطأ في إنشاء قيد محاسبي للدفعة، سيتم التراجع: {e}")
+                    raise RuntimeError(f"Accounting journal entry failed for customer payment {payment_id}: {e}") from e
 
                 # Link payment to specific sale/invoice: update paid_amount & remaining_amount
+                # TOCTOU FIX: Atomic conditional SQL prevents concurrent overpayment.
+                #   WHERE remaining_amount >= ? ensures that if another concurrent payment
+                #   already reduced remaining below this payment's amount, the UPDATE
+                #   affects 0 rows (rowcount == 0) and we roll back.
+                # Sale balance update failure raises to trigger rollback.
                 if sale_id:
                     try:
-                        self.db_manager.execute_non_query(
+                        amt_float = float(amount or 0)
+                        result = self.db_manager.execute_non_query(
                             "UPDATE sales SET paid_amount = paid_amount + ?, "
-                            "remaining_amount = total_amount - (paid_amount + ?) WHERE id = ?",
-                            (float(amount), float(amount), sale_id),
+                            "remaining_amount = total_amount - (paid_amount + ?) "
+                            "WHERE id = ? AND remaining_amount >= ?",
+                            (amt_float, amt_float, sale_id, amt_float),
                         )
+                        # Check rowcount to detect TOCTOU: if 0 rows affected, a concurrent
+                        # payment reduced remaining below our amount — roll back.
+                        rowcount = result if isinstance(result, int) else 0
+                        if rowcount == 0:
+                            self.logger.error(
+                                f"TOCTOU detected: payment {payment_id} for sale {sale_id} "
+                                f"would overpay (concurrent payment reduced remaining). Rolling back."
+                            )
+                            raise RuntimeError(
+                                f"Concurrent overpayment detected for sale {sale_id}"
+                            )
                         if self.logger:
                             self.logger.info(f"تم ربط الدفعة {payment_id} بالفاتورة {sale_id} وتحديث الأرصدة")
+                    except RuntimeError:
+                        raise  # Re-raise to trigger rollback
                     except Exception as e:
-                        self.logger.warning(f"خطأ في تحديث أرصدة الفاتورة {sale_id}: {e}")
+                        self.logger.error(f"خطأ في تحديث أرصدة الفاتورة {sale_id}، سيتم التراجع: {e}")
+                        raise RuntimeError(f"Sale balance update failed for sale {sale_id}: {e}") from e
 
                 return payment_obj
 
@@ -540,7 +587,7 @@ class PaymentService:
                         "payment_id": payment_id,
                         "payment_type": payment.payment_type,
                         "supplier_id": supplier_id,
-                        "amount": float(amount),
+                        "amount": float(amount or 0),
                         "payment_method": payment_method,
                         "created_at": datetime.now().isoformat(),
                         "payment": (payment_obj.to_dict() if payment_obj and hasattr(payment_obj, "to_dict") else {}),
@@ -561,7 +608,9 @@ class PaymentService:
                     if self.logger:
                         self.logger.warning(f"⚠️ فشل إطلاق Webhook: {e}")
 
-                # قيد محاسبي للدفعة (غير معطل)
+                # قيد محاسبي للدفعة
+                # Supplier payment + accounting journal entry must succeed atomically.
+                # Failure raises to trigger rollback. Also includes supplier balance update.
                 try:
                     payment_data = {
                         'payment_id': payment_id,
@@ -572,7 +621,16 @@ class PaymentService:
                     }
                     self.accounting_service.create_payment_journal_entry(payment_data)
                 except Exception as e:
-                    self.logger.warning(f"خطأ في إنشاء قيد محاسبي للدفعة: {e}")
+                    self.logger.error(f"خطأ في إنشاء قيد محاسبي للدفعة، سيتم التراجع: {e}")
+                    raise RuntimeError(f"Accounting journal entry failed for supplier payment {payment_id}: {e}") from e
+
+                # Update supplier balance to decrease debt after payment
+                try:
+                    supplier_mgr = self.supplier_manager
+                    if supplier_mgr and amount > 0:
+                        supplier_mgr.update_supplier_balance(supplier_id, -amount)
+                except Exception as e:
+                    self.logger.warning(f"Supplier balance update deferred after payment: {e}")
 
                 return payment_obj
 
@@ -585,6 +643,7 @@ class PaymentService:
 
     def get_payments_by_date_range(self, start_date: date, end_date: date, payment_type: str = None) -> List[Payment]:
         """الحصول على المدفوعات في فترة زمنية"""
+        # VALIDATION: consider adding date range validation (start_date <= end_date)
         try:
             query = """
             SELECT * FROM payments
@@ -807,7 +866,7 @@ class PaymentService:
                 SELECT id, payment_id, installment_number, due_date, amount,
                        paid_amount, remaining_amount, status, notes
                 FROM payment_schedules
-                WHERE 1=1 {status_filter}
+                WHERE 1=1 {status_filter}  # SQL_SAFE: status_filter is hardcoded "" or "AND status != ?"
                 ORDER BY due_date ASC
                 LIMIT ?
             """
@@ -819,7 +878,7 @@ class PaymentService:
             for r in rows:
                 due = date.fromisoformat(r.get("due_date")) if r.get("due_date") else None
                 remaining = (
-                    Decimal(str(r.get("remaining_amount")))
+                    Decimal(str(r.get("remaining_amount") or 0))
                     if r.get("remaining_amount") is not None
                     else Decimal("0.00")
                 )
@@ -845,6 +904,85 @@ class PaymentService:
             if self.logger:
                 self.logger.error(f"خطأ في الحصول على جدولة المدفوعات: {e}", exc_info=True)
             return []
+
+    def get_payment_schedule(self, schedule_id: int) -> Optional[Dict[str, Any]]:
+        """الحصول على قسط محدد بمعرفه (مطلوب من accounts_window.py)
+
+        Args:
+            schedule_id: معرف القسط
+
+        Returns:
+            بيانات القسط أو None إذا لم يوجد
+        """
+        try:
+            if not self.db_manager.table_exists("payment_schedules"):
+                return None
+            row = self.db_manager.fetch_one(
+                "SELECT id, payment_id, installment_number, due_date, amount, "
+                "paid_amount, remaining_amount, status, notes "
+                "FROM payment_schedules WHERE id = ?",
+                (schedule_id,),
+            )
+            if not row:
+                return None
+            return {
+                "schedule_id": row.get("id"),
+                "payment_id": row.get("payment_id"),
+                "installment_number": row.get("installment_number"),
+                "due_date": row.get("due_date"),
+                "amount": Decimal(str(row.get("amount") or 0)),
+                "paid_amount": Decimal(str(row.get("paid_amount") or 0)),
+                "remaining_amount": Decimal(str(row.get("remaining_amount") or 0)),
+                "status": row.get("status"),
+                "notes": row.get("notes"),
+            }
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في الحصول على القسط {schedule_id}: {e}", exc_info=True)
+            return None
+
+    def update_payment_schedule_status(self, schedule_id: int, new_status: str) -> bool:
+        """تحديث حالة قسط محدد (مطلوب من accounts_window.py)
+
+        Args:
+            schedule_id: معرف القسط
+            new_status: الحالة الجديدة ('paid', 'cancelled', 'pending')
+
+        Returns:
+            True إذا نجح التحديث
+        """
+        try:
+            if not self.db_manager.table_exists("payment_schedules"):
+                return False
+            valid_statuses = {"paid", "cancelled", "pending", "completed", "overdue"}
+            if new_status not in valid_statuses:
+                if self.logger:
+                    self.logger.warning(f"Invalid schedule status: {new_status}")
+                return False
+            self.db_manager.execute_non_query(
+                "UPDATE payment_schedules SET status = ?, updated_at = ? WHERE id = ?",
+                (new_status, datetime.now(), schedule_id),
+            )
+            return True
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في تحديث حالة القسط {schedule_id}: {e}", exc_info=True)
+            return False
+
+    def get_payment_summary_report(self) -> Dict[str, Any]:
+        """ملخص المدفوعات بدون تحديد فترة (مطلوب من accounts_window.py)
+
+        Returns:
+            ملخص المدفوعات لآخر 30 يوماً
+        """
+        try:
+            end = date.today()
+            start = end - timedelta(days=30)
+            return self.get_payment_summary(start, end)
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في الحصول على ملخص المدفوعات: {e}", exc_info=True)
+            return {"totals": {}, "by_type_and_method": []}
 
     # ===== التقارير المالية =====
 
@@ -1080,9 +1218,9 @@ class PaymentService:
             }
 
             for row in results:
-                payment_date = row["payment_date"]
-                payment_type = row["payment_type"]
-                amount = Decimal(str(row["daily_amount"] or 0))
+                payment_date = row.get("payment_date")
+                payment_type = row.get("payment_type")
+                amount = Decimal(str(row.get("daily_amount") or 0))
 
                 if payment_date not in cash_flow["daily_flow"]:
                     cash_flow["daily_flow"][payment_date] = {
@@ -1167,18 +1305,18 @@ class PaymentService:
 
             # تنظيم البيانات
             for row in results:
-                period = row["period"]
-                payment_type = row["payment_type"]
+                period = row.get("period")
+                payment_type = row.get("payment_type")
 
                 if period not in trends["trends_data"]:
                     trends["trends_data"][period] = {}
 
                 trends["trends_data"][period][payment_type] = {
-                    "transaction_count": row["transaction_count"],
-                    "total_amount": Decimal(str(row["total_amount"] or 0)),
-                    "avg_amount": Decimal(str(row["avg_amount"] or 0)),
-                    "min_amount": Decimal(str(row["min_amount"] or 0)),
-                    "max_amount": Decimal(str(row["max_amount"] or 0)),
+                    "transaction_count": row.get("transaction_count", 0),
+                    "total_amount": Decimal(str(row.get("total_amount") or 0)),
+                    "avg_amount": Decimal(str(row.get("avg_amount") or 0)),
+                    "min_amount": Decimal(str(row.get("min_amount") or 0)),
+                    "max_amount": Decimal(str(row.get("max_amount") or 0)),
                 }
 
             # حساب معدلات النمو والتقلبات
@@ -1193,7 +1331,7 @@ class PaymentService:
                     amounts = []
                     for period in periods:
                         if payment_type in trends["trends_data"][period]:
-                            amounts.append(float(trends["trends_data"][period][payment_type]["total_amount"]))
+                            amounts.append(float(trends["trends_data"][period][payment_type]["total_amount"] or 0))
                         else:
                             amounts.append(0.0)
 
@@ -1246,9 +1384,9 @@ class PaymentService:
             # تنظيم البيانات التاريخية
             historical_data = {}
             for row in results:
-                month = row["month"]
-                payment_type = row["payment_type"]
-                amount = Decimal(str(row["monthly_amount"] or 0))
+                month = row.get("month")
+                payment_type = row.get("payment_type")
+                amount = Decimal(str(row.get("monthly_amount") or 0))
 
                 if payment_type not in historical_data:
                     historical_data[payment_type] = []
@@ -1270,13 +1408,13 @@ class PaymentService:
             for payment_type, data in historical_data.items():
                 if len(data) >= 3:  # نحتاج على الأقل 3 نقاط بيانات
                     # حساب المتوسط المتحرك للأشهر الثلاثة الأخيرة
-                    recent_amounts = [float(item["amount"]) for item in data[-3:]]
+                    recent_amounts = [float(item["amount"] or 0) for item in data[-3:]]
                     avg_amount = sum(recent_amounts) / len(recent_amounts)
 
                     # حساب الاتجاه
                     if len(data) >= 6:
-                        first_half = sum(float(item["amount"]) for item in data[: len(data) // 2]) / (len(data) // 2)
-                        second_half = sum(float(item["amount"]) for item in data[len(data) // 2 :]) / (
+                        first_half = sum(float(item["amount"] or 0) for item in data[: len(data) // 2]) / (len(data) // 2)
+                        second_half = sum(float(item["amount"] or 0) for item in data[len(data) // 2 :]) / (
                             len(data) - len(data) // 2
                         )
                         trend_factor = (second_half - first_half) / first_half if first_half > 0 else 0
@@ -1296,7 +1434,7 @@ class PaymentService:
                         predictions.append(
                             {
                                 "month": forecast_month,
-                                "predicted_amount": round(Decimal(str(predicted_amount)), 2),
+                                "predicted_amount": round(Decimal(str(predicted_amount or 0)), 2),
                                 "confidence": "متوسط",
                             }
                         )
@@ -1451,7 +1589,7 @@ class PaymentService:
             if previous_data["total_amount"] > 0:
                 comparison["comparison"]["amount_growth"] = float(
                     (current_data["total_amount"] - previous_data["total_amount"]) / previous_data["total_amount"] * 100
-                )
+                 or 0)
 
             if previous_data["unique_customers"] > 0:
                 comparison["comparison"]["customer_growth"] = (
@@ -1626,13 +1764,13 @@ class PaymentService:
                 if total_amount > 0:
                     kpis["collection_metrics"]["collection_amount_rate"] = float(
                         (collected_amount / total_amount) * 100
-                    )
+                     or 0)
 
             # متوسط وقت التحصيل
             if collection_time_result and collection_time_result.get("avg_collection_days"):
                 # C3 FIX: استخدام اسم العمود
                 kpis["collection_metrics"]["avg_collection_days"] = round(
-                    float(collection_time_result["avg_collection_days"]), 1
+                    float(collection_time_result.get("avg_collection_days", 0) or 0), 1
                 )
 
             # مقاييس الكفاءة

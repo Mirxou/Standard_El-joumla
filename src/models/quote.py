@@ -61,7 +61,7 @@ class QuoteItem:
         for field_name in decimal_fields:
             value = getattr(self, field_name)
             if isinstance(value, (int, float, str)):
-                setattr(self, field_name, Decimal(str(value)))
+                setattr(self, field_name, Decimal(str(value or 0)))
 
     @property
     def subtotal(self) -> Decimal:
@@ -98,13 +98,13 @@ class QuoteItem:
             "product_name": self.product_name,
             "product_barcode": self.product_barcode,
             "description": self.description,
-            "quantity": float(self.quantity),
-            "unit_price": float(self.unit_price),
-            "discount_amount": float(self.discount_amount),
-            "discount_percentage": float(self.discount_percentage),
-            "tax_amount": float(self.tax_amount),
-            "tax_percentage": float(self.tax_percentage),
-            "total_amount": float(self.total_amount),
+            "quantity": float(self.quantity or 0),
+            "unit_price": float(self.unit_price or 0),
+            "discount_amount": float(self.discount_amount or 0),
+            "discount_percentage": float(self.discount_percentage or 0),
+            "tax_amount": float(self.tax_amount or 0),
+            "tax_percentage": float(self.tax_percentage or 0),
+            "total_amount": float(self.total_amount or 0),
             "notes": self.notes,
         }
 
@@ -195,7 +195,7 @@ class Quote:
         for field_name in decimal_fields:
             value = getattr(self, field_name)
             if isinstance(value, (int, float, str)):
-                setattr(self, field_name, Decimal(str(value)))
+                setattr(self, field_name, Decimal(str(value or 0)))
 
         # تحويل الحالة
         if isinstance(self.status, str):
@@ -337,11 +337,11 @@ class Quote:
             "sent_date": self.sent_date.isoformat() if self.sent_date else None,
             "response_date": (self.response_date.isoformat() if self.response_date else None),
             "status": (self.status.name if isinstance(self.status, QuoteStatus) else self.status),
-            "subtotal": float(self.subtotal),
-            "discount_amount": float(self.discount_amount),
-            "discount_percentage": float(self.discount_percentage),
-            "tax_amount": float(self.tax_amount),
-            "total_amount": float(self.total_amount),
+            "subtotal": float(self.subtotal or 0),
+            "discount_amount": float(self.discount_amount or 0),
+            "discount_percentage": float(self.discount_percentage or 0),
+            "tax_amount": float(self.tax_amount or 0),
+            "total_amount": float(self.total_amount or 0),
             "payment_terms": self.payment_terms,
             "delivery_terms": self.delivery_terms,
             "notes": self.notes,

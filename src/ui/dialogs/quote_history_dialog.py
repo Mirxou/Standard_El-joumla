@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 
 from src.ui.styles.design_tokens import C
 from src.ui.widgets.base_dialog import BaseDialog
+from src.utils.db_helpers import safe_int, safe_float
 
 from ...services.quote_printer_service import QuotePrinterService
 
@@ -212,7 +213,9 @@ class QuoteHistoryDialog(BaseDialog):
         if row >= 0 and row < self.table.rowCount():
             item = self.table.item(row, 0)
             if item:
-                self.selected_quote_id = int(item.text())
+                self.selected_quote_id = safe_int(item.text(), default=-1)
+                if self.selected_quote_id <= 0:
+                    self.selected_quote_id = None
         return True
 
     def view_quote_details(self):
@@ -235,7 +238,7 @@ class QuoteHistoryDialog(BaseDialog):
         row = self.table.currentRow()
         if row < 0:
             return None
-        item = self.table.item(row, 0); return int(item.text()) if item else None
+        item = self.table.item(row, 0); return safe_int(item.text(), default=-1) if item and safe_int(item.text(), default=-1) > 0 else None
 
     def _on_load(self):
         quote_id = self._get_selected_id()
@@ -289,10 +292,7 @@ class QuoteHistoryDialog(BaseDialog):
         row = self.table.currentRow()
         item = self.table.item(row, 1); customer = item.text() if item else ""
         item = self.table.item(row, 2); date_str = item.text() if item else ""
-        try:
-            item = self.table.item(row, 4); total_val = float(item.text().replace(",", "")) if item else 0.0
-        except (ValueError, TypeError, AttributeError):
-            total_val = 0.0
+        item = self.table.item(row, 4); total_val = safe_float(item.text().replace(",", ""), default=0.0) if item else 0.0
 
         # We need items for the PDF
         # We can use a quick query here or add get_quote method to service.

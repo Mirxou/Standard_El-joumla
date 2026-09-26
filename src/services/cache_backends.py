@@ -5,6 +5,7 @@ Provides RedisCache if redis library and REDIS_URL are available.
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any, Dict, Optional
 
@@ -12,9 +13,13 @@ try:
     import redis
 
     _REDIS_AVAILABLE = True
-except Exception:
+except ImportError:
     redis = None  # type: ignore
     _REDIS_AVAILABLE = False
+
+from src.utils.db_helpers import retry_with_backoff
+
+_redis_logger = logging.getLogger(__name__)
 
 
 class RedisCache:
@@ -22,6 +27,8 @@ class RedisCache:
         if not _REDIS_AVAILABLE:
             raise ImportError("redis library not available")
         self.url = url or os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+        # CONFIG: Default redis://localhost:6379/0 is for local development.
+        # In production, REDIS_URL env var must be set explicitly.
         self.prefix = prefix.rstrip(":") + ":"
         self.client = redis.Redis.from_url(self.url, decode_responses=False)
         # Simple stats counters (approximate)
@@ -32,7 +39,19 @@ class RedisCache:
         return f"{self.prefix}{key}"
 
     def get(self, key: str) -> Optional[Any]:
-        val = self.client.get(self._k(key))
+        """Get with retry and graceful degradation on Redis failure."""
+        try:
+            val = retry_with_backoff(
+                lambda: self.client.get(self._k(key)),
+                max_retries=2,
+                base_delay=0.5,
+                exceptions=(redis.ConnectionError, redis.TimeoutError, OSError),
+                logger=_redis_logger,
+            )
+        except (redis.ConnectionError, redis.TimeoutError, OSError) as e:
+            _redis_logger.warning(f"Redis get failed for key {key}: {e}")
+            self._misses += 1
+            return None
         if val is None:
             self._misses += 1
             return None
@@ -55,10 +74,11 @@ class RedisCache:
                 return val
 
             return pickle.loads(serialized_data)
-        except Exception:
+        except (pickle.UnpicklingError, ValueError, TypeError, AttributeError):
             return val
 
     def set(self, key: str, value: Any, ttl: Optional[int] = None):
+        """Set with retry and graceful degradation on Redis failure."""
         try:
             import pickle
             import hmac
@@ -68,12 +88,27 @@ class RedisCache:
             secret = os.environ.get("APP_ENCRYPTION_KEY", "StandardElJoumlaERPSecureHMACDefaultKey").encode()
             signature = hmac.new(secret, serialized_data, hashlib.sha256).digest()
             data = signature + serialized_data
-        except Exception:
+        except (pickle.PicklingError, TypeError, AttributeError):
             data = value
-        if ttl and ttl > 0:
-            self.client.set(self._k(key), data, ex=int(ttl))
-        else:
-            self.client.set(self._k(key), data)
+        try:
+            if ttl and ttl > 0:
+                retry_with_backoff(
+                    lambda: self.client.set(self._k(key), data, ex=int(ttl)),
+                    max_retries=2,
+                    base_delay=0.5,
+                    exceptions=(redis.ConnectionError, redis.TimeoutError, OSError),
+                    logger=_redis_logger,
+                )
+            else:
+                retry_with_backoff(
+                    lambda: self.client.set(self._k(key), data),
+                    max_retries=2,
+                    base_delay=0.5,
+                    exceptions=(redis.ConnectionError, redis.TimeoutError, OSError),
+                    logger=_redis_logger,
+                )
+        except (redis.ConnectionError, redis.TimeoutError, OSError) as e:
+            _redis_logger.warning(f"Redis set failed for key {key}: {e}")
 
     def delete(self, key: str) -> bool:
         return bool(self.client.delete(self._k(key)))
@@ -102,6 +137,7 @@ class RedisCache:
             "usage_percent": None,
             "hits": self._hits,
             "misses": self._misses,
+            # PRECISION: round() on cache hit rate (percentage, not money) is acceptable
             "hit_rate": round(hit_rate, 2),
             "evictions": None,
             "expirations": None,

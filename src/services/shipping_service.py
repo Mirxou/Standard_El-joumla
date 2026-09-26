@@ -209,7 +209,7 @@ class ShippingService:
                         "imageType": "PDF",
                         "labelStockType": "PAPER_4X6",
                     },
-                    "requestedPackageLineItems": [{"weight": {"units": "KG", "value": float(weight)}}],
+                    "requestedPackageLineItems": [{"weight": {"units": "KG", "value": float(weight or 0)}}],
                 },
             }
 
@@ -304,7 +304,7 @@ class ShippingService:
                 "content": {
                     "packages": [
                         {
-                            "weight": float(weight),
+                            "weight": float(weight or 0),
                             "dimensions": {
                                 "length": (dimensions.get("length", 10) if dimensions else 10),
                                 "width": (dimensions.get("width", 10) if dimensions else 10),
@@ -466,7 +466,7 @@ class ShippingService:
                 customer_id,
                 origin_address,
                 destination_address,
-                float(weight) if weight else None,
+                float(weight or 0) if weight else None,
                 dimensions,
                 status,
                 shipping_status,

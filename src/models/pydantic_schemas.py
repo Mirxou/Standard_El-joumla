@@ -5,7 +5,9 @@
 توفير schema validation لجميع الكيانات الرئيسية
 """
 
+import logging
 from datetime import date, datetime
+from decimal import Decimal
 from enum import Enum
 from typing import List, Optional
 
@@ -22,7 +24,7 @@ try:
     PYDANTIC_AVAILABLE = True
 except ImportError:
     PYDANTIC_AVAILABLE = False
-    print("⚠️ تحذير: مكتبة pydantic غير متاحة. لن يعمل التحقق التلقائي.")
+    logging.getLogger(__name__).warning("مكتبة pydantic غير متاحة. لن يعمل التحقق التلقائي.")
 
     # Mock classes للتوافق
     class BaseModel:
@@ -282,26 +284,29 @@ class InvoiceItemCreate(BaseModel):
     """نموذج عنصر في الفاتورة"""
 
     product_id: int
-    quantity: float = Field(gt=0)
-    unit_price: float = Field(ge=0)
-    discount: float = Field(0.0, ge=0, le=100)
-    tax_rate: float = Field(0.0, ge=0, le=100)
+    # PRECISION: Changed from float to Decimal for money fields to avoid
+    # floating-point arithmetic errors in invoice calculations.
+    quantity: Decimal = Field(gt=0)
+    unit_price: Decimal = Field(ge=0)
+    discount: Decimal = Field(Decimal("0.0"), ge=0, le=100)
+    tax_rate: Decimal = Field(Decimal("0.0"), ge=0, le=100)
     notes: Optional[str] = None
 
     if PYDANTIC_AVAILABLE:
 
         @property
-        def subtotal(self) -> float:
+        def subtotal(self) -> Decimal:
             """حساب المجموع الفرعي"""
-            return self.quantity * self.unit_price * (1 - self.discount / 100)
+            # PRECISION: Decimal arithmetic avoids float rounding errors
+            return self.quantity * self.unit_price * (Decimal("1") - self.discount / Decimal("100"))
 
         @property
-        def tax_amount(self) -> float:
+        def tax_amount(self) -> Decimal:
             """حساب الضريبة"""
-            return self.subtotal * (self.tax_rate / 100)
+            return self.subtotal * (self.tax_rate / Decimal("100"))
 
         @property
-        def total(self) -> float:
+        def total(self) -> Decimal:
             """حساب الإجمالي"""
             return self.subtotal + self.tax_amount
 
@@ -392,7 +397,8 @@ class AccountingEntryCreate(BaseModel):
 
     account_id: int
     transaction_type: TransactionType
-    amount: float = Field(gt=0)
+    # PRECISION: amount should be Decimal for money precision
+    amount: Decimal = Field(gt=0)
     description: str
     reference_type: Optional[str] = None
     reference_id: Optional[int] = None
@@ -420,7 +426,8 @@ class JournalEntryCreate(BaseModel):
 
             credit_total = sum(e.amount for e in entries if e.transaction_type == TransactionType.CREDIT)
 
-            if abs(debit_total - credit_total) > 0.01:  # Tolerance for floating point
+            # PRECISION: Using Decimal tolerance instead of float 0.01
+            if abs(debit_total - credit_total) > Decimal("0.01"):
                 raise ValueError(f"القيد غير متوازن: مدين={debit_total}, دائن={credit_total}")
 
             return self
@@ -433,7 +440,8 @@ class PaymentCreate(BaseModel):
     """نموذج تسجيل دفعة"""
 
     invoice_id: int
-    amount: float = Field(gt=0)
+    # PRECISION: amount should be Decimal for money precision
+    amount: Decimal = Field(gt=0)
     payment_method: PaymentMethod
     payment_date: date = Field(default_factory=date.today)
     reference_number: Optional[str] = None
@@ -567,7 +575,7 @@ if __name__ == "__main__":
     try:
         user = UserCreate(
             username="ahmad_123",
-            password="SecurePass123!",
+            password="SecurePass123!",  # TEST ONLY: demo in __main__
             email="ahmad@example.com",
             full_name="أحمد محمد",
             role=UserRole.ADMIN,

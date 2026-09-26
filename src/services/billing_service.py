@@ -5,15 +5,19 @@
 توليد الفواتير، تسجيل المدفوعات، وإدارة الفواتير الدورية (Subscriptions)
 """
 
+import logging
+
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 class BillingService:
     def __init__(self, db_manager, logger=None):
         self.db = db_manager
-        self.logger = logger
+        self.logger = logger or logging.getLogger(__name__)
 
     def generate_invoice(self, sale_id: int, due_days: int = 0) -> Optional[int]:
         try:
@@ -23,10 +27,7 @@ class BillingService:
                 (sale_id,),
             )
             if not sale:
-                if self.logger:
-                    self.logger.warning(f"لم يتم العثور على الطلب {sale_id} عند توليد الفاتورة")
-                else:
-                    print(f"WARN: sale {sale_id} not found when generating invoice")
+                self.logger.warning(f"لم يتم العثور على الطلب {sale_id} عند توليد الفاتورة")
                 return None
             total = sale.get("total_amount", sale[2] if not isinstance(sale, dict) else 0)
             customer_id = sale.get("customer_id", sale[1] if not isinstance(sale, dict) else None)
@@ -35,23 +36,16 @@ class BillingService:
             if due_days and isinstance(due_days, int) and due_days > 0:
                 due = now + timedelta(days=due_days)
             q = "INSERT INTO invoices (sale_id, customer_id, amount, status, issued_at, due_at) VALUES (?, ?, ?, ?, ?, ?)"  # noqa: E501
-            invoice_id = self.db.execute_insert(q, (sale_id, customer_id, float(total), "unpaid", now, due))
+            invoice_id = self.db.execute_insert(q, (sale_id, customer_id, float(total or 0), "unpaid", now, due))
 
             if invoice_id:
-                if self.logger:
-                    self.logger.info(f"تم إنشاء فاتورة ID={invoice_id} للطلب {sale_id}")
-                else:
-                    print(f"INFO: created invoice ID={invoice_id} for sale {sale_id}")
+                self.logger.info(f"تم إنشاء فاتورة ID={invoice_id} للطلب {sale_id}")
                 return invoice_id
             else:
-                if self.logger:
-                    self.logger.warning(f"فشل إنشاء الفاتورة للطلب {sale_id}")
-                else:
-                    print(f"WARN: failed to create invoice for sale {sale_id}")
+                self.logger.warning(f"فشل إنشاء الفاتورة للطلب {sale_id}")
                 return None
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في توليد الفاتورة: {e}")
+            self.logger.error(f"خطأ في توليد الفاتورة للطلب {sale_id}: {e}")
         return None
 
     def record_payment(
@@ -59,14 +53,14 @@ class BillingService:
         invoice_id: int,
         amount: Decimal,
         method: str = "cash",
-        reference: str = None,
+        reference: Optional[str] = None,
     ) -> bool:
         try:
             now = datetime.now()
             # Try invoice-oriented payments table first
             try:
                 q = "INSERT INTO payments (invoice_id, amount, method, reference, paid_at) VALUES (?, ?, ?, ?, ?)"
-                self.db.execute_insert(q, (invoice_id, float(amount), method, reference, now))
+                self.db.execute_insert(q, (invoice_id, float(amount or 0), method, reference, now))
             except Exception as e:
                 # Fallback to core payments schema (payment_type, entity_id,
                 # amount, payment_method, reference_number, payment_date, status,
@@ -83,7 +77,7 @@ class BillingService:
                     params2 = (
                         "customer_payment",
                         invoice_id,
-                        float(amount),
+                        float(amount or 0),
                         method,
                         reference,
                         now,
@@ -99,13 +93,10 @@ class BillingService:
                 invoice_row = self.db.fetch_one("SELECT amount, paid_amount FROM invoices WHERE id = ?", (invoice_id,))
                 if invoice_row:
                     invoice_amount = float(
-                        invoice_row.get(
-                            "amount",
-                            invoice_row[0] if not isinstance(invoice_row, dict) else 0,
-                        ) or 0
+                        invoice_row.get("amount", 0) or 0
                     )
                     current_paid = float(invoice_row.get("paid_amount", 0) or 0)
-                    new_paid = current_paid + float(amount)
+                    new_paid = current_paid + float(amount or 0)
 
                     # Update paid_amount on the invoice
                     try:
@@ -113,8 +104,8 @@ class BillingService:
                             "UPDATE invoices SET paid_amount = ? WHERE id = ?",
                             (new_paid, invoice_id),
                         )
-                    except Exception:
-                        pass  # Column may not exist yet
+                    except Exception as e:
+                        self.logger.debug(f"paid_amount column not available: {e}")
 
                     if new_paid >= invoice_amount:
                         self.db.execute_non_query(
@@ -126,22 +117,12 @@ class BillingService:
                             "UPDATE invoices SET status = ? WHERE id = ?",
                             ("partially_paid", invoice_id),
                         )
-                    if self.logger:
-                        self.logger.info(f"تم تسجيل دفعة على الفاتورة {invoice_id} المبلغ: {amount}")
+                    self.logger.info(f"تم تسجيل دفعة على الفاتورة {invoice_id} المبلغ: {amount}")
             except Exception as e:
-                if self.logger:
-                    self.logger.error(f"خطأ عند تحديث حالة الفاتورة بعد الدفع: {e}")
-                else:
-                    print("WARN: failed to update invoice status after payment:", e)
+                self.logger.error(f"خطأ عند تحديث حالة الفاتورة {invoice_id} بعد الدفع: {e}")
             return True
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في تسجيل الدفعة: {e}")
-            else:
-                import traceback
-
-                print("ERROR recording payment:", e)
-                print(traceback.format_exc())
+            self.logger.error(f"خطأ في تسجيل الدفعة للفاتورة {invoice_id}: {e}")
             return False
 
     def create_recurring_invoice(self, subscription_id: int) -> Optional[int]:
@@ -156,8 +137,7 @@ class BillingService:
             # توليد فاتورة
             return self.generate_invoice_for_subscription(sub)
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في إنشاء فاتورة دورية: {e}")
+            self.logger.error(f"خطأ في إنشاء فاتورة دورية للاشتراك {subscription_id}: {e}")
             return None
 
     def generate_invoice_for_subscription(self, sub_row) -> Optional[int]:
@@ -167,11 +147,10 @@ class BillingService:
             q = "INSERT INTO invoices (sale_id, customer_id, amount, status, issued_at) VALUES (?, ?, ?, ?, ?)"
             res = self.db.execute_insert(
                 q, (None, sub_row.get('customer_id'),
-                    float(sub_row.get('amount', 0)), "unpaid", now)
+                    float(sub_row.get('amount', 0) or 0), "unpaid", now)
             )
             if res is not None:
                 return res
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"خطأ في توليد فاتورة للاشتراك: {e}")
+            self.logger.error(f"خطأ في توليد فاتورة للاشتراك: {e}")
         return None

@@ -39,6 +39,7 @@ from src.services.scheduled_reports_service import (
     ScheduleFrequency,
 )
 from src.ui.styles.design_tokens import C
+from src.utils.db_helpers import safe_int
 from src.utils.logger import setup_logger
 
 project_root = Path(__file__).parent.parent.parent.parent
@@ -159,8 +160,12 @@ class ScheduledReportDialog(QDialog):
             self.name_edit.setText(self.report.name)
             self.report_type_combo.setCurrentText(self.report.report_type)
             self.frequency_combo.setCurrentText(self.report.frequency)
-            time_parts = self.report.schedule_time.split(":")
-            self.schedule_time.setTime(QTime(int(time_parts[0]), int(time_parts[1])))
+            time_parts = (self.report.schedule_time or "09:00").split(":")
+            if len(time_parts) >= 2:
+                try:
+                    self.schedule_time.setTime(QTime(int(time_parts[0]), int(time_parts[1])))
+                except (ValueError, TypeError):
+                    self.schedule_time.setTime(QTime(9, 0))
             if self.report.schedule_day:
                 self.schedule_day_spin.setValue(self.report.schedule_day)
             self.export_format_combo.setCurrentText(self.report.export_format)
@@ -253,7 +258,7 @@ class ScheduledReportsWindow(QMainWindow):
         self.load_reports()
 
         # Timer للتحقق من التقارير المستحقة
-        self.check_timer = QTimer()
+        self.check_timer = QTimer(self)  # MEMORY: parent=self ensures timer is destroyed with window
         self.check_timer.timeout.connect(self.check_due_reports)
         # self.check_timer.start(60000)  # 🔥 معطّل لمنع التجميد
 
@@ -367,7 +372,9 @@ class ScheduledReportsWindow(QMainWindow):
         if not id_cell:
             QMessageBox.warning(self, "تحذير", "لم يتم العثور على التقرير")
             return
-        report_id = int(id_cell.text())
+        report_id = safe_int(id_cell.text(), default=-1)
+        if report_id <= 0:
+            return
 
         report = self.scheduled_reports_service.get_scheduled_report(report_id)
         if not report:
@@ -391,7 +398,9 @@ class ScheduledReportsWindow(QMainWindow):
         if not id_cell or not name_cell:
             QMessageBox.warning(self, "تحذير", "لم يتم العثور على بيانات التقرير")
             return
-        report_id = int(id_cell.text())
+        report_id = safe_int(id_cell.text(), default=-1)
+        if report_id <= 0:
+            return
         report_name = name_cell.text()
 
         reply = QMessageBox.question(
@@ -420,7 +429,9 @@ class ScheduledReportsWindow(QMainWindow):
         if not id_cell:
             QMessageBox.warning(self, "تحذير", "لم يتم العثور على التقرير")
             return
-        report_id = int(id_cell.text())
+        report_id = safe_int(id_cell.text(), default=-1)
+        if report_id <= 0:
+            return
 
         self.statusBar().showMessage("جاري تشغيل التقرير...")
 
@@ -452,6 +463,13 @@ class ScheduledReportsWindow(QMainWindow):
                 self.load_reports()
         except Exception as e:
             self.logger.error(f"خطأ في فحص التقارير المستحقة: {e}", exc_info=True)
+
+    def closeEvent(self, event):
+        """تنظيف الموارد عند إغلاق النافذة"""
+        # MEMORY: stop check_timer to prevent callbacks after close
+        if hasattr(self, 'check_timer') and self.check_timer.isActive():
+            self.check_timer.stop()
+        super().closeEvent(event)
 
     # --- Stubs for Testing ---
     def edit_schedule(self, *args, **kwargs):

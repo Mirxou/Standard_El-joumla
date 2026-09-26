@@ -366,7 +366,7 @@ class ReportExporter:
                         "currency_symbol": currency_symbol,
                         "base_amount": (float(base_amount) if base_amount else display_amount),
                         "converted_amount": (float(converted_amount) if converted_amount else display_amount),
-                        "exchange_rate": float(exchange_rate),
+                        "exchange_rate": float(exchange_rate or 0),
                         "display_amount": display_amount,  # المبلغ للعرض (بالعملة الأساسية)
                         "payment_method": translate_payment_method(row.get("payment_method")),
                         "status": translate_status(row.get("status")),
@@ -377,9 +377,9 @@ class ReportExporter:
 
             # حساب الملخص (باستخدام المبالغ بالعملة الأساسية)
             total_sales = len(sales_data)
-            total_amount = sum(row.get("base_amount", row["final_amount"]) for row in sales_data)
-            total_discount = sum(row["discount_amount"] or 0 for row in sales_data)
-            total_tax = sum(row["tax_amount"] or 0 for row in sales_data)
+            total_amount = sum(row.get("base_amount", row.get("final_amount")) for row in sales_data)
+            total_discount = sum(row.get("discount_amount") or 0 for row in sales_data)
+            total_tax = sum(row.get("tax_amount") or 0 for row in sales_data)
 
             # تجميع حسب العملة
             currencies_summary = {}
@@ -392,17 +392,17 @@ class ReportExporter:
                         "base_amount": 0,
                     }
                 currencies_summary[currency_code]["count"] += 1
-                currencies_summary[currency_code]["amount"] += row.get("converted_amount", row["final_amount"])
-                currencies_summary[currency_code]["base_amount"] += row.get("base_amount", row["final_amount"])
+                currencies_summary[currency_code]["amount"] += row.get("converted_amount", row.get("final_amount"))
+                currencies_summary[currency_code]["base_amount"] += row.get("base_amount", row.get("final_amount"))
 
             # تجميع البيانات حسب طريقة الدفع
             payment_methods = {}
             for row in sales_data:
-                method = row["payment_method"]
+                method = row.get("payment_method", "unknown")
                 if method not in payment_methods:
                     payment_methods[method] = {"count": 0, "amount": 0}
                 payment_methods[method]["count"] += 1
-                payment_methods[method]["amount"] += row["final_amount"]
+                payment_methods[method]["amount"] += row.get("final_amount", 0)
 
             summary = {
                 "total_sales": total_sales,
@@ -446,7 +446,7 @@ class ReportExporter:
             try:
                 columns_info = self.db.fetch_all("PRAGMA table_info(products)")
                 # fetch_all returns DictRow (dict subclass); key 'name' gives the column name
-                available_columns = {row['name'] for row in columns_info} if columns_info else set()
+                available_columns = {row.get('name', '') for row in columns_info if row.get('name')} if columns_info else set()
             except Exception:
                 # في حالة الخطأ، افترض أن الأعمدة الأساسية موجودة فقط
                 available_columns = {
@@ -536,11 +536,11 @@ class ReportExporter:
             # تجميع حسب الفئات
             categories_summary = {}
             for row in products_data:
-                cat = row["category_name"] or "بدون فئة"
+                cat = row.get("category_name") or "بدون فئة"
                 if cat not in categories_summary:
                     categories_summary[cat] = {"count": 0, "value": 0}
                 categories_summary[cat]["count"] += 1
-                categories_summary[cat]["value"] += row["stock_value"]
+                categories_summary[cat]["value"] += row.get("stock_value", 0)
 
             summary = {
                 "total_products": total_products,
@@ -1006,7 +1006,7 @@ class ReportExporter:
         query += " GROUP BY DATE(sale_date) ORDER BY sale_day"
 
         results = self.db.execute_query(query, params)
-        return {row["sale_day"]: row["daily_total"] for row in results}
+        return {row.get("sale_day"): row.get("daily_total", 0) for row in (results or [])}
 
     def _get_top_customers_chart_data(self, filters: ReportFilter) -> Dict[str, float]:
         """الحصول على بيانات أفضل العملاء للرسم البياني"""
@@ -1031,7 +1031,7 @@ class ReportExporter:
         query += " GROUP BY c.id, c.name ORDER BY total_purchases DESC LIMIT 10"
 
         results = self.db.execute_query(query, params)
-        return {row["customer_name"]: row["total_purchases"] for row in results}
+        return {row.get("customer_name"): row.get("total_purchases", 0) for row in (results or [])}
 
     def _get_monthly_financial_trend(self, filters: ReportFilter) -> Dict[str, Dict[str, float]]:
         """الحصول على الاتجاه المالي الشهري"""
@@ -1053,7 +1053,7 @@ class ReportExporter:
                 SUM(si.profit) as monthly_profit
             FROM sale_items si
             JOIN sales s ON si.sale_id = s.id
-            WHERE s.status != 'cancelled' {start_date_str} {end_date_str}
+            WHERE s.status != 'cancelled' {start_date_str} {end_date_str}  # SQL_SAFE: start_date_str/end_date_str are "" or "AND s.sale_date >= ?" with params
             GROUP BY strftime('%Y-%m', s.sale_date)
             ORDER BY month
         """
@@ -1271,7 +1271,7 @@ class ReportExporter:
                     "currency_symbol": currency_symbol,
                     "base_amount": (float(base_amount) if base_amount else display_amount),
                     "converted_amount": (float(converted_amount) if converted_amount else display_amount),
-                    "exchange_rate": float(exchange_rate),
+                    "exchange_rate": float(exchange_rate or 0),
                     "display_amount": display_amount,  # المبلغ للعرض (بالعملة الأساسية)
                 }
                 data.append(payment_data)
@@ -1474,7 +1474,7 @@ class ReportExporter:
 
             summary = {
                 "total_suppliers": len(data),
-                "active_suppliers": len([d for d in data if d["total_purchase_amount"] > 0]),
+                "active_suppliers": len([d for d in data if d.get("total_purchase_amount", 0) > 0]),
                 "total_spend": total_spend,
                 "total_orders": total_orders,
                 "avg_spend_per_supplier": total_spend / len(data) if data else 0,
@@ -2341,7 +2341,7 @@ class ReportExporter:
             # تجميع حسب المستودع
             warehouses_summary = {}
             for item in data:
-                wh_name = item["warehouse_name"]
+                wh_name = item.get("warehouse_name", "غير محدد")
                 if wh_name not in warehouses_summary:
                     warehouses_summary[wh_name] = {
                         "products_count": 0,
@@ -2350,10 +2350,10 @@ class ReportExporter:
                         "out_of_stock_count": 0,
                     }
                 warehouses_summary[wh_name]["products_count"] += 1
-                warehouses_summary[wh_name]["total_value"] += item["stock_value"]
-                if item["status"] == "منخفض":
+                warehouses_summary[wh_name]["total_value"] += item.get("stock_value", 0)
+                if item.get("status") == "منخفض":
                     warehouses_summary[wh_name]["low_stock_count"] += 1
-                elif item["status"] == "نفد":
+                elif item.get("status") == "نفد":
                     warehouses_summary[wh_name]["out_of_stock_count"] += 1
 
             summary = {
@@ -2510,28 +2510,28 @@ class ReportExporter:
                         )
 
             # ترتيب حسب الأولوية (نفد أولاً، ثم الأكثر حاجة)
-            data.sort(key=lambda x: (0 if x["status"] == "نفد" else 1, -x["needed_quantity"]))
+            data.sort(key=lambda x: (0 if x.get("status") == "نفد" else 1, -x.get("needed_quantity", 0)))
 
             # تجميع حسب المستودع
             warehouses_summary = {}
             for item in data:
-                wh_name = item["warehouse_name"]
+                wh_name = item.get("warehouse_name", "غير محدد")
                 if wh_name not in warehouses_summary:
                     warehouses_summary[wh_name] = {
                         "low_stock_count": 0,
                         "out_of_stock_count": 0,
                         "total_needed_value": 0,
                     }
-                if item["status"] == "نفد":
+                if item.get("status") == "نفد":
                     warehouses_summary[wh_name]["out_of_stock_count"] += 1
                 else:
                     warehouses_summary[wh_name]["low_stock_count"] += 1
-                warehouses_summary[wh_name]["total_needed_value"] += item["needed_quantity"] * item["cost_price"]
+                warehouses_summary[wh_name]["total_needed_value"] += item.get("needed_quantity", 0) * item.get("cost_price", 0)
 
             summary = {
                 "total_items": len(data),
-                "out_of_stock_count": len([d for d in data if d["status"] == "نفد"]),
-                "low_stock_count": len([d for d in data if d["status"] == "منخفض"]),
+                "out_of_stock_count": len([d for d in data if d.get("status") == "نفد"]),
+                "low_stock_count": len([d for d in data if d.get("status") == "منخفض"]),
                 "warehouses_summary": warehouses_summary,
             }
 

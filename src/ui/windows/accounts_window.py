@@ -566,6 +566,7 @@ class AccountsWindow(QMainWindow):
             )
             actions_layout.addWidget(pay_btn)
 
+            # PERF: consider using delegate instead of setCellWidget for large datasets
             self.receivables_table.setCellWidget(row, 5, actions_widget)
 
         # تحديث الإجمالي
@@ -615,6 +616,7 @@ class AccountsWindow(QMainWindow):
             )
             actions_layout.addWidget(pay_btn)
 
+            # PERF: consider using delegate instead of setCellWidget for large datasets
             self.payables_table.setCellWidget(row, 5, actions_widget)
 
         # تحديث الإجمالي
@@ -671,6 +673,7 @@ class AccountsWindow(QMainWindow):
                 )
                 actions_layout.addWidget(cancel_btn)
 
+            # PERF: consider using delegate instead of setCellWidget for large datasets
             self.schedules_table.setCellWidget(row, 6, actions_widget)
 
     def filter_receivables(self):

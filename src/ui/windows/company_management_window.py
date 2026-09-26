@@ -36,6 +36,7 @@ from src.core.local_database_manager import LocalDatabaseManager
 from src.models.company import Company, CompanyManager
 from src.models.currency import CurrencyManager
 from src.ui.styles.design_tokens import C
+from src.utils.db_helpers import safe_int
 from src.utils.logger import setup_logger
 
 project_root = Path(__file__).parent.parent.parent.parent
@@ -279,7 +280,7 @@ class CompanyDialog(QDialog):
                     )
                 )
 
-            self.tax_rate_spin.setValue(float(self.company.tax_rate))
+            self.tax_rate_spin.setValue(float(self.company.tax_rate or 0))
             self.timezone_edit.setText(self.company.timezone)
             self.locale_edit.setText(self.company.locale)
             self.date_format_edit.setText(self.company.date_format)
@@ -464,7 +465,7 @@ class CompanyManagementWindow(QMainWindow):
 
         item = self.table.item(current_row, 0)
         if item:
-            return int(item.text())
+            return safe_int(item.text(), default=-1)
         return None
 
     def add_company(self):

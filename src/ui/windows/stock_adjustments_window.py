@@ -34,6 +34,7 @@ from ...core.database_manager import DatabaseManager
 from ...models.physical_count import AdjustmentStatus, AdjustmentType, StockAdjustment
 from ...services.inventory_count_service import InventoryCountService
 from ...ui.styles.design_tokens import C as Colors
+from ...utils.db_helpers import safe_int
 
 
 class StockAdjustmentsWindow(QMainWindow):
@@ -363,10 +364,19 @@ class StockAdjustmentsWindow(QMainWindow):
         approved = sum(1 for a in adjustments if a.status == AdjustmentStatus.APPROVED)
         applied = sum(1 for a in adjustments if a.status == AdjustmentStatus.APPLIED)
 
-        self.total_card.findChild(QLabel, "card_value").setText(str(total))
-        self.pending_card.findChild(QLabel, "card_value").setText(str(pending))
-        self.approved_card.findChild(QLabel, "card_value").setText(str(approved))
-        self.applied_card.findChild(QLabel, "card_value").setText(str(applied))
+        # None-safe findChild: findChild can return None if label not found
+        total_label = self.total_card.findChild(QLabel, "card_value")
+        pending_label = self.pending_card.findChild(QLabel, "card_value")
+        approved_label = self.approved_card.findChild(QLabel, "card_value")
+        applied_label = self.applied_card.findChild(QLabel, "card_value")
+        if total_label:
+            total_label.setText(str(total))
+        if pending_label:
+            pending_label.setText(str(pending))
+        if approved_label:
+            approved_label.setText(str(approved))
+        if applied_label:
+            applied_label.setText(str(applied))
 
     def get_status_color(self, status: AdjustmentStatus) -> QColor:
         """الحصول على لون الحالة"""
@@ -407,7 +417,7 @@ class StockAdjustmentsWindow(QMainWindow):
         id_cell = self.table.item(row, 0)
         if not id_cell:
             return None
-        return int(id_cell.text())
+        return safe_int(id_cell.text(), default=-1)
 
     def approve_adjustment(self):
         """اعتماد التسوية"""

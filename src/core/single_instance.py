@@ -77,12 +77,20 @@ class SingleInstance:
                 self.logger.info("تم الحصول على قفل النسخة الواحدة (Unix lock file)")
                 return True
             except IOError:
+                # RESOURCE-LEAK-FIX: ensure lockfile is closed on flock failure
                 self._lockfile.close()
                 self._lockfile = None
                 self.logger.warning(f"نسخة أخرى من {self.app_name} تعمل بالفعل")
                 return False
 
         except Exception as e:
+            # RESOURCE-LEAK-FIX: close lockfile if open() succeeded but flock import failed
+            if self._lockfile:
+                try:
+                    self._lockfile.close()
+                except Exception:
+                    pass
+                self._lockfile = None
             self.logger.error(f"خطأ في إنشاء lock file: {e}")
             return True  # تراجع آمن
 

@@ -3,10 +3,13 @@ Standard EL-joumLa Intelligence Service
 خدمة ذكاء الجملة المعيارية - تحليل الهوامش والفرص
 """
 
+import logging
 from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
+
+from ..utils.db_helpers import escape_like_wildcards
 
 from ..core.database_manager import DatabaseManager
 from ..models.search import SearchQuery
@@ -20,6 +23,7 @@ class StandardJoumLaService:
 
     def __init__(self, db_manager: DatabaseManager):
         self.db = db_manager
+        self.logger = logging.getLogger(__name__)
 
     def custom_read_sql(self, query: str, params: Optional[List[Any]] = None) -> pd.DataFrame:
         """
@@ -31,7 +35,7 @@ class StandardJoumLaService:
                 return pd.DataFrame()
             return pd.DataFrame(results)
         except Exception as e:
-            print(f"Error executing query: {e}")
+            self.logger.error(f"Error executing query: {e}")
             return pd.DataFrame()
 
     def analyze_wholesale_opportunities(self, query: SearchQuery) -> Dict[str, Any]:
@@ -44,7 +48,7 @@ class StandardJoumLaService:
 
         sql = """
             SELECT
-                p.id, p.name, p.sku, p.barcode,
+                p.id, p.name, p.barcode, p.barcode as sku,  # COLUMN_CHECK: alias for compat; schema has 'barcode' not 'sku'
                 p.cost_price, p.wholesale_price, p.selling_price as retail_price,
                 p.current_stock, p.min_stock,
                 (p.wholesale_price - p.cost_price) as margin_value,
@@ -59,8 +63,8 @@ class StandardJoumLaService:
 
         params = []
         if query.keyword:
-            sql += " AND (p.name LIKE ? OR p.sku LIKE ? OR p.barcode LIKE ?)"
-            params.extend([f"%{query.keyword}%"] * 3)
+            sql += " AND (p.name LIKE ? OR p.barcode LIKE ? OR p.barcode LIKE ?)"  # COLUMN_CHECK: replaced p.sku with p.barcode
+            params.extend([f"%{escape_like_wildcards(query.keyword)}%"] * 3)
 
         df = self.custom_read_sql(sql, params)
 
@@ -125,5 +129,5 @@ class StandardJoumLaService:
             self.db.execute_update(sql, [new_price, product_id])
             return True
         except Exception as e:
-            print(f"Error updating wholesale price: {e}")
+            self.logger.error(f"Error updating wholesale price for product {product_id}: {e}")
             return False

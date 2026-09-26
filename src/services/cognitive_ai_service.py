@@ -110,8 +110,8 @@ class CognitiveAIService:
                         insight_type="pattern",
                         title="أنماط موسمية مكتشفة",
                         description=f"تم اكتشاف أنماط موسمية في مبيعات المنتج {product_id}",
-                        confidence_score=seasonal_patterns["confidence"],
-                        impact_level=self._calculate_impact_level(seasonal_patterns["confidence"]),
+                        confidence_score=seasonal_patterns.get("confidence", 0.5),
+                        impact_level=self._calculate_impact_level(seasonal_patterns.get("confidence", 0.5)),
                         data_points=seasonal_patterns,
                         recommendations=self._generate_seasonal_recommendations(seasonal_patterns),
                         created_at=datetime.now(),
@@ -128,7 +128,7 @@ class CognitiveAIService:
                             insight_type="anomaly",
                             title="شذوذ في المبيعات",
                             description=f"تم اكتشاف شذوذ في مبيعات المنتج {product_id}",
-                            confidence_score=anomaly["confidence"],
+                            confidence_score=anomaly.get("confidence", 0.5),
                             impact_level="high",
                             data_points=anomaly,
                             recommendations=[
@@ -148,8 +148,8 @@ class CognitiveAIService:
                         insight_type="prediction",
                         title="تنبؤات المبيعات",
                         description=f"تنبؤات لمبيعات المنتج {product_id} للأشهر القادمة",
-                        confidence_score=predictions["confidence"],
-                        impact_level=self._calculate_impact_level(predictions["confidence"]),
+                        confidence_score=predictions.get("confidence", 0.5),
+                        impact_level=self._calculate_impact_level(predictions.get("confidence", 0.5)),
                         data_points=predictions,
                         recommendations=self._generate_prediction_recommendations(predictions),
                         created_at=datetime.now(),
@@ -239,11 +239,11 @@ class CognitiveAIService:
                     DecisionRecommendation(
                         recommendation_id=f"PR_{customer_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
                         decision_type="pricing",
-                        priority=pricing_rec["priority"],
-                        confidence=pricing_rec["confidence"],
-                        expected_impact=pricing_rec["impact"],
-                        implementation_steps=pricing_rec["steps"],
-                        risk_assessment=pricing_rec["risks"],
+                        priority=pricing_rec.get("priority", "medium"),
+                        confidence=pricing_rec.get("confidence", 0.5),
+                        expected_impact=pricing_rec.get("impact", {}),
+                        implementation_steps=pricing_rec.get("steps", []),
+                        risk_assessment=pricing_rec.get("risks", {}),
                         created_at=datetime.now(),
                     )
                 )
@@ -255,11 +255,11 @@ class CognitiveAIService:
                     DecisionRecommendation(
                         recommendation_id=f"MK_{customer_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
                         decision_type="marketing",
-                        priority=marketing_rec["priority"],
-                        confidence=marketing_rec["confidence"],
-                        expected_impact=marketing_rec["impact"],
-                        implementation_steps=marketing_rec["steps"],
-                        risk_assessment=marketing_rec["risks"],
+                        priority=marketing_rec.get("priority", "medium"),
+                        confidence=marketing_rec.get("confidence", 0.5),
+                        expected_impact=marketing_rec.get("impact", {}),
+                        implementation_steps=marketing_rec.get("steps", []),
+                        risk_assessment=marketing_rec.get("risks", {}),
                         created_at=datetime.now(),
                     )
                 )
@@ -615,14 +615,14 @@ class CognitiveAIService:
         optimal_levels = {}
 
         for item in inventory_data:
-            product_id = item["product_id"]
-            current_stock = item["current_stock"]
+            product_id = item.get("product_id")
+            current_stock = item.get("current_stock", 0)
 
             # البحث عن تاريخ المبيعات لهذا المنتج
-            sales_record = next((s for s in sales_history if s["product_id"] == product_id), None)
+            sales_record = next((s for s in sales_history if s.get("product_id") == product_id), None)
 
             if sales_record:
-                avg_daily_sales = sales_record["total_sold"] / 90  # متوسط المبيعات اليومية
+                avg_daily_sales = sales_record.get("total_sold", 0) / 90  # متوسط المبيعات اليومية
                 safety_stock = avg_daily_sales * 7  # أسبوع أمان
                 reorder_point = avg_daily_sales * 14  # نقطة إعادة الطلب
 
@@ -654,8 +654,8 @@ class CognitiveAIService:
         risks = {"stockout_risk": 0, "overstock_risk": 0, "high_risk_items": []}
 
         for product_id, levels in optimal_levels.items():
-            current = levels["current_stock"]
-            min_level = levels["optimal_min"]
+            current = levels.get("current_stock", 0)
+            min_level = levels.get("optimal_min", 0)
 
             if current < min_level:
                 risks["stockout_risk"] += 1
@@ -684,8 +684,8 @@ class CognitiveAIService:
         """توليد توصيات تحسين المخزون"""
         recommendations = []
 
-        stockout_count = risk_analysis["stockout_risk"]
-        overstock_count = risk_analysis["overstock_risk"]
+        stockout_count = risk_analysis.get("stockout_risk", 0)
+        overstock_count = risk_analysis.get("overstock_risk", 0)
 
         if stockout_count > 0:
             recommendations.append(f"معالجة {stockout_count} منتج مع خطر نفاد المخزون")
@@ -821,13 +821,13 @@ class CognitiveAIService:
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                     (
-                        recommendations["warehouse_id"],
-                        json.dumps(recommendations["optimal_levels"]),
-                        json.dumps(recommendations["risk_analysis"]),
-                        json.dumps(recommendations["recommended_actions"]),
-                        json.dumps(recommendations["expected_savings"]),
-                        recommendations["confidence_score"],
-                        recommendations["generated_at"],
+                        recommendations.get("warehouse_id"),
+                        json.dumps(recommendations.get("optimal_levels", {})),
+                        json.dumps(recommendations.get("risk_analysis", {})),
+                        json.dumps(recommendations.get("recommended_actions", [])),
+                        json.dumps(recommendations.get("expected_savings", {})),
+                        recommendations.get("confidence_score", 0.5),
+                        recommendations.get("generated_at"),
                     ),
                 )
                 conn.commit()

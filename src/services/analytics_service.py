@@ -9,6 +9,7 @@ Analytics Service - خدمة التحليلات المتقدمة
 import logging
 import json
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 try:
@@ -127,7 +128,8 @@ class AnalyticsService:
                     },
                 }
             else:
-                total = sum(item["total_amount"] for item in data)
+                # PRECISION: Use Decimal for money division to avoid float errors
+                total = Decimal(str(sum(item.get("total_amount") or 0 for item in data) or 0))
                 return {
                     "success": True,
                     "data": data,
@@ -185,10 +187,10 @@ class AnalyticsService:
                 "success": True,
                 "data": [
                     {
-                        "category": row["category_name"] or "بدون فئة",
-                        "sale_count": row["sale_count"],
-                        "total_quantity": row["total_quantity"],
-                        "total_amount": float(row["total_amount"]),
+                        "category": row.get("category_name") or "بدون فئة",
+                        "sale_count": row.get("sale_count", 0),
+                        "total_quantity": row.get("total_quantity", 0),
+                        "total_amount": float(row.get("total_amount") or 0),
                     }
                     for row in rows
                 ],
@@ -244,11 +246,11 @@ class AnalyticsService:
                 "success": True,
                 "data": [
                     {
-                        "customer_id": row["id"],
-                        "customer_name": row["customer_name"],
-                        "sale_count": row["sale_count"],
-                        "total_amount": float(row["total_amount"]),
-                        "avg_amount": float(row["avg_amount"]),
+                        "customer_id": row.get("id"),
+                        "customer_name": row.get("customer_name", ""),
+                        "sale_count": row.get("sale_count", 0),
+                        "total_amount": float(row.get("total_amount") or 0),
+                        "avg_amount": float(row.get("avg_amount") or 0),
                     }
                     for row in rows
                 ],
@@ -297,8 +299,8 @@ class AnalyticsService:
 
             results = []
             for row in rows:
-                current_stock = row["current_stock"] or 0
-                total_sold = row["total_sold"] or 0
+                current_stock = row.get("current_stock") or 0
+                total_sold = row.get("total_sold") or 0
 
                 # حساب معدل الدوران (عدد المرات التي تم بيع المخزون فيها)
                 turnover_rate = (total_sold / current_stock) if current_stock > 0 else 0
@@ -308,8 +310,8 @@ class AnalyticsService:
 
                 results.append(
                     {
-                        "product_id": row["id"],
-                        "product_name": row["name"],
+                        "product_id": row.get("id"),
+                        "product_name": row.get("name", ""),
                         "current_stock": current_stock,
                         "total_sold": total_sold,
                         "turnover_rate": float(turnover_rate),
@@ -352,14 +354,16 @@ class AnalyticsService:
             overstocked = []
 
             for row in rows:
-                current_stock = row["current_stock"] or 0
-                min_stock = row["min_stock"] or 0
+                current_stock = row.get("current_stock") or 0
+                min_stock = row.get("min_stock") or 0
+                product_id = row.get("id")
+                product_name = row.get("name", "")
 
                 if current_stock <= 0:
                     out_of_stock.append(
                         {
-                            "product_id": row["id"],
-                            "product_name": row["name"],
+                            "product_id": product_id,
+                            "product_name": product_name,
                             "current_stock": current_stock,
                             "min_stock": min_stock,
                         }
@@ -367,8 +371,8 @@ class AnalyticsService:
                 elif current_stock <= min_stock:
                     low_stock.append(
                         {
-                            "product_id": row["id"],
-                            "product_name": row["name"],
+                            "product_id": product_id,
+                            "product_name": product_name,
                             "current_stock": current_stock,
                             "min_stock": min_stock,
                             "needed": min_stock - current_stock,
@@ -377,8 +381,8 @@ class AnalyticsService:
                 elif current_stock > min_stock * 3:
                     overstocked.append(
                         {
-                            "product_id": row["id"],
-                            "product_name": row["name"],
+                            "product_id": product_id,
+                            "product_name": product_name,
                             "current_stock": current_stock,
                             "min_stock": min_stock,
                         }
@@ -444,39 +448,42 @@ class AnalyticsService:
             rows = self.db_manager.fetch_all(query, tuple(params))
 
             results = []
-            total_revenue = 0
-            total_cost = 0
+            # PRECISION: Use Decimal sum for money totals
+            total_revenue = Decimal("0")
+            total_cost = Decimal("0")
 
             for row in rows:
-                revenue = float(row["total_revenue"])
-                cost = float(row["total_cost"])
-                profit = float(row["total_profit"])
-                margin = (profit / revenue * 100) if revenue > 0 else 0
+                # PRECISION: Use Decimal for revenue/cost/profit calculations
+                revenue = Decimal(str(row.get("total_revenue") or 0))
+                cost = Decimal(str(row.get("total_cost") or 0))
+                profit = Decimal(str(row.get("total_profit") or 0))
+                margin = (profit / revenue * 100) if revenue > 0 else Decimal("0")
 
                 total_revenue += revenue
                 total_cost += cost
 
                 results.append(
                     {
-                        "product_id": row["id"],
-                        "product_name": row["name"],
-                        "total_quantity": row["total_quantity"],
-                        "revenue": revenue,
-                        "cost": cost,
-                        "profit": profit,
+                        "product_id": row.get("id"),
+                        "product_name": row.get("name", ""),
+                        "total_quantity": row.get("total_quantity", 0),
+                        "revenue": float(revenue),
+                        "cost": float(cost),
+                        "profit": float(profit),
                         "margin_percent": float(margin),
                     }
                 )
 
-            overall_margin = ((total_revenue - total_cost) / total_revenue * 100) if total_revenue > 0 else 0
+            # PRECISION: Decimal division for margin calculation
+            overall_margin = ((total_revenue - total_cost) / total_revenue * 100) if total_revenue > 0 else Decimal("0")
 
             return {
                 "success": True,
                 "data": results,
                 "summary": {
-                    "total_revenue": total_revenue,
-                    "total_cost": total_cost,
-                    "total_profit": total_revenue - total_cost,
+                    "total_revenue": float(total_revenue),
+                    "total_cost": float(total_cost),
+                    "total_profit": float(total_revenue - total_cost),
                     "overall_margin_percent": float(overall_margin),
                 },
             }
@@ -563,22 +570,28 @@ class AnalyticsService:
             cash_flow = {}
 
             for row in sales_rows:
-                date = row["date"]
+                date = row.get("date")
+                if date is None:
+                    continue
                 if date not in cash_flow:
                     cash_flow[date] = {"inflow": 0, "outflow": 0}
-                cash_flow[date]["inflow"] += float(row["amount"])
+                cash_flow[date]["inflow"] += float(row.get("amount") or 0)
 
             for row in purchases_rows:
-                date = row["date"]
+                date = row.get("date")
+                if date is None:
+                    continue
                 if date not in cash_flow:
                     cash_flow[date] = {"inflow": 0, "outflow": 0}
-                cash_flow[date]["outflow"] += float(row["amount"])
+                cash_flow[date]["outflow"] += float(row.get("amount") or 0)
 
             for row in payments_rows:
-                date = row["date"]
+                date = row.get("date")
+                if date is None:
+                    continue
                 if date not in cash_flow:
                     cash_flow[date] = {"inflow": 0, "outflow": 0}
-                cash_flow[date]["outflow"] += float(row["amount"])
+                cash_flow[date]["outflow"] += float(row.get("amount") or 0)
 
             # تحويل إلى قائمة
             flow_data = [

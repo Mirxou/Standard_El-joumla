@@ -23,6 +23,7 @@ class CarbonService:
             count = 0
 
         total_co2 = count * self.default_factor
+        # PRECISION: round() on float is acceptable here (CO2, not money)
         return round(total_co2, 2)
 
     def get_daily_footprint(self, date_str=None):
@@ -46,6 +47,7 @@ class CarbonService:
             total_items = 0
 
         total_co2 = total_items * self.default_factor
+        # PRECISION: round() on float is acceptable here (CO2, not money)
         return round(total_co2, 2)
 
     def get_green_rating(self, total_co2):
@@ -70,4 +72,5 @@ class CarbonService:
     def get_monthly_footprint(self, month_str=None):
         """Returns a monthly footprint estimate."""
         daily = self.get_daily_footprint(f"{month_str}-01" if month_str else None)
+        # PRECISION: round() on float is acceptable here (CO2, not money)
         return round(daily * 30, 2)

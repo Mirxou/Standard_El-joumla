@@ -14,9 +14,11 @@ try:
     from .cache_backends import RedisCache
 
     _HAS_REDIS = True
-except Exception:
+except ImportError:
     RedisCache = None  # type: ignore
     _HAS_REDIS = False
+
+from src.utils.db_helpers import retry_with_backoff
 
 
 class CacheEntry:
@@ -126,6 +128,7 @@ class LRUCache:
                 "usage_percent": len(self._cache) / self.max_size * 100,
                 "hits": self._stats["hits"],
                 "misses": self._stats["misses"],
+                # PRECISION: round() on cache hit rate (percentage, not money) is acceptable
                 "hit_rate": round(hit_rate, 2),
                 "evictions": self._stats["evictions"],
                 "expirations": self._stats["expirations"],
@@ -166,11 +169,11 @@ class CacheService:
 
                 # محاولة ping للتأكد من الصحة، وإذا فشلت نستخدم LRU
                 try:
-                    redis.Redis.from_url(redis_url or "redis://localhost:6379/0").ping()
+                    redis.Redis.from_url(redis_url or os.getenv("REDIS_URL", "redis://localhost:6379/0")).ping()
                     redis_available = True
-                except Exception:
+                except (redis.ConnectionError, redis.TimeoutError, OSError):
                     redis_available = False
-            except Exception:
+            except ImportError:
                 redis_available = False
         self.caches = {
             "products": LRUCache(max_size=500, default_ttl=300),  # 5 min
@@ -195,22 +198,35 @@ class CacheService:
         self._start_cleanup_thread()
 
     def get(self, cache_name: str, key: str) -> Optional[Any]:
-        """الحصول من ذاكرة مؤقتة محددة"""
+        """الحصول من ذاكرة مؤقتة محددة مع graceful degradation"""
         if cache_name not in self.caches:
             return None
-        return self.caches[cache_name].get(key)
+        try:
+            return self.caches[cache_name].get(key)
+        except Exception as e:
+            # Graceful degradation: if cache backend fails, return None
+            self.logger.warning(f"Cache get failed for {cache_name}/{key}: {e}, degrading gracefully")
+            return None
 
     def set(self, cache_name: str, key: str, value: Any, ttl: Optional[int] = None):
-        """التعيين في ذاكرة مؤقتة محددة"""
+        """التعيين في ذاكرة مؤقتة محددة مع graceful degradation"""
         if cache_name not in self.caches:
             cache_name = "general"
-        self.caches[cache_name].set(key, value, ttl)
+        try:
+            self.caches[cache_name].set(key, value, ttl)
+        except Exception as e:
+            # Graceful degradation: if cache backend fails, log and continue
+            self.logger.warning(f"Cache set failed for {cache_name}/{key}: {e}, degrading gracefully")
 
     def delete(self, cache_name: str, key: str) -> bool:
-        """حذف من ذاكرة مؤقتة محددة"""
+        """حذف من ذاكرة مؤقتة محددة مع graceful degradation"""
         if cache_name not in self.caches:
             return False
-        return self.caches[cache_name].delete(key)
+        try:
+            return self.caches[cache_name].delete(key)
+        except Exception as e:
+            self.logger.warning(f"Cache delete failed for {cache_name}/{key}: {e}, degrading gracefully")
+            return False
 
     def clear_cache(self, cache_name: str = None):
         """مسح ذاكرة مؤقتة أو جميعها"""
@@ -245,6 +261,7 @@ class CacheService:
             total_stats["total_expirations"] += cache_stats["expirations"]
 
         # Calculate overall hit rate
+        # PRECISION: round() on cache hit rate (percentage, not money) is acceptable
         total_requests = total_stats["total_hits"] + total_stats["total_misses"]
         total_stats["overall_hit_rate"] = round(
             ((total_stats["total_hits"] / total_requests * 100) if total_requests > 0 else 0),

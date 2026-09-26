@@ -444,3 +444,18 @@ class AIPredictionsWindow(QMainWindow):
         """تحديث البيانات"""
         # TODO: تحديث قوائم المنتجات والعملاء
         self.statusBar().showMessage("تم التحديث")
+
+    def closeEvent(self, event):
+        """تنظيف الموارد عند إغلاق النافذة"""
+        # MEMORY: stop any running prediction worker
+        worker = getattr(self, 'prediction_worker', None)
+        if worker and isinstance(worker, QThread) and worker.isRunning():
+            if hasattr(worker, 'running'):
+                worker.running = False
+            worker.requestInterruption()
+            if not worker.wait(2000):
+                worker.terminate()
+                worker.wait(500)
+            worker.deleteLater()
+            self.prediction_worker = None
+        super().closeEvent(event)

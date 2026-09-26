@@ -70,13 +70,13 @@ class ProductVariant:
 
     def __post_init__(self):
         if isinstance(self.cost_price, (int, float, str)):
-            self.cost_price = Decimal(str(self.cost_price))
+            self.cost_price = Decimal(str(self.cost_price or 0))
         if isinstance(self.selling_price, (int, float, str)):
-            self.selling_price = Decimal(str(self.selling_price))
+            self.selling_price = Decimal(str(self.selling_price or 0))
         if self.current_stock and not self.stock_quantity:
             self.stock_quantity = int(self.current_stock)
         elif self.stock_quantity and not self.current_stock:
-            self.current_stock = float(self.stock_quantity)
+            self.current_stock = float(self.stock_quantity or 0)
 
     @property
     def profit_margin(self) -> Decimal:
@@ -90,16 +90,16 @@ class ProductVariant:
             "product_id": self.product_id,
             "sku": self.sku,
             "attributes": self.attributes,
-            "cost_price": float(self.cost_price),
-            "selling_price": float(self.selling_price),
+            "cost_price": float(self.cost_price or 0),
+            "selling_price": float(self.selling_price or 0),
             "stock_quantity": self.stock_quantity,
-            "current_stock": float(self.current_stock),
+            "current_stock": float(self.current_stock or 0),
             "barcode": self.barcode,
             "image_path": self.image_path,
             "is_active": self.is_active,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "profit_margin": float(self.profit_margin),
+            "profit_margin": float(self.profit_margin or 0),
             "attributes_display": self._attributes_display(),
         }
 
@@ -122,7 +122,7 @@ class BundleProduct:
 
     def __post_init__(self):
         if isinstance(self.unit_price, (int, float, str)):
-            self.unit_price = Decimal(str(self.unit_price))
+            self.unit_price = Decimal(str(self.unit_price or 0))
 
     @property
     def total_price(self) -> Decimal:
@@ -135,8 +135,8 @@ class BundleProduct:
             "product_id": self.product_id,
             "product_name": self.product_name,
             "quantity": self.quantity,
-            "unit_price": float(self.unit_price),
-            "total_price": float(self.total_price),
+            "unit_price": float(self.unit_price or 0),
+            "total_price": float(self.total_price or 0),
         }
 
 
@@ -156,9 +156,9 @@ class PricingTier:
 
     def __post_init__(self):
         if isinstance(self.price, (int, float, str)):
-            self.price = Decimal(str(self.price))
+            self.price = Decimal(str(self.price or 0))
         if isinstance(self.discount_percent, (int, float, str)):
-            self.discount_percent = Decimal(str(self.discount_percent))
+            self.discount_percent = Decimal(str(self.discount_percent or 0))
 
     def is_valid(self, quantity: int) -> bool:
         now = datetime.now()
@@ -178,8 +178,8 @@ class PricingTier:
             "product_id": self.product_id,
             "min_quantity": self.min_quantity,
             "max_quantity": self.max_quantity,
-            "price": float(self.price),
-            "discount_percent": float(self.discount_percent),
+            "price": float(self.price or 0),
+            "discount_percent": float(self.discount_percent or 0),
             "valid_from": self.valid_from.isoformat() if self.valid_from else None,
             "valid_until": self.valid_until.isoformat() if self.valid_until else None,
             "description": self.description,
@@ -313,7 +313,7 @@ class Product:
         ]:
             value = getattr(self, field_name)
             if isinstance(value, (int, float, str)):
-                setattr(self, field_name, Decimal(str(value)))
+                setattr(self, field_name, Decimal(str(value or 0)))
 
     @property
     def available_stock(self) -> int:
@@ -334,7 +334,7 @@ class Product:
     @selling_price.setter
     def selling_price(self, value: Decimal) -> None:
         if isinstance(value, (int, float, str)):
-            self.base_price = Decimal(str(value))
+            self.base_price = Decimal(str(value or 0))
         else:
             self.base_price = value
 
@@ -406,10 +406,10 @@ class Product:
             "specifications": self.specifications,
             "unit": self.unit,
             # المالية
-            "cost_price": float(self.cost_price),
-            "base_price": float(self.base_price),
-            "wholesale_price": float(self.wholesale_price),
-            "tax_rate": float(self.tax_rate),
+            "cost_price": float(self.cost_price or 0),
+            "base_price": float(self.base_price or 0),
+            "wholesale_price": float(self.wholesale_price or 0),
+            "tax_rate": float(self.tax_rate or 0),
             "pricing_policy": self.pricing_policy,
             # المخزون
             "current_stock": self.current_stock,
@@ -437,10 +437,10 @@ class Product:
             # الإحصائيات
             "sales_count": self.sales_count,
             "total_sold": self.total_sold,
-            "average_rating": float(self.average_rating),
-            "profit_margin": float(self.profit_margin),
-            "profit_amount": float(self.profit_amount),
-            "stock_value": float(self.stock_value),
+            "average_rating": float(self.average_rating or 0),
+            "profit_margin": float(self.profit_margin or 0),
+            "profit_amount": float(self.profit_amount or 0),
+            "stock_value": float(self.stock_value or 0),
             "is_low_stock": self.is_low_stock,
             "requires_reorder": self.requires_reorder,
             "active_labels": [label.to_dict() for label in self.active_labels],
@@ -484,8 +484,8 @@ class ProductVariantManager:
                 variant.product_id,
                 variant.sku,
                 json.dumps(variant.attributes, ensure_ascii=False),
-                float(variant.cost_price),
-                float(variant.selling_price),
+                float(variant.cost_price or 0),
+                float(variant.selling_price or 0),
                 variant.stock_quantity,
                 variant.barcode,
                 variant.image_path,
@@ -582,7 +582,7 @@ class BundleProductManager:
                 bundle_item.product_id,
                 bundle_item.product_name,
                 bundle_item.quantity,
-                float(bundle_item.unit_price),
+                float(bundle_item.unit_price or 0),
             )
 
             item_id = self.db_manager.execute_insert(query, params)

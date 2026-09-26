@@ -8,6 +8,7 @@
 
 import logging
 from datetime import date, timedelta
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 
@@ -38,17 +39,18 @@ class ReportManager:
             WHERE date(sale_date) BETWEEN date(?) AND date(?)
             AND status IN ('confirmed', 'paid', 'partially_paid')
             """
+            # PRECISION: Using Decimal for financial calculations to avoid float errors
             sales_result = self.db_manager.fetch_one(sales_query, (start_date, end_date))
             if sales_result:
                 if isinstance(sales_result, dict):
-                    total_sales = float(sales_result.get("total_sales") or 0)
-                    collected_cash = float(sales_result.get("collected_cash") or 0)
+                    total_sales = Decimal(str(sales_result.get("total_sales") or 0))
+                    collected_cash = Decimal(str(sales_result.get("collected_cash") or 0))
                 elif sales_result:
-                    total_sales = float(sales_result[0] or 0)
-                    collected_cash = float(sales_result[1] or 0)
+                    total_sales = Decimal(str(sales_result[0] or 0))
+                    collected_cash = Decimal(str(sales_result[1] or 0))
             else:
-                total_sales = 0.0
-                collected_cash = 0.0
+                total_sales = Decimal("0")
+                collected_cash = Decimal("0")
 
             # 2. تكلفة البضاعة المباعة (COGS)
             # نحتاج لحساب تكلفة العناصر في الفواتير المؤكدة
@@ -63,26 +65,27 @@ class ReportManager:
             cogs_result = self.db_manager.fetch_one(cogs_query, (start_date, end_date))
             if cogs_result:
                 if isinstance(cogs_result, dict):
-                    total_cost = float(cogs_result.get("total_cogs") or 0)
+                    total_cost = Decimal(str(cogs_result.get("total_cogs") or 0))
                 elif cogs_result:
-                    total_cost = float(cogs_result[0] or 0)
+                    total_cost = Decimal(str(cogs_result[0] or 0))
             else:
-                total_cost = 0.0
+                total_cost = Decimal("0")
 
             # 3. صافي الربح
             net_profit = total_sales - total_cost
 
             # 4. هامش الربح
-            profit_margin = 0
+            profit_margin = Decimal("0")
             if total_sales > 0:
-                profit_margin = round((net_profit / total_sales) * 100, 2)
+                # PRECISION: Use Decimal quantize instead of round() for money
+                profit_margin = ((net_profit / total_sales) * 100).quantize(Decimal("0.01"))
 
             return {
-                "total_sales": total_sales,
-                "total_cost": total_cost,
-                "net_profit": net_profit,
-                "profit_margin": profit_margin,
-                "collected_cash": collected_cash,
+                "total_sales": float(total_sales),
+                "total_cost": float(total_cost),
+                "net_profit": float(net_profit),
+                "profit_margin": float(profit_margin),
+                "collected_cash": float(collected_cash),
                 "period": {
                     "start": start_date.isoformat(),
                     "end": end_date.isoformat(),

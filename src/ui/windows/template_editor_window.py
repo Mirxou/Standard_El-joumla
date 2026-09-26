@@ -164,7 +164,12 @@ class TemplateEditorWindow(QMainWindow):
             templates = self.db_manager.fetch_all(
                 "SELECT id, name FROM document_templates WHERE template_type = 'invoice' ORDER BY name"
             )
-            for t_id, name in templates:
+            for row in templates:
+                # Handle both dict and tuple result formats
+                if isinstance(row, dict):
+                    t_id, name = row.get("id"), row.get("name", "")
+                else:
+                    t_id, name = row[0], row[1]
                 self.template_combo.addItem(name, t_id)
         except Exception as e:
             QMessageBox.critical(self, "خطأ", f"فشل في تحميل قائمة القوالب: {e}")
@@ -201,9 +206,11 @@ class TemplateEditorWindow(QMainWindow):
                     item = DraggableTextItem(item_data.get("content", ""))
                     item.setPos(*item_data.get("pos", [0, 0]))
 
-                    font = QFont()
-                    font.fromString(item_data.get("font"))
-                    item.setFont(font)
+                    font_data = item_data.get("font")
+                    if font_data:
+                        font = QFont()
+                        font.fromString(font_data)
+                        item.setFont(font)
 
                     item.setDefaultTextColor(Qt.GlobalColor(item_data.get("color", "black")))
                     self.scene.addItem(item)

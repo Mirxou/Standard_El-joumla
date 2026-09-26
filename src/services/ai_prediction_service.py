@@ -1,4 +1,5 @@
 from datetime import timedelta
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
@@ -65,7 +66,8 @@ class AIPredictionService:
                 prediction = 0
             future_total += prediction
 
-        return round(future_total, 2), "Growth Trend" if m > 0 else "Decline Trend"
+        # PRECISION: Use Decimal quantize for monetary rounding instead of round()
+        return Decimal(str(future_total)).quantize(Decimal("0.01")), "Growth Trend" if m > 0 else "Decline Trend"
 
     def detect_anomalies(self):
         """
@@ -128,11 +130,13 @@ class AIPredictionService:
                 total += predicted
                 forecast.append({
                     "date": pred_date.strftime('%Y-%m-%d'),
-                    "predicted_sales": round(float(predicted), 2),
+                    # PRECISION: Use Decimal quantize for money rounding
+                    "predicted_sales": float(Decimal(str(predicted)).quantize(Decimal("0.01"))),
                 })
 
             trend = "growth" if trend_factor > 1.05 else ("decline" if trend_factor < 0.95 else "stable")
-            return {"forecast": forecast, "total_predicted": round(total, 2), "trend": trend}
+            # PRECISION: Use Decimal quantize for money rounding
+            return {"forecast": forecast, "total_predicted": float(Decimal(str(total)).quantize(Decimal("0.01"))), "trend": trend}
         except Exception as e:
             if self.logger:
                 self.logger.warning(f"Error in forecast_sales: {e}")
@@ -178,13 +182,18 @@ class AIPredictionService:
                 pred_date = last_date + timedelta(days=i)
                 forecast.append({
                     "date": pred_date.strftime('%Y-%m-%d'),
-                    "predicted_demand": round(float(avg_demand), 2),
+                    # PRECISION: Use Decimal quantize for money rounding
+                    "predicted_demand": float(Decimal(str(avg_demand)).quantize(Decimal("0.01"))),
                 })
                 total_demand += avg_demand
 
             return {
                 "forecast": forecast,
-                "summary": {"total_demand": round(total_demand, 2), "avg_daily_demand": round(float(avg_demand), 2)},
+                # PRECISION: Use Decimal quantize for money rounding
+                "summary": {
+                    "total_demand": float(Decimal(str(total_demand)).quantize(Decimal("0.01"))),
+                    "avg_daily_demand": float(Decimal(str(avg_demand)).quantize(Decimal("0.01"))),
+                },
             }
         except Exception as e:
             if self.logger:
@@ -239,8 +248,8 @@ class AIPredictionService:
                     "phone": row['phone'],
                     "risk_level": risk,
                     "days_since_last_order": days_since,
-                    "total_orders": int(row['total_orders']),
-                    "total_spent": float(row['total_spent']),
+                    "total_orders": int(row['total_orders'] or 0),
+                    "total_spent": float(row['total_spent'] or 0),
                 })
 
             def _risk_sort_key(x):
@@ -269,7 +278,7 @@ class AIPredictionService:
                     si1.product_id as product_a,
                     si2.product_id as product_b,
                     p2.name as product_b_name,
-                    p2.sku as product_b_sku,
+                    p2.barcode as product_b_sku,  # COLUMN_CHECK: schema has 'barcode' not 'sku'
                     p2.selling_price,
                     COUNT(*) as co_occurrence,
                     p2.current_stock
@@ -285,7 +294,7 @@ class AIPredictionService:
             if not product_id:
                 # Return top trending products instead
                 trend_query = """
-                    SELECT p.id, p.name, p.sku, p.selling_price, p.current_stock,
+                    SELECT p.id, p.name, p.barcode as sku, p.selling_price, p.current_stock,  # COLUMN_CHECK: alias for compat; schema has 'barcode' not 'sku'
                            SUM(si.quantity) as recent_qty
                     FROM products p
                     JOIN sale_items si ON p.id = si.product_id

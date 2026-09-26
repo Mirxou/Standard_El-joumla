@@ -337,8 +337,8 @@ class ConfigManager:
             },
             "api": {
                 "enabled": False,
-                "base_url": "http://127.0.0.1:8000",
-                "api_url": "http://127.0.0.1:8000",  # Alias for base_url for backward compatibility
+                "base_url": os.getenv("API_BASE_URL", "http://127.0.0.1:8000"),
+                "api_url": os.getenv("API_BASE_URL", "http://127.0.0.1:8000"),  # Alias for base_url for backward compatibility
                 "api_key": "",
                 "timeout": 30,
                 "retry_attempts": 3,

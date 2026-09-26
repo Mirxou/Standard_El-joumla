@@ -186,7 +186,7 @@ class AccountingIntegrationService:
             invoice_data = {
                 "Line": [
                     {
-                        "Amount": float(sale_data.get("total_amount", 0)),
+                        "Amount": float(sale_data.get("total_amount", 0) or 0),
                         "DetailType": "SalesItemLineDetail",
                         "SalesItemLineDetail": {"ItemRef": {"value": "1", "name": "Services"}},
                     }
@@ -197,7 +197,7 @@ class AccountingIntegrationService:
                 },
                 "TxnDate": sale_data.get("sale_date", datetime.now().strftime("%Y-%m-%d")),
                 "DueDate": sale_data.get("due_date", datetime.now().strftime("%Y-%m-%d")),
-                "TotalAmt": float(sale_data.get("total_amount", 0)),
+                "TotalAmt": float(sale_data.get("total_amount", 0) or 0),
                 "DocNumber": sale_data.get("invoice_number", ""),
             }
 
@@ -253,11 +253,11 @@ class AccountingIntegrationService:
                     {
                         "Description": "Sale",
                         "Quantity": 1,
-                        "UnitAmount": float(sale_data.get("total_amount", 0)),
+                        "UnitAmount": float(sale_data.get("total_amount", 0) or 0),
                         "AccountCode": "200",
                     }
                 ],
-                "Total": float(sale_data.get("total_amount", 0)),
+                "Total": float(sale_data.get("total_amount", 0) or 0),
             }
 
             # Note: This is a simplified example. Real Xero integration requires OAuth2 token

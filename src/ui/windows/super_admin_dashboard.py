@@ -110,7 +110,7 @@ class SuperAdminDashboard(QMainWindow):
         self.statusBar().showMessage("جاهز")
 
         # Auto-refresh timer (every 30 seconds)
-        self.refresh_timer = QTimer()
+        self.refresh_timer = QTimer(self)  # MEMORY: parent=self ensures timer is destroyed with window
         self.refresh_timer.timeout.connect(self.refresh_all)
         # self.refresh_timer.start(30000)  # 🔥 معطّل لمنع التجميد
 

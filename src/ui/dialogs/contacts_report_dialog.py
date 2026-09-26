@@ -235,9 +235,9 @@ class ContactsReportDialog(BaseDialog):
 ─────────────────────────────────────────────────────────────────────────────
 """
                 for i, row in enumerate(top_balance, 1):
-                    name = row["name"]
-                    balance = row["balance"]
-                    report += f"  {i}. {name:<30} {float(balance):>15,.2f} دج\n"
+                    name = row.get("name", "?")
+                    balance = row.get("balance", 0)
+                    report += f"  {i}. {name:<30} {float(balance or 0):>15,.2f} دج\n"
             else:
                 report += """💰 العملاء الأعلى رصيداً مستحقاً:
 ─────────────────────────────────────────────────────────────────────────────
@@ -248,10 +248,10 @@ class ContactsReportDialog(BaseDialog):
                 report += "\n🛍️  العملاء الأكثر شراءً:\n"
                 report += "─────────────────────────────────────────────────────────────────────────────\n"
                 for i, row in enumerate(top_buyers, 1):
-                    name = row["name"]
-                    count = row["purchase_count"]
-                    amount = row["total_amount"]
-                    amount_val = float(amount) if amount else 0
+                    name = row.get("name", "?")
+                    count = row.get("purchase_count", 0)
+                    amount = row.get("total_amount", 0)
+                    amount_val = float(amount or 0) if amount else 0
                     report += f"  {i}. {name:<30} {count:>5} فاتورة  {amount_val:>15,.2f} دج\n"
             else:
                 report += "\n🛍️  العملاء الأكثر شراءً:\n"
@@ -321,10 +321,10 @@ class ContactsReportDialog(BaseDialog):
                 report += "📦 الموردين الأكثر عمليات:\n"
                 report += "─────────────────────────────────────────────────────────────────────────────\n"
                 for i, row in enumerate(top_suppliers, 1):
-                    name = row["name"]
-                    count = row["purchase_count"]
-                    amount = row["total_amount"]
-                    amount_val = float(amount) if amount else 0
+                    name = row.get("name", "?")
+                    count = row.get("purchase_count", 0)
+                    amount = row.get("total_amount", 0)
+                    amount_val = float(amount or 0) if amount else 0
                     report += f"  {i}. {name:<30} {count:>5} عملية   {amount_val:>15,.2f} دج\n"
             else:
                 report += "📦 الموردين الأكثر عمليات:\n"
