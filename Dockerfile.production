@@ -1,41 +1,100 @@
-# Dockerfile.production - Production Build
-FROM python:3.11-slim
+# ============================================================================
+# Dockerfile.production — Standard El-Joumla ERP (Multi-Stage Production)
+# Optimized: build cache, security hardening, health checks, version labels
+# ============================================================================
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONPATH=/app
-ENV DJANGO_SETTINGS_MODULE=unified_erp.settings.production
+# ── Stage 1: Builder ──────────────────────────────────────────────────────
+FROM python:3.12-slim AS builder
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+ARG BUILD_DATE
+ARG VCS_REF
+ARG VERSION=6.0.0
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /build
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
-    postgresql-client \
-    redis-tools \
-    curl \
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Create app directory
+# Install Python dependencies in a virtualenv
+COPY requirements.txt .
+RUN python -m venv /opt/venv
+RUN /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
+
+# ── Stage 2: Production ───────────────────────────────────────────────────
+FROM python:3.12-slim AS production
+
+ARG BUILD_DATE
+ARG VCS_REF
+ARG VERSION=6.0.0
+
+LABEL maintainer="Standard El-Joumla Team" \
+      org.opencontainers.image.title="Standard El-Joumla ERP API" \
+      org.opencontainers.image.description="Production ERP API Server" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.source="https://github.com/Mirxou/Standard_El-joumla"
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app \
+    PATH="/opt/venv/bin:${PATH}" \
+    ENVIRONMENT=production
+
+# Security: install only runtime deps, no build tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get purge -y --auto-remove
+
+# Copy virtualenv from builder
+COPY --from=builder /opt/venv /opt/venv
+
+# Create non-root user and directories
+RUN groupadd -r erp && useradd -r -g erp -d /app -s /sbin/nologin erp \
+    && mkdir -p /app/data /app/logs /app/config /app/assets \
+    && chown -R erp:erp /app
+
 WORKDIR /app
 
-# Install Python dependencies
-COPY requirements/production.txt .
-RUN pip install --no-cache-dir -r production.txt
+# Copy application code (API + core only — no UI/AI for production API)
+COPY --chown=erp:erp src/api/ src/api/
+COPY --chown=erp:erp src/core/ src/core/
+COPY --chown=erp:erp src/services/ src/services/
+COPY --chown=erp:erp src/models/ src/models/
+COPY --chown=erp:erp src/utils/ src/utils/
+COPY --chown=erp:erp src/database/ src/database/
+COPY --chown=erp:erp src/repositories/ src/repositories/
+COPY --chown=erp:erp config/ config/
+COPY --chown=erp:erp assets/ assets/
 
-# Copy application code
-COPY . .
+# Switch to non-root user
+USER erp
 
-# Create non-root user
-RUN useradd --create-home --shell /bin/bash app \
-    && chown -R app:app /app
-USER app
+# Health check — uses /api/v1/health endpoint
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -sf http://localhost:8000/api/v1/health || exit 1
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health/ || exit 1
-
-# Expose port
 EXPOSE 8000
 
-# Run the application
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "--worker-class", "uvicorn.workers.UvicornWorker", "src.api.app:app"]
+# Production entrypoint: gunicorn with uvicorn workers
+CMD ["gunicorn", \
+     "--bind", "0.0.0.0:8000", \
+     "--workers", "4", \
+     "--worker-class", "uvicorn.workers.UvicornWorker", \
+     "--timeout", "120", \
+     "--graceful-timeout", "30", \
+     "--max-requests", "1000", \
+     "--max-requests-jitter", "100", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
+     "src.api.app:app"]

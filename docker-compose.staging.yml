@@ -1,0 +1,214 @@
+# ============================================================================
+# docker-compose.staging.yml — Standard El-Joumla ERP Staging Environment
+# Includes: API, PostgreSQL, Redis, Nginx, Prometheus, Grafana
+# Supports: Blue-Green deployment via DEPLOY_COLOR env var
+# ============================================================================
+version: "3.9"
+
+x-common-env: &common-env
+  ENVIRONMENT: staging
+  DB_TYPE: postgres
+  DATABASE_URL: postgresql://erp:erp_password@postgres:5432/erp_staging
+  REDIS_URL: redis://redis:6379/0
+  CACHE_USE_REDIS: "true"
+  CORS_ORIGINS: http://localhost:3000,http://staging.erp.standard-eljoumla.com
+
+x-api-healthcheck: &api-healthcheck
+  test: ["CMD", "curl", "-sf", "http://localhost:8000/api/v1/health"]
+  interval: 30s
+  timeout: 10s
+  start_period: 30s
+  retries: 3
+
+services:
+  # ── PostgreSQL ──────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: erp_staging
+      POSTGRES_USER: erp
+      POSTGRES_PASSWORD: erp_password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U erp -d erp_staging"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── Redis ───────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass erp_redis
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "erp_redis", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── API Server (Blue) ──────────────────────────────────────────────────
+  api-blue:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    environment:
+      <<: *common-env
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change_me_in_production}
+      ERP_DEPLOY_COLOR: blue
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck: *api-healthcheck
+    volumes:
+      - ./data:/app/data:rw
+      - ./logs:/app/logs:rw
+      - ./config:/app/config:ro
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+
+  # ── API Server (Green) — for Blue-Green deployments ────────────────────
+  api-green:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    environment:
+      <<: *common-env
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change_me_in_production}
+      ERP_DEPLOY_COLOR: green
+    ports:
+      - "8001:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck: *api-healthcheck
+    volumes:
+      - ./data:/app/data:rw
+      - ./logs:/app/logs:rw
+      - ./config:/app/config:ro
+    restart: unless-stopped
+    profiles:
+      - green  # Only start when "green" profile is activated
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+
+  # ── API Canary — for canary deployments ────────────────────────────────
+  api-canary:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    environment:
+      <<: *common-env
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change_me_in_production}
+      ERP_DEPLOY_COLOR: canary
+    ports:
+      - "8002:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck: *api-healthcheck
+    volumes:
+      - ./data:/app/data:rw
+      - ./logs:/app/logs:rw
+      - ./config:/app/config:ro
+    restart: unless-stopped
+    profiles:
+      - canary  # Only start when "canary" profile is activated
+
+  # ── Background Worker ──────────────────────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      <<: *common-env
+      WORKER_MODE: "true"
+    command: python -m src.services.task_scheduler_service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data:rw
+      - ./logs:/app/logs:rw
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+
+  # ── Nginx Reverse Proxy ────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      - api-blue
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:80/health"]
+      interval: 15s
+      timeout: 5s
+    restart: unless-stopped
+
+  # ── Prometheus ─────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+      - prometheus_data:/prometheus
+    restart: unless-stopped
+
+  # ── Grafana ────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  default:
+    name: erp_staging
+    driver: bridge

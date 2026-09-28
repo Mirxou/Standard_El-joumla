@@ -1,217 +1,228 @@
 #!/usr/bin/env python3
 """
-سكريبت البناء - Build Script
-يبني تطبيق El-Joumla ERP كملف تنفيذي Windows باستخدام Nuitka
+Standard El-Joumla ERP — Nuitka Build Script
+Builds the desktop application into a standalone executable.
+
+Usage:
+    python scripts/build.py --mode=standalone    # Folder with exe + deps (recommended)
+    python scripts/build.py --mode=onefile       # Single .exe (slower startup)
+    python scripts/build.py --mode=standalone --platform=windows
+    python scripts/build.py --mode=standalone --platform=linux
 """
 
+import argparse
 import os
-import sys
+import platform
 import shutil
 import subprocess
-import argparse
+import sys
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).parent.parent
-
-# معلومات التطبيق
-APP_NAME = "ElJoumla"
-APP_VERSION = "6.0.0"
-APP_COMPANY = "Standard El-Joumla"
-APP_DESCRIPTION = "نظام إدارة المبيعات والمجوز بالجملة"
-APP_ICON = PROJECT_ROOT / "assets" / "icons" / "app_icon.ico"
-
-# المجلدات المطلوبة
-DATA_DIRS = [
-    "assets",
-    "locales",
-    "config",
-    "data",
-]
+# Project root
+ROOT = Path(__file__).resolve().parent.parent
+DIST_DIR = ROOT / "dist"
+BUILD_DIR = ROOT / "build"
 
 
-def check_nuitka():
-    """التحقق من تثبيت Nuitka"""
+def get_version() -> str:
+    """Read version from VERSION.txt."""
+    version_file = ROOT / "VERSION.txt"
+    if version_file.exists():
+        first_line = version_file.read_text(encoding="utf-8").strip().split("\n")[0]
+        return first_line.strip()
+    return "6.0.0"
+
+
+def clean_build_dirs():
+    """Remove previous build artifacts."""
+    for d in [DIST_DIR, BUILD_DIR]:
+        if d.exists():
+            shutil.rmtree(d, ignore_errors=True)
+            print(f"🧹 Cleaned {d}")
+
+
+def build_nuitka(mode: str, plat: str, version: str):
+    """Execute Nuitka build command."""
+    is_windows = plat == "windows" or (plat == "auto" and platform.system() == "Windows")
+    is_linux = plat == "linux" or (plat == "auto" and platform.system() == "Linux")
+
+    cmd = [
+        sys.executable, "-m", "nuitka",
+        "--assume-yes-for-downloads",
+        "--python-flag=no_site",
+        f"--output-dir={DIST_DIR}",
+        f"--output-filename=StandardElJoumla-{version}",
+    ]
+
+    # Build mode
+    if mode == "onefile":
+        cmd.append("--onefile")
+    else:
+        cmd.append("--standalone")
+
+    # Qt support
+    cmd.append("--enable-qt=pyside6")
+
+    # Platform-specific options
+    if is_windows:
+        cmd.extend([
+            "--windows-disable-console",
+            "--windows-icon-from-ico=assets/icons/app_icon.ico",
+        ])
+    elif is_linux:
+        icon_path = ROOT / "assets" / "icons" / "app_icon.png"
+        if icon_path.exists():
+            cmd.append(f"--linux-icon={icon_path}")
+
+    # Include data directories
+    data_dirs = ["assets", "config", "locales"]
+    for d in data_dirs:
+        data_path = ROOT / d
+        if data_path.exists():
+            cmd.append(f"--include-data-dir={d}={d}")
+
+    # Include data files
+    data_files = [
+        ("requirements.txt", "requirements.txt"),
+        ("VERSION.txt", "VERSION.txt"),
+    ]
+    for src, dst in data_files:
+        if (ROOT / src).exists():
+            cmd.append(f"--include-data-file={src}={dst}")
+
+    # Performance: enable C acceleration for hot modules
+    hot_modules = [
+        "src.core.database_manager",
+        "src.core.local_database_manager",
+        "src.services.sales_service",
+        "src.services.inventory_service",
+        "src.services.accounting_service",
+        "src.services.payment_service",
+    ]
+    for mod in hot_modules:
+        cmd.append(f"--module={mod}")
+
+    # Anti-bloat: remove unnecessary modules
+    no_follow = [
+        "tkinter", "unittest", "test", "tests",
+        "setuptools", "pip", "wheel",
+        "PyQt5", "PyQt6",  # We use PySide6 only
+        "IPython", "notebook", "jupyter",
+        "sphinx", "docutils",
+    ]
+    for mod in no_follow:
+        cmd.append(f"--nofollow-import-to={mod}")
+
+    # Main entry point
+    cmd.append(str(ROOT / "main.py"))
+
+    print("🔨 Building with Nuitka...")
+    print(f"   Mode: {mode}")
+    print(f"   Platform: {plat}")
+    print(f"   Version: {version}")
+    print(f"   Command: {' '.join(cmd[:8])}...")
+    print()
+
     try:
-        result = subprocess.run(
-            [sys.executable, "-m", "nuitka", "--version"],
-            capture_output=True, text=True
-        )
-        if result.returncode == 0:
-            print(f"✓ Nuitka مثبّت: {result.stdout.strip()}")
-            return True
-    except Exception:
-        pass
-
-    print("✗ Nuitka غير مثبّت. جاري التثبيت...")
-    subprocess.run([sys.executable, "-m", "pip", "install", "nuitka"], check=True)
-    print("✓ Nuitka تم تثبيته")
-    return True
+        result = subprocess.run(cmd, cwd=ROOT, check=True)
+        print(f"\n✅ Build successful! Output in: {DIST_DIR}")
+        return 0
+    except subprocess.CalledProcessError as e:
+        print(f"\n❌ Build failed with exit code: {e.returncode}")
+        return e.returncode
+    except FileNotFoundError:
+        print("❌ Nuitka not found. Install with: pip install nuitka")
+        return 1
 
 
-def build_onefile():
-    """بناء كملف واحد (Onefile)"""
-    cmd = [
-        sys.executable, "-m", "nuitka",
-        "--onefile",
-        "--enable-qt=pyside6",
-        "--windows-disable-console",
-        f"--windows-icon-from-ico={APP_ICON}",
-        f"--windows-company-name={APP_COMPANY}",
-        f"--windows-product-name={APP_NAME} ERP",
-        f"--windows-file-version={APP_VERSION}",
-        f"--windows-product-version={APP_VERSION}",
-        f"--output-filename={APP_NAME}.exe",
-        "--assume-yes-for-downloads",
-        "--show-progress",
-        "--show-memory",
-        "--python-flag=no_site",
-    ]
+def create_installer(version: str, plat: str):
+    """Create platform-specific installer (Windows: InnoSetup, Linux: AppImage)."""
+    is_windows = plat == "windows" or platform.system() == "Windows"
 
-    # إضافة مجلدات البيانات
-    for data_dir in DATA_DIRS:
-        dir_path = PROJECT_ROOT / data_dir
-        if dir_path.exists():
-            cmd.append(f"--include-data-dir={data_dir}={data_dir}")
+    if is_windows:
+        iss_path = ROOT / "installer.iss"
+        if not iss_path.exists():
+            print("⚠️  InnoSetup script not found — skipping installer creation")
+            return
 
-    # ملف الإدخال
-    cmd.append(str(PROJECT_ROOT / "main.py"))
+        print("📦 Creating Windows installer with InnoSetup...")
+        try:
+            subprocess.run(
+                ["iscc", str(iss_path), f"/DAppVersion={version}"],
+                cwd=ROOT, check=True
+            )
+            print("✅ Installer created")
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            print(f"⚠️  Installer creation failed: {e}")
 
-    print(f"\nبناء {APP_NAME} v{APP_VERSION} كملف واحد...")
-    print(f"الأمر: {' '.join(cmd)}\n")
+    else:
+        print("📦 Creating Linux AppImage...")
+        appdir = DIST_DIR / "AppDir"
+        appdir.mkdir(exist_ok=True)
 
-    result = subprocess.run(cmd, cwd=PROJECT_ROOT)
+        # Create AppImage structure
+        (appdir / "usr" / "bin").mkdir(parents=True, exist_ok=True)
+        (appdir / "usr" / "share" / "applications").mkdir(parents=True, exist_ok=True)
+        (appdir / "usr" / "share" / "icons" / "hicolor" / "256x256" / "apps").mkdir(parents=True, exist_ok=True)
 
-    if result.returncode == 0:
-        exe_path = PROJECT_ROOT / f"{APP_NAME}.exe"
-        if exe_path.exists():
-            size_mb = exe_path.stat().st_size / (1024 * 1024)
-            print(f"\n✓ البناء ناجح: {exe_path} ({size_mb:.1f} MB)")
-            return True
-
-    print("\n✗ فشل البناء")
-    return False
-
-
-def build_standalone():
-    """بناء كمجلد مستقل (Standalone)"""
-    cmd = [
-        sys.executable, "-m", "nuitka",
-        "--standalone",
-        "--enable-qt=pyside6",
-        "--windows-disable-console",
-        f"--windows-icon-from-ico={APP_ICON}",
-        f"--windows-company-name={APP_COMPANY}",
-        f"--windows-product-name={APP_NAME} ERP",
-        f"--windows-file-version={APP_VERSION}",
-        f"--windows-product-version={APP_VERSION}",
-        f"--output-dir={PROJECT_ROOT / 'dist'}",
-        "--assume-yes-for-downloads",
-        "--show-progress",
-        "--show-memory",
-        "--python-flag=no_site",
-    ]
-
-    for data_dir in DATA_DIRS:
-        dir_path = PROJECT_ROOT / data_dir
-        if dir_path.exists():
-            cmd.append(f"--include-data-dir={data_dir}={data_dir}")
-
-    cmd.append(str(PROJECT_ROOT / "main.py"))
-
-    print(f"\nبناء {APP_NAME} v{APP_VERSION} كمجلد مستقل...")
-    result = subprocess.run(cmd, cwd=PROJECT_ROOT)
-
-    if result.returncode == 0:
-        dist_dir = PROJECT_ROOT / "dist" / "main.dist"
-        if dist_dir.exists():
-            print(f"\n✓ البناء ناجح: {dist_dir}")
-            return True
-
-    print("\n✗ فشل البناء")
-    return False
-
-
-def create_inno_setup():
-    """إنشاء مثبت InnoSetup"""
-    iss_content = f"""; InnoSetup Script for {APP_NAME} ERP
-#define MyAppName "{APP_NAME}"
-#define MyAppVersion "{APP_VERSION}"
-#define MyAppPublisher "{APP_COMPANY}"
-#define MyAppExeName "{APP_NAME}.exe"
-
-[Setup]
-AppId={{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}}
-AppName={{#MyAppName}}
-AppVersion={{#MyAppVersion}}
-AppPublisher={{#MyAppPublisher}}
-DefaultDirName={{autopf}}\\{{#MyAppName}}
-DefaultGroupName={{#MyAppName}}
-OutputDir=installer_output
-OutputBaseFilename={APP_NAME}_Setup_{{#MyAppVersion}}
-Compression=lzma2/ultra64
-SolidCompression=yes
-WizardStyle=modern
-
-[Languages]
-Name: "arabic"; MessagesFile: "compiler:Languages\\Arabic.isl"
-Name: "english"; MessagesFile: "compiler:Default.isl"
-
-[Tasks]
-Name: "desktopicon"; Description: "{{cm:CreateDesktopIcon}}"; GroupDescription: "{{cm:AdditionalIcons}}"
-
-[Files]
-Source: "dist\\main.dist\\*"; DestDir: "{{app}}"; Flags: ignoreversion recursesubdirs createallsubdirs
-
-[Icons]
-Name: "{{group}}\\{{#MyAppName}}"; Filename: "{{app}}\\{{#MyAppExeName}}"
-Name: "{{group}}\\{{cm:UninstallProgram,{{#MyAppName}}}}"; Filename: "{{app}}\\unins000.exe"
-Name: "{{autodesktop}}\\{{#MyAppName}}"; Filename: "{{app}}\\{{#MyAppExeName}}"; Tasks: desktopicon
-
-[Run]
-Filename: "{{app}}\\{{#MyAppExeName}}"; Description: "{{cm:LaunchProgram,{{#MyAppName}}}}"; Flags: nowait postinstall skipifsilent
+        desktop_entry = f"""[Desktop Entry]
+Name=Standard El-Joumla ERP
+Comment=Enterprise Resource Planning System
+Exec=StandardElJoumla
+Icon=standard-eljoumla
+Type=Application
+Categories=Office;Business;Qt;
+Version={version}
 """
+        (appdir / "usr" / "share" / "applications" / "standard-eljoumla.desktop").write_text(desktop_entry)
 
-    iss_path = PROJECT_ROOT / "installer.iss"
-    with open(iss_path, 'w', encoding='utf-8') as f:
-        f.write(iss_content)
-
-    print(f"✓ ملف InnoSetup أُنشئ: {iss_path}")
-    print("  لإنشاء المثبت، شغّل: iscc installer.iss")
+        try:
+            subprocess.run(
+                ["appimagetool", str(appdir), f"StandardElJoumla-{version}-x86_64.AppImage"],
+                cwd=DIST_DIR, check=True
+            )
+            print("✅ AppImage created")
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            print("⚠️  AppImage creation failed — appimagetool not installed")
 
 
 def main():
-    parser = argparse.ArgumentParser(description=f"بناء {APP_NAME} ERP")
-    parser.add_argument("--mode", choices=["onefile", "standalone", "both"], default="onefile")
-    parser.add_argument("--installer", action="store_true", help="إنشاء مثبت InnoSetup")
-    parser.add_argument("--clean", action="store_true", help="تنظيف قبل البناء")
+    parser = argparse.ArgumentParser(description="Build Standard El-Joumla ERP")
+    parser.add_argument("--mode", choices=["standalone", "onefile"], default="standalone",
+                        help="Build mode (default: standalone)")
+    parser.add_argument("--platform", choices=["auto", "windows", "linux"], default="auto",
+                        help="Target platform (default: auto-detect)")
+    parser.add_argument("--clean", action="store_true", help="Clean build dirs first")
+    parser.add_argument("--installer", action="store_true", help="Create installer after build")
+    parser.add_argument("--version", default=None, help="Override version number")
     args = parser.parse_args()
 
-    print(f"{'='*60}")
-    print(f"بناء {APP_NAME} ERP v{APP_VERSION}")
-    print(f"{'='*60}")
+    version = args.version or get_version()
+    plat = args.platform
+    if plat == "auto":
+        plat = "windows" if platform.system() == "Windows" else "linux"
+
+    print(f"""
+╔══════════════════════════════════════════════════════╗
+║     Standard El-Joumla ERP — Build System            ║
+║     Version: {version:<40}║
+║     Mode: {args.mode:<44}║
+║     Platform: {plat:<41}║
+╚══════════════════════════════════════════════════════╝
+""")
 
     if args.clean:
-        print("\nتنظيف...")
-        for d in ["build", "dist", f"{APP_NAME}.build"]:
-            p = PROJECT_ROOT / d
-            if p.exists():
-                shutil.rmtree(p)
-                print(f"  ✓ حُذف: {d}")
+        clean_build_dirs()
 
-    check_nuitka()
-
-    success = False
-    if args.mode in ("onefile", "both"):
-        success = build_onefile()
-
-    if args.mode in ("standalone", "both"):
-        success = build_standalone()
+    rc = build_nuitka(args.mode, plat, version)
+    if rc != 0:
+        sys.exit(rc)
 
     if args.installer:
-        create_inno_setup()
+        create_installer(version, plat)
 
-    return 0 if success else 1
+    print(f"\n🎉 Build complete! Version {version}")
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

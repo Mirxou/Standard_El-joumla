@@ -1,0 +1,56 @@
+{
+  "new_dashboard": {
+    "name": "new_dashboard",
+    "description": "Redesigned dashboard with real-time charts",
+    "state": "environment",
+    "percentage": 0.0,
+    "environments": ["staging", "development"],
+    "user_ids": [],
+    "enable_after": null,
+    "kill_switch": false,
+    "metadata": {"owner": "ui-team", "ticket": "ERP-101"}
+  },
+  "new_pricing_engine": {
+    "name": "new_pricing_engine",
+    "description": "Dynamic pricing engine v2 with ML recommendations",
+    "state": "percentage",
+    "percentage": 10.0,
+    "environments": ["staging", "production"],
+    "user_ids": [],
+    "enable_after": null,
+    "kill_switch": false,
+    "metadata": {"owner": "pricing-team", "ticket": "ERP-202"}
+  },
+  "ai_predictions": {
+    "name": "ai_predictions",
+    "description": "AI-powered sales predictions and inventory optimization",
+    "state": "on",
+    "percentage": 0.0,
+    "environments": ["staging", "production", "development"],
+    "user_ids": [],
+    "enable_after": null,
+    "kill_switch": false,
+    "metadata": {"owner": "ai-team", "ticket": "ERP-303"}
+  },
+  "canary_api_v2": {
+    "name": "canary_api_v2",
+    "description": "API v2 endpoints with new response format",
+    "state": "percentage",
+    "percentage": 5.0,
+    "environments": ["production"],
+    "user_ids": [],
+    "enable_after": null,
+    "kill_switch": false,
+    "metadata": {"owner": "api-team", "ticket": "ERP-404"}
+  },
+  "websocket_realtime": {
+    "name": "websocket_realtime",
+    "description": "Real-time updates via WebSocket",
+    "state": "on",
+    "percentage": 0.0,
+    "environments": ["staging", "production"],
+    "user_ids": [],
+    "enable_after": null,
+    "kill_switch": false
+  }
+}

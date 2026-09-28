@@ -1,213 +1,309 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# ============================================================================
+# Standard El-Joumla ERP — Deployment Script
+# Supports: staging, production, rollback, canary, blue-green
+# Usage:
+#   bash scripts/deploy.sh staging v6.1.0 blue-green
+#   bash scripts/deploy.sh production v6.1.0 canary --weight=5
+#   bash scripts/deploy.sh production rollback
+# ============================================================================
 
-# Standard El-Joumla Production Deployment Script
-# Version: 1.0.0
-# Description: Automated deployment for production environment
+set -euo pipefail
 
-set -e
+# ── Configuration ─────────────────────────────────────────────────────────
+ENVIRONMENT="${1:-staging}"
+VERSION="${2:-latest}"
+STRATEGY="${3:-direct}"
+EXTRA_ARGS="${4:-}"
+
+REGISTRY="${DOCKER_REGISTRY:-ghcr.io/mirxou/standard_el-joumla}"
+API_IMAGE="${REGISTRY}/erp-api"
+COMPOSE_FILE="docker-compose.yml"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+DEPLOY_DIR="/opt/erp"
 
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Configuration
-PROJECT_NAME="unified-commerce-erp"
-DOCKER_COMPOSE_FILE="docker-compose.production.yml"
-BACKUP_DIR="./backups"
-LOG_FILE="./logs/deploy_$(date +%Y%m%d_%H%M%S).log"
+log()  { echo -e "${BLUE}[DEPLOY]${NC} $*"; }
+ok()   { echo -e "${GREEN}[OK]${NC} $*"; }
+warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
+err()  { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
-# Functions
-log() {
-    echo -e "${BLUE}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $1" | tee -a "$LOG_FILE"
-}
+# ── Pre-flight Checks ────────────────────────────────────────────────────
+preflight() {
+    log "Running pre-flight checks..."
 
-error() {
-    echo -e "${RED}[ERROR]${NC} $1" | tee -a "$LOG_FILE"
-    exit 1
-}
+    # Check Docker
+    command -v docker &>/dev/null || err "Docker not installed"
+    docker info &>/dev/null || err "Docker daemon not running"
 
-success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1" | tee -a "$LOG_FILE"
-}
-
-warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1" | tee -a "$LOG_FILE"
-}
-
-# Pre-deployment checks
-pre_deployment_checks() {
-    log "Running pre-deployment checks..."
-
-    # Check if Docker is running
-    if ! docker info > /dev/null 2>&1; then
-        error "Docker is not running. Please start Docker and try again."
+    # Check Docker Compose
+    if docker compose version &>/dev/null; then
+        COMPOSE_CMD="docker compose"
+    elif command -v docker-compose &>/dev/null; then
+        COMPOSE_CMD="docker-compose"
+    else
+        err "Docker Compose not installed"
     fi
 
-    # Check if docker-compose file exists
-    if [ ! -f "$DOCKER_COMPOSE_FILE" ]; then
-        error "Docker compose file '$DOCKER_COMPOSE_FILE' not found."
+    # Check disk space (need at least 2GB)
+    AVAILABLE=$(df -BG / | tail -1 | awk '{print $4}' | tr -d 'G')
+    if [[ "$AVAILABLE" -lt 2 ]]; then
+        err "Insufficient disk space: ${AVAILABLE}GB (need 2GB+)"
     fi
 
-    # Check environment variables
-    if [ ! -f ".env.production" ]; then
-        warning "Production environment file '.env.production' not found."
-        warning "Please create it with required environment variables."
-        read -p "Continue anyway? (y/N): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            exit 1
+    ok "Pre-flight checks passed"
+}
+
+# ── Health Check ─────────────────────────────────────────────────────────
+health_check() {
+    local url="${1:-http://localhost:8000/api/v1/health}"
+    local max_retries="${2:-30}"
+    local retry=0
+
+    log "Health check: $url"
+    while [[ $retry -lt $max_retries ]]; do
+        if curl -sf --max-time 5 "$url" &>/dev/null; then
+            ok "Health check passed (attempt $((retry+1)))"
+            return 0
         fi
-    fi
+        retry=$((retry+1))
+        sleep 2
+    done
 
-    success "Pre-deployment checks completed."
+    err "Health check FAILED after $max_retries attempts"
 }
 
-# Create backup
+# ── Backup Current State ─────────────────────────────────────────────────
 create_backup() {
-    log "Creating backup..."
+    log "Creating pre-deployment backup..."
+    local backup_dir="${DEPLOY_DIR}/backups/${TIMESTAMP}"
+    mkdir -p "$backup_dir"
 
-    mkdir -p "$BACKUP_DIR"
-
-    # Database backup
-    if docker-compose -f "$DOCKER_COMPOSE_FILE" ps db | grep -q "Up"; then
-        log "Backing up database..."
-        docker-compose -f "$DOCKER_COMPOSE_FILE" exec -T db pg_dumpall -U postgres > "$BACKUP_DIR/db_backup_$(date +%Y%m%d_%H%M%S).sql"
+    # Backup database
+    if [[ -f "${DEPLOY_DIR}/data/erp.db" ]]; then
+        cp "${DEPLOY_DIR}/data/erp.db" "$backup_dir/erp.db"
+        ok "Database backed up"
     fi
 
-    # Configuration backup
-    cp -r config "$BACKUP_DIR/config_backup_$(date +%Y%m%d_%H%M%S)"
-
-    success "Backup created in $BACKUP_DIR"
-}
-
-# Deploy application
-deploy_application() {
-    log "Deploying application..."
-
-    # Pull latest images
-    log "Pulling latest Docker images..."
-    docker-compose -f "$DOCKER_COMPOSE_FILE" pull
-
-    # Stop existing containers
-    log "Stopping existing containers..."
-    docker-compose -f "$DOCKER_COMPOSE_FILE" down
-
-    # Start new containers
-    log "Starting new containers..."
-    docker-compose -f "$DOCKER_COMPOSE_FILE" up -d
-
-    # Wait for services to be healthy
-    log "Waiting for services to be healthy..."
-    sleep 30
-
-    success "Application deployed successfully."
-}
-
-# Run health checks
-run_health_checks() {
-    log "Running health checks..."
-
-    # Check if all services are running
-    if ! docker-compose -f "$DOCKER_COMPOSE_FILE" ps | grep -q "Exit"; then
-        success "All services are running."
-    else
-        error "Some services failed to start. Check logs with: docker-compose -f $DOCKER_COMPOSE_FILE logs"
+    # Backup config
+    if [[ -d "${DEPLOY_DIR}/config" ]]; then
+        cp -r "${DEPLOY_DIR}/config" "$backup_dir/"
+        ok "Config backed up"
     fi
 
-    # Check web service health
-    if curl -f http://localhost/health > /dev/null 2>&1; then
-        success "Web service is healthy."
-    else
-        warning "Web service health check failed."
-    fi
+    # Record current version
+    echo "$VERSION" > "$backup_dir/deployed_version.txt"
+    echo "$TIMESTAMP" > "$backup_dir/deploy_timestamp.txt"
 
-    # Check API service health
-    if curl -f http://localhost:8001/health > /dev/null 2>&1; then
-        success "API service is healthy."
-    else
-        warning "API service health check failed."
-    fi
+    ok "Backup created: $backup_dir"
 }
 
-# Run database migrations
-run_migrations() {
-    log "Running database migrations..."
-
-    docker-compose -f "$DOCKER_COMPOSE_FILE" exec -T web python manage.py migrate
-
-    success "Database migrations completed."
+# ── Pull Images ──────────────────────────────────────────────────────────
+pull_images() {
+    log "Pulling Docker images for $VERSION..."
+    docker pull "${API_IMAGE}:${VERSION}" 2>/dev/null || \
+    docker pull "${API_IMAGE}:latest" || \
+    warn "Image pull failed — using local image"
+    ok "Images ready"
 }
 
-# Post-deployment tasks
-post_deployment_tasks() {
-    log "Running post-deployment tasks..."
-
-    # Clear cache
-    docker-compose -f "$DOCKER_COMPOSE_FILE" exec -T web python manage.py clear_cache
-
-    # Collect static files
-    docker-compose -f "$DOCKER_COMPOSE_FILE" exec -T web python manage.py collectstatic --noinput
-
-    # Restart services if needed
-    docker-compose -f "$DOCKER_COMPOSE_FILE" restart web api
-
-    success "Post-deployment tasks completed."
-}
-
-# Rollback function
+# ── Rollback ─────────────────────────────────────────────────────────────
 rollback() {
-    log "Rolling back deployment..."
-
-    # Stop current deployment
-    docker-compose -f "$DOCKER_COMPOSE_FILE" down
+    log "🔄 ROLLBACK INITIATED"
 
     # Find latest backup
-    LATEST_BACKUP=$(ls -t "$BACKUP_DIR"/db_backup_*.sql | head -1)
+    local latest_backup
+    latest_backup=$(ls -td "${DEPLOY_DIR}"/backups/*/ 2>/dev/null | head -1)
 
-    if [ -n "$LATEST_BACKUP" ]; then
-        log "Restoring from backup: $LATEST_BACKUP"
-        # Restore database from backup
-        docker-compose -f "$DOCKER_COMPOSE_FILE" exec -T db psql -U postgres < "$LATEST_BACKUP"
+    if [[ -z "$latest_backup" ]]; then
+        err "No backup found for rollback"
     fi
 
-    # Restart with previous version
-    docker-compose -f "$DOCKER_COMPOSE_FILE" up -d
+    local prev_version
+    prev_version=$(cat "$latest_backup/deployed_version.txt" 2>/dev/null || echo "unknown")
+    log "Rolling back to: $prev_version"
 
-    success "Rollback completed."
+    # Restore database
+    if [[ -f "$latest_backup/erp.db" ]]; then
+        cp "$latest_backup/erp.db" "${DEPLOY_DIR}/data/erp.db"
+        ok "Database restored"
+    fi
+
+    # Restore config
+    if [[ -d "$latest_backup/config" ]]; then
+        rm -rf "${DEPLOY_DIR}/config"
+        cp -r "$latest_backup/config" "${DEPLOY_DIR}/"
+        ok "Config restored"
+    fi
+
+    # Rollback containers to previous version
+    if [[ "$prev_version" != "unknown" ]]; then
+        export ERP_IMAGE_TAG="$prev_version"
+        $COMPOSE_CMD -f "$COMPOSE_FILE" down --timeout=30
+        $COMPOSE_CMD -f "$COMPOSE_FILE" up -d --remove-orphans
+        health_check
+    fi
+
+    ok "Rollback complete — running $prev_version"
 }
 
-# Main deployment function
-main() {
-    log "Starting deployment of $PROJECT_NAME"
+# ── Deploy: Direct ───────────────────────────────────────────────────────
+deploy_direct() {
+    log "📦 Direct deployment: $VERSION → $ENVIRONMENT"
+    create_backup
+    pull_images
 
-    case "$1" in
-        "deploy")
-            pre_deployment_checks
-            create_backup
-            deploy_application
-            run_migrations
-            run_health_checks
-            post_deployment_tasks
-            success "Deployment completed successfully!"
+    export ERP_IMAGE_TAG="$VERSION"
+    export ERP_ENV="$ENVIRONMENT"
+
+    $COMPOSE_CMD -f "$COMPOSE_FILE" up -d --remove-orphans --no-deps api
+    health_check "http://localhost:8000/api/v1/health" 30
+
+    ok "Direct deployment complete"
+}
+
+# ── Deploy: Blue-Green ───────────────────────────────────────────────────
+deploy_blue_green() {
+    log "🔵🟢 Blue-Green deployment: $VERSION → $ENVIRONMENT"
+
+    create_backup
+    pull_images
+
+    # Determine current and next color
+    CURRENT_COLOR=$(cat "${DEPLOY_DIR}/.deploy_color" 2>/dev/null || echo "blue")
+    if [[ "$CURRENT_COLOR" == "blue" ]]; then
+        NEXT_COLOR="green"
+    else
+        NEXT_COLOR="blue"
+    fi
+
+    log "Current: $CURRENT_COLOR → Deploying: $NEXT_COLOR"
+
+    # Start new (next color) containers
+    export ERP_IMAGE_TAG="$VERSION"
+    export ERP_ENV="$ENVIRONMENT"
+    export DEPLOY_COLOR="$NEXT_COLOR"
+
+    $COMPOSE_CMD -f "$COMPOSE_FILE" -f "docker-compose.${NEXT_COLOR}.yml" up -d --no-deps api
+
+    # Health check on new containers
+    NEXT_PORT=8001  # Green runs on different port during switch
+    health_check "http://localhost:${NEXT_PORT}/api/v1/health" 30
+
+    # Switch traffic (update nginx upstream)
+    log "🔀 Switching traffic from $CURRENT_COLOR to $NEXT_COLOR"
+    if command -v nginx &>/dev/null; then
+        sed -i "s/server 127.0.0.1:8000;/server 127.0.0.1:${NEXT_PORT};/" \
+            /etc/nginx/conf.d/erp-upstream.conf 2>/dev/null || true
+        nginx -s reload 2>/dev/null || true
+    fi
+
+    # Record new active color
+    echo "$NEXT_COLOR" > "${DEPLOY_DIR}/.deploy_color"
+
+    # Stop old containers (with grace period)
+    log "⏳ Waiting 30s before stopping old ($CURRENT_COLOR) containers..."
+    sleep 30
+
+    export DEPLOY_COLOR="$CURRENT_COLOR"
+    $COMPOSE_CMD -f "$COMPOSE_FILE" -f "docker-compose.${CURRENT_COLOR}.yml" down --timeout=60 2>/dev/null || true
+
+    ok "Blue-Green deployment complete — $NEXT_COLOR is active"
+}
+
+# ── Deploy: Canary ───────────────────────────────────────────────────────
+deploy_canary() {
+    local weight=5
+    if [[ "$EXTRA_ARGS" == --weight=* ]]; then
+        weight="${EXTRA_ARGS#--weight=}"
+    fi
+
+    log "🐤 Canary deployment: $VERSION → $ENVIRONMENT ($weight% traffic)"
+
+    create_backup
+    pull_images
+
+    # Deploy canary containers alongside production
+    export ERP_IMAGE_TAG="$VERSION"
+    export ERP_ENV="$ENVIRONMENT"
+
+    $COMPOSE_CMD -f "$COMPOSE_FILE" -f "docker-compose.canary.yml" up -d --no-deps api-canary
+
+    # Health check canary
+    health_check "http://localhost:8002/api/v1/health" 30
+
+    # Configure nginx to split traffic
+    if command -v nginx &>/dev/null; then
+        cat > /etc/nginx/conf.d/erp-canary.conf <<EOF
+upstream erp_backend {
+    server 127.0.0.1:8000 weight=$((100-weight));
+    server 127.0.0.1:8002 weight=$weight;
+}
+EOF
+        nginx -s reload 2>/dev/null || true
+    fi
+
+    log "🐤 Canary active at ${weight}% — monitor before full rollout"
+    ok "Canary deployment complete"
+}
+
+# ── Main ─────────────────────────────────────────────────────────────────
+main() {
+    echo ""
+    echo "╔══════════════════════════════════════════════════════╗"
+    echo "║     Standard El-Joumla ERP — Deployment System       ║"
+    echo "║     Environment: $(printf '%-40s' "$ENVIRONMENT")║"
+    echo "║     Version:      $(printf '%-40s' "$VERSION")║"
+    echo "║     Strategy:     $(printf '%-40s' "$STRATEGY")║"
+    echo "╚══════════════════════════════════════════════════════╝"
+    echo ""
+
+    # Handle rollback specially
+    if [[ "$STRATEGY" == "rollback" ]]; then
+        preflight
+        rollback
+        exit 0
+    fi
+
+    # Select compose file based on environment
+    case "$ENVIRONMENT" in
+        staging)
+            COMPOSE_FILE="docker-compose.yml"
             ;;
-        "rollback")
-            rollback
-            ;;
-        "status")
-            docker-compose -f "$DOCKER_COMPOSE_FILE" ps
-            ;;
-        "logs")
-            docker-compose -f "$DOCKER_COMPOSE_FILE" logs -f
+        production)
+            COMPOSE_FILE="docker-compose.prod.yml"
             ;;
         *)
-            echo "Usage: $0 {deploy|rollback|status|logs}"
-            exit 1
+            err "Unknown environment: $ENVIRONMENT"
             ;;
     esac
+
+    preflight
+
+    # Deploy based on strategy
+    case "$STRATEGY" in
+        direct)
+            deploy_direct
+            ;;
+        blue-green)
+            deploy_blue_green
+            ;;
+        canary)
+            deploy_canary
+            ;;
+        *)
+            err "Unknown strategy: $STRATEGY (use: direct, blue-green, canary, rollback)"
+            ;;
+    esac
+
+    echo ""
+    ok "🎉 Deployment complete: $VERSION → $ENVIRONMENT ($STRATEGY)"
 }
 
-# Run main function with all arguments
 main "$@"

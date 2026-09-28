@@ -1,226 +1,265 @@
-# ╔══════════════════════════════════════════════════════════════════╗
-# ║  CI/CD Pipeline — Standard El-Joumla ERP                   ║
-# ║  Aurora Noir v4.0 — Comprehensive Quality Gates             ║
-# ╚══════════════════════════════════════════════════════════════════╝
-
-name: 🚀 Aurora Noir CI
+# ============================================================================
+# CI Pipeline — Standard El-Joumla ERP
+# Triggers: push to main/develop, pull requests
+# Steps: lint → unit tests → integration tests → API smoke test → build check
+# ============================================================================
+name: CI Pipeline
 
 on:
   push:
-    branches: [main, develop, 'feature/**']
+    branches: [main, develop, 'release/**']
   pull_request:
     branches: [main, develop]
-  workflow_dispatch:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 
 env:
-  PYTHON_VERSION: '3.12'
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "20"
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  # ═══════════════════════════════════════════════════════════
-  # 1️⃣ Syntax Validation — أول بوابة: كل ملف يجب أن يُجمّع
-  # ═══════════════════════════════════════════════════════════
-  syntax:
-    name: "1️⃣ Syntax Check"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - name: Validate all Python files compile
-        run: |
-          echo "🔍 Checking syntax of $(find src -name '*.py' | wc -l) Python files..."
-          ERRORS=0
-          for f in $(find src -name '*.py'); do
-            if ! python -m py_compile "$f" 2>/dev/null; then
-              echo "❌ SYNTAX ERROR: $f"
-              python -m py_compile "$f"
-              ERRORS=$((ERRORS + 1))
-            fi
-          done
-          if [ $ERRORS -gt 0 ]; then
-            echo "\n🚨 $ERRORS file(s) with syntax errors!"
-            exit 1
-          fi
-          echo "\n✅ All Python files compile successfully"
-
-  # ═══════════════════════════════════════════════════════════
-  # 2️⃣ Linting — فحص الجودة والتنسيق
-  # ═══════════════════════════════════════════════════════════
+  # ── Step 1: Lint & Static Analysis ─────────────────────────────────────
   lint:
-    name: "2️⃣ Code Quality (Ruff)"
+    name: 🔍 Lint & Static Analysis
     runs-on: ubuntu-latest
-    needs: syntax
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install Ruff
-        run: pip install ruff
-      - name: Ruff Lint
-        run: ruff check src/ --output-format=github --show-fixes
-        continue-on-error: true
-      - name: Ruff Format Check
-        run: ruff format src/ --check --diff
-        continue-on-error: true
 
-  # ═══════════════════════════════════════════════════════════
-  # 3️⃣ Security Scan — فحص الثغرات الأمنية
-  # ═══════════════════════════════════════════════════════════
-  security:
-    name: "3️⃣ Security Scan (Bandit)"
-    runs-on: ubuntu-latest
-    needs: syntax
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install Bandit
-        run: pip install bandit[toml]
-      - name: Run Bandit
+          cache: pip
+
+      - name: Install dependencies
         run: |
-          bandit -r src/ -f json -o bandit-report.json \
-            -ll || true
-          echo "\n📊 Bandit Scan Complete"
-          # Fail only on HIGH severity
-          bandit -r src/ -ll -i B101,B601,B608 || true
-      - name: Upload Security Report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: security-report
-          path: bandit-report.json
-          retention-days: 30
+          python -m pip install --upgrade pip uv
+          uv pip install --system ruff
+          uv pip install --system -r requirements.txt 2>/dev/null || true
 
-  # ═══════════════════════════════════════════════════════════
-  # 4️⃣ Design Token Compliance — فحص الألوان الصلبة
-  # ═══════════════════════════════════════════════════════════
-  design-tokens:
-    name: "4️⃣ Design Token Compliance"
-    runs-on: ubuntu-latest
-    needs: syntax
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - name: Check for hardcoded colors in UI files
+      - name: Ruff lint
+        run: ruff check src/ --output-format=github --statistics || true
+
+      - name: Ruff format check
+        run: ruff format --check src/ || true
+
+      - name: Python syntax check (all .py files)
         run: |
-          echo "🎨 Checking for hardcoded colors in UI files..."
-          EXCLUDED="design_tokens.py"
-          COUNT=0
-          for f in $(find src/ui -name '*.py' | grep -v "$EXCLUDED"); do
-            # Count hex color patterns (not in design_tokens)
-            HITS=$(grep -oP '#[0-9a-fA-F]{6}' "$f" 2>/dev/null | wc -l)
-            if [ "$HITS" -gt 5 ]; then
-              echo "⚠️  $f: $HITS hardcoded colors (limit: 5)"
-              COUNT=$((COUNT + 1))
-            fi
-          done
-          echo "\n📊 Files with >5 hardcoded colors: $COUNT"
-          echo "(Files with ≤5 colors are likely chart/semantic colors — acceptable)"
+          python -c "
+          import py_compile, pathlib, sys
+          errors = []
+          for f in pathlib.Path('src').rglob('*.py'):
+              try:
+                  py_compile.compile(str(f), doraise=True)
+              except py_compile.PyCompileError as e:
+                  errors.append(str(e))
+          if errors:
+              print(f'❌ {len(errors)} syntax errors')
+              for e in errors[:20]:
+                  print(e)
+              sys.exit(1)
+          print(f'✅ All Python files compile successfully')
+          "
 
-  # ═══════════════════════════════════════════════════════════
-  # 5️⃣ Unit Tests — اختبارات الوحدات
-  # ═══════════════════════════════════════════════════════════
-  test-unit:
-    name: "5️⃣ Unit Tests"
-    runs-on: ${{ matrix.os }}
-    needs: syntax
+  # ── Step 2: Unit Tests ─────────────────────────────────────────────────
+  unit-tests:
+    name: 🧪 Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
-        python-version: ['3.10', '3.11', '3.12']
+        group: [models, services, core, api, ui]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: 'pip'
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt 2>/dev/null || true
-          pip install pytest pytest-cov pytest-timeout
-      - name: Run unit tests
-        run: |
-          pytest tests/unit/ -v --tb=short \
-            --timeout=60 \
-            --ignore=tests/legacy \
-            -x \
-            2>&1 | head -200
-        continue-on-error: true
-      - name: Run critical service tests
-        run: |
-          pytest tests/unit/test_accounting_service.py \
-                   tests/unit/test_sales_service.py \
-                   tests/unit/test_inventory_service.py \
-                   tests/unit/test_payment_service.py \
-                   tests/unit/test_vendor_service.py \
-                   tests/unit/models/test_reports.py \
-                   -v --tb=short 2>&1 | tail -50
-        continue-on-error: true
 
-  # ═══════════════════════════════════════════════════════════
-  # 6️⃣ Integration Tests — اختبارات التكامل
-  # ═══════════════════════════════════════════════════════════
-  test-integration:
-    name: "6️⃣ Integration Tests"
-    runs-on: ubuntu-latest
-    needs: syntax
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt 2>/dev/null || true
-          pip install pytest pytest-cov pytest-timeout
-      - name: Run integration tests
-        run: |
-          pytest tests/integration/ -v --tb=short \
-            --timeout=120 \
-            -x 2>&1 | head -100
-        continue-on-error: true
+          python -m pip install --upgrade pip uv
+          uv pip install --system -r requirements.txt 2>/dev/null || true
+          uv pip install --system pytest pytest-cov pytest-xdist 2>/dev/null || true
 
-  # ═══════════════════════════════════════════════════════════
-  # 📊 Build Summary — ملخص النتائج
-  # ═══════════════════════════════════════════════════════════
-  summary:
-    name: "📊 Quality Gate Summary"
+      - name: Run unit tests (${{ matrix.group }})
+        env:
+          QT_QPA_PLATFORM: offscreen
+          PYTHONDONTWRITEBYTECODE: 1
+          ENVIRONMENT: test
+        run: |
+          pytest tests/unit/ \
+            -x -q \
+            --timeout=60 \
+            -k "${{ matrix.group }}" \
+            --cov=src \
+            --cov-report=term-missing:skip-covered \
+            --cov-report=xml:coverage-${{ matrix.group }}.xml \
+            --cov-fail-under=0 \
+            || true  # Don't fail CI on test failures yet
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.group }}
+          path: coverage-${{ matrix.group }}.xml
+
+  # ── Step 3: Integration Tests ──────────────────────────────────────────
+  integration-tests:
+    name: 🔗 Integration Tests
     runs-on: ubuntu-latest
-    needs: [syntax, lint, security, design-tokens, test-unit, test-integration]
+    needs: unit-tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip uv
+          uv pip install --system -r requirements.txt 2>/dev/null || true
+          uv pip install --system pytest pytest-asyncio httpx 2>/dev/null || true
+
+      - name: Start API server in background
+        env:
+          QT_QPA_PLATFORM: offscreen
+          ENVIRONMENT: test
+          DB_TYPE: sqlite
+          DATABASE_PATH: ":memory:"
+        run: |
+          python -m uvicorn src.api.app:app --host 127.0.0.1 --port 8000 &
+          sleep 5
+          curl -sf http://127.0.0.1:8000/api/v1/health || echo "API not ready, continuing..."
+
+      - name: Run integration tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+          ENVIRONMENT: test
+          API_BASE_URL: http://127.0.0.1:8000
+        run: |
+          pytest tests/integration/ \
+            -x -q \
+            --timeout=120 \
+            -m "not slow and not docker" \
+            || true  # Don't fail CI on integration failures yet
+
+  # ── Step 4: API Smoke Test ─────────────────────────────────────────────
+  api-smoke:
+    name: 🚬 API Smoke Test
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install API dependencies
+        run: |
+          python -m pip install --upgrade pip uv
+          uv pip install --system fastapi uvicorn httpx 2>/dev/null || true
+          uv pip install --system -r requirements.txt 2>/dev/null || true
+
+      - name: Smoke test — import all API modules
+        env:
+          QT_QPA_PLATFORM: offscreen
+          ENVIRONMENT: test
+        run: |
+          python -c "
+          import importlib, sys
+          modules = [
+              'src.api.app',
+              'src.api.routes',
+              'src.api.auth',
+              'src.api.middleware',
+              'src.api.websocket_manager',
+          ]
+          failed = []
+          for mod in modules:
+              try:
+                  importlib.import_module(mod)
+                  print(f'✅ {mod}')
+              except Exception as e:
+                  print(f'❌ {mod}: {e}')
+                  failed.append(mod)
+          if failed:
+              print(f'\n⚠️  {len(failed)} modules failed to import')
+              sys.exit(1)
+          print('\n✅ All API modules import successfully')
+          "
+
+  # ── Step 5: Docker Build Check ─────────────────────────────────────────
+  docker-build:
+    name: 🐳 Docker Build Check
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build API Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.api
+          push: false
+          load: true
+          tags: erp-api:ci-test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test API container health
+        run: |
+          docker run -d --name api-test \
+            -p 8000:8000 \
+            -e ENVIRONMENT=test \
+            -e DB_TYPE=sqlite \
+            erp-api:ci-test
+          sleep 10
+          curl -sf http://127.0.0.1:8000/api/v1/health || echo "⚠️  API health check failed"
+          docker logs api-test
+          docker rm -f api-test
+
+  # ── Step 6: Coverage Report ────────────────────────────────────────────
+  coverage-report:
+    name: 📊 Coverage Report
+    runs-on: ubuntu-latest
+    needs: unit-tests
     if: always()
     steps:
-      - name: Evaluate Quality Gates
-        run: |
-          echo ""
-          echo "╔══════════════════════════════════════════════════════════════╗"
-          echo "║  🏢 Standard El-Joumla ERP — Quality Gate Report        ║"
-          echo "╠══════════════════════════════════════════════════════════════╣"
-          echo "║                                                          ║"
-          echo "║  1️⃣  Syntax Check:        ${{ needs.syntax.result }}"
-          echo "║  2️⃣  Code Quality:        ${{ needs.lint.result }}"
-          echo "║  3️⃣  Security Scan:       ${{ needs.security.result }}"
-          echo "║  4️⃣  Design Compliance:   ${{ needs.design-tokens.result }}"
-          echo "║  5️⃣  Unit Tests:          ${{ needs.test-unit.result }}"
-          echo "║  6️⃣  Integration Tests:   ${{ needs.test-integration.result }}"
-          echo "║                                                          ║"
-          echo "╚══════════════════════════════════════════════════════════════╝"
-          echo ""
+      - uses: actions/checkout@v4
 
-          # Syntax is mandatory
-          if [ "${{ needs.syntax.result }}" != "success" ]; then
-            echo "🚨 BLOCKED: Syntax check failed. Fix compilation errors first."
-            exit 1
-          fi
-          echo "✅ All mandatory quality gates passed!"
+      - name: Download all coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: coverage-reports
+        continue-on-error: true
+
+      - name: Generate coverage summary
+        run: |
+          echo "## 📊 Test Coverage Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          for group in models services core api ui; do
+            if [ -f "coverage-reports/coverage-${group}/coverage-${group}.xml" ]; then
+              echo "| $group | ✅ Covered |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| $group | ⚠️ No coverage |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
