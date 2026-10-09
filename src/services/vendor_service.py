@@ -185,6 +185,27 @@ class VendorService:
                 except Exception as inv_err:
                     logging.getLogger(__name__).warning(f"Failed to record stock movement for product {pid}: {inv_err}")
 
+                # ── MOVING AVERAGE / FIFO COSTING ──────────────────────────
+                # Update product cost using the configured costing method
+                # when receiving purchased items.
+                try:
+                    from src.services.business_rules_service import CostingService
+                    from decimal import Decimal as D
+
+                    cost_price = D(str(it.get("cost_price", 0) or 0))
+                    if cost_price > 0:
+                        costing = CostingService(self.db, self.logger)
+                        costing.on_purchase(
+                            product_id=pid,
+                            quantity=D(str(qty)),
+                            unit_cost=cost_price,
+                            purchase_id=purchase_id,
+                        )
+                except Exception as costing_err:
+                    logging.getLogger(__name__).warning(
+                        "Costing update failed for product %d: %s", pid, costing_err
+                    )
+
             if self.logger:
                 self.logger.info(f"تم استلام أمر الشراء {purchase_id}")
             return True

@@ -22,6 +22,14 @@ from src.models.sale import Sale, SaleItem, SaleManager, SaleStatus
 from src.services.accounting_service import AccountingService
 from src.services.inventory_service import InventoryService
 from src.services.exchange_rate_service import ExchangeRateService
+from src.services.business_rules_service import (
+    AllocationStrategy,
+    BatchAllocationService,
+    CostingService,
+    CreditLimitError,
+    CreditService,
+    UnitConversionService,
+)
 from src.utils.logger import setup_logger
 
 
@@ -37,7 +45,15 @@ class SalesService:
         self.inventory_service = InventoryService(db_manager, self.logger)
         self.accounting_service = AccountingService(db_manager, self.logger)
         self.exchange_rate_service = ExchangeRateService(db_manager, self.logger)
+        # ── Business Rules Services (FEFO, Credit, Costing, Unit Conversion) ──
+        self.batch_allocator = BatchAllocationService(db_manager, self.logger)
+        self.credit_service = CreditService(db_manager, self.logger)
+        self.costing_service = CostingService(db_manager, self.logger)
+        self.unit_conversion_service = UnitConversionService(db_manager, self.logger)
         self.current_session = None
+        # ── Business Rule Config ──
+        self._allocation_strategy = AllocationStrategy.FEFO  # Default: FEFO
+        self._enforce_credit_limit = True                  # Default: enforce
 
     def _generate_invoice_number(self) -> str:
         """توليد رقم فاتورة فريد مع حماية من التكرار.
@@ -139,6 +155,30 @@ class SalesService:
                     )
                     return None
 
+                # ── CREDIT LIMIT ENFORCEMENT ──────────────────────────────────
+                # Check credit limit for credit sales (آجل)
+                payment_method = getattr(sale, "payment_method", "cash") or "cash"
+                if self._enforce_credit_limit and payment_method in ("credit", "آجل"):
+                    final_amt = Decimal(str(getattr(sale, "final_amount", None)
+                                            or getattr(sale, "total_amount", 0) or 0))
+                    try:
+                        credit_check = self.credit_service.check_credit_limit(
+                            customer_id=customer_id,
+                            sale_amount=final_amt,
+                            raise_on_exceed=True,
+                        )
+                        self.logger.info(
+                            "Credit check passed for customer %d: available=%.2f, requested=%.2f",
+                            customer_id,
+                            credit_check.get("available_credit", 0),
+                            float(final_amt),
+                        )
+                    except CreditLimitError as cle:
+                        self.logger.warning(
+                            "Sale rejected — credit limit exceeded: %s", str(cle)
+                        )
+                        return None
+
             # 1. التحقق من توفر الكميات (قبل بدء المعاملة)
             # M7 FIX: تجميع الكميات المطلوبة لكل منتج للتحقق الصحيح
             # EDGE CASE (same product added twice): Aggregating quantities per product
@@ -166,8 +206,17 @@ class SalesService:
                     if item.product_id == pid:
                         cost_price = getattr(item, "cost_price", Decimal("0.00"))
                         if cost_price == Decimal("0.00"):
-                            prod_cost = getattr(product, "cost_price", Decimal("0.00"))
-                            item.cost_price = prod_cost
+                            # ── MOVING AVERAGE / FIFO COGS ────────────────
+                            # Use CostingService to get the correct cost based on
+                            # the configured costing method (standard/moving_avg/fifo)
+                            item_cost = self.costing_service.get_cost_of_goods_sold(
+                                product_id=pid,
+                                quantity=Decimal("1"),  # Unit cost
+                            )
+                            if item_cost > 0:
+                                item.cost_price = item_cost
+                            else:
+                                item.cost_price = getattr(product, "cost_price", Decimal("0.00"))
 
             # 2-5. C4 FIX: تنفيذ جميع العمليات داخل معاملة واحدة (ذري)
             with self.db_manager.transaction():
@@ -185,27 +234,88 @@ class SalesService:
                 # read-then-set pattern. The old code read current_stock then set
                 # new_quantity, which had a TOCTOU race between read and write.
                 # deduct_stock_atomic uses WHERE current_stock >= ? and checks rowcount.
+                #
+                # ── FEFO BATCH ALLOCATION ──────────────────────────────────
+                # If batches exist for the product, allocate from batches using
+                # FEFO (First Expired First Out) strategy. Otherwise, fall back
+                # to simple atomic stock deduction.
                 for item in sale.items:
                     qty = float(item.quantity or 0)
-                    success = self.product_manager.deduct_stock_atomic(item.product_id, qty)
-                    if not success:
-                        raise RuntimeError(
-                            f"Insufficient stock for product {item.product_id} "
-                            f"(needed {qty}) — concurrent sale may have consumed it"
-                        )
-                    # Record stock movement for audit trail
+                    pid = item.product_id
+
+                    # Try batch-aware allocation (FEFO)
                     try:
-                        self.inventory_service._record_stock_movement(
-                            product_id=item.product_id,
-                            movement_type="out",
-                            quantity=qty,
-                            reference_id=sale_id,
-                            reference_type="sale",
-                            notes=f"sale:{sale_id}",
-                            created_by=user_id,
+                        allocations = self.batch_allocator.allocate_batches(
+                            product_id=pid,
+                            required_quantity=Decimal(str(qty)),
+                            strategy=self._allocation_strategy,
                         )
-                    except Exception as move_err:
-                        self.logger.warning(f"Stock movement recording failed (non-blocking): {move_err}")
+                        if allocations:
+                            # Execute batch deduction
+                            batch_ok = self.batch_allocator.execute_allocation(allocations)
+                            if not batch_ok:
+                                raise RuntimeError(
+                                    f"Batch allocation failed for product {pid}"
+                                )
+                            # Record batch_id on the sale_item
+                            if len(allocations) == 1:
+                                item.batch_id = allocations[0].batch_id
+                                item.cost_price = allocations[0].cost_price
+                            # Record stock movements per batch
+                            for alloc in allocations:
+                                try:
+                                    self.inventory_service._record_stock_movement(
+                                        product_id=pid,
+                                        movement_type="out",
+                                        quantity=float(alloc.quantity),
+                                        reference_id=sale_id,
+                                        reference_type="sale",
+                                        notes=f"sale:{sale_id} batch:{alloc.batch_number}",
+                                        created_by=user_id,
+                                    )
+                                except Exception as move_err:
+                                    self.logger.warning("Batch movement record failed: %s", move_err)
+                        else:
+                            # No batches available — fall back to atomic deduction
+                            success = self.product_manager.deduct_stock_atomic(pid, qty)
+                            if not success:
+                                raise RuntimeError(
+                                    f"Insufficient stock for product {pid} "
+                                    f"(needed {qty}) — concurrent sale may have consumed it"
+                                )
+                            try:
+                                self.inventory_service._record_stock_movement(
+                                    product_id=pid,
+                                    movement_type="out",
+                                    quantity=qty,
+                                    reference_id=sale_id,
+                                    reference_type="sale",
+                                    notes=f"sale:{sale_id}",
+                                    created_by=user_id,
+                                )
+                            except Exception as move_err:
+                                self.logger.warning("Stock movement recording failed (non-blocking): %s", move_err)
+                    except Exception as batch_err:
+                        # Batch allocation failed — fall back to atomic deduction
+                        self.logger.warning("Batch allocation error, falling back to atomic: %s", batch_err)
+                        success = self.product_manager.deduct_stock_atomic(pid, qty)
+                        if not success:
+                            raise RuntimeError(
+                                f"Insufficient stock for product {pid} "
+                                f"(needed {qty}) — concurrent sale may have consumed it"
+                            )
+                        try:
+                            self.inventory_service._record_stock_movement(
+                                product_id=pid,
+                                movement_type="out",
+                                quantity=qty,
+                                reference_id=sale_id,
+                                reference_type="sale",
+                                notes=f"sale:{sale_id}",
+                                created_by=user_id,
+                            )
+                        except Exception as move_err:
+                            self.logger.warning("Stock movement recording failed (non-blocking): %s", move_err)
 
                 # 4. معالجة محاسبية (داخل المعاملة لضمان التناسق)
                 # Accounting journal entry is mandatory within the transaction.
