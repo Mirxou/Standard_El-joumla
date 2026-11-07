@@ -3758,3 +3758,89 @@ Approximately 200+ `except Exception` instances remain across services/core. The
 6. `src/services/cache_service.py` — graceful degradation on backend failure
 7. `src/services/cache_backends.py` — retry on Redis operations + graceful degradation
 8. `src/core/local_database_manager.py` — 21 new indexes
+
+---
+
+# Session: Critical Gaps #3 (Costing on Receipt) & #4 (POS Reconciliation) — CLOSED
+
+**Date:** 2025-12
+**Commit:** f4defe4
+**Scope:** SRS_ARCHITECTURE.md gap matrix — critical & high items
+**Verification:** 31/31 functional checks passed (in-memory SQLite, end-to-end)
+
+## Verification of Previously-Reported Critical Gaps
+
+The 5-axis gap analysis reported 3 critical gaps. Deep code audit revealed
+**2 of 3 were already integrated** in `sales_service.create_sale()` by
+commit 913427a (FEFO allocation lines ~238-318, credit limit enforcement
+lines ~158-180) — verified functionally, not just by reading.
+
+## Actual Gaps Found & Fixed This Session
+
+### Gap A (CRITICAL): Receiving never updated product cost
+`PurchaseOrderService.receive_shipment()` incremented stock and created
+batches but NEVER called `CostingService.on_purchase()` — so Moving
+Average / FIFO layers were never built on the primary receiving path.
+Profits were computed from stale costs.
+
+**Fixes in `purchase_order_service.py`:**
+1. `CostingService.on_purchase()` called per accepted item with unit cost
+   from `purchase_order_items.unit_price` (fallback: product cost).
+2. **Ordering fix**: costing runs BEFORE the stock increment. Moving
+   Average reads `current_stock` as `old_qty`; adding stock first caused
+   `(10×150+13×50)/200 = 10.75` instead of `(10×100+13×50)/150 = 11.00`.
+3. `batches.cost_price` now persisted on INSERT/UPDATE (column is NOT
+   NULL — the old bare INSERT would fail on strict schemas). Batch
+   expiry_date + purchase_date recorded.
+4. FIFO `cost_layers.batch_id` linked after batch resolution.
+5. Inbound `stock_movements` recorded per item (non-blocking).
+6. Costing failure raises → triggers full ROLLBACK (atomic).
+
+### Gap B (HIGH): POS sessions had no reconciliation
+`start_pos_session`/`end_pos_session` existed but: sales were not linked
+to sessions, no expected-cash math, no discrepancy, no shift handover.
+
+**Fixes in `sales_service.py`:**
+1. `sales.pos_session_id` — stamped on every sale inside `create_sale()`
+   transaction (idempotent ALTER TABLE migration).
+2. `pos_sessions` extended: `expected_cash`, `cash_sales`, `card_sales`,
+   `credit_sales`, `returns_total`, `sales_count`, `discrepancy`,
+   `handed_over_to`, `notes`.
+3. `get_pos_reconciliation(session_id)`:
+   expected = opening + cash_sales − returns_total.
+   Cash sales EXCLUDE returned invoices (prevents double-count).
+   Discrepancy classified: over / short / balanced.
+4. `end_pos_session(counted_cash)` — persists full settlement snapshot.
+5. `handover_pos_session(to_user_id, counted_cash)` — close + reconcile +
+   open new session with counted cash as opening float.
+6. `list_pos_sessions(limit)` — settlement status per session.
+
+### API (`routes.py`) — 5 endpoints
+- `POST /pos/sessions` — start (409 if active session exists)
+- `GET /pos/sessions` — list with settlement status
+- `GET /pos/sessions/{id}/reconciliation` — cash reconciliation
+- `POST /pos/sessions/{id}/close` — close + reconcile
+- `POST /pos/sessions/handover` — shift handover
+
+## Verified Behaviors (31/31)
+- Moving Average: (10×100 + 13×50)/150 = 11.00 after receipt of 50@13
+- FIFO: cost layer created with correct unit_cost, linked to batch
+- Batch: cost_price/expiry/quantity persisted
+- POS: opening 500 + cash 200 − returns 100 = expected 600; counted 590
+  → discrepancy −10 (short), persisted; handover opens session #2 with
+  opening 590, old session marked handed_over_to
+- Credit limit: request 300 with available 200 → rejected; 150 → accepted
+- FEFO: 15 units across 2 batches → 10 from earliest-expiring first
+
+## Remaining Open Gaps (unchanged priority)
+- 🟡 Unit conversion service wired into sale UI (service exists)
+- 🟡 Barcode scanner / ESC-POS printer / cash drawer hardware handlers
+- 🟡 Expense management UI (double-entry accounting is complete)
+- 🟢 Supplier payment FIFO auto-allocation
+- 🟢 mDNS LAN discovery + auto offline-queue flush
+
+## Note
+`tests/unit` & most integration tests require PySide6 (not installed in
+this environment) — collection fails at conftest import; pre-existing
+`test_full_sale_workflow` failure reproduces identically on the parent
+commit (verified via git stash) — unrelated to this session's changes.
