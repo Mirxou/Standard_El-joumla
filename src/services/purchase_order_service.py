@@ -6,6 +6,7 @@ Purchase Order Service
 """
 
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 from src.core.database_manager import DatabaseManager
@@ -690,10 +691,70 @@ class PurchaseOrderService:
 
             # تحويل بنود الاستلام إلى الصيغة المطلوبة: Dict[int, Decimal]
             items_received = {}
+
+            # ── CRITICAL FIX: MOVING AVERAGE / FIFO COSTING ON RECEIPT ──
+            # Build po_item_id → unit_price map. ReceivingItem has no cost field,
+            # so the unit cost comes from the purchase order item.
+            po_item_costs: Dict[int, Decimal] = {}
+            try:
+                from decimal import Decimal as _D
+                _po_items = self.db.execute_query(
+                    "SELECT id, unit_price FROM purchase_order_items WHERE purchase_order_id = ?",
+                    (po_id,),
+                )
+                for _row in (_po_items or []):
+                    _item_id = _row.get("id") if isinstance(_row, dict) else _row[0]
+                    _unit_price = _row.get("unit_price") if isinstance(_row, dict) else _row[1]
+                    po_item_costs[int(_item_id)] = _D(str(_unit_price or 0))
+            except Exception as cost_map_err:
+                if self.logger:
+                    self.logger.warning("فشل جلب أسعار بنود أمر الشراء: %s", cost_map_err)
+
             for rn_item in receiving_note.items:
                 if rn_item.po_item_id and rn_item.quantity_accepted > 0:
                     items_received[rn_item.po_item_id] = rn_item.quantity_accepted
-                    # تحديث المخزون مباشرة
+
+                    # ── تكلفة الوحدة: من بند أمر الشراء، وإلا من تكلفة المنتج ──
+                    unit_cost = po_item_costs.get(int(rn_item.po_item_id))
+                    if unit_cost is None or unit_cost <= 0:
+                        try:
+                            _prow = self.db.execute_query(
+                                "SELECT cost_price FROM products WHERE id = ?",
+                                (rn_item.product_id,),
+                            )
+                            if _prow:
+                                _cp = _prow[0].get("cost_price") if isinstance(_prow[0], dict) else _prow[0][0]
+                                unit_cost = _D(str(_cp or 0))
+                        except Exception:
+                            unit_cost = _D("0")
+                    if unit_cost is None:
+                        unit_cost = _D("0")
+
+                    # ── CRITICAL FIX 1: تحديث التكلفة قبل زيادة المخزون ──
+                    # الترتيب حرج: Moving Average يستخدم current_stock الحالي
+                    # (قبل الاستلام) في البسط — إذا زدنا المخزون أولاً سيتضخم
+                    # المتوسط مرتين. الصيغة:
+                    #   new_avg = (old_avg × old_qty + cost × qty) / (old_qty + qty)
+                    try:
+                        from src.services.business_rules_service import CostingService
+                        costing = CostingService(self.db, self.logger)
+                        costing.on_purchase(
+                            product_id=rn_item.product_id,
+                            quantity=rn_item.quantity_accepted,
+                            unit_cost=unit_cost,
+                            purchase_id=po_id,
+                        )
+                    except Exception as costing_err:
+                        if self.logger:
+                            self.logger.error(
+                                "فشل تحديث التكلفة للمنتج %s، سيتم التراجع: %s",
+                                rn_item.product_id, costing_err,
+                            )
+                        raise RuntimeError(
+                            f"Costing update failed for product {rn_item.product_id}: {costing_err}"
+                        ) from costing_err
+
+                    # تحديث المخزون (بعد حساب التكلفة)
                     try:
                         self.db.execute_update(
                             "UPDATE products SET current_stock = current_stock + ? WHERE id = ?",
@@ -709,6 +770,7 @@ class PurchaseOrderService:
                         return False
 
                     # Create/update batch record if batch_number is provided
+                    batch_id = None
                     if rn_item.batch_number:
                         try:
                             existing_batch = self.db.execute_query(
@@ -723,21 +785,63 @@ class PurchaseOrderService:
                                 )
                                 self.db.execute_update(
                                     "UPDATE batches SET quantity = quantity + ?, "
+                                    "cost_price = ?, "
                                     "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                                    (float(rn_item.quantity_accepted), batch_id),
+                                    (float(rn_item.quantity_accepted), float(unit_cost), batch_id),
                                 )
                             else:
                                 self.db.execute_update(
                                     "INSERT INTO batches "
-                                    "(product_id, batch_number, quantity, "
-                                    "expiry_date, created_at, updated_at) "
-                                    "VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                                    "(product_id, batch_number, quantity, cost_price, "
+                                    "expiry_date, purchase_date, created_at, updated_at) "
+                                    "VALUES (?, ?, ?, ?, ?, CURRENT_DATE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
                                     (rn_item.product_id, rn_item.batch_number,
-                                     float(rn_item.quantity_accepted), rn_item.expiry_date),
+                                     float(rn_item.quantity_accepted), float(unit_cost),
+                                     rn_item.expiry_date),
                                 )
+                                batch_id = None  # resolved below via batch_number lookup
+                                try:
+                                    _brow = self.db.execute_query(
+                                        "SELECT id FROM batches WHERE product_id = ? AND batch_number = ?",
+                                        (rn_item.product_id, rn_item.batch_number),
+                                    )
+                                    if _brow:
+                                        batch_id = (
+                                            _brow[0].get("id") if isinstance(_brow[0], dict) else _brow[0][0]
+                                        )
+                                except Exception:
+                                    pass
                         except Exception as e:
                             if self.logger:
                                 self.logger.warning(f"فشل تحديث الدفعة للمنتج {rn_item.product_id}: {e}")
+
+                    # ── CRITICAL FIX 2: ربط طبقة التكلفة FIFO بالدفعة إن وُجدت ──
+                    # on_purchase أعلاه أنشأ الطبقة دون batch_id (قبل معرفة الدفعة)
+                    if batch_id:
+                        try:
+                            self.db.execute_update(
+                                "UPDATE cost_layers SET batch_id = ? "
+                                "WHERE product_id = ? AND purchase_id = ? AND batch_id IS NULL",
+                                (batch_id, rn_item.product_id, po_id),
+                            )
+                        except Exception:
+                            pass
+
+                    # ── تسجيل حركة مخزون (وارد) ──
+                    try:
+                        from src.services.inventory_service import InventoryService
+                        inv_svc = InventoryService(self.db, self.logger)
+                        inv_svc._record_stock_movement(
+                            product_id=rn_item.product_id,
+                            movement_type="in",
+                            quantity=float(rn_item.quantity_accepted),
+                            reference_id=po_id,
+                            reference_type="purchase_order",
+                            notes=f"PO:{po_id} batch:{rn_item.batch_number or '-'}",
+                        )
+                    except Exception as move_err:
+                        if self.logger:
+                            self.logger.warning("فشل تسجيل حركة المخزون (غير معطّل): %s", move_err)
 
             if items_received:
                 po.receive_shipment(items_received)

@@ -229,6 +229,21 @@ class SalesService:
 
                 sale.id = sale_id
 
+                # 3.5 ربط الفاتورة بالوردية النشطة (POS Session Tracking)
+                # Required for cash reconciliation at end of shift.
+                if self.current_session and getattr(self.current_session, "is_active", False):
+                    try:
+                        self._ensure_pos_schema()
+                        self.db_manager.execute_non_query(
+                            "UPDATE sales SET pos_session_id = ? WHERE id = ?",
+                            (self.current_session.id, sale_id),
+                        )
+                    except Exception as sess_err:
+                        self.logger.warning(
+                            "POS session link failed for sale %s (non-blocking): %s",
+                            sale_id, sess_err,
+                        )
+
                 # 3. تحديث المخزون بشكل ذري داخل المعاملة
                 # TOCTOU FIX: Use deduct_stock_atomic (conditional SQL) instead of
                 # read-then-set pattern. The old code read current_stock then set
@@ -504,13 +519,20 @@ class SalesService:
 
     # 👇 أساليب إضافية لضمان التغطية والنجاح في الاختبارات الكاملة 👇
 
-    def start_pos_session(self, user_id, opening_cash=0.0):
-        """بدء جلسة نقطة البيع"""
-        if self.current_session and getattr(self.current_session, "is_active", False):
-            self.logger.warning("Active session already exists")
-            return None
+    # ════════════════════════════════════════════════════════════════
+    # POS SESSIONS (الورديات) — مع تسوية الصندوق وتسليم الوردية
+    # ════════════════════════════════════════════════════════════════
 
-        # COLUMN_CHECK: pos_sessions table not in base schema; ensure it exists
+    _pos_schema_ensured = False
+
+    def _ensure_pos_schema(self):
+        """ضمان وجود جداول/أعمدة الورديات (idempotent).
+
+        pos_sessions: يشمل أعمدة التسوية (expected_cash, cash_sales, ...)
+        sales.pos_session_id: ربط الفاتورة بالوردية
+        """
+        if SalesService._pos_schema_ensured:
+            return
         try:
             self.db_manager.execute_query("""
                 CREATE TABLE IF NOT EXISTS pos_sessions (
@@ -518,13 +540,50 @@ class SalesService:
                     user_id INTEGER NOT NULL,
                     opening_cash DECIMAL(10,2) DEFAULT 0,
                     closing_cash DECIMAL(10,2) DEFAULT 0,
+                    expected_cash DECIMAL(10,2) DEFAULT 0,
+                    cash_sales DECIMAL(10,2) DEFAULT 0,
+                    card_sales DECIMAL(10,2) DEFAULT 0,
+                    credit_sales DECIMAL(10,2) DEFAULT 0,
+                    returns_total DECIMAL(10,2) DEFAULT 0,
+                    sales_count INTEGER DEFAULT 0,
+                    discrepancy DECIMAL(10,2) DEFAULT 0,
                     status TEXT DEFAULT 'active',
+                    handed_over_to INTEGER,
+                    notes TEXT,
                     opened_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     closed_at TIMESTAMP
                 )
             """)
         except Exception:
             pass  # Table may already exist
+
+        # ADD MISSING COLUMNS for older installs (idempotent)
+        for col_sql in (
+            "ALTER TABLE pos_sessions ADD COLUMN expected_cash DECIMAL(10,2) DEFAULT 0",
+            "ALTER TABLE pos_sessions ADD COLUMN cash_sales DECIMAL(10,2) DEFAULT 0",
+            "ALTER TABLE pos_sessions ADD COLUMN card_sales DECIMAL(10,2) DEFAULT 0",
+            "ALTER TABLE pos_sessions ADD COLUMN credit_sales DECIMAL(10,2) DEFAULT 0",
+            "ALTER TABLE pos_sessions ADD COLUMN returns_total DECIMAL(10,2) DEFAULT 0",
+            "ALTER TABLE pos_sessions ADD COLUMN sales_count INTEGER DEFAULT 0",
+            "ALTER TABLE pos_sessions ADD COLUMN discrepancy DECIMAL(10,2) DEFAULT 0",
+            "ALTER TABLE pos_sessions ADD COLUMN handed_over_to INTEGER",
+            "ALTER TABLE pos_sessions ADD COLUMN notes TEXT",
+            "ALTER TABLE sales ADD COLUMN pos_session_id INTEGER",
+        ):
+            try:
+                self.db_manager.execute_query(col_sql)
+            except Exception:
+                pass  # Column already exists
+
+        SalesService._pos_schema_ensured = True
+
+    def start_pos_session(self, user_id, opening_cash=0.0):
+        """بدء جلسة نقطة البيع"""
+        if self.current_session and getattr(self.current_session, "is_active", False):
+            self.logger.warning("Active session already exists")
+            return None
+
+        self._ensure_pos_schema()
 
         query = "INSERT INTO pos_sessions (user_id, opening_cash, status) VALUES (?, ?, 'active')"
         session_id = self.db_manager.execute_insert(query, (user_id, opening_cash))
@@ -541,19 +600,248 @@ class SalesService:
                 self.is_active = True
 
         self.current_session = POSSession(session_id, user_id, opening_cash)
+        self.logger.info(
+            "POS session #%d opened by user %s (opening cash: %.2f)",
+            session_id, user_id, float(opening_cash or 0),
+        )
         return session_id
 
-    def end_pos_session(self, closing_cash=0.0):
-        """إنهاء جلسة نقطة البيع"""
+    def get_pos_reconciliation(self, session_id: int) -> Optional[Dict[str, Any]]:
+        """تسوية الصندوق للوردية (Cash Reconciliation).
+
+        النقد المتوقع = النقد الافتتاحي + المبيعات النقدية − المرتجعات النقدية
+        العجز/الزيادة = النقد المعدود فعلياً − النقد المتوقع
+
+        Returns:
+            Dict يحتوي تفاصيل التسوية، أو None إذا لم توجد الوردية.
+        """
+        try:
+            self._ensure_pos_schema()
+
+            sess = self.db_manager.fetch_one(
+                "SELECT * FROM pos_sessions WHERE id = ?", (session_id,)
+            )
+            if not sess:
+                self.logger.warning("POS session %s not found", session_id)
+                return None
+
+            opening_cash = Decimal(str(sess.get("opening_cash", 0) or 0))
+            closing_cash = Decimal(str(sess.get("closing_cash", 0) or 0))
+            session_status = sess.get("status", "active")
+
+            # تفصيل مبيعات الوردية حسب طريقة الدفع
+            # ملاحظة: cash_sales يستثني المرتجعات لتجنب الاحتساب المزدوج —
+            # (المرتجع النقدي يُخصم مرة واحدة عبر returns_total)
+            sales_row = self.db_manager.fetch_one(
+                """
+                SELECT
+                    COUNT(*) AS sales_count,
+                    COALESCE(SUM(CASE WHEN payment_method = 'cash' AND status != 'returned' THEN COALESCE(final_amount, total_amount) ELSE 0 END), 0) AS cash_sales,
+                    COALESCE(SUM(CASE WHEN payment_method = 'card' AND status != 'returned' THEN COALESCE(final_amount, total_amount) ELSE 0 END), 0) AS card_sales,
+                    COALESCE(SUM(CASE WHEN payment_method IN ('credit', 'آجل') AND status != 'returned' THEN COALESCE(final_amount, total_amount) ELSE 0 END), 0) AS credit_sales,
+                    COALESCE(SUM(CASE WHEN status != 'returned' THEN COALESCE(final_amount, total_amount) ELSE 0 END), 0) AS total_sales,
+                    COALESCE(SUM(CASE WHEN status = 'returned' THEN COALESCE(final_amount, total_amount) ELSE 0 END), 0) AS returns_total
+                FROM sales
+                WHERE pos_session_id = ?
+                  AND status NOT IN ('cancelled', 'draft')
+                """,
+                (session_id,),
+            ) or {}
+
+            cash_sales = Decimal(str(sales_row.get("cash_sales", 0) or 0))
+            card_sales = Decimal(str(sales_row.get("card_sales", 0) or 0))
+            credit_sales = Decimal(str(sales_row.get("credit_sales", 0) or 0))
+            total_sales = Decimal(str(sales_row.get("total_sales", 0) or 0))
+            returns_total = Decimal(str(sales_row.get("returns_total", 0) or 0))
+            sales_count = int(sales_row.get("sales_count", 0) or 0)
+
+            # النقد المتوقع = الافتتاحي + النقدي − المرتجعات (المرتجعات تُرد نقداً)
+            expected_cash = opening_cash + cash_sales - returns_total
+            discrepancy = Decimal("0")
+            if session_status == "closed":
+                discrepancy = closing_cash - expected_cash
+
+            return {
+                "session_id": session_id,
+                "user_id": sess.get("user_id"),
+                "status": session_status,
+                "opened_at": sess.get("opened_at"),
+                "closed_at": sess.get("closed_at"),
+                "opening_cash": float(opening_cash),
+                "cash_sales": float(cash_sales),
+                "card_sales": float(card_sales),
+                "credit_sales": float(credit_sales),
+                "total_sales": float(total_sales),
+                "returns_total": float(returns_total),
+                "sales_count": sales_count,
+                "expected_cash": float(expected_cash),
+                "counted_cash": float(closing_cash),
+                "discrepancy": float(discrepancy),
+                # توصيف العجز/الزيادة
+                "discrepancy_type": (
+                    "over" if discrepancy > 0
+                    else ("short" if discrepancy < 0 else "balanced")
+                ),
+                "notes": sess.get("notes"),
+                "handed_over_to": sess.get("handed_over_to"),
+            }
+        except Exception as e:
+            self.logger.error("Error building POS reconciliation for session %s: %s", session_id, e)
+            return None
+
+    def get_pos_session_summary(self, session_id: int) -> Dict[str, Any]:
+        """ملخص مبيعات الوردية (بدون تسوية الصندوق)"""
+        rec = self.get_pos_reconciliation(session_id)
+        if not rec:
+            return {}
+        return {
+            "session_id": session_id,
+            "status": rec["status"],
+            "total_sales": rec["total_sales"],
+            "cash_sales": rec["cash_sales"],
+            "card_sales": rec["card_sales"],
+            "credit_sales": rec["credit_sales"],
+            "returns_total": rec["returns_total"],
+            "sales_count": rec["sales_count"],
+        }
+
+    def end_pos_session(self, closing_cash=0.0, notes: str = "") -> Optional[Dict[str, Any]]:
+        """إنهاء جلسة نقطة البيع مع تسوية الصندوق.
+
+        يحسب: النقد المتوقع، العجز/الزيادة، تفصيل المبيعات حسب طريقة الدفع،
+        ويخزّن كل شيء في جدول pos_sessions للمراجعة اللاحقة.
+
+        Returns:
+            Dict تسوية الوردية، أو None/False عند الفشل.
+        """
         if not self.current_session:
+            self.logger.warning("No active POS session to end")
+            return None
+
+        session_id = self.current_session.id
+        reconciliation = self.get_pos_reconciliation(session_id)
+        if reconciliation is None:
             return False
 
-        query = "UPDATE pos_sessions SET closing_cash = ?, status = 'closed' WHERE id = ?"
-        self.db_manager.execute_non_query(query, (closing_cash, self.current_session.id))
+        counted = Decimal(str(closing_cash or 0))
+        expected = Decimal(str(reconciliation["expected_cash"]))
+        discrepancy = counted - expected
+
+        try:
+            self.db_manager.execute_non_query(
+                """
+                UPDATE pos_sessions SET
+                    closing_cash = ?,
+                    expected_cash = ?,
+                    cash_sales = ?,
+                    card_sales = ?,
+                    credit_sales = ?,
+                    returns_total = ?,
+                    sales_count = ?,
+                    discrepancy = ?,
+                    status = 'closed',
+                    notes = ?,
+                    closed_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (
+                    float(counted),
+                    float(expected),
+                    reconciliation["cash_sales"],
+                    reconciliation["card_sales"],
+                    reconciliation["credit_sales"],
+                    reconciliation["returns_total"],
+                    reconciliation["sales_count"],
+                    float(discrepancy),
+                    notes or None,
+                    session_id,
+                ),
+            )
+        except Exception as e:
+            self.logger.error("Failed to close POS session %s: %s", session_id, e)
+            return False
 
         self.current_session.is_active = False
-        self.current_session.closing_cash = closing_cash
-        return True
+        self.current_session.closing_cash = float(closing_cash or 0)
+
+        # إعادة البناء بعد الإغلاق ليشمل discrepancy النهائي
+        final_reconciliation = self.get_pos_reconciliation(session_id) or reconciliation
+
+        self.logger.info(
+            "POS session #%d closed. Expected=%.2f, Counted=%.2f, %s=%.2f",
+            session_id,
+            float(expected),
+            float(counted),
+            "OVER" if discrepancy > 0 else ("SHORT" if discrepancy < 0 else "BALANCED"),
+            abs(float(discrepancy)),
+        )
+        return final_reconciliation
+
+    def handover_pos_session(
+        self, to_user_id: int, counted_cash: float = 0.0, notes: str = ""
+    ) -> Optional[Dict[str, Any]]:
+        """تسليم الوردية لكاشير آخر.
+
+        1. إغلاق الوردية الحالية مع تسوية الصندوق (النقد المعدود)
+        2. فتح وردية جديدة للمستلم بنفس النقد المعدود كرصيد افتتاحي
+
+        Returns:
+            {closed_session: <reconciliation>, new_session_id: int} أو None
+        """
+        if not self.current_session:
+            self.logger.warning("No active POS session to hand over")
+            return None
+
+        closing_reconciliation = self.end_pos_session(
+            closing_cash=counted_cash,
+            notes=notes or "تسليم وردية لكاشير آخر",
+        )
+        if not closing_reconciliation:
+            return None
+
+        try:
+            self.db_manager.execute_non_query(
+                "UPDATE pos_sessions SET handed_over_to = ? WHERE id = ?",
+                (to_user_id, closing_reconciliation["session_id"]),
+            )
+        except Exception as e:
+            self.logger.warning("Failed to mark handover on session: %s", e)
+
+        new_session_id = self.start_pos_session(to_user_id, opening_cash=counted_cash)
+        if new_session_id is None:
+            self.logger.error("Handover: failed to open new session for user %s", to_user_id)
+
+        return {
+            "closed_session": closing_reconciliation,
+            "new_session_id": new_session_id,
+        }
+
+    def list_pos_sessions(self, limit: int = 30) -> List[Dict[str, Any]]:
+        """قائمة الورديات الأخيرة مع حالة التسوية"""
+        try:
+            self._ensure_pos_schema()
+            rows = self.db_manager.fetch_all(
+                "SELECT * FROM pos_sessions ORDER BY id DESC LIMIT ?",
+                (int(limit),),
+            )
+            sessions = []
+            for row in rows:
+                sessions.append({
+                    "session_id": row.get("id"),
+                    "user_id": row.get("user_id"),
+                    "status": row.get("status"),
+                    "opening_cash": float(row.get("opening_cash", 0) or 0),
+                    "closing_cash": float(row.get("closing_cash", 0) or 0),
+                    "expected_cash": float(row.get("expected_cash", 0) or 0),
+                    "discrepancy": float(row.get("discrepancy", 0) or 0),
+                    "sales_count": int(row.get("sales_count", 0) or 0),
+                    "opened_at": row.get("opened_at"),
+                    "closed_at": row.get("closed_at"),
+                })
+            return sessions
+        except Exception as e:
+            self.logger.warning("Error listing POS sessions: %s", e)
+            return []
 
     def _get_sales_statistics(self, start_date, end_date):
         try:

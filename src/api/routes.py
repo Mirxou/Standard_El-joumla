@@ -40,6 +40,7 @@ from src.models.supplier import SupplierManager
 from src.models.user import UserManager
 from src.models.warehouse import WarehouseManager
 from src.services.inventory_service import InventoryService
+from src.services.sales_service import SalesService
 from src.utils.logger import setup_logger
 
 # Router
@@ -2535,6 +2536,197 @@ async def mark_notification_read(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطأ في تحديد الإشعار كمقروء: {str(e)}",
+        )
+
+
+# ==================== POS Sessions (الورديات) ====================
+
+
+def get_sales_service() -> SalesService:
+    """الحصول على SalesService (مع دعم الورديات والتسوية)"""
+    db_manager = get_db_manager()
+    return SalesService(db_manager, logger)
+
+
+class POSSessionStartRequest(BaseModel):
+    """طلب بدء وردية نقطة بيع"""
+    opening_cash: float = Field(default=0.0, ge=0, description="النقد الافتتاحي في الصندوق")
+
+
+class POSSessionCloseRequest(BaseModel):
+    """طلب إنهاء وردية مع تسوية الصندوق"""
+    counted_cash: float = Field(ge=0, description="النقد المعدود فعلياً في الصندوق")
+    notes: Optional[str] = Field(default=None, max_length=500, description="ملاحظات")
+
+
+class POSSessionHandoverRequest(BaseModel):
+    """طلب تسليم الوردية لكاشير آخر"""
+    to_user_id: int = Field(gt=0, description="معرف الكاشير المستلم")
+    counted_cash: float = Field(default=0.0, ge=0, description="النقد المعدود عند التسليم")
+    notes: Optional[str] = Field(default=None, max_length=500, description="ملاحظات")
+
+
+@router.post("/pos/sessions", tags=["POS Sessions"])
+async def start_pos_session(
+    request_data: POSSessionStartRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    sales_service: SalesService = Depends(get_sales_service),
+):
+    """
+    بدء وردية نقطة بيع جديدة للكاشير الحالي
+
+    - يرفض بدء وردية جديدة إذا توجد وردية نشطة
+    - opening_cash: النقد الافتتاحي الموضوع في الدرج
+    """
+    try:
+        user_id = current_user.get("user_id") or current_user.get("sub")
+        session_id = sales_service.start_pos_session(
+            user_id=user_id,
+            opening_cash=request_data.opening_cash,
+        )
+        if session_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="توجد وردية نشطة بالفعل — يجب إنهاؤها أولاً",
+            )
+
+        return {
+            "session_id": session_id,
+            "user_id": user_id,
+            "opening_cash": request_data.opening_cash,
+            "status": "active",
+            "message": "تم بدء الوردية بنجاح",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"خطأ في بدء وردية POS: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في بدء الوردية: {str(e)}",
+        )
+
+
+@router.get("/pos/sessions", tags=["POS Sessions"])
+async def list_pos_sessions(
+    limit: int = Query(default=30, ge=1, le=100),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    sales_service: SalesService = Depends(get_sales_service),
+):
+    """قائمة الورديات الأخيرة مع حالة التسوية"""
+    try:
+        sessions = sales_service.list_pos_sessions(limit=limit)
+        return {"sessions": sessions, "count": len(sessions)}
+    except Exception as e:
+        logger.error(f"خطأ في جلب قائمة الورديات: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في جلب الورديات: {str(e)}",
+        )
+
+
+@router.get("/pos/sessions/{session_id}/reconciliation", tags=["POS Sessions"])
+async def get_pos_reconciliation(
+    session_id: int,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    sales_service: SalesService = Depends(get_sales_service),
+):
+    """
+    تسوية الصندوق للوردية:
+
+    - النقد المتوقع = الافتتاحي + المبيعات النقدية − المرتجعات
+    - العجز/الزيادة = النقد المعدود − النقد المتوقع (للورديات المغلقة)
+    """
+    try:
+        reconciliation = sales_service.get_pos_reconciliation(session_id)
+        if reconciliation is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"الوردية {session_id} غير موجودة",
+            )
+        return reconciliation
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"خطأ في تسوية الصندوق للوردية {session_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في التسوية: {str(e)}",
+        )
+
+
+@router.post("/pos/sessions/{session_id}/close", tags=["POS Sessions"])
+async def close_pos_session(
+    session_id: int,
+    request_data: POSSessionCloseRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    sales_service: SalesService = Depends(get_sales_service),
+):
+    """
+    إنهاء وردية مع تسوية الصندوق (Cash Reconciliation)
+
+    - counted_cash: النقد المعدود فعلياً
+    - يعيد التسوية الكاملة: النقد المتوقع، العجز/الزيادة، تفصيل المبيعات
+    """
+    try:
+        # التحقق من مطابقة الوردية المطلوبة للوردية النشطة
+        if sales_service.current_session and getattr(sales_service.current_session, "id", None) != session_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="الوردية المطلوبة ليست الوردية النشطة في هذا الجهاز",
+            )
+
+        reconciliation = sales_service.end_pos_session(
+            closing_cash=request_data.counted_cash,
+            notes=request_data.notes or "",
+        )
+        if not reconciliation or reconciliation is None or reconciliation is False:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="فشل إنهاء الوردية — قد لا تكون موجودة أو نشطة",
+            )
+        return reconciliation
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"خطأ في إغلاق وردية POS {session_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في إغلاق الوردية: {str(e)}",
+        )
+
+
+@router.post("/pos/sessions/handover", tags=["POS Sessions"])
+async def handover_pos_session(
+    request_data: POSSessionHandoverRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    sales_service: SalesService = Depends(get_sales_service),
+):
+    """
+    تسليم الوردية لكاشير آخر:
+
+    1. إغلاق الوردية الحالية مع تسوية الصندوق
+    2. فتح وردية جديدة للمستلم بنفس النقد المعدود كرصيد افتتاحي
+    """
+    try:
+        result = sales_service.handover_pos_session(
+            to_user_id=request_data.to_user_id,
+            counted_cash=request_data.counted_cash,
+            notes=request_data.notes or "",
+        )
+        if result is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="لا توجد وردية نشطة للتسليم",
+            )
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"خطأ في تسليم الوردية: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في تسليم الوردية: {str(e)}",
         )
 
 
