@@ -255,6 +255,24 @@ class LocalDatabaseManager:
             )
         """)
 
+        # جدول system_settings - إعدادات النظام (طريقة التكلفة، نسخ النسخ، إلخ)
+        # FIX: كان هذا الجدول مستخدماً في CostingService وbackup_service و
+        # system_management_window بدون أن يُنشأ أبداً — مما يفشل حفظ الإعدادات صمتاً
+        self.connection.execute("""
+            CREATE TABLE IF NOT EXISTS system_settings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                key TEXT NOT NULL UNIQUE,
+                value TEXT,
+                category TEXT DEFAULT 'general',
+                description TEXT,
+                is_synced INTEGER DEFAULT 0,
+                last_synced_at TIMESTAMP,
+                sync_version INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         # جدول chart_of_accounts - شجرة الحسابات
         self.connection.execute("""
             CREATE TABLE IF NOT EXISTS chart_of_accounts (
@@ -1050,12 +1068,30 @@ class LocalDatabaseManager:
             # 🔥 تحسين: إضافة فلتر is_deleted فقط إذا كان الاستعلام بسيطاً ولا يحتوي على JOIN
             # وإذا كان الجدول يحتوي فعلاً على هذا العمود (لتجنب الأخطاء)
             if exclude_deleted and is_select and "is_deleted" not in query_upper and "JOIN" not in query_upper:
-                # محاولة استخراج اسم الجدول من الاستعلام
+                # محاولة استخراج اسم الجدول من الاستعلام (مع دعم الـ alias)
+                # مثال: "FROM batches b WHERE ..." → table=batches, alias=b
+                # يجب استخدام الـ alias في الفلتر المحقون وإلا فشل الاستعلام
                 import re  # already imported at module level, kept for clarity
 
-                table_match = re.search(r"FROM\s+([a-zA-Z0-9_]+)", query_upper)
+                # SQL_SAFE: table/alias names are captured with [a-zA-Z0-9_] only
+                table_match = re.search(
+                    r"FROM\s+([a-zA-Z0-9_]+)(?:\s+(?:AS\s+)?([a-zA-Z0-9_]+))?",
+                    query_upper,
+                )
                 if table_match:
                     table_name = table_match.group(1).lower()
+                    alias_token = table_match.group(2)
+                    # كلمات SQL المحجوزة التي قد تتبع اسم الجدول وليست alias
+                    _SQL_KEYWORDS = {
+                        "WHERE", "GROUP", "ORDER", "LIMIT", "HAVING", "UNION",
+                        "JOIN", "LEFT", "RIGHT", "INNER", "OUTER", "CROSS",
+                        "FULL", "NATURAL", "ON", "USING", "SET", "VALUES",
+                        "AS", "EXCEPT", "INTERSECT", "WINDOW", "OFFSET",
+                    }
+                    if alias_token and alias_token.upper() not in _SQL_KEYWORDS:
+                        delete_ref = alias_token  # استخدم الـ alias في الفلتر
+                    else:
+                        delete_ref = table_name
                     # التحقق من وجود العمود في الجدول لتجنب OperationalError
                     if self.table_exists(table_name):
                         cols = self.connection.execute(f"PRAGMA table_info({table_name})").fetchall()
@@ -1066,18 +1102,18 @@ class LocalDatabaseManager:
                             query_upper_full = query.upper()
                             if "WHERE" in query_upper_full:
                                 where_pos = query_upper_full.find("WHERE") + 5
-                                query = query[:where_pos] + f" {table_name}.is_deleted = 0 AND " + query[where_pos:]
+                                query = query[:where_pos] + f" {delete_ref}.is_deleted = 0 AND " + query[where_pos:]
                             elif "GROUP BY" in query_upper_full:
                                 gb_pos = query_upper_full.find("GROUP BY")
-                                query = query[:gb_pos] + f" WHERE {table_name}.is_deleted = 0 " + query[gb_pos:]  # SQL_SAFE: table_name from internal execute_query parameter
+                                query = query[:gb_pos] + f" WHERE {delete_ref}.is_deleted = 0 " + query[gb_pos:]  # SQL_SAFE: table_name from internal execute_query parameter
                             elif "ORDER BY" in query_upper_full:
                                 ob_pos = query_upper_full.find("ORDER BY")
-                                query = query[:ob_pos] + f" WHERE {table_name}.is_deleted = 0 " + query[ob_pos:]  # SQL_SAFE: table_name from internal execute_query parameter
+                                query = query[:ob_pos] + f" WHERE {delete_ref}.is_deleted = 0 " + query[ob_pos:]  # SQL_SAFE: table_name from internal execute_query parameter
                             elif "LIMIT" in query_upper_full:
                                 l_pos = query_upper_full.find("LIMIT")
-                                query = query[:l_pos] + f" WHERE {table_name}.is_deleted = 0 " + query[l_pos:]  # SQL_SAFE: table_name from internal execute_query parameter
+                                query = query[:l_pos] + f" WHERE {delete_ref}.is_deleted = 0 " + query[l_pos:]  # SQL_SAFE: table_name from internal execute_query parameter
                             else:
-                                query += f" WHERE {table_name}.is_deleted = 0"  # SQL_SAFE: table_name from internal execute_query parameter
+                                query += f" WHERE {delete_ref}.is_deleted = 0"  # SQL_SAFE: table_name from internal execute_query parameter
 
             from enum import Enum
 
