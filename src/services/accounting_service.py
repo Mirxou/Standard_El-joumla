@@ -350,6 +350,78 @@ class AccountingService:
             self.logger.warning(f"خطأ في إنشاء قيد عكسي لإلغاء المبيعات: {e}")
             return None
 
+    def create_sale_return_journal_entry(self, return_data: dict) -> Optional[int]:
+        """إنشاء قيد محاسبي لمرتجع مبيعات مكتمل.
+
+        القيد: مدين المبيعات (عكس الإيراد) / دائن الصندوق أو العملاء
+        (حسب طريقة الاسترداد: نقداً → الصندوق، آجل/إشعار دائن → العملاء).
+
+        Args:
+            return_data: dict يحتوي:
+                - return_number: رقم المرتجع
+                - return_id: معرف المرتجع
+                - amount: قيمة المرتجع
+                - refund_method: "cash" | "bank_transfer" | "credit_note" (اختياري)
+                - return_date: تاريخ المرتجع (اختياري)
+        """
+        try:
+            amount = Decimal(str(return_data.get("amount", 0) or 0))
+            if amount <= 0:
+                return None
+
+            entry = JournalEntry(
+                entry_date=(return_data.get("return_date") or datetime.now()),
+                description=f"مرتجع مبيعات رقم {return_data.get('return_number', '')}",
+                reference_type="sale_return",
+                reference_id=return_data.get("return_id"),
+                created_by=str(return_data.get("created_by") or "system"),
+            )
+
+            revenue = self.get_account_by_code("4001")  # المبيعات
+            cash = self.get_account_by_code("1000")     # الصندوق
+            receivable = self.get_account_by_code("1010")  # العملاء
+
+            if not revenue:
+                self.logger.warning(
+                    "حساب المبيعات (4001) غير موجود — قيد المرتجع سيُنشأ يدوياً لاحقاً"
+                )
+                return None
+
+            # مدين: المبيعات (تخفيض الإيراد)
+            entry.add_line(
+                JournalLine(
+                    account_id=revenue.id,
+                    account_code=revenue.account_code,
+                    account_name=revenue.account_name,
+                    debit_amount=amount,
+                )
+            )
+
+            # دائن: الصندوق (استرداد نقدي) أو العملاء (إشعار دائن / تخفيض ذمة)
+            refund_method = str(return_data.get("refund_method") or "credit_note")
+            credit_account = cash if refund_method in ("cash", "bank_transfer") else receivable
+            if not credit_account:
+                credit_account = cash or receivable
+            if not credit_account:
+                self.logger.warning(
+                    "لا يوجد حساب صندوق (1000) أو عملاء (1010) — قيد المرتجع غير مكتمل"
+                )
+                return None
+
+            entry.add_line(
+                JournalLine(
+                    account_id=credit_account.id,
+                    account_code=credit_account.account_code,
+                    account_name=credit_account.account_name,
+                    credit_amount=amount,
+                )
+            )
+
+            return self.create_journal_entry(entry)
+        except Exception as e:
+            self.logger.warning(f"خطأ في إنشاء قيد مرتجع المبيعات: {e}")
+            return None
+
     def create_purchase_journal_entry(self, purchase_data: dict) -> int:
         """إنشاء قيد محاسبي لأمر شراء (غير معطل) — H6 FIX: تعيين account_id"""
         try:

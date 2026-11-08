@@ -41,6 +41,7 @@ from src.models.user import UserManager
 from src.models.warehouse import WarehouseManager
 from src.services.inventory_service import InventoryService
 from src.services.sales_service import SalesService
+from src.services.business_rules_service import CreditLimitError
 from src.utils.logger import setup_logger
 
 # Router
@@ -1291,6 +1292,7 @@ class SaleItemCreate(BaseModel):
     discount_percentage: Optional[float] = Field(0.0, ge=0, le=100, description="نسبة الخصم")
     tax_amount: Optional[float] = Field(0.0, ge=0, description="مبلغ الضريبة")
     tax_percentage: Optional[float] = Field(0.0, ge=0, description="نسبة الضريبة")
+    unit: Optional[str] = Field(None, description="وحدة البيع (كرتونة/علبة/حبة) — تحوّل تلقائياً للوحدة الأساسية")
 
 
 class SaleCreate(BaseModel):
@@ -1641,14 +1643,23 @@ async def create_sale(
     sale_data: SaleCreate,
     current_user: Dict[str, Any] = Depends(get_current_user),
     sale_manager: SaleManager = Depends(get_sale_manager),
+    sales_service: SalesService = Depends(get_sales_service),
 ):
     """
     إنشاء فاتورة مبيعات جديدة
+
+    يمر عبر SalesService لتفعيل قواعد الأعمال الكاملة:
+    - السقف الائتماني (Credit Limit Enforcement)
+    - تخصيص الدفعات FEFO
+    - تكلفة البضاعة المباعة (Moving Average / FIFO)
+    - تحويل الوحدات (كرتونة/علبة/حبة)
+    - ربط الفاتورة بالوردية النشطة (POS Session)
 
     Args:
         sale_data: بيانات الفاتورة
         current_user: المستخدم الحالي
         sale_manager: Sale Manager
+        sales_service: خدمة المبيعات (قواعد الأعمال)
 
     Returns:
         الفاتورة المُنشأة
@@ -1678,7 +1689,7 @@ async def create_sale(
         if company_id and hasattr(sale, "company_id"):
             sale.company_id = company_id
 
-        # إضافة العناصر
+        # إضافة العناصر (مع وحدة البيع للتحويل التلقائي)
         for item_data in sale_data.items:
             item = SaleItem(
                 product_id=item_data.product_id,
@@ -1688,11 +1699,12 @@ async def create_sale(
                 discount_percentage=Decimal(str(item_data.discount_percentage or 0)),
                 tax_amount=Decimal(str(item_data.tax_amount or 0)),
                 tax_percentage=Decimal(str(item_data.tax_percentage or 0)),
+                sale_unit=(item_data.unit or None),
             )
             sale.add_item(item)
 
-        # إنشاء الفاتورة
-        sale_id = sale_manager.create_sale(sale)
+        # إنشاء الفاتورة عبر SalesService (قواعد الأعمال الكاملة)
+        sale_id = sales_service.create_sale(sale, user_id=current_user.get("user_id"))
 
         if not sale_id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="فشل إنشاء الفاتورة")
@@ -1714,6 +1726,25 @@ async def create_sale(
 
     except HTTPException:
         raise
+    except CreditLimitError as cle:
+        logger.warning(
+            "تم رفض فاتورة مبيعات — تجاوز السقف الائتماني: %s", str(cle)
+        )
+        available = (cle.credit_limit - cle.current_balance)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": "credit_limit_exceeded",
+                "message": "تم رفض الفاتورة: تجاوز السقف الائتماني للعميل",
+                "details": {
+                    "customer_id": cle.customer_id,
+                    "credit_limit": float(cle.credit_limit),
+                    "current_balance": float(cle.current_balance),
+                    "available_credit": float(available),
+                    "requested_amount": float(cle.requested),
+                },
+            },
+        )
     except ValueError as e:
         logger.log(logging.ERROR, f"خطأ في بيانات الفاتورة: {e}")
         raise HTTPException(
@@ -2727,6 +2758,453 @@ async def handover_pos_session(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطأ في تسليم الوردية: {str(e)}",
+        )
+
+
+# ==================== Unit Conversion Models ====================
+
+
+class UnitConversionSet(BaseModel):
+    """نموذج تعيين تحويل وحدة لمنتج"""
+
+    from_unit: str = Field(..., description="الوحدة المصدر (مثل كرتونة)")
+    to_unit: str = Field(..., description="الوحدة الهدف (مثل حبة)")
+    factor: float = Field(..., gt=0, description="معامل التحويل (1 كرتونة = 24 حبة)")
+
+
+class UnitPriceSet(BaseModel):
+    """نموذج تعيين سعر وحدة لمنتج"""
+
+    unit: str = Field(..., description="الوحدة")
+    price: float = Field(..., ge=0, description="سعر البيع للوحدة")
+    cost_price: float = Field(0.0, ge=0, description="سعر التكلفة للوحدة")
+    barcode: Optional[str] = Field(None, description="الباركود المخصص للوحدة")
+    is_default: bool = Field(False, description="هل هي الوحدة الافتراضية")
+
+
+@router.get("/products/{product_id}/unit-conversions", tags=["Unit Conversion"])
+async def get_product_unit_conversions(
+    product_id: int,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """جلب جميع تحويلات الوحدات لمنتج (كرتونة↔علبة↔حبة)"""
+    try:
+        db = get_db_manager()
+        from src.services.business_rules_service import UnitConversionService
+
+        ucs = UnitConversionService(db, logger)
+        return {"product_id": product_id, "conversions": ucs.get_all_conversions(product_id)}
+    except Exception as e:
+        logger.error(f"خطأ في جلب تحويلات الوحدات للمنتج {product_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في جلب تحويلات الوحدات: {str(e)}",
+        )
+
+
+@router.post("/products/{product_id}/unit-conversions", tags=["Unit Conversion"])
+async def set_product_unit_conversion(
+    product_id: int,
+    conv: UnitConversionSet,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """تعيين تحويل وحدة لمنتج (مثل: 1 كرتونة = 24 علبة)"""
+    try:
+        db = get_db_manager()
+        from src.services.business_rules_service import UnitConversionService
+
+        ucs = UnitConversionService(db, logger)
+        ok = ucs.set_conversion(
+            product_id=product_id,
+            from_unit=conv.from_unit,
+            to_unit=conv.to_unit,
+            factor=Decimal(str(conv.factor)),
+        )
+        if not ok:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="فشل تعيين التحويل",
+            )
+        return {"product_id": product_id, "from_unit": conv.from_unit, "to_unit": conv.to_unit,
+                "factor": conv.factor, "message": "تم تعيين التحويل بنجاح"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"خطأ في تعيين تحويل الوحدة للمنتج {product_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في تعيين التحويل: {str(e)}",
+        )
+
+
+@router.get("/products/{product_id}/unit-prices", tags=["Unit Conversion"])
+async def get_product_unit_prices(
+    product_id: int,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """جلب جميع أسعار الوحدات لمنتج (سعر الكرتونة، سعر العلبة، سعر الحبة)"""
+    try:
+        db = get_db_manager()
+        from src.services.business_rules_service import UnitConversionService
+
+        ucs = UnitConversionService(db, logger)
+        return {"product_id": product_id, "unit_prices": ucs.get_all_unit_prices(product_id)}
+    except Exception as e:
+        logger.error(f"خطأ في جلب أسعار الوحدات للمنتج {product_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في جلب أسعار الوحدات: {str(e)}",
+        )
+
+
+@router.post("/products/{product_id}/unit-prices", tags=["Unit Conversion"])
+async def set_product_unit_price(
+    product_id: int,
+    up: UnitPriceSet,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """تعيين سعر لوحدة محددة من المنتج (مع باركود اختياري للوحدة)"""
+    try:
+        db = get_db_manager()
+        from src.services.business_rules_service import UnitConversionService
+
+        ucs = UnitConversionService(db, logger)
+        ok = ucs.set_unit_price(
+            product_id=product_id,
+            unit=up.unit,
+            price=Decimal(str(up.price)),
+            cost_price=Decimal(str(up.cost_price)),
+            barcode=up.barcode,
+            is_default=up.is_default,
+        )
+        if not ok:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="فشل تعيين سعر الوحدة",
+            )
+        return {"product_id": product_id, "unit": up.unit, "price": up.price,
+                "message": "تم تعيين سعر الوحدة بنجاح"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"خطأ في تعيين سعر الوحدة للمنتج {product_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في تعيين سعر الوحدة: {str(e)}",
+        )
+
+
+# ==================== Expenses Models ====================
+
+
+class ExpenseCreate(BaseModel):
+    """نموذج إنشاء مصروف"""
+
+    description: str = Field(..., min_length=1, description="وصف المصروف")
+    amount: float = Field(..., gt=0, description="المبلغ")
+    expense_date: Optional[str] = Field(None, description="التاريخ (YYYY-MM-DD)")
+    category_id: Optional[int] = Field(None, description="معرف التصنيف")
+    payment_method: str = Field("cash", description="طريقة الدفع (cash/bank/cheque)")
+    vendor: Optional[str] = Field(None, description="الجهة المستفيدة")
+    notes: Optional[str] = Field(None, description="ملاحظات")
+
+
+class ExpenseCategoryCreate(BaseModel):
+    """نموذج إنشاء تصنيف مصاريف"""
+
+    name: str = Field(..., min_length=1, description="اسم التصنيف")
+    description: Optional[str] = Field("", description="الوصف")
+    account_code: str = Field("5000", description="رمز حساب المصروف في دليل الحسابات")
+
+
+class RecurringExpenseCreate(BaseModel):
+    """نموذج إنشاء مصروف متكرر"""
+
+    name: str = Field(..., min_length=1, description="اسم القالب")
+    amount: float = Field(..., gt=0, description="المبلغ")
+    frequency: str = Field("monthly", description="التكرار (daily/weekly/monthly/yearly)")
+    next_due_date: Optional[str] = Field(None, description="أول استحقاق (YYYY-MM-DD)")
+    category_id: Optional[int] = Field(None, description="معرف التصنيف")
+    description: Optional[str] = Field(None, description="الوصف")
+    auto_approve: bool = Field(False, description="موافقة تلقائية مع القيد المحاسبي")
+
+
+def _get_expense_service():
+    """الحصول على خدمة المصاريف"""
+    from src.services.expense_service import ExpenseService
+
+    return ExpenseService(get_db_manager(), logger)
+
+
+@router.get("/expenses/categories", tags=["Expenses"])
+async def list_expense_categories(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """جلب تصنيفات المصاريف"""
+    try:
+        return {"categories": _get_expense_service().get_categories()}
+    except Exception as e:
+        logger.error(f"خطأ في جلب تصنيفات المصاريف: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في جلب التصنيفات: {str(e)}",
+        )
+
+
+@router.post("/expenses/categories", tags=["Expenses"])
+async def create_expense_category(
+    cat: ExpenseCategoryCreate,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """إنشاء تصنيف مصاريف مرتبط بحساب دليل الحسابات"""
+    try:
+        cat_id = _get_expense_service().create_category(
+            name=cat.name, description=cat.description or "", account_code=cat.account_code
+        )
+        if not cat_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="فشل إنشاء التصنيف",
+            )
+        return {"id": cat_id, "name": cat.name, "account_code": cat.account_code,
+                "message": "تم إنشاء التصنيف بنجاح"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"خطأ في إنشاء تصنيف المصاريف: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في إنشاء التصنيف: {str(e)}",
+        )
+
+
+@router.get("/expenses", tags=["Expenses"])
+async def list_expenses(
+    start_date: Optional[str] = Query(None, description="من تاريخ (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="إلى تاريخ (YYYY-MM-DD)"),
+    category_id: Optional[int] = Query(None, description="معرف التصنيف"),
+    expense_status: Optional[str] = Query(None, description="الحالة (pending/approved/rejected)"),
+    limit: int = Query(200, ge=1, le=1000),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """جلب المصاريف بفلاتر"""
+    try:
+        svc = _get_expense_service()
+        sd = date.fromisoformat(start_date) if start_date else None
+        ed = date.fromisoformat(end_date) if end_date else None
+        return {
+            "expenses": svc.get_expenses(
+                start_date=sd, end_date=ed,
+                category_id=category_id, status=expense_status, limit=limit,
+            )
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"خطأ في جلب المصاريف: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في جلب المصاريف: {str(e)}",
+        )
+
+
+@router.get("/expenses/statistics", tags=["Expenses"])
+async def get_expense_statistics_endpoint(
+    start_date: Optional[str] = Query(None, description="من تاريخ (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="إلى تاريخ (YYYY-MM-DD)"),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """إحصاءات المصاريف: الإجمالي + حسب التصنيف + حسب الشهر"""
+    try:
+        svc = _get_expense_service()
+        sd = date.fromisoformat(start_date) if start_date else None
+        ed = date.fromisoformat(end_date) if end_date else None
+        return svc.get_expense_statistics(start_date=sd, end_date=ed)
+    except Exception as e:
+        logger.error(f"خطأ في إحصاءات المصاريف: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في الإحصاءات: {str(e)}",
+        )
+
+
+@router.post("/expenses", status_code=201, tags=["Expenses"])
+async def create_expense_endpoint(
+    data: ExpenseCreate,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """إنشاء مصروف جديد (حالة أولية: معلق بانتظار الموافقة)"""
+    try:
+        svc = _get_expense_service()
+        expense_date = date.fromisoformat(data.expense_date) if data.expense_date else None
+        expense_id = svc.create_expense(
+            description=data.description,
+            amount=Decimal(str(data.amount)),
+            expense_date=expense_date,
+            category_id=data.category_id,
+            payment_method=data.payment_method,
+            vendor=data.vendor,
+            notes=data.notes,
+            created_by=current_user.get("user_id"),
+        )
+        if not expense_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="فشل إنشاء المصروف — تحقق من المبلغ والوصف",
+            )
+        return {"id": expense_id, "message": "تم إنشاء المصروف بنجاح (معلق الموافقة)"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"خطأ في إنشاء المصروف: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في إنشاء المصروف: {str(e)}",
+        )
+
+
+@router.post("/expenses/{expense_id}/approve", tags=["Expenses"])
+async def approve_expense_endpoint(
+    expense_id: int,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """الموافقة على مصروف — ينشئ القيد المحاسبي تلقائياً (مدين مصروف / دائن صندوق)"""
+    try:
+        ok = _get_expense_service().approve_expense(
+            expense_id, approved_by=current_user.get("user_id")
+        )
+        if not ok:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="فشل الموافقة — قد يكون المصروف غير موجود أو معالج مسبقاً",
+            )
+        return {"id": expense_id, "message": "تمت الموافقة وإنشاء القيد المحاسبي"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"خطأ في الموافقة على المصروف {expense_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في الموافقة: {str(e)}",
+        )
+
+
+@router.post("/expenses/{expense_id}/reject", tags=["Expenses"])
+async def reject_expense_endpoint(
+    expense_id: int,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """رفض مصروف معلق"""
+    try:
+        ok = _get_expense_service().reject_expense(
+            expense_id, approved_by=current_user.get("user_id")
+        )
+        if not ok:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="فشل الرفض — قد يكون المصروف غير موجود أو غير معلق",
+            )
+        return {"id": expense_id, "message": "تم رفض المصروف"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"خطأ في رفض المصروف {expense_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في الرفض: {str(e)}",
+        )
+
+
+@router.delete("/expenses/{expense_id}", tags=["Expenses"])
+async def delete_expense_endpoint(
+    expense_id: int,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """حذف مصروف معلق فقط (الموافق عليه محاسبياً — لا يُحذف)"""
+    try:
+        ok = _get_expense_service().delete_expense(expense_id)
+        if not ok:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="فشل الحذف — المصروف الموافق عليه لا يمكن حذفه (قيد محاسبي)",
+            )
+        return {"id": expense_id, "message": "تم حذف المصروف"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"خطأ في حذف المصروف {expense_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في الحذف: {str(e)}",
+        )
+
+
+@router.get("/expenses/recurring", tags=["Expenses"])
+async def list_recurring_expenses(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """جلب قوالب المصاريف المتكررة"""
+    try:
+        return {"recurring": _get_expense_service().get_recurring()}
+    except Exception as e:
+        logger.error(f"خطأ في جلب المصاريف المتكررة: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في الجلب: {str(e)}",
+        )
+
+
+@router.post("/expenses/recurring", status_code=201, tags=["Expenses"])
+async def create_recurring_expense_endpoint(
+    data: RecurringExpenseCreate,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """إنشاء قالب مصروف متكرر (يومي/أسبوعي/شهري/سنوي)"""
+    try:
+        svc = _get_expense_service()
+        next_due = date.fromisoformat(data.next_due_date) if data.next_due_date else None
+        rec_id = svc.create_recurring(
+            name=data.name,
+            amount=Decimal(str(data.amount)),
+            frequency=data.frequency,
+            next_due_date=next_due,
+            category_id=data.category_id,
+            description=data.description,
+            auto_approve=data.auto_approve,
+        )
+        if not rec_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="فشل إنشاء القالب — تحقق من المبلغ والتكرار",
+            )
+        return {"id": rec_id, "message": "تم إنشاء المصروف المتكرر بنجاح"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"خطأ في إنشاء المصروف المتكرر: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في الإنشاء: {str(e)}",
+        )
+
+
+@router.post("/expenses/recurring/generate", tags=["Expenses"])
+async def generate_due_recurring_expenses(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """توليد المصاريف المستحقة من القوالب المتكررة (catch-up مدعوم)"""
+    try:
+        generated = _get_expense_service().generate_due_expenses()
+        return {
+            "generated_count": len(generated),
+            "generated": generated,
+            "message": f"تم توليد {len(generated)} مصروف مستحق",
+        }
+    except Exception as e:
+        logger.error(f"خطأ في توليد المصاريف المستحقة: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في التوليد: {str(e)}",
         )
 
 

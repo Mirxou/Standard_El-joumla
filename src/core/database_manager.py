@@ -793,25 +793,36 @@ class DatabaseManager:
 
     def _create_enhanced_tables(self):
         """إنشاء جداول الميزات المحسنة (المرتجعات، الاسترداد)"""
-        # جدول المرتجعات
+        # SCHEMA ALIGNMENT FIX: كان هذا الجدول يُنشأ بمخطط بسيط
+        # (sale_id, reason, created_at) بينما ReturnService يتوقع
+        # المخطط الغني (return_number, original_invoice_id, ...)
+        # — والجدول الأول يفوز لأن IF NOT EXISTS يتخطى الهجرة اللاحقة
+        # → كل إنشاء مرتجع يفشل بـ 'no column named original_invoice_id'.
+        # الآن ننشئ المخطط الغني المتوافق مع الخدمة مباشرة.
         self.connection.execute("""
             CREATE TABLE IF NOT EXISTS return_invoices (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sale_id INTEGER NOT NULL,
+                return_number TEXT UNIQUE,
+                original_invoice_id INTEGER,
+                return_date DATETIME DEFAULT CURRENT_TIMESTAMP,
                 reason TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (sale_id) REFERENCES sales(id)
+                total_refund_amount REAL,
+                status TEXT DEFAULT 'approved',
+                FOREIGN KEY(original_invoice_id) REFERENCES sales(id)
             )
         """)
 
-        # جدول عناصر المرتجعات
+        # جدول عناصر المرتجعات (متوافق مع ReturnService:
+        # quantity/refund_price — مع restockable اختيارية)
         self.connection.execute("""
             CREATE TABLE IF NOT EXISTS return_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 return_id INTEGER NOT NULL,
                 product_id INTEGER NOT NULL,
-                quantity INTEGER NOT NULL,
-                unit_price DECIMAL(10,2) NOT NULL,
+                quantity REAL NOT NULL,
+                refund_price REAL,
+                restockable BOOLEAN DEFAULT 1,
+                batch_id INTEGER,
                 FOREIGN KEY (return_id) REFERENCES return_invoices(id),
                 FOREIGN KEY (product_id) REFERENCES products(id)
             )

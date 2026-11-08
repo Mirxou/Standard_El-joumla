@@ -123,17 +123,33 @@ class PaymentService:
             )
             """
 
+            # جدول تخصيص الدفعات على الفواتير (Supplier Payment FIFO Allocation)
+            payment_allocations_table = """
+            CREATE TABLE IF NOT EXISTS payment_allocations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                payment_id INTEGER NOT NULL,
+                purchase_id INTEGER NOT NULL,
+                allocated_amount DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+                allocated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+                FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE CASCADE,
+                FOREIGN KEY (purchase_id) REFERENCES purchases(id)
+            )
+            """
+
             # تنفيذ إنشاء الجداول
             # استخدام execute_query إذا كان متاحاً، وإلا استخدام connection مباشرة
             if hasattr(self.db_manager, "execute_query"):
                 self.db_manager.execute_query(payments_table)
                 self.db_manager.execute_query(payment_schedules_table)
                 self.db_manager.execute_query(payment_attachments_table)
+                self.db_manager.execute_query(payment_allocations_table)
             elif hasattr(self.db_manager, "connection") and self.db_manager.connection:
                 cursor = self.db_manager.connection.cursor()
                 cursor.execute(payments_table)
                 cursor.execute(payment_schedules_table)
                 cursor.execute(payment_attachments_table)
+                cursor.execute(payment_allocations_table)
                 self.db_manager.connection.commit()
             elif hasattr(self.db_manager, "get_connection"):
                 conn = self.db_manager.get_connection()
@@ -141,9 +157,13 @@ class PaymentService:
                 cursor.execute(payments_table)
                 cursor.execute(payment_schedules_table)
                 cursor.execute(payment_attachments_table)
+                cursor.execute(payment_allocations_table)
                 conn.commit()
             else:
                 raise Exception("لا يمكن الوصول إلى قاعدة البيانات: DatabaseManager غير مهيأ")
+
+            # أعمدة تتبع السداد على جدول المشتريات (للتخصيص FIFO)
+            self._ensure_purchase_payment_columns()
 
             # إنشاء الفهارس
             self._create_indexes()
@@ -191,6 +211,127 @@ class PaymentService:
         except sqlite3.Error as e:
             if self.logger:
                 self.logger.error(f"خطأ في إنشاء فهارس المدفوعات: {e}", exc_info=True)
+
+    # ===== تخصيص دفعات الموردين FIFO =====
+
+    def _ensure_purchase_payment_columns(self):
+        """إضافة أعمدة تتبع السداد على جدول المشتريات (paid_amount, payment_status)"""
+        try:
+            columns = [("paid_amount", "DECIMAL(15,2) DEFAULT 0"),
+                       ("payment_status", "TEXT DEFAULT 'unpaid'")]
+            for col_name, col_def in columns:
+                try:
+                    self.db_manager.execute_non_query(
+                        f"ALTER TABLE purchases ADD COLUMN {col_name} {col_def}"
+                    )
+                except Exception:
+                    # العمود موجود مسبقاً — تجاهل
+                    pass
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"تخطي إضافة أعمدة السداد للمشتريات: {e}")
+
+    def _allocate_supplier_payment_fifo(
+        self, payment_id: int, supplier_id: int, amount: Decimal
+    ) -> List[Dict[str, Any]]:
+        """تخصيص دفعة مورد تلقائياً على فواتير الشراء غير المسددة (الأقدم أولاً — FIFO).
+
+        لكل فاتورة بترتيب تاريخ الشراء تصاعدياً:
+        - المستحق = final_amount - paid_amount
+        - المخصص = min(المستحق, المتبقي من الدفعة)
+        - تحديث paid_amount + payment_status ('partial'/'paid')
+
+        Returns:
+            قائمة التخصيصات [{purchase_id, invoice_number, allocated_amount, purchase_paid, purchase_status}]
+        """
+        allocations: List[Dict[str, Any]] = []
+        remaining = Decimal(str(amount or 0))
+        if remaining <= 0:
+            return allocations
+
+        try:
+            rows = self.db_manager.fetch_all(
+                """
+                SELECT id, invoice_number, final_amount,
+                       COALESCE(paid_amount, 0) AS paid_amount
+                FROM purchases
+                WHERE supplier_id = ? AND is_active = 1
+                ORDER BY purchase_date ASC, id ASC
+                """,
+                (supplier_id,),
+            )
+
+            for row in rows:
+                if remaining <= 0:
+                    break
+                purchase_id = int(row["id"])
+                final_amount = Decimal(str(row.get("final_amount", 0) or 0))
+                paid_amount = Decimal(str(row.get("paid_amount", 0) or 0))
+                due = final_amount - paid_amount
+                if due <= 0:
+                    continue  # مسددة بالكامل مسبقاً
+
+                alloc = min(due, remaining)
+                new_paid = paid_amount + alloc
+                status = "paid" if new_paid >= final_amount else "partial"
+
+                # تسجيل التخصيص
+                self.db_manager.execute_insert(
+                    """
+                    INSERT INTO payment_allocations (payment_id, purchase_id, allocated_amount)
+                    VALUES (?, ?, ?)
+                    """,
+                    (payment_id, purchase_id, float(alloc)),
+                )
+                # تحديث تتبع السداد على الفاتورة
+                self.db_manager.execute_non_query(
+                    "UPDATE purchases SET paid_amount = ?, payment_status = ? WHERE id = ?",
+                    (float(new_paid), status, purchase_id),
+                )
+
+                allocations.append({
+                    "purchase_id": purchase_id,
+                    "invoice_number": row.get("invoice_number", ""),
+                    "allocated_amount": float(alloc),
+                    "purchase_paid": float(new_paid),
+                    "purchase_total": float(final_amount),
+                    "purchase_status": status,
+                })
+                remaining -= alloc
+
+            if allocations and self.logger:
+                self.logger.info(
+                    "تم تخصيص دفعة المورد %d (%.2f) على %d فاتورة FIFO — المتبقي غير المخصص: %.2f",
+                    payment_id, float(amount), len(allocations), float(remaining),
+                )
+        except Exception as e:
+            # التخصيص best-effort: لا يفشل الدفع نفسه، لكن يُسجل الخطأ
+            if self.logger:
+                self.logger.warning(
+                    "فشل تخصيص الدفعة %d على فواتير المورد (غير مانع): %s",
+                    payment_id, e,
+                )
+        return allocations
+
+    def get_payment_allocations(self, payment_id: int) -> List[Dict[str, Any]]:
+        """جلب تخصيصات دفعة على الفواتير"""
+        try:
+            rows = self.db_manager.fetch_all(
+                """
+                SELECT pa.id, pa.payment_id, pa.purchase_id, pa.allocated_amount,
+                       pa.allocated_at, p.invoice_number, p.purchase_date
+                FROM payment_allocations pa
+                LEFT JOIN purchases p ON p.id = pa.purchase_id
+                WHERE pa.payment_id = ?
+                ORDER BY pa.id ASC
+                """,
+                (payment_id,),
+            )
+            return [dict(r) for r in rows] if rows else []
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"خطأ في جلب تخصيصات الدفعة {payment_id}: {e}")
+            return []
 
     # ===== إدارة المدفوعات =====
 
@@ -631,6 +772,20 @@ class PaymentService:
                         supplier_mgr.update_supplier_balance(supplier_id, -amount)
                 except Exception as e:
                     self.logger.warning(f"Supplier balance update deferred after payment: {e}")
+
+                # ── SUPPLIER PAYMENT FIFO ALLOCATION ─────────────────────
+                # تخصيص الدفعة تلقائياً على فواتير الشراء غير المسددة
+                # (الأقدم أولاً). غير مانع: فشله لا يلغي الدفع.
+                try:
+                    allocations = self._allocate_supplier_payment_fifo(
+                        payment_id=payment_id, supplier_id=supplier_id, amount=amount
+                    )
+                    if hasattr(payment_obj, "allocations"):
+                        payment_obj.allocations = allocations
+                except Exception as alloc_err:
+                    self.logger.warning(
+                        "FIFO allocation deferred for payment %d: %s", payment_id, alloc_err
+                    )
 
                 return payment_obj
 

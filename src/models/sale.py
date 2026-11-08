@@ -105,6 +105,9 @@ class SaleItem:
     batch_id: int = 1
     cost_price: Decimal = Decimal("0.00")
     profit: Decimal = Decimal("0.00")
+    # وحدة البيع كما طلبها العميل (كرتونة/علبة/حبة) — غير مخزنة في DB،
+    # تُحوَّل إلى الوحدة الأساسية قبل خصم المخزون (Unit Conversion)
+    sale_unit: Optional[str] = None
 
     def __post_init__(self):
         for f in [
@@ -791,15 +794,19 @@ class SaleManager:
     ):
         """إنشاء عنصر فاتورة داخل معاملة"""
         try:
-            # جلب سعر التكلفة
-            cursor.execute(
-                "SELECT cost_price FROM products "
-                "WHERE id = ?",
-                (item.product_id,)
-            )
-            cost_row = cursor.fetchone()
-            if cost_row:
-                item.cost_price = Decimal(str(cost_row[0] or 0))
+            # COSTING FIX: احترام cost_price المحسوب مسبقاً من CostingService
+            # (Moving Average / FIFO) — لا نتجاوزه بتكلفة المنتج المسطحة
+            # إلا إذا كان البند بلا تكلفة محسوبة.
+            precomputed_cost = Decimal(str(getattr(item, "cost_price", 0) or 0))
+            if precomputed_cost <= 0:
+                cursor.execute(
+                    "SELECT cost_price FROM products "
+                    "WHERE id = ?",
+                    (item.product_id,)
+                )
+                cost_row = cursor.fetchone()
+                if cost_row:
+                    item.cost_price = Decimal(str(cost_row[0] or 0))
 
             # جلب الدفعة بنظام FEFO (الأقرب للانتهاء أولاً)
             cursor.execute(
@@ -819,6 +826,21 @@ class SaleManager:
                 batch_row = cursor.fetchone()
             if batch_row:
                 item.batch_id = batch_row[0]
+            else:
+                # FK FIX: لا توجد دفعات لهذا المنتج — إنشاء دفعة AUTO
+                # داخل المعاملة (نفس سلوك المسار غير المعاملاتي) بدلاً من
+                # الاعتماد على batch_id=1 الافتراضي الذي يفشل FK.
+                cursor.execute(
+                    "INSERT INTO batches "
+                    "(product_id, batch_number, quantity, cost_price, selling_price) "
+                    "VALUES (?, 'AUTO', 0, ?, ?)",
+                    (
+                        item.product_id,
+                        float(item.cost_price or 0),
+                        float(item.unit_price or 0),
+                    ),
+                )
+                item.batch_id = cursor.lastrowid
 
             item.calculate_total()
 
@@ -984,7 +1006,7 @@ class SaleManager:
         for item in items:
             qty_needed = float(item.quantity or 0)
 
-            # 1. حساب الرصيد الإجمالي المتاح للقطعة الحالية
+            # 1. حساب الرصيد الإجمالي المتاح من الدفعات
             cursor.execute("""
                 SELECT SUM(quantity)
                 FROM batches
@@ -993,10 +1015,35 @@ class SaleManager:
             result = cursor.fetchone()
             total_available = float(result[0]) if result and result[0] is not None else 0.0
 
-            # 2. إذا كان هناك عجز، استدعاء التفكيك التلقائي للكرتون
+            # 2. إذا كان هناك عجز:
+            # STOCK FALLBACK FIX: قبل فك الكراتين، تحقق من products.current_stock.
+            # المنتجات التي أُدخل مخزونها مباشرة (تعديل مخزون / منتجات غير قابلة
+            # للتلف) ليس لها دفعات فعّالة — كانت تُرفض خطأً برسالة
+            # "الرصيد غير كافٍ ولا يوجد كرتون" رغم توفر المخزون فعلياً!
             if total_available < qty_needed:
+                cursor.execute(
+                    "SELECT current_stock FROM products WHERE id = ?",
+                    (item.product_id,)
+                )
+                stock_row = cursor.fetchone()
+                products_available = float(stock_row[0] or 0) if stock_row else 0.0
+
+                if products_available >= qty_needed:
+                    # مخزون مباشر بدون دفعات فعّالة → خصم مباشر من products
+                    cursor.execute("""
+                        UPDATE products
+                        SET current_stock = current_stock - ?
+                        WHERE id = ?
+                    """, (qty_needed, item.product_id))
+                    cursor.execute("""
+                        INSERT INTO stock_movements (product_id, movement_type, quantity, reference_type, notes)
+                        VALUES (?, 'out', ?, 'sale', 'بيع')
+                    """, (item.product_id, -qty_needed))
+                    continue
+
+                # لا مخزون مباشر كافٍ → جرب فك الكراتين التلقائي
+                # (تعوض العجز وتحدث الدفعات، أو ترفع خطأ يوقف المعاملة)
                 deficit = qty_needed - total_available
-                # ستقوم هذه الدالة بتعويض العجز وتحديث الجدول، أو ستطلق خطأ يوقف المعاملة
                 self._handle_auto_conversion_in_transaction(cursor, item.product_id, deficit)
 
             # 3. بعد ضمان وجود رصيد كافٍ، نقوم بصرف الحبات المطلوبة للبيع بنظام FEFO
