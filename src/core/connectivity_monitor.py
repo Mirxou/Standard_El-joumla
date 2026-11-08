@@ -6,7 +6,7 @@
 
 import logging
 import time
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Callable
 
 from PySide6.QtCore import QObject, QTimer, Signal, QThread
 from PySide6.QtGui import QIcon, QPixmap, QColor, QPainter
@@ -61,6 +61,9 @@ class ConnectivityMonitor(QObject):
         # عامل الفحص
         self._checker: Optional[ConnectivityChecker] = None
 
+        # استدعاءات خارجية عند تغيّر الحالة (بدون Qt) — plain callbacks on state change
+        self._state_change_callbacks: List[Callable[[bool], None]] = []
+
         # واجهة الحالة
         self._status_widget: Optional[QWidget] = None
         self._status_label: Optional[QLabel] = None
@@ -85,6 +88,20 @@ class ConnectivityMonitor(QObject):
         self._checker = ConnectivityChecker()
         self._checker.result_ready.connect(self._on_result)
         self._checker.start()
+
+    def on_state_change(self, callback: Callable[[bool], None]) -> None:
+        """تسجيل استدعاء بسيط يُنادى عند تغيّر حالة الاتصال (بدون إشارات Qt).
+
+        Register a plain callback invoked whenever connectivity state changes
+        (offline→online or online→offline). Fits the existing architecture as a
+        minimal, additive hook for non-Qt consumers (e.g. SyncQueueFlushService).
+
+        Args:
+            callback: دالة تأخذ is_connected: bool — callable(is_connected: bool) -> None
+        """
+        if callable(callback) and callback not in self._state_change_callbacks:
+            self._state_change_callbacks.append(callback)
+            self.logger.debug(f"تم تسجيل مستمع تغيّر حالة الاتصال: {callback}")
 
     def _on_result(self, is_connected: bool, latency_ms: float):
         """معالجة نتيجة الفحص"""
@@ -119,6 +136,13 @@ class ConnectivityMonitor(QObject):
             self.latency_updated.emit(latency_ms)
 
         self.status_changed.emit(is_connected)
+
+        # استدعاءات خارجية بسيطة (بديل بدون Qt) — plain non-Qt callbacks
+        for state_callback in list(self._state_change_callbacks):
+            try:
+                state_callback(is_connected)
+            except Exception as callback_exc:
+                self.logger.warning(f"فشل استدعاء مستمع تغيّر حالة الاتصال: {callback_exc}")
 
         # تحديث واجهة الحالة
         self._update_status_widget()
