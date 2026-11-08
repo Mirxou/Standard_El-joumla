@@ -1331,16 +1331,20 @@ class SaleUpdate(BaseModel):
 
 
 class SaleItemResponse(BaseModel):
-    """نموذج استجابة عنصر مبيعات"""
+    """نموذج استجابة عنصر مبيعات
 
-    id: Optional[int]
-    sale_id: Optional[int]
+    ملاحظة: SaleItem.to_dict() يصدّر discount وليس discount_amount ولا يصدّر
+    product_barcode دائماً — لذا القيم الافتراضية ضرورية للتوافق.
+    """
+
+    id: Optional[int] = None
+    sale_id: Optional[int] = None
     product_id: int
     product_name: str
-    product_barcode: Optional[str]
+    product_barcode: Optional[str] = None
     quantity: int
     unit_price: float
-    discount_amount: float
+    discount_amount: float = 0.0
     discount_percentage: float
     tax_amount: float
     tax_percentage: float
@@ -1348,15 +1352,19 @@ class SaleItemResponse(BaseModel):
 
 
 class SaleResponse(BaseModel):
-    """نموذج استجابة فاتورة مبيعات"""
+    """نموذج استجابة فاتورة مبيعات
+
+    ملاحظة: الحقول التي لا يُصدّرها Sale.to_dict() لها قيم افتراضية —
+    بدونها يفشل التحقق في كل endpoint يعتمد SaleResponse(**sale.to_dict()).
+    """
 
     id: int
     invoice_number: str
-    customer_id: Optional[int]
-    customer_name: Optional[str]
-    customer_phone: Optional[str]
-    sale_date: Optional[str]
-    due_date: Optional[str]
+    customer_id: Optional[int] = None
+    customer_name: Optional[str] = None
+    customer_phone: Optional[str] = None
+    sale_date: Optional[str] = None
+    due_date: Optional[str] = None
     status: str
     payment_method: str
     subtotal: float
@@ -1367,18 +1375,21 @@ class SaleResponse(BaseModel):
     total_amount: float
     paid_amount: float
     remaining_amount: float
-    currency_id: Optional[int]
-    exchange_rate: float
-    base_amount: Optional[float]
-    converted_amount: Optional[float]
-    notes: Optional[str]
-    created_by: Optional[int]
-    created_at: Optional[str]
-    updated_at: Optional[str]
+    currency_id: Optional[int] = None
+    exchange_rate: float = 1.0
+    base_amount: Optional[float] = None
+    converted_amount: Optional[float] = None
+    notes: Optional[str] = None
+    created_by: Optional[int] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
     items: List[SaleItemResponse]
     is_paid: bool
     items_count: int
     total_quantity: int
+    # معاينة الإيصال الحراري (نص ESC/POS مُفكوك الترميز) — تُملأ فقط عند
+    # تمرير print_receipt=true على POST /sales، وإلا تكون None
+    receipt_preview: Optional[str] = None
 
 
 class SaleListResponse(BaseModel):
@@ -1398,6 +1409,17 @@ def get_sale_manager() -> SaleManager:
     """الحصول على Sale Manager"""
     db_manager = get_db_manager()
     return SaleManager(db_manager, logger)
+
+
+def get_sales_service() -> SalesService:
+    """الحصول على SalesService (مع دعم الورديات والتسوية)
+
+    ملاحظة: يجب تعريفها قبل استخدامها في create_sale أعلاه —
+    تعريفها متأخر كان يُسقط استيراد الموديول بالكامل (NameError) وبالتالي
+    تسجيل جميع الـ Routes بصمت (register_routes يبتلع الأخطاء).
+    """
+    db_manager = get_db_manager()
+    return SalesService(db_manager, logger)
 
 
 # ==================== Sales Routes ====================
@@ -1641,6 +1663,10 @@ async def download_invoice_pdf(
 )
 async def create_sale(
     sale_data: SaleCreate,
+    print_receipt: bool = Query(
+        default=False,
+        description="طباعة إيصال حراري بعد نجاح إنشاء الفاتورة (fire-and-forget — فشل الطابعة لا يفشل البيع)",
+    ),
     current_user: Dict[str, Any] = Depends(get_current_user),
     sale_manager: SaleManager = Depends(get_sale_manager),
     sales_service: SalesService = Depends(get_sales_service),
@@ -1657,15 +1683,19 @@ async def create_sale(
 
     Args:
         sale_data: بيانات الفاتورة
+        print_receipt: طلب طباعة الإيصال الحراري بعد النجاح (اختياري)
         current_user: المستخدم الحالي
         sale_manager: Sale Manager
         sales_service: خدمة المبيعات (قواعد الأعمال)
 
     Returns:
-        الفاتورة المُنشأة
+        الفاتورة المُنشأة (مع receipt_preview عند طلب الطباعة)
     """
     try:
         # إنشاء Sale object
+        # ملاحظة: Sale لا يحتوي حقل created_by — هوية المنشئ تُمرر عبر
+        # SalesService.create_sale(sale, user_id=...) أدناه (تم إصلاح TypeError
+        # كان يُسقط إنشاء الفاتورة بـ 500)
         sale = Sale(
             customer_id=sale_data.customer_id,
             sale_date=(datetime.fromisoformat(sale_data.sale_date).date() if sale_data.sale_date else date.today()),
@@ -1681,7 +1711,6 @@ async def create_sale(
             paid_amount=Decimal(str(sale_data.paid_amount or 0)),
             currency_id=sale_data.currency_id,
             notes=sale_data.notes,
-            created_by=current_user.get("user_id"),
         )
 
         # إضافة company_id
@@ -1690,12 +1719,13 @@ async def create_sale(
             sale.company_id = company_id
 
         # إضافة العناصر (مع وحدة البيع للتحويل التلقائي)
+        # ملاحظة: حقل الموديل اسمه discount وليس discount_amount (تم إصلاح TypeError)
         for item_data in sale_data.items:
             item = SaleItem(
                 product_id=item_data.product_id,
                 quantity=item_data.quantity,
                 unit_price=Decimal(str(item_data.unit_price or 0)),
-                discount_amount=Decimal(str(item_data.discount_amount or 0)),
+                discount=Decimal(str(item_data.discount_amount or 0)),
                 discount_percentage=Decimal(str(item_data.discount_percentage or 0)),
                 tax_amount=Decimal(str(item_data.tax_amount or 0)),
                 tax_percentage=Decimal(str(item_data.tax_percentage or 0)),
@@ -1722,7 +1752,19 @@ async def create_sale(
             f"تم إنشاء فاتورة مبيعات جديدة: {created_sale.invoice_number} (ID: {sale_id}) بواسطة {current_user.get('username')}"  # noqa: E501
         )
 
-        return SaleResponse(**created_sale.to_dict())
+        # طباعة الإيصال الحراري (fire-and-forget اختياري):
+        # فشل الطابعة أو غياب العتاد لا يؤثر على استجابة الفاتورة أبداً —
+        # يتحول للوضع dry_run وتُلتقط المعاينة النصية لعرضها في واجهة الويب
+        receipt_preview: Optional[str] = None
+        if print_receipt:
+            receipt_preview = print_sale_receipt_safe(
+                created_sale,
+                cashier_name=current_user.get("username"),
+            ).get("preview")
+
+        response_data = created_sale.to_dict()
+        response_data["receipt_preview"] = receipt_preview
+        return SaleResponse(**response_data)
 
     except HTTPException:
         raise
@@ -2571,12 +2613,6 @@ async def mark_notification_read(
 
 
 # ==================== POS Sessions (الورديات) ====================
-
-
-def get_sales_service() -> SalesService:
-    """الحصول على SalesService (مع دعم الورديات والتسوية)"""
-    db_manager = get_db_manager()
-    return SalesService(db_manager, logger)
 
 
 class POSSessionStartRequest(BaseModel):
@@ -4063,6 +4099,699 @@ async def websocket_data_updates(
         logger.log(logging.ERROR, f"Data-updates WebSocket error: {e}")
     finally:
         ws_manager.disconnect(websocket, room="data_updates", user_id=user_id)
+
+
+# ==================== Purchase Returns Models (مرتجعات المشتريات) ====================
+
+
+class PurchaseReturnItemCreate(BaseModel):
+    """نموذج بند مرتجع مشتريات"""
+
+    product_id: int = Field(..., description="معرف المنتج")
+    quantity: float = Field(..., gt=0, description="الكمية المرتجعة")
+    unit_cost: Optional[float] = Field(None, ge=0, description="تكلفة الوحدة (اختياري — تؤخذ من الدفعة)")
+    batch_id: Optional[int] = Field(None, description="معرف الدفعة (اختياري — يعين تلقائياً FEFO-عكسي)")
+
+
+class PurchaseReturnCreate(BaseModel):
+    """نموذج إنشاء مرتجع مشتريات (مسودة)"""
+
+    supplier_id: int = Field(..., description="معرف المورد")
+    items: List[PurchaseReturnItemCreate] = Field(..., min_length=1, description="بنود المرتجع")
+    purchase_id: Optional[int] = Field(None, description="فاتورة الشراء الأصلية (اختياري)")
+    warehouse_id: Optional[int] = Field(None, description="المستودع (اختياري)")
+    reason: Optional[str] = Field(None, max_length=500, description="سبب الإرجاع")
+    notes: Optional[str] = Field(None, max_length=1000, description="ملاحظات")
+
+
+class PurchaseReturnApproveRequest(BaseModel):
+    """طلب الموافقة على مرتجع مشتريات"""
+
+    approver_id: Optional[int] = Field(None, description="معرف المعتمِد (افتراضياً المستخدم الحالي)")
+
+
+class PurchaseReturnCompleteRequest(BaseModel):
+    """طلب إتمام مرتجع مشتريات"""
+
+    refund_method: str = Field(
+        default="credit_note",
+        description="طريقة الاسترداد: credit_note (إشعار دائن) أو cash_refund (استرداد نقدي)",
+    )
+    user_id: Optional[int] = Field(None, description="معرف المستخدم المنفذ (افتراضياً المستخدم الحالي)")
+
+
+def get_purchase_return_service():
+    """الحصول على خدمة مرتجعات المشتريات (المخطط يضمن نفسه عند التهيئة)"""
+    from src.services.purchase_return_service import PurchaseReturnService
+
+    db_manager = get_db_manager()
+    return PurchaseReturnService(db_manager)
+
+
+@router.post("/purchase-returns", tags=["Purchase Returns"])
+async def create_purchase_return(
+    return_data: PurchaseReturnCreate,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    service=Depends(get_purchase_return_service),
+):
+    """
+    إنشاء مرتجع مشتريات جديد بحالة مسودة (draft)
+
+    - يتحقق من الكمية القابلة للإرجاع (المشترى − المرتجع غير الملغى)
+    - يعيد 422 مع تفاصيل الخطأ عند أي قاعدة عمل (نمط CreditLimitError)
+    """
+    try:
+        return_id = service.create_return(
+            supplier_id=return_data.supplier_id,
+            items=[item.model_dump() for item in return_data.items],
+            purchase_id=return_data.purchase_id,
+            warehouse_id=return_data.warehouse_id,
+            reason=return_data.reason,
+            notes=return_data.notes,
+            user_id=current_user.get("user_id") or current_user.get("sub"),
+        )
+        logger.info(f"تم إنشاء مرتجع مشتريات (ID: {return_id}) بواسطة {current_user.get('username')}")
+        return {"id": return_id, "status": "draft", "message": "تم إنشاء مرتجع المشتريات بنجاح"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        # تحويل أخطاء النطاق إلى 422 مع تفاصيل ثنائية اللغة (نفس نمط CreditLimitError)
+        raise _purchase_return_http_error(exc, "إنشاء") from exc
+
+
+@router.get("/purchase-returns/returnable", tags=["Purchase Returns"])
+async def get_returnable_quantity(
+    supplier_id: int = Query(..., description="معرف المورد"),
+    product_id: int = Query(..., description="معرف المنتج"),
+    purchase_id: Optional[int] = Query(None, description="فاتورة شراء محددة (اختياري)"),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    service=Depends(get_purchase_return_service),
+):
+    """الكمية القابلة للإرجاع للمورد/المنتج (المشترى − المرتجع غير الملغى)
+
+    تنبيه الترتيب: هذا المسار معرّف قبل /purchase-returns/{return_id}
+    حتى لا يلتهمه تحويل {return_id} إلى int (الذي كان سيرجع 422).
+    """
+    try:
+        returnable = service.get_returnable_quantity(
+            supplier_id=supplier_id,
+            product_id=product_id,
+            purchase_id=purchase_id,
+        )
+        return {"supplier_id": supplier_id, "product_id": product_id, "returnable_quantity": float(returnable)}
+    except Exception as e:
+        logger.log(logging.ERROR, f"خطأ في حساب الكمية القابلة للإرجاع: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في حساب الكمية القابلة للإرجاع: {str(e)}",
+        )
+
+
+@router.get("/purchase-returns", tags=["Purchase Returns"])
+async def list_purchase_returns(
+    supplier_id: Optional[int] = Query(None, description="تصفية بالمورد"),
+    status_filter: Optional[str] = Query(None, alias="status", description="تصفية بالحالة (draft/approved/completed/cancelled)"),
+    date_from: Optional[str] = Query(None, description="تاريخ البداية (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, description="تاريخ النهاية (YYYY-MM-DD)"),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    service=Depends(get_purchase_return_service),
+):
+    """قائمة مرتجعات المشتريات مع فلاتر اختيارية"""
+    try:
+        returns = service.list_returns(
+            supplier_id=supplier_id,
+            status=status_filter,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        return {"returns": returns, "count": len(returns)}
+    except Exception as e:
+        logger.log(logging.ERROR, f"خطأ في جلب مرتجعات المشتريات: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في جلب مرتجعات المشتريات: {str(e)}",
+        )
+
+
+@router.get("/purchase-returns/{return_id}", tags=["Purchase Returns"])
+async def get_purchase_return(
+    return_id: int,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    service=Depends(get_purchase_return_service),
+):
+    """تفاصيل مرتجع مشتريات مع بنوده (404 عند عدم الوجود — نفس نمط الأشقاء)"""
+    try:
+        ret = service.get_return(return_id)
+        if not ret:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"مرتجع المشتريات غير موجود (ID: {return_id})",
+            )
+        return ret
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.log(logging.ERROR, f"خطأ في جلب مرتجع المشتريات {return_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في جلب المرتجع: {str(e)}",
+        )
+
+
+@router.post("/purchase-returns/{return_id}/approve", tags=["Purchase Returns"])
+async def approve_purchase_return(
+    return_id: int,
+    request_data: Optional[PurchaseReturnApproveRequest] = None,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    service=Depends(get_purchase_return_service),
+):
+    """الموافقة على مرتجع (مسودة → معتمد) مع تعيين الدفعات FEFO-عكسي"""
+    try:
+        approver_id = (
+            request_data.approver_id
+            if (request_data and request_data.approver_id is not None)
+            else current_user.get("user_id") or current_user.get("sub")
+        )
+        service.approve_return(return_id, approver_id=approver_id)
+        logger.info(f"تمت الموافقة على مرتجع المشتريات {return_id} بواسطة {current_user.get('username')}")
+        return {"id": return_id, "status": "approved", "message": "تمت الموافقة على المرتجع"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _purchase_return_http_error(exc, "الموافقة على") from exc
+
+
+@router.post("/purchase-returns/{return_id}/complete", tags=["Purchase Returns"])
+async def complete_purchase_return(
+    return_id: int,
+    request_data: PurchaseReturnCompleteRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    service=Depends(get_purchase_return_service),
+):
+    """إتمام مرتجع (معتمد → مكتمل) — ذري: خصم دفعات/مخزون + قيد عكسي + تسوية مورد"""
+    try:
+        refund_method = str(request_data.refund_method or "credit_note").strip().lower()
+        if refund_method not in ("credit_note", "cash_refund"):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "error": "invalid_refund_method",
+                    "message": "طريقة الاسترداد غير صحيحة (المسموح: credit_note أو cash_refund)",
+                    "details": {"refund_method": request_data.refund_method},
+                },
+            )
+        user_id = (
+            request_data.user_id
+            if request_data.user_id is not None
+            else current_user.get("user_id") or current_user.get("sub")
+        )
+        service.complete_return(return_id, user_id=user_id, refund_method=refund_method)
+        logger.info(
+            f"تم إتمام مرتجع المشتريات {return_id} (استرداد: {refund_method}) بواسطة {current_user.get('username')}"
+        )
+        detail = service.get_return(return_id) or {}
+        return {
+            "id": return_id,
+            "status": "completed",
+            "refund_method": refund_method,
+            "credit_note_amount": detail.get("credit_note_amount"),
+            "message": "تم إتمام المرتجع وخصم المخزون وتسجيل القيد",
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _purchase_return_http_error(exc, "إتمام") from exc
+
+
+@router.post("/purchase-returns/{return_id}/cancel", tags=["Purchase Returns"])
+async def cancel_purchase_return(
+    return_id: int,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    service=Depends(get_purchase_return_service),
+):
+    """إلغاء مرتجع (مسودة أو معتمد → ملغى) بدون أي أثر على المخزون"""
+    try:
+        service.cancel_return(return_id, user_id=current_user.get("user_id") or current_user.get("sub"))
+        logger.info(f"تم إلغاء مرتجع المشتريات {return_id} بواسطة {current_user.get('username')}")
+        return {"id": return_id, "status": "cancelled", "message": "تم إلغاء المرتجع"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _purchase_return_http_error(exc, "إلغاء") from exc
+
+
+def _purchase_return_http_error(exc: Exception, action: str) -> HTTPException:
+    """تحويل PurchaseReturnError إلى HTTP 422 (نمط CreditLimitError)، وما عداها إلى 500.
+
+    Args:
+        exc: الاستثناء الملتقط
+        action: وصف العملية بالعربية للتسجيل (إنشاء/إتمام/إلغاء...)
+    """
+    from src.services.purchase_return_service import PurchaseReturnError
+
+    if isinstance(exc, HTTPException):
+        return exc
+    if isinstance(exc, PurchaseReturnError):
+        logger.warning(f"تم رفض عملية {action} مرتجع مشتريات: {exc.message_ar}")
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": "purchase_return_error",
+                "message": exc.message_ar,
+                "details": {"message_ar": exc.message_ar, "message_en": exc.message_en},
+            },
+        )
+    logger.log(logging.ERROR, f"خطأ غير متوقع في عملية {action} مرتجع مشتريات: {exc}")
+    return HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail=f"خطأ في {action} المرتجع: {str(exc)}",
+    )
+
+
+# ==================== POS Hardware (طابعة الإيصالات / درج النقدية / الباركود) ====================
+
+
+class CashDrawerOpenRequest(BaseModel):
+    """طلب فتح درج النقدية"""
+
+    reason: Optional[str] = Field(None, max_length=300, description="سبب فتح الدرج (تدقيق)")
+
+
+class POSReportRequest(BaseModel):
+    """طلب طباعة تقرير X/Z للوردية"""
+
+    session_id: int = Field(..., description="معرف الوردية (pos_sessions.id)")
+
+
+class AssignBarcodeRequest(BaseModel):
+    """طلب ربط باركود بمنتج"""
+
+    barcode: Optional[str] = Field(None, description="باركود صريح (اختياري — يُولَّد EAN-13 تلقائياً)")
+
+
+def get_escpos_printer_service():
+    """الحصول على خدمة طابعة الإيصالات (تتحول لوضع dry_run بدون عتاد — لا ترمي أبداً)"""
+    from src.services.escpos_printer_service import ESCPOSPrinterService
+
+    db_manager = get_db_manager()
+    return ESCPOSPrinterService(db_manager, logger=logger)
+
+
+def get_cash_drawer_service():
+    """الحصول على خدمة درج النقدية (تفويض للطابعة مع dry_run آمن)"""
+    from src.services.cash_drawer_service import CashDrawerService
+
+    db_manager = get_db_manager()
+    return CashDrawerService(db_manager, logger=logger)
+
+
+def get_barcode_service():
+    """الحصول على خدمة الباركود (توليد/تحقق/قراءة/ملصقات)"""
+    from src.services.barcode_service import BarcodeService
+
+    db_manager = get_db_manager()
+    return BarcodeService(db_manager, logger=logger)
+
+
+def build_sale_print_dict(sale) -> Dict[str, Any]:
+    """بناء قاموس البيع المتوافق مع مفاتيح ESCPOSPrinterService.print_receipt
+
+    Expected keys: invoice_number, sale_date, customer_name,
+    items[{product_name, quantity, unit_price, total_amount}], subtotal,
+    discount_amount, tax_amount, total, paid_amount, payment_method,
+    remaining_amount (+ cashier_name/shift_number اختيارية).
+    """
+    payment_value = (
+        sale.payment_method.value
+        if hasattr(sale.payment_method, "value")
+        else str(sale.payment_method or "")
+    )
+    return {
+        "invoice_number": sale.invoice_number,
+        "sale_date": sale.sale_date,
+        "customer_name": sale.customer_name or "عميل نقدي",
+        "items": [
+            {
+                "product_name": item.product_name,
+                "quantity": item.quantity,
+                "unit_price": item.unit_price,
+                "total_amount": item.total_amount,
+            }
+            for item in (sale.items or [])
+        ],
+        "subtotal": sale.subtotal,
+        "discount_amount": sale.discount_amount,
+        "tax_amount": sale.tax_amount,
+        "total": sale.final_amount or sale.total_amount,
+        "paid_amount": sale.paid_amount,
+        "remaining_amount": sale.remaining_amount,
+        "payment_method": payment_value,
+    }
+
+
+def print_sale_receipt_safe(sale, cashier_name: Optional[str] = None) -> Dict[str, Any]:
+    """طباعة إيصال البيع بأمان — فشل الطابعة لا يُسقط العملية أبداً.
+
+    Returns:
+        {"printed": bool, "dry_run": bool, "preview": str|None}
+    """
+    result: Dict[str, Any] = {"printed": False, "dry_run": True, "preview": None}
+    try:
+        printer = get_escpos_printer_service()
+        sale_dict = build_sale_print_dict(sale)
+        if cashier_name:
+            sale_dict["cashier_name"] = cashier_name
+        printed = bool(printer.print_receipt(sale_dict))
+        preview = printer.get_last_output_text()
+        result.update(
+            {
+                "printed": printed,
+                "dry_run": bool(printer.is_dry_run),
+                "preview": preview or None,
+            }
+        )
+    except Exception as e:
+        # شرط ملتقط ومُعالج — تحذير لا خطأ (اتفاقية المشروع)، البيع يجب أن يستمر
+        logger.warning(f"تعذرت طباعة إيصال البيع (غير حرج — وضع dry_run): {e}")
+    return result
+
+
+@router.post("/sales/{sale_id}/receipt", tags=["POS Hardware"])
+async def print_sale_receipt(
+    sale_id: int,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    sale_manager: SaleManager = Depends(get_sale_manager),
+):
+    """طباعة إيصال حراري لفاتورة موجودة
+
+    يعيد preview نصي للإيصال — GOLD لعرض الإيصال فوراً في واجهات الويب/الموبايل
+    أو للتصحيح. فشل الطابعة لا يُرجع 500 أبداً (dry_run = التقاط المخرجات فقط).
+    """
+    try:
+        sale = sale_manager.get_sale_by_id(sale_id)
+        if not sale:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"الفاتورة غير موجودة (ID: {sale_id})",
+            )
+        result = print_sale_receipt_safe(sale, cashier_name=current_user.get("username"))
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.log(logging.ERROR, f"خطأ في طباعة إيصال الفاتورة {sale_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في طباعة الإيصال: {str(e)}",
+        )
+
+
+@router.post("/pos/cash-drawer/open", tags=["POS Hardware"])
+async def open_cash_drawer(
+    request_data: Optional[CashDrawerOpenRequest] = None,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    drawer_service=Depends(get_cash_drawer_service),
+):
+    """فتح درج النقدية مع تسجيل السبب (تدقيق) — يعمل عبر نبضة الطابعة أو dry_run"""
+    try:
+        reason = request_data.reason if request_data else None
+        opened = bool(drawer_service.open_and_log(reason=reason or "manual"))
+        drawer_status = drawer_service.check_status()
+        return {
+            "opened": opened,
+            "status": drawer_status.value,
+            "dry_run": bool(getattr(drawer_service, "is_dry_run", False)),
+            "message": "تم إرسال نبضة فتح الدرج",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.log(logging.ERROR, f"خطأ في فتح درج النقدية: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في فتح الدرج: {str(e)}",
+        )
+
+
+@router.get("/pos/cash-drawer/status", tags=["POS Hardware"])
+async def get_cash_drawer_status(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    drawer_service=Depends(get_cash_drawer_service),
+):
+    """حالة درج النقدية (open/closed/unknown) — unknown بدون عتاد قراءة"""
+    try:
+        drawer_status = drawer_service.check_status()
+        return {"status": drawer_status.value, "dry_run": bool(getattr(drawer_service, "is_dry_run", False))}
+    except Exception as e:
+        logger.log(logging.ERROR, f"خطأ في قراءة حالة درج النقدية: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في قراءة الحالة: {str(e)}",
+        )
+
+
+def _build_session_report_dict(sales_service: "SalesService", session_id: int) -> Optional[Dict[str, Any]]:
+    """بناء قاموس الوردية لمفاتيح render_session_report_text من التسوية الموجودة.
+
+    يعيد None إذا لم توجد الوردية — بدون أي SQL يدوي مكرر.
+    المفاتيح: shift_number, opened_at, closed_at, opening_cash, cash_sales,
+    card_sales, credit_sales, refunds, cash_in, cash_out, expected_closing,
+    counted_cash, difference, sales_count.
+    """
+    reconciliation = sales_service.get_pos_reconciliation(session_id)
+    if not reconciliation:
+        return None
+    return {
+        "shift_number": reconciliation.get("session_id"),
+        "opened_at": reconciliation.get("opened_at"),
+        "closed_at": reconciliation.get("closed_at"),
+        "opening_cash": reconciliation.get("opening_cash", 0),
+        "cash_sales": reconciliation.get("cash_sales", 0),
+        "card_sales": reconciliation.get("card_sales", 0),
+        "credit_sales": reconciliation.get("credit_sales", 0),
+        "refunds": reconciliation.get("returns_total", 0),
+        "cash_in": 0.0,
+        "cash_out": 0.0,
+        "expected_closing": reconciliation.get("expected_cash", 0),
+        "counted_cash": reconciliation.get("counted_cash", 0),
+        "difference": reconciliation.get("discrepancy", 0),
+        "sales_count": reconciliation.get("sales_count", 0),
+    }
+
+
+@router.post("/pos/reports/x", tags=["POS Hardware"])
+async def print_pos_x_report(
+    request_data: POSReportRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    sales_service: SalesService = Depends(get_sales_service),
+    printer_service=Depends(get_escpos_printer_service),
+):
+    """طباعة تقرير X للوردية (ملخص منتصف الوردية بدون تصفير)"""
+    return await _print_session_report(request_data.session_id, "x", sales_service, printer_service)
+
+
+@router.post("/pos/reports/z", tags=["POS Hardware"])
+async def print_pos_z_report(
+    request_data: POSReportRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    sales_service: SalesService = Depends(get_sales_service),
+    printer_service=Depends(get_escpos_printer_service),
+):
+    """طباعة تقرير Z للوردية (ملخص إغلاق الوردية)"""
+    return await _print_session_report(request_data.session_id, "z", sales_service, printer_service)
+
+
+async def _print_session_report(
+    session_id: int,
+    report_kind: str,
+    sales_service: "SalesService",
+    printer_service,
+) -> Dict[str, Any]:
+    """التنفيذ المشترك لتقارير X/Z: بناء بيانات الوردية ثم الطباعة الآمنة"""
+    try:
+        session_dict = _build_session_report_dict(sales_service, session_id)
+        if session_dict is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"الوردية {session_id} غير موجودة",
+            )
+        if report_kind == "z":
+            printed = bool(printer_service.print_z_report(session_dict))
+        else:
+            printed = bool(printer_service.print_x_report(session_dict))
+        preview = printer_service.get_last_output_text()
+        return {
+            "printed": printed,
+            "dry_run": bool(getattr(printer_service, "is_dry_run", False)),
+            "preview": preview or None,
+            "session_id": session_id,
+            "report_kind": report_kind,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.log(logging.ERROR, f"خطأ في طباعة تقرير {report_kind.upper()} للوردية {session_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في طباعة التقرير: {str(e)}",
+        )
+
+
+@router.get("/products/scan/{barcode}", tags=["POS Hardware"])
+async def scan_barcode(
+    barcode: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    barcode_service=Depends(get_barcode_service),
+):
+    """تحويل باركود ممسوح إلى منتج (قراءة سريعة لنقطة البيع)
+
+    العقد التعاقدي (documented contract): الباركود غير المعروف يعيد
+    HTTP 404 بنفس نمط GET /products/{product_id} — متمايز عن 200 للنتيجة.
+    """
+    try:
+        product = barcode_service.resolve_barcode(barcode)
+        if not product:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"لا يوجد منتج للباركود: {barcode}",
+            )
+        # المال Decimal → قيم JSON صريحة (سعر بالفلوات) لتجنب أي غموض
+        return {
+            "found": True,
+            "id": product.get("id"),
+            "name": product.get("name"),
+            "name_en": product.get("name_en"),
+            "barcode": product.get("barcode"),
+            "selling_price": float(product.get("selling_price") or 0),
+            "cost_price": float(product.get("cost_price") or 0),
+            "unit": product.get("unit"),
+            "current_stock": float(product.get("current_stock") or 0),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.log(logging.ERROR, f"خطأ في قراءة الباركود {barcode}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في قراءة الباركود: {str(e)}",
+        )
+
+
+@router.post("/products/{product_id}/assign-barcode", tags=["POS Hardware"])
+async def assign_product_barcode(
+    product_id: int,
+    request_data: Optional[AssignBarcodeRequest] = None,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    barcode_service=Depends(get_barcode_service),
+):
+    """ربط باركود بمنتج (EAN-13 تلقائي عند عدم التحديد) — 422 عند التعارض"""
+    try:
+        barcode_value = request_data.barcode if request_data else None
+        assigned = barcode_service.assign_barcode_to_product(product_id, barcode=barcode_value)
+        logger.info(f"تم ربط الباركود {assigned} بالمنتج {product_id} بواسطة {current_user.get('username')}")
+        return {"product_id": product_id, "barcode": assigned, "message": "تم ربط الباركود بالمنتج"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        from src.services.barcode_service import BarcodeCollisionError
+
+        if isinstance(exc, BarcodeCollisionError):
+            logger.warning(f"تعارض باركود للمنتج {product_id}: {exc}")
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "error": "barcode_collision",
+                    "message": "الباركود مستخدم لمنتج آخر — لن يُستبدل صامتاً",
+                    "details": {"product_id": product_id},
+                },
+            ) from exc
+        if isinstance(exc, ValueError):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "error": "invalid_barcode_request",
+                    "message": str(exc),
+                },
+            ) from exc
+        logger.log(logging.ERROR, f"خطأ في ربط باركود المنتج {product_id}: {exc}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في ربط الباركود: {str(exc)}",
+        )
+
+
+@router.post("/products/{product_id}/barcode-label", tags=["POS Hardware"])
+async def print_product_barcode_label(
+    product_id: int,
+    label_format: str = Query(default="30x20mm", description="مقاس الملصق (30x20mm أو 50x25mm)"),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    barcode_service=Depends(get_barcode_service),
+):
+    """طباعة ملصق باركود لمنتج مع إرجاع نص المعاينة (dry_run آمن بدون طابعة)"""
+    try:
+        printed = bool(barcode_service.print_barcode_label(product_id, label_format=label_format))
+        # المعاينة من صف المنتج بعد ربط باركود تلقائي إن كان ناقصاً
+        db_manager = get_db_manager()
+        row = db_manager.fetch_one(
+            "SELECT id, name, name_en, barcode, selling_price, cost_price, unit, current_stock "
+            "FROM products WHERE id = ?",
+            (product_id,),
+        )
+        preview = None
+        if row:
+            try:
+                preview = barcode_service.build_label_text(dict(row), label_format=label_format)
+            except ValueError:
+                preview = None
+        return {"product_id": product_id, "printed": printed, "preview": preview, "label_format": label_format}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.log(logging.ERROR, f"خطأ في طباعة ملصق المنتج {product_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"خطأ في طباعة الملصق: {str(e)}",
+        )
+
+
+# ==================== Sync & LAN (المزامنة واكتشاف الشبكة) ====================
+
+
+@router.get("/lan/discover", tags=["Sync & LAN"])
+async def discover_lan_devices(
+    timeout_ms: int = Query(default=3000, ge=250, le=15000, description="مهلة الاكتشاف بالمللي ثانية"),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    db_manager: DatabaseManager = Depends(get_db_manager),
+):
+    """اكتشاف أجهزة ERP على الشبكة المحلية (mDNS + فحص وصول + سجل)
+
+    zeroconf غائب في sandbox → قائمة فارغة مع 200 (تدهور رشيق مضمون).
+    """
+    try:
+        from src.services.lan_discovery_service import LanDiscoveryService
+
+        discovery = LanDiscoveryService(db_manager=db_manager, logger=logger)
+        devices = discovery.discover_full(timeout_ms=timeout_ms)
+        return {"devices": devices, "count": len(devices), "timeout_ms": timeout_ms}
+    except Exception as e:
+        logger.warning(f"اكتشاف LAN فشل (غير حرج): {e}")
+        return {"devices": [], "count": 0, "timeout_ms": timeout_ms, "error": str(e)}
+
+
+@router.post("/sync/flush", tags=["Sync & LAN"])
+async def flush_sync_queue(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    db_manager: DatabaseManager = Depends(get_db_manager),
+):
+    """تفريغ فوري لطابور المزامنة — يعيد نتيجة flush_now كما هي (never raises)"""
+    try:
+        from src.services.sync_queue_flush_service import SyncQueueFlushService
+
+        flusher = SyncQueueFlushService(db_manager=db_manager, logger=logger)
+        return flusher.flush_now(reason="api")
+    except Exception as e:
+        logger.warning(f"تفريغ طابور المزامنة فشل (غير حرج): {e}")
+        return {"success": False, "flushed": 0, "error": str(e), "reason": "api"}
 
 
 # Export

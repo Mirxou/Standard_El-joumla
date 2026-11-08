@@ -62,3 +62,31 @@ tests/unit/services/test_lan_sync_gaps.py   (جديد — 28)
 | 5.3 تحرير تعاوني (متوسطة) | ⏳ مؤجلة — الوحيدة المتبقية |
 
 **الاختبارات:** `python3 -m pytest tests/unit/services/ -q` (المتأثرة الجديدة كلها خضراء؛ أخطاء قديمة معروفة في test_payment_service/ملفات AI مفقودة — سابقة عن هذه التغييرات).
+
+---
+
+## الجولة الثانية — الدمج في API + إغلاق GAP-5.3 (التحرير التعاوني)
+
+**التاريخ:** 2026-11-08 | **النتيجة:** 13/13 فجوات SRS مُغلقة كاملةً
+
+### اكتشاف حرج مُصلَح: راوتر API كان معطلاً بالكامل بصمت
+`import src.api.routes` كان يرمي `NameError: get_sales_service` (مُعرَّف سطر 2576 لكن مستخدم في `Depends()` سطر 1646) — و`app.register_routes()` يبتلع الاستثناء بـ warning → **كل نقاط `/api/v1` كانت ترجع 404**. الإصلاح: نقل التبعية أعلى الملف + إصلاح 3 أعطال كامنة في نقاط البيع (`Sale(created_by)`، `SaleItem(discount_amount)`، حقول ناقصة في `SaleResponse`).
+
+### نقاط API المضافة (16، خلف المصادقة مثل باقي النقاط)
+| المجموعة | النقاط |
+|---|---|
+| Purchase Returns (7) | `POST /purchase-returns` (+`/approve`,`/complete`,`/cancel`)، `GET /purchase-returns` (+`/{id}`، `/returnable`) — أخطاء الأعمال → HTTP 422 بتفاصيل ثنائية اللغة |
+| POS Hardware (7) | `POST /sales/{id}/receipt`، `POST /pos/cash-drawer/open` + `GET status`، `POST /pos/reports/x|z`، `GET /products/scan/{barcode}`، `POST /products/{id}/assign-barcode`، `POST /products/{id}/barcode-label` |
+| Sync & LAN (2) | `GET /lan/discover`، `POST /sync/flush` |
+
+- **الطباعة بعد البيع**: انضمام اختياري `POST /sales?print_receipt=true` + حقل `receipt_preview` في الاستجابة (طباعة fire-and-forget لا تُفشل البيع أبداً — سبب الاختيار: الطابعة المتوقفة قد تُجمّد الطلب 3 ثوانٍ).
+- **أثر جانبي إيجابي**: إصلاح الاستيراد أصلح اختبارين في test_websocket_endpoints كانا يفشلان.
+
+### GAP-5.3 التحرير التعاوني — الفجوة الأخيرة (13/13)
+- `src/services/collaboration_service.py` (855 سطر): أقفال تشاؤمية (acquire/release/heartbeat/purge) بساعة قابلة للحقن + تنازلية انزلاقية، بث WebSocket محمي (`notify_edit`/`notify_lock_change` عبر `WebSocketManager.broadcast` الحقيقي)، دفتر تعارضات الإصدارات (detect/resolve/list/get)، `get_record_version` (عمود version أو sha256(updated_at)).
+- `src/services/collab_edit_guard.py`: سياق `guarded_edit()` بسطر واحد + `RecordLockedError` ثنائي اللغة.
+- **وعي بالمخطط**: migration 026 يمتلك `sync_conflicts` بشكل متوافق-غير قابل لإعادة الاستخدام → جدول موازٍ `collab_sync_conflicts` للمخطط الجديد بلمس المخطط القديم.
+
+### الاختبارات
+- API الجديد: **16 passed** | التعاون: **38 passed** (10 تشغيلات مستقرة، اختبار تزامن 2 خيوط × 20 جولة) | الانحدار: **141 passed**
+- الإجمالي التراكمي للجولتين: **195 اختبار ناجح**
